@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../models/advanced_search_selection.dart';
 import '../models/debrify_tv/channel.dart';
@@ -64,6 +65,7 @@ const Color _kCwProgressRed = Color(0xFFE50914);
 /// list every catalog up front and lazily pull batches on scroll (Stremio-style)
 /// instead of a hard global row cap.
 const int _kBoardBatchSize = 8;
+
 /// When a row's horizontal scroll gets within this many pixels of the end, the
 /// next page for that catalog is fetched (Stremio-style unlimited rows).
 const double _kRowLoadMoreThreshold = 900;
@@ -104,6 +106,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
+  // The small search icon pinned to the top-right of the chrome-free TV board.
+  // It's the visible, discoverable entry into the search overlay (DPAD-up from
+  // the top row lands here; SELECT opens the field).
+  final FocusNode _boardSearchNode = FocusNode(debugLabel: 'board_search_icon');
   // DPAD focus targets for the Catalog / Keyword toggle (TV only), so the
   // toggle is reachable with a remote (arrow-up from the search field).
   final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
@@ -129,8 +135,10 @@ class _SearchScreenState extends State<SearchScreen> {
   final List<FocusNode> _kwNodes = [];
   // Keyboard/DPAD focus targets for the keyword toolbar pills (Sort / Filters /
   // Sources / Select). A fixed pool of 4 covers the most pills ever shown.
-  final List<FocusNode> _kwToolbarNodes =
-      List.generate(4, (i) => FocusNode(debugLabel: 'kw_tb_$i'));
+  final List<FocusNode> _kwToolbarNodes = List.generate(
+    4,
+    (i) => FocusNode(debugLabel: 'kw_tb_$i'),
+  );
   TorrentFilterState _kwFilters = const TorrentFilterState.empty();
   String _kwSort = 'relevance';
   Map<String, List<String>> _kwCache = {}; // infohash(lower) → ['TB','PM']
@@ -251,10 +259,10 @@ class _SearchScreenState extends State<SearchScreen> {
   // still resolving links (the menu closes immediately, giving no other cue).
   bool _playlistLaunching = false;
 
-  // Focus nodes for the leading "See All" DPAD tiles (one per row that has a
-  // See-All link), keyed by a stable row id. Lazily created so we don't track
-  // row counts; all disposed together in dispose().
-  final Map<String, FocusNode> _seeAllNodes = {};
+  /// Whether the search overlay (field + Catalog/Keyword toggle + results) is
+  /// showing over the board. The board itself is chrome-free; search is opened
+  /// from the sidebar magnifier (re-pressing the already-active Search tab).
+  bool _searchOpen = false;
 
   int _traktCwToken = 0;
 
@@ -271,55 +279,55 @@ class _SearchScreenState extends State<SearchScreen> {
   /// non-empty groups are included. Each row carries its own progress lookup
   /// and open / quick-play handlers so local and Trakt sources coexist.
   List<_CwRow> get _cwRows => [
-        if (_cwEnabled && _cwMovies.isNotEmpty)
-          _CwRow(
-            title: 'Continue Watching',
-            tag: 'Movies',
-            items: _cwMovies,
-            nodes: _cwMovieNodes,
-            progressOf: (m) => _cwProgress[m.imdbId],
-            episodeOf: (_) => null,
-            onOpen: _openContinueItem,
-            onQuickPlay: _onContinuePlay,
-            onSeeAll: () => _openContinueWatchingSeeAll('movie'),
-          ),
-        if (_cwEnabled && _cwSeries.isNotEmpty)
-          _CwRow(
-            title: 'Continue Watching',
-            tag: 'Series',
-            items: _cwSeries,
-            nodes: _cwSeriesNodes,
-            progressOf: (m) => _cwProgress[m.imdbId],
-            episodeOf: (m) => _cwEpisode[m.imdbId],
-            onOpen: _openContinueItem,
-            onQuickPlay: _onContinuePlay,
-            onSeeAll: () => _openContinueWatchingSeeAll('series'),
-          ),
-        if (_traktMovies.isNotEmpty)
-          _CwRow(
-            title: 'Trakt Continue Watching',
-            tag: 'Movies',
-            items: _traktMovies,
-            nodes: _traktMovieNodes,
-            progressOf: (m) => _traktProgress[m.imdbId],
-            episodeOf: (_) => null,
-            onOpen: _openTraktItem,
-            onQuickPlay: _playTraktItem,
-            onSeeAll: () => _openTraktSeeAll('movie'),
-          ),
-        if (_traktSeries.isNotEmpty)
-          _CwRow(
-            title: 'Trakt Continue Watching',
-            tag: 'Shows',
-            items: _traktSeries,
-            nodes: _traktSeriesNodes,
-            progressOf: (m) => _traktProgress[m.imdbId],
-            episodeOf: (m) => _traktEpisode[m.imdbId],
-            onOpen: _openTraktItem,
-            onQuickPlay: _playTraktItem,
-            onSeeAll: () => _openTraktSeeAll('series'),
-          ),
-      ];
+    if (_cwEnabled && _cwMovies.isNotEmpty)
+      _CwRow(
+        title: 'Continue Watching',
+        tag: 'Movies',
+        items: _cwMovies,
+        nodes: _cwMovieNodes,
+        progressOf: (m) => _cwProgress[m.imdbId],
+        episodeOf: (_) => null,
+        onOpen: _openContinueItem,
+        onQuickPlay: _onContinuePlay,
+        onSeeAll: () => _openContinueWatchingSeeAll('movie'),
+      ),
+    if (_cwEnabled && _cwSeries.isNotEmpty)
+      _CwRow(
+        title: 'Continue Watching',
+        tag: 'Series',
+        items: _cwSeries,
+        nodes: _cwSeriesNodes,
+        progressOf: (m) => _cwProgress[m.imdbId],
+        episodeOf: (m) => _cwEpisode[m.imdbId],
+        onOpen: _openContinueItem,
+        onQuickPlay: _onContinuePlay,
+        onSeeAll: () => _openContinueWatchingSeeAll('series'),
+      ),
+    if (_traktMovies.isNotEmpty)
+      _CwRow(
+        title: 'Trakt Continue Watching',
+        tag: 'Movies',
+        items: _traktMovies,
+        nodes: _traktMovieNodes,
+        progressOf: (m) => _traktProgress[m.imdbId],
+        episodeOf: (_) => null,
+        onOpen: _openTraktItem,
+        onQuickPlay: _playTraktItem,
+        onSeeAll: () => _openTraktSeeAll('movie'),
+      ),
+    if (_traktSeries.isNotEmpty)
+      _CwRow(
+        title: 'Trakt Continue Watching',
+        tag: 'Shows',
+        items: _traktSeries,
+        nodes: _traktSeriesNodes,
+        progressOf: (m) => _traktProgress[m.imdbId],
+        episodeOf: (m) => _traktEpisode[m.imdbId],
+        onOpen: _openTraktItem,
+        onQuickPlay: _playTraktItem,
+        onSeeAll: () => _openTraktSeeAll('series'),
+      ),
+  ];
 
   /// Whether any Continue Watching row is currently on-screen (drives focus
   /// wiring between it and the first catalog row). Uses allocation-free field
@@ -333,9 +341,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // Hero state. Driven by ValueNotifiers so focus-driven hero swaps rebuild
   // only the spotlight, never the whole board (important on low-power TVs).
-  final ValueNotifier<StremioMeta?> _heroItem = ValueNotifier<StremioMeta?>(null);
-  final ValueNotifier<StremioMeta?> _heroEnriched =
-      ValueNotifier<StremioMeta?>(null);
+  final ValueNotifier<StremioMeta?> _heroItem = ValueNotifier<StremioMeta?>(
+    null,
+  );
+  final ValueNotifier<StremioMeta?> _heroEnriched = ValueNotifier<StremioMeta?>(
+    null,
+  );
   int _heroReqId = 0;
   Timer? _heroTimer;
 
@@ -343,6 +354,8 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
+    MainPageBridge.openSearchOverlay = _openSearchOverlay;
+    MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     _boardScroll.addListener(_onBoardScroll);
     _load();
@@ -373,6 +386,10 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void dispose() {
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
+    if (MainPageBridge.openSearchOverlay == _openSearchOverlay) {
+      MainPageBridge.openSearchOverlay = null;
+    }
+    MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
@@ -380,6 +397,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroEnriched.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _boardSearchNode.dispose();
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
     _boardScroll.dispose();
@@ -406,10 +424,6 @@ class _SearchScreenState extends State<SearchScreen> {
     _stvFavNodes.clear();
     _iptvFavNodes.clear();
     _playlistFavNodes.clear();
-    for (final n in _seeAllNodes.values) {
-      n.dispose();
-    }
-    _seeAllNodes.clear();
     super.dispose();
   }
 
@@ -483,30 +497,32 @@ class _SearchScreenState extends State<SearchScreen> {
     final end = (_boardCursor + n).clamp(0, _boardRefs.length);
     final slice = _boardRefs.sublist(_boardCursor, end);
     _boardCursor = end;
-    final results = await Future.wait(slice.map((ref) async {
-      final (addon, catalog) = ref;
-      try {
-        var rawCount = 0;
-        final items = await _stremio.fetchCatalog(
-          addon,
-          catalog,
-          onRawCount: (c) => rawCount = c,
-        );
-        if (items.isEmpty) return null;
-        return CatalogSection(
-          title: '${addon.name}: ${catalog.name}',
-          addon: addon,
-          catalog: catalog,
-          // Keep the whole first page; more pages stream in on horizontal scroll.
-          items: items.toList(),
-          // Next page starts past the addon's raw first window (not the smaller
-          // post-filter count), keeping paging aligned from the very first fetch.
-          nextSkip: rawCount > 0 ? rawCount : items.length,
-        );
-      } catch (_) {
-        return null;
-      }
-    }));
+    final results = await Future.wait(
+      slice.map((ref) async {
+        final (addon, catalog) = ref;
+        try {
+          var rawCount = 0;
+          final items = await _stremio.fetchCatalog(
+            addon,
+            catalog,
+            onRawCount: (c) => rawCount = c,
+          );
+          if (items.isEmpty) return null;
+          return CatalogSection(
+            title: '${addon.name}: ${catalog.name}',
+            addon: addon,
+            catalog: catalog,
+            // Keep the whole first page; more pages stream in on horizontal scroll.
+            items: items.toList(),
+            // Next page starts past the addon's raw first window (not the smaller
+            // post-filter count), keeping paging aligned from the very first fetch.
+            nextSkip: rawCount > 0 ? rawCount : items.length,
+          );
+        } catch (_) {
+          return null;
+        }
+      }),
+    );
     return results.whereType<CatalogSection>().toList();
   }
 
@@ -678,9 +694,11 @@ class _SearchScreenState extends State<SearchScreen> {
       if (n > 0) counts[imdb] = n;
     }
     if (!mounted) return;
-    setState(() => _boundCounts
-      ..clear()
-      ..addAll(counts));
+    setState(
+      () => _boundCounts
+        ..clear()
+        ..addAll(counts),
+    );
   }
 
   /// PikPak is "only" when it's enabled and no add/resolve provider has a key.
@@ -690,7 +708,8 @@ class _SearchScreenState extends State<SearchScreen> {
     final tb = await StorageService.getTorboxApiKey();
     final pm = await StorageService.getPremiumizeApiKey();
     final ad = await StorageService.getAllDebridApiKey();
-    final anyOther = (rd != null && rd.isNotEmpty) ||
+    final anyOther =
+        (rd != null && rd.isNotEmpty) ||
         (tb != null && tb.isNotEmpty) ||
         (pm != null && pm.isNotEmpty) ||
         (ad != null && ad.isNotEmpty);
@@ -736,14 +755,16 @@ class _SearchScreenState extends State<SearchScreen> {
       final imdbId = m['imdbId'] as String?;
       if (imdbId == null || imdbId.isEmpty) continue;
       final type = (m['contentType'] as String?) ?? 'movie';
-      items.add(StremioMeta(
-        id: imdbId,
-        imdbId: imdbId,
-        type: type,
-        name: (m['title'] as String?) ?? 'Untitled',
-        poster: m['posterUrl'] as String?,
-        year: m['year'] as String?,
-      ));
+      items.add(
+        StremioMeta(
+          id: imdbId,
+          imdbId: imdbId,
+          type: type,
+          name: (m['title'] as String?) ?? 'Untitled',
+          poster: m['posterUrl'] as String?,
+          year: m['year'] as String?,
+        ),
+      );
       ids.add(imdbId);
       addonIds[imdbId] = m['addonId'] as String?;
 
@@ -751,7 +772,9 @@ class _SearchScreenState extends State<SearchScreen> {
       // HomeContinueWatchingSection (finished episodes count as 100%).
       double? pct;
       if (type == 'series') {
-        final lastEp = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
+        final lastEp = await StorageService.getLastPlayedEpisodeByImdbId(
+          imdbId,
+        );
         if (lastEp != null) {
           final finished = lastEp['finished'] == true;
           final posMs = lastEp['positionMs'] as int? ?? 0;
@@ -759,11 +782,16 @@ class _SearchScreenState extends State<SearchScreen> {
           if (durMs > 0) {
             pct = finished ? 100.0 : (posMs / durMs * 100).clamp(0.0, 100.0);
           }
-          final se = _seLabel(lastEp['season'] as int?, lastEp['episode'] as int?);
+          final se = _seLabel(
+            lastEp['season'] as int?,
+            lastEp['episode'] as int?,
+          );
           if (se != null) episode[imdbId] = se;
         }
       } else {
-        final state = await StorageService.getVideoPlaybackStateByImdbId(imdbId);
+        final state = await StorageService.getVideoPlaybackStateByImdbId(
+          imdbId,
+        );
         if (state != null) {
           final posMs = state['positionMs'] as int? ?? 0;
           final durMs = state['durationMs'] as int? ?? 1;
@@ -815,10 +843,12 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     nodes
       ..clear()
-      ..addAll(List.generate(
-        count,
-        (i) => FocusNode(debugLabel: 'search_cw_${tag}_$i'),
-      ));
+      ..addAll(
+        List.generate(
+          count,
+          (i) => FocusNode(debugLabel: 'search_cw_${tag}_$i'),
+        ),
+      );
   }
 
   /// Focus a card in the Continue Watching row at [cwIndex] (index into the
@@ -835,7 +865,9 @@ class _SearchScreenState extends State<SearchScreen> {
   // only shown on the board, never over search results — same gate as
   // [_cwVisible]. Each has its own visibility so an empty source just drops out.
   bool get _iptvFavVisible =>
-      _iptvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
+      _iptvFavChannels.isNotEmpty &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
   bool get _tvFavVisible =>
       _tvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
   bool get _stvFavVisible =>
@@ -848,11 +880,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// ([_buildBoard]) and the index-based DPAD focus wiring below, so the two
   /// never drift out of sync.
   List<_FavKind> get _favRowKinds => [
-        if (_playlistFavVisible) _FavKind.playlist,
-        if (_tvFavVisible) _FavKind.debrify,
-        if (_stvFavVisible) _FavKind.stremio,
-        if (_iptvFavVisible) _FavKind.iptv,
-      ];
+    if (_playlistFavVisible) _FavKind.playlist,
+    if (_tvFavVisible) _FavKind.debrify,
+    if (_stvFavVisible) _FavKind.stremio,
+    if (_iptvFavVisible) _FavKind.iptv,
+  ];
 
   int get _favRowCount => _favRowKinds.length;
   bool get _anyFavVisible => _favRowKinds.isNotEmpty;
@@ -882,20 +914,20 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// DPAD-up target for a favourites row: the previous favourites row, else the
-  /// last Continue Watching row, else the search field.
+  /// last Continue Watching row, else off the top of the board (to the sidebar).
   VoidCallback _favRowOnUp(int favIndex, int cwCount, int column) =>
       favIndex > 0
-          ? () => _focusFavRowAt(favIndex - 1, column)
-          : (cwCount > 0
-              ? () => _focusCwRow(cwCount - 1, column)
-              : () => _searchFocusNode.requestFocus());
+      ? () => _focusFavRowAt(favIndex - 1, column)
+      : (cwCount > 0
+            ? () => _focusCwRow(cwCount - 1, column)
+            : () => _leaveBoardTop());
 
   /// DPAD-down target for a favourites row: the next favourites row, else the
   /// first catalog row (a no-op if none have loaded yet).
   VoidCallback _favRowOnDown(int favIndex, int column) =>
       favIndex < _favRowCount - 1
-          ? () => _focusFavRowAt(favIndex + 1, column)
-          : () => _focusRow(0, column);
+      ? () => _focusFavRowAt(favIndex + 1, column)
+      : () => _focusRow(0, column);
 
   /// Load the user's starred Debrify TV channels for the leading favourites row.
   /// Silently leaves the row empty on any error (it just won't render).
@@ -927,8 +959,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Grow/shrink the favourites row's focus nodes to match the channel count.
   void _syncTvFavNodes() {
     while (_tvFavNodes.length < _tvFavChannels.length) {
-      _tvFavNodes
-          .add(FocusNode(debugLabel: 'search_tvfav_${_tvFavNodes.length}'));
+      _tvFavNodes.add(
+        FocusNode(debugLabel: 'search_tvfav_${_tvFavNodes.length}'),
+      );
     }
     while (_tvFavNodes.length > _tvFavChannels.length) {
       _tvFavNodes.removeLast().dispose();
@@ -982,8 +1015,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _syncStvFavNodes() {
     while (_stvFavNodes.length < _stvFavChannels.length) {
-      _stvFavNodes
-          .add(FocusNode(debugLabel: 'search_stvfav_${_stvFavNodes.length}'));
+      _stvFavNodes.add(
+        FocusNode(debugLabel: 'search_stvfav_${_stvFavNodes.length}'),
+      );
     }
     while (_stvFavNodes.length > _stvFavChannels.length) {
       _stvFavNodes.removeLast().dispose();
@@ -1032,18 +1066,20 @@ class _SearchScreenState extends State<SearchScreen> {
         _syncIptvFavNodes();
         return;
       }
-      final favs = map.entries.map((e) {
-        final meta = e.value;
-        return IptvChannel(
-          name: meta['name'] as String? ?? 'Unknown Channel',
-          url: e.key,
-          logoUrl: meta['logoUrl'] as String?,
-          group: meta['group'] as String?,
-          duration: -1, // live stream
-          attributes: const {},
-        );
-      }).toList()
-        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      final favs =
+          map.entries.map((e) {
+            final meta = e.value;
+            return IptvChannel(
+              name: meta['name'] as String? ?? 'Unknown Channel',
+              url: e.key,
+              logoUrl: meta['logoUrl'] as String?,
+              group: meta['group'] as String?,
+              duration: -1, // live stream
+              attributes: const {},
+            );
+          }).toList()..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
       if (!mounted) return;
       setState(() => _iptvFavChannels = favs);
       _syncIptvFavNodes();
@@ -1054,8 +1090,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _syncIptvFavNodes() {
     while (_iptvFavNodes.length < _iptvFavChannels.length) {
-      _iptvFavNodes
-          .add(FocusNode(debugLabel: 'search_iptvfav_${_iptvFavNodes.length}'));
+      _iptvFavNodes.add(
+        FocusNode(debugLabel: 'search_iptvfav_${_iptvFavNodes.length}'),
+      );
     }
     while (_iptvFavNodes.length > _iptvFavChannels.length) {
       _iptvFavNodes.removeLast().dispose();
@@ -1118,8 +1155,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _syncPlaylistFavNodes() {
     while (_playlistFavNodes.length < _playlistItems.length) {
-      _playlistFavNodes.add(FocusNode(
-          debugLabel: 'search_playlistfav_${_playlistFavNodes.length}'));
+      _playlistFavNodes.add(
+        FocusNode(debugLabel: 'search_playlistfav_${_playlistFavNodes.length}'),
+      );
     }
     while (_playlistFavNodes.length > _playlistItems.length) {
       final removed = _playlistFavNodes.removeLast();
@@ -1182,7 +1220,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: Text(
                     title,
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1218,8 +1258,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   icon: isFavorited
                       ? Icons.star_rounded
                       : Icons.star_border_rounded,
-                  label:
-                      isFavorited ? 'Remove from Favorites' : 'Add to Favorites',
+                  label: isFavorited
+                      ? 'Remove from Favorites'
+                      : 'Add to Favorites',
                   subtitle: isFavorited
                       ? 'Remove from your favorites list'
                       : 'Add to your favorites list',
@@ -1243,7 +1284,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   color: const Color(0xFFEF4444),
                   subtitleColor: const Color(0xFFFCA5A5),
                   isTelevision: tv,
-                  onTap: () => Navigator.pop(dialogContext, 'launch_on_startup'),
+                  onTap: () =>
+                      Navigator.pop(dialogContext, 'launch_on_startup'),
                 ),
                 Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
                 _PlaylistMenuItem(
@@ -1313,9 +1355,9 @@ class _SearchScreenState extends State<SearchScreen> {
       await PlaylistPlayerService.play(context, item, playRandom: playRandom);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to play: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to play: $e')));
     } finally {
       if (mounted) _playlistLaunching = false;
     }
@@ -1508,8 +1550,9 @@ class _SearchScreenState extends State<SearchScreen> {
       _openTraktItem(item);
       return;
     }
-    final sel = await TraktContinueWatchingService.instance
-        .selectionForItem(cwItem);
+    final sel = await TraktContinueWatchingService.instance.selectionForItem(
+      cwItem,
+    );
     if (!mounted) return;
     if (sel == null) {
       _snack("Couldn't resolve where to resume \"${item.name}\".");
@@ -1521,7 +1564,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Detail-screen action for a Continue Watching title. Only handles removal;
   /// pops the detail and lets the push's `.then` refresh the row.
   Future<void> _handleContinueDetailAction(
-      TraktItemMenuAction action, String imdbId) async {
+    TraktItemMenuAction action,
+    String imdbId,
+  ) async {
     if (action != TraktItemMenuAction.removeFromPlayback) return;
     await StorageService.removeContinueWatchingItem(imdbId);
     await StorageService.clearPlaybackStateByImdbId(imdbId);
@@ -1572,8 +1617,11 @@ class _SearchScreenState extends State<SearchScreen> {
         for (final catalog in addon.catalogs.where((c) => c.supportsSearch)) {
           tasks.add(() async {
             try {
-              final items =
-                  await _stremio.searchSingleCatalog(addon, catalog, query);
+              final items = await _stremio.searchSingleCatalog(
+                addon,
+                catalog,
+                query,
+              );
               if (items.isEmpty) return null;
               return CatalogSection(
                 title: '${addon.name}: ${catalog.name}',
@@ -1610,6 +1658,59 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ── Focus entry ──────────────────────────────────────────────────────────
 
+  /// DPAD-up from the board's top row. When the search overlay is open the field
+  /// sits above; otherwise land on the top-right search icon (the board's one
+  /// piece of chrome), so search is reachable — and discoverable — with a flick
+  /// up from the first row.
+  void _leaveBoardTop() {
+    if (_searchOpen) {
+      _searchFocusNode.requestFocus();
+    } else {
+      _boardSearchNode.requestFocus();
+    }
+  }
+
+  /// Open the search overlay over the board (from the sidebar magnifier) and put
+  /// the caret in the field. Re-opening when already open just refocuses.
+  /// Desktop/mobile show the search bar permanently, so there it only focuses
+  /// the field (the overlay state stays TV-only).
+  void _openSearchOverlay() {
+    if (!mounted) return;
+    if (!widget.isTelevision) {
+      _searchFocusNode.requestFocus();
+      return;
+    }
+    if (!_searchOpen) setState(() => _searchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocusNode.requestFocus();
+    });
+  }
+
+  /// Close the search overlay: drop any query, reset to the catalog board, and
+  /// (on TV) move focus back onto the board so the remote isn't left on the
+  /// now-hidden field.
+  void _closeSearchOverlay() {
+    if (!mounted || !_searchOpen) return;
+    _mode = _Mode.catalog;
+    _searchOpen = false;
+    // Clears keyword + catalog search state and restores the home board (this
+    // calls setState, so the board rebuilds without the overlay).
+    _clearQuery();
+    if (widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusContent();
+      });
+    }
+  }
+
+  /// Remote/hardware back while on the Search tab: swallow it to close an open
+  /// overlay; otherwise let the app handle back normally.
+  bool _handleSearchBack() {
+    if (!_searchOpen) return false;
+    _closeSearchOverlay();
+    return true;
+  }
+
   void _focusContent() {
     if (_mode == _Mode.keyword) {
       // Toolbar + result rows render together, so entering the content lands on
@@ -1638,7 +1739,15 @@ class _SearchScreenState extends State<SearchScreen> {
       _rowNodes.first.first.requestFocus();
       return;
     }
-    _searchFocusNode.requestFocus();
+    // Nothing on the board is focusable (empty catalogs). The search field is in
+    // the tree on desktop/mobile and inside the open TV overlay; on the closed
+    // TV board it isn't — fall back to the always-present top-right search icon
+    // so the remote never lands on a detached node.
+    if (!widget.isTelevision || _searchOpen) {
+      _searchFocusNode.requestFocus();
+    } else {
+      _boardSearchNode.requestFocus();
+    }
   }
 
   /// Focus the Catalog/Keyword toggle, landing on the segment for the current
@@ -1652,8 +1761,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// leaving the toggle leftward and pressing right again jumps straight back.
   void _focusSearchFieldAtEnd() {
     _searchFocusNode.requestFocus();
-    _searchController.selection =
-        TextSelection.collapsed(offset: _searchController.text.length);
+    _searchController.selection = TextSelection.collapsed(
+      offset: _searchController.text.length,
+    );
   }
 
   /// Whether the keyword results toolbar (Sort/Filters/Sources/…) is on-screen,
@@ -1771,7 +1881,8 @@ class _SearchScreenState extends State<SearchScreen> {
       // instead of a misleading "No results" (searchAllEngines fails soft).
       if (torrents.isEmpty && engineErrors is Map && engineErrors.isNotEmpty) {
         setState(() {
-          _kwError = 'Search failed on all sources. Check your connection or '
+          _kwError =
+              'Search failed on all sources. Check your connection or '
               'enabled sources and try again.';
           _kwLoading = false;
         });
@@ -1792,8 +1903,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ── Bulk selection (keyword results) ──────────────────────────────────────
   /// Torrents eligible for bulk actions (excludes direct/external streams).
-  List<Torrent> get _kwSelectableResults =>
-      _kwResults.where((t) => !t.isDirectStream && !t.isExternalStream).toList();
+  List<Torrent> get _kwSelectableResults => _kwResults
+      .where((t) => !t.isDirectStream && !t.isExternalStream)
+      .toList();
 
   void _enterKwSelection() {
     // Entering selection swaps the toolbar to 3 pills; if DPAD focus was on the
@@ -1845,8 +1957,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _openBulkAdd() async {
     if (_kwBulkBusy) return;
-    final chosen =
-        _kwResults.where((t) => _kwSelected.contains(t.infohash)).toList();
+    final chosen = _kwResults
+        .where((t) => _kwSelected.contains(t.infohash))
+        .toList();
     if (chosen.isEmpty) return;
     _kwBulkBusy = true;
     bool chose = false;
@@ -1887,8 +2000,11 @@ class _SearchScreenState extends State<SearchScreen> {
         l.sort((a, b) => b.createdUnix.compareTo(a.createdUnix));
         break;
       case 'name':
-        l.sort((a, b) =>
-            a.displayTitle.toLowerCase().compareTo(b.displayTitle.toLowerCase()));
+        l.sort(
+          (a, b) => a.displayTitle.toLowerCase().compareTo(
+            b.displayTitle.toLowerCase(),
+          ),
+        );
         break;
       default: // 'relevance' — keep the engine (seeder-deduped) order
         break;
@@ -1909,11 +2025,14 @@ class _SearchScreenState extends State<SearchScreen> {
     // integration is on AND a key is saved (matches Home's gating).
     try {
       final tb = await StorageService.getTorboxApiKey();
-      final enabled = await StorageService.getTorboxCacheCheckEnabled() &&
+      final enabled =
+          await StorageService.getTorboxCacheCheckEnabled() &&
           await StorageService.getTorboxIntegrationEnabled();
       if (enabled && tb != null && tb.isNotEmpty) {
-        final cached =
-            await TorboxService.checkCachedTorrents(apiKey: tb, infoHashes: hashes);
+        final cached = await TorboxService.checkCachedTorrents(
+          apiKey: tb,
+          infoHashes: hashes,
+        );
         for (final h in cached) {
           (map[h] ??= <String>[]).add('TB');
         }
@@ -1921,7 +2040,8 @@ class _SearchScreenState extends State<SearchScreen> {
     } catch (_) {}
     try {
       final pm = await StorageService.getPremiumizeApiKey();
-      final enabled = await StorageService.getPremiumizeCacheCheckEnabled() &&
+      final enabled =
+          await StorageService.getPremiumizeCacheCheckEnabled() &&
           await StorageService.getPremiumizeIntegrationEnabled();
       if (enabled && pm != null && pm.isNotEmpty) {
         final res = await PremiumizeService.checkCache(pm, hashes);
@@ -1954,12 +2074,12 @@ class _SearchScreenState extends State<SearchScreen> {
       builder: (dialogContext) {
         final scheme = Theme.of(dialogContext).colorScheme;
         Widget tile(String value, String label) => ListTile(
-              title: Text(label),
-              trailing: _kwSort == value
-                  ? Icon(Icons.check_rounded, color: scheme.primary)
-                  : null,
-              onTap: () => Navigator.of(dialogContext).pop(value),
-            );
+          title: Text(label),
+          trailing: _kwSort == value
+              ? Icon(Icons.check_rounded, color: scheme.primary)
+              : null,
+          onTap: () => Navigator.of(dialogContext).pop(value),
+        );
         return AlertDialog(
           backgroundColor: scheme.surfaceContainerHigh,
           title: const Text('Sort by'),
@@ -2070,13 +2190,20 @@ class _SearchScreenState extends State<SearchScreen> {
               onPlay: () => _onCatalogPlay(item, addon),
               onBrowse: () => _onCatalogBrowse(item, addon),
               traktMenuOptions: options,
-              onTraktAction: (a) =>
-                  _handleDetailQuickAction(item, addon, a, inCw: inCw, imdb: imdb),
+              onTraktAction: (a) => _handleDetailQuickAction(
+                item,
+                addon,
+                a,
+                inCw: inCw,
+                imdb: imdb,
+              ),
               // "More Like This" rail + sparse-item meta backfill, matching the
               // catalog detail flow.
               recommendationsLoader: imdb != null
-                  ? () =>
-                      _stremio.getRecommendations(imdbId: imdb, type: item.type)
+                  ? () => _stremio.getRecommendations(
+                      imdbId: imdb,
+                      type: item.type,
+                    )
                   : null,
               onRecommendationTap: imdb != null
                   ? (rec) => _openItem(rec, rec.sourceAddon ?? addon)
@@ -2089,10 +2216,10 @@ class _SearchScreenState extends State<SearchScreen> {
         // A bind/unbind may have happened inside the detail flow; playback may
         // also have changed Continue Watching progress.
         .then((_) {
-      _refreshBoundSources();
-      _loadContinueWatching();
-      _refreshTraktAuthState();
-    });
+          _refreshBoundSources();
+          _loadContinueWatching();
+          _refreshTraktAuthState();
+        });
   }
 
   /// Dispatch a detail-screen quick action. Reuses the shared
@@ -2129,8 +2256,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// otherwise the add-source picker.
   Future<void> _handleEditOrSelectSource(StremioMeta item) async {
     final imdb = _imdbOf(item);
-    final bound =
-        imdb == null ? const <SeriesSource>[] : await SeriesSourceService.getSources(imdb);
+    final bound = imdb == null
+        ? const <SeriesSource>[]
+        : await SeriesSourceService.getSources(imdb);
     if (!mounted) return;
     if (bound.isNotEmpty) {
       await _showEditSourceDialog(item, bound);
@@ -2143,7 +2271,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// (series — first match wins), delete individually, Remove All, or add
   /// another via the picker. Ported from the catalog/aggregated detail flow.
   Future<void> _showEditSourceDialog(
-      StremioMeta item, List<SeriesSource> initial) async {
+    StremioMeta item,
+    List<SeriesSource> initial,
+  ) async {
     final imdbId = _imdbOf(item);
     if (imdbId == null) return;
     final isMovie = item.type == 'movie';
@@ -2154,8 +2284,9 @@ class _SearchScreenState extends State<SearchScreen> {
     // builder) when the last source is removed — robust to nested navigators,
     // and a callback (not a BuildContext) so it's safe across the awaits here.
     Future<void> refreshInto(
-        void Function(void Function()) setDialogState,
-        VoidCallback closeIfEmpty) async {
+      void Function(void Function()) setDialogState,
+      VoidCallback closeIfEmpty,
+    ) async {
       final updated = await SeriesSourceService.getSources(imdbId);
       if (!mounted) return;
       setDialogState(() {
@@ -2178,11 +2309,14 @@ class _SearchScreenState extends State<SearchScreen> {
 
             return Dialog(
               backgroundColor: const Color(0xFF1E293B),
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: ConstrainedBox(
-                constraints:
-                    const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                constraints: const BoxConstraints(
+                  maxWidth: 450,
+                  maxHeight: 500,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -2190,17 +2324,21 @@ class _SearchScreenState extends State<SearchScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.link_rounded,
-                              color: Color(0xFF60A5FA), size: 24),
+                          const Icon(
+                            Icons.link_rounded,
+                            color: Color(0xFF60A5FA),
+                            size: 24,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             isMovie
                                 ? 'Movie Source'
                                 : 'Series Sources (${sources.length})',
                             style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600),
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
@@ -2210,8 +2348,10 @@ class _SearchScreenState extends State<SearchScreen> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'First match wins — reorder by priority',
-                            style:
-                                TextStyle(color: Colors.white38, fontSize: 11),
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
@@ -2223,16 +2363,21 @@ class _SearchScreenState extends State<SearchScreen> {
                                 itemCount: sources.length,
                                 itemBuilder: (context, index) =>
                                     _buildSourceListTile(
-                                  key: ValueKey(sources[index].torrentHash),
-                                  source: sources[index],
-                                  index: index,
-                                  showDragHandle: false,
-                                  onDelete: () async {
-                                    await SeriesSourceService.removeSourceByHash(
-                                        imdbId, sources[index].torrentHash);
-                                    await refreshInto(setDialogState, closeIfEmpty);
-                                  },
-                                ),
+                                      key: ValueKey(sources[index].torrentHash),
+                                      source: sources[index],
+                                      index: index,
+                                      showDragHandle: false,
+                                      onDelete: () async {
+                                        await SeriesSourceService.removeSourceByHash(
+                                          imdbId,
+                                          sources[index].torrentHash,
+                                        );
+                                        await refreshInto(
+                                          setDialogState,
+                                          closeIfEmpty,
+                                        );
+                                      },
+                                    ),
                               )
                             : ReorderableListView.builder(
                                 shrinkWrap: true,
@@ -2244,25 +2389,33 @@ class _SearchScreenState extends State<SearchScreen> {
                                     sources.insert(newIndex, moved);
                                   });
                                   SeriesSourceService.setSources(
-                                      imdbId, List.of(sources));
+                                    imdbId,
+                                    List.of(sources),
+                                  );
                                   _refreshBoundSources();
                                 },
                                 proxyDecorator: (child, index, animation) =>
                                     Material(
-                                        color: Colors.transparent,
-                                        elevation: 4,
-                                        child: child),
+                                      color: Colors.transparent,
+                                      elevation: 4,
+                                      child: child,
+                                    ),
                                 itemBuilder: (context, index) =>
                                     _buildSourceListTile(
-                                  key: ValueKey(sources[index].torrentHash),
-                                  source: sources[index],
-                                  index: index,
-                                  onDelete: () async {
-                                    await SeriesSourceService.removeSourceByHash(
-                                        imdbId, sources[index].torrentHash);
-                                    await refreshInto(setDialogState, closeIfEmpty);
-                                  },
-                                ),
+                                      key: ValueKey(sources[index].torrentHash),
+                                      source: sources[index],
+                                      index: index,
+                                      onDelete: () async {
+                                        await SeriesSourceService.removeSourceByHash(
+                                          imdbId,
+                                          sources[index].torrentHash,
+                                        );
+                                        await refreshInto(
+                                          setDialogState,
+                                          closeIfEmpty,
+                                        );
+                                      },
+                                    ),
                               ),
                       ),
                       const SizedBox(height: 12),
@@ -2275,16 +2428,19 @@ class _SearchScreenState extends State<SearchScreen> {
                                 _showAddSourcePicker(item);
                               },
                               icon: Icon(
-                                  isMovie
-                                      ? Icons.swap_horiz_rounded
-                                      : Icons.add_rounded,
-                                  size: 18),
-                              label:
-                                  Text(isMovie ? 'Change Source' : 'Add Source'),
+                                isMovie
+                                    ? Icons.swap_horiz_rounded
+                                    : Icons.add_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                isMovie ? 'Change Source' : 'Add Source',
+                              ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF6366F1),
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10)),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                           ),
@@ -2294,21 +2450,30 @@ class _SearchScreenState extends State<SearchScreen> {
                               child: OutlinedButton.icon(
                                 onPressed: () async {
                                   await SeriesSourceService.removeAllSources(
-                                      imdbId);
+                                    imdbId,
+                                  );
                                   await _refreshBoundSources();
                                   if (dialogContext.mounted) {
                                     Navigator.of(dialogContext).pop();
                                   }
                                 },
-                                icon: const Icon(Icons.delete_sweep_outlined,
-                                    size: 18, color: Color(0xFFEF4444)),
-                                label: const Text('Remove All',
-                                    style: TextStyle(color: Color(0xFFEF4444))),
+                                icon: const Icon(
+                                  Icons.delete_sweep_outlined,
+                                  size: 18,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                label: const Text(
+                                  'Remove All',
+                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                ),
                                 style: OutlinedButton.styleFrom(
                                   side: const BorderSide(
-                                      color: Color(0xFFEF4444), width: 1),
+                                    color: Color(0xFFEF4444),
+                                    width: 1,
+                                  ),
                                   shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10)),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -2319,21 +2484,30 @@ class _SearchScreenState extends State<SearchScreen> {
                               child: OutlinedButton.icon(
                                 onPressed: () async {
                                   await SeriesSourceService.removeAllSources(
-                                      imdbId);
+                                    imdbId,
+                                  );
                                   await _refreshBoundSources();
                                   if (dialogContext.mounted) {
                                     Navigator.of(dialogContext).pop();
                                   }
                                 },
-                                icon: const Icon(Icons.delete_outline_rounded,
-                                    size: 18, color: Color(0xFFEF4444)),
-                                label: const Text('Remove',
-                                    style: TextStyle(color: Color(0xFFEF4444))),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 18,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                label: const Text(
+                                  'Remove',
+                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                ),
                                 style: OutlinedButton.styleFrom(
                                   side: const BorderSide(
-                                      color: Color(0xFFEF4444), width: 1),
+                                    color: Color(0xFFEF4444),
+                                    width: 1,
+                                  ),
                                   shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10)),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -2343,8 +2517,10 @@ class _SearchScreenState extends State<SearchScreen> {
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: () => Navigator.of(dialogContext).pop(),
-                        child: const Text('Close',
-                            style: TextStyle(color: Colors.white54)),
+                        child: const Text(
+                          'Close',
+                          style: TextStyle(color: Colors.white54),
+                        ),
                       ),
                     ],
                   ),
@@ -2399,24 +2575,28 @@ class _SearchScreenState extends State<SearchScreen> {
       onLocal: supportsLocal ? () => _pickAndSaveLocalSource(item) : null,
       localDisabledReason: LocalBoundSourceService.localDisabledReason,
       onRealDebrid: rdEnabled
-          ? () => navigator.push(MaterialPageRoute(
+          ? () => navigator.push(
+              MaterialPageRoute(
                 builder: (_) => DebridDownloadsScreen(
                   isPushedRoute: true,
                   initialSearchQuery: item.name,
                   selectSourceMode: true,
                   onSourceSelected: saveSource,
                 ),
-              ))
+              ),
+            )
           : null,
       onTorbox: torboxEnabled
-          ? () => navigator.push(MaterialPageRoute(
+          ? () => navigator.push(
+              MaterialPageRoute(
                 builder: (_) => TorboxDownloadsScreen(
                   isPushedRoute: true,
                   initialSearchQuery: item.name,
                   selectSourceMode: true,
                   onSourceSelected: saveSource,
                 ),
-              ))
+              ),
+            )
           : null,
     );
   }
@@ -2426,11 +2606,16 @@ class _SearchScreenState extends State<SearchScreen> {
     if (imdbId == null) return;
     final SeriesSource? source;
     if (item.type == 'series') {
-      source = await LocalBoundSourceService.pickSeriesSource(context,
-          title: item.name);
+      source = await LocalBoundSourceService.pickSeriesSource(
+        context,
+        title: item.name,
+      );
     } else {
-      source = await LocalBoundSourceService.pickMovieSource(context,
-          title: item.name, year: item.year);
+      source = await LocalBoundSourceService.pickMovieSource(
+        context,
+        title: item.name,
+        year: item.year,
+      );
     }
     if (source == null) return;
     if (item.type == 'series') {
@@ -2501,9 +2686,10 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Text(
                 '${index + 1}',
                 style: const TextStyle(
-                    color: Color(0xFF60A5FA),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700),
+                  color: Color(0xFF60A5FA),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -2515,16 +2701,19 @@ class _SearchScreenState extends State<SearchScreen> {
                 Text(
                   source.torrentName,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500),
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: serviceColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(3),
@@ -2532,25 +2721,32 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: Text(
                     serviceLabel,
                     style: TextStyle(
-                        color: serviceColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600),
+                      color: serviceColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close_rounded,
-                size: 16, color: Color(0xFFEF4444)),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: Color(0xFFEF4444),
+            ),
             onPressed: onDelete,
             tooltip: 'Remove source',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           if (showDragHandle)
-            const Icon(Icons.drag_handle_rounded,
-                size: 18, color: Colors.white24),
+            const Icon(
+              Icons.drag_handle_rounded,
+              size: 18,
+              color: Colors.white24,
+            ),
         ],
       ),
     );
@@ -2568,14 +2764,16 @@ class _SearchScreenState extends State<SearchScreen> {
       _snack('No IMDb match to find packs for "${item.name}".');
       return;
     }
-    _browseSelection(AdvancedSearchSelection(
-      imdbId: imdb,
-      isSeries: true,
-      title: item.name,
-      year: item.year,
-      contentType: item.type,
-      posterUrl: item.poster,
-    ));
+    _browseSelection(
+      AdvancedSearchSelection(
+        imdbId: imdb,
+        isSeries: true,
+        title: item.name,
+        year: item.year,
+        contentType: item.type,
+        posterUrl: item.poster,
+      ),
+    );
   }
 
   /// Resolve a meta-capable addon (for episode listings): the preferred addon
@@ -2591,7 +2789,9 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _playRandomEpisodeFromDetail(
-      StremioMeta item, StremioAddon addon) async {
+    StremioMeta item,
+    StremioAddon addon,
+  ) async {
     final imdb = _imdbOf(item);
     if (imdb == null) {
       _snack('No IMDb match to pick an episode for "${item.name}".');
@@ -2624,16 +2824,18 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     final pick = episodes[Random().nextInt(episodes.length)];
-    _playSelection(AdvancedSearchSelection(
-      imdbId: imdb,
-      isSeries: true,
-      title: item.name,
-      year: item.year,
-      season: pick.season,
-      episode: pick.episode,
-      contentType: item.type,
-      posterUrl: item.poster,
-    ));
+    _playSelection(
+      AdvancedSearchSelection(
+        imdbId: imdb,
+        isSeries: true,
+        title: item.name,
+        year: item.year,
+        season: pick.season,
+        episode: pick.episode,
+        contentType: item.type,
+        posterUrl: item.poster,
+      ),
+    );
   }
 
   // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
@@ -2664,8 +2866,9 @@ class _SearchScreenState extends State<SearchScreen> {
     season = byId?['season'] as int?;
     episode = byId?['episode'] as int?;
     if (season == null || episode == null) {
-      final byTitle =
-          await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
+      final byTitle = await StorageService.getLastPlayedEpisode(
+        seriesTitle: item.name,
+      );
       season ??= byTitle?['season'] as int?;
       episode ??= byTitle?['episode'] as int?;
     }
@@ -2673,16 +2876,18 @@ class _SearchScreenState extends State<SearchScreen> {
     episode ??= 1;
     if (!mounted) return;
 
-    _playSelection(AdvancedSearchSelection(
-      imdbId: imdbId,
-      isSeries: true,
-      title: item.name,
-      year: item.year,
-      season: season,
-      episode: episode,
-      contentType: item.type,
-      posterUrl: item.poster,
-    ));
+    _playSelection(
+      AdvancedSearchSelection(
+        imdbId: imdbId,
+        isSeries: true,
+        title: item.name,
+        year: item.year,
+        season: season,
+        episode: episode,
+        contentType: item.type,
+        posterUrl: item.poster,
+      ),
+    );
   }
 
   void _onCatalogBrowse(StremioMeta item, StremioAddon addon) {
@@ -2693,21 +2898,23 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  AdvancedSearchSelection _movieSelection(StremioMeta item) =>
-      AdvancedSearchSelection(
-        // Keep the raw addon id ONLY for non-standard types (IPTV / TV / channel)
-        // so playback/Sources can resolve the addon's own stream endpoint. A
-        // movie/series without a `tt…` id (e.g. tmdb/kitsu-only) keeps '' so it
-        // still shows the clear "No IMDb match" message instead of a doomed
-        // torrent search — the isolated engine can't resolve those ids anyway.
-        imdbId: item.effectiveImdbId ??
-            (item.type == 'movie' || item.type == 'series' ? '' : item.id),
-        isSeries: false,
-        title: item.name,
-        year: item.year,
-        contentType: item.type,
-        posterUrl: item.poster,
-      );
+  AdvancedSearchSelection _movieSelection(
+    StremioMeta item,
+  ) => AdvancedSearchSelection(
+    // Keep the raw addon id ONLY for non-standard types (IPTV / TV / channel)
+    // so playback/Sources can resolve the addon's own stream endpoint. A
+    // movie/series without a `tt…` id (e.g. tmdb/kitsu-only) keeps '' so it
+    // still shows the clear "No IMDb match" message instead of a doomed
+    // torrent search — the isolated engine can't resolve those ids anyway.
+    imdbId:
+        item.effectiveImdbId ??
+        (item.type == 'movie' || item.type == 'series' ? '' : item.id),
+    isSeries: false,
+    title: item.name,
+    year: item.year,
+    contentType: item.type,
+    posterUrl: item.poster,
+  );
 
   void _openEpisodes(StremioMeta item, StremioAddon addon) {
     _activeAddonId = addon.id;
@@ -2778,8 +2985,8 @@ class _SearchScreenState extends State<SearchScreen> {
     final seed = isSeries
         ? '${show.name} complete'
         : (show.year != null && show.year!.isNotEmpty
-            ? '${show.name} ${show.year}'
-            : show.name);
+              ? '${show.name} ${show.year}'
+              : show.name);
     final sel = AdvancedSearchSelection(
       imdbId: imdb,
       isSeries: isSeries,
@@ -2806,19 +3013,19 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Auto-best in-tab play: search torrents for the selection, pick the best
   /// instantly-playable source, and play — never leaving the Search tab.
   PlaybackMeta _metaFor(AdvancedSearchSelection sel) => PlaybackMeta(
-        // Only a real IMDb id here — the launcher's Trakt auto-sync + local
-        // Continue Watching must never fire on an empty or non-IMDb (IPTV) id,
-        // even though the search itself still uses sel.imdbId (the addon id).
-        imdbId: sel.imdbId.startsWith('tt') ? sel.imdbId : null,
-        contentType: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
-        season: sel.season,
-        episode: sel.episode,
-        title: sel.title,
-        posterUrl: sel.posterUrl,
-        year: sel.year,
-        addonId: _activeAddonId,
-        traktProgressPercent: sel.traktProgressPercent,
-      );
+    // Only a real IMDb id here — the launcher's Trakt auto-sync + local
+    // Continue Watching must never fire on an empty or non-IMDb (IPTV) id,
+    // even though the search itself still uses sel.imdbId (the addon id).
+    imdbId: sel.imdbId.startsWith('tt') ? sel.imdbId : null,
+    contentType: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
+    season: sel.season,
+    episode: sel.episode,
+    title: sel.title,
+    posterUrl: sel.posterUrl,
+    year: sel.year,
+    addonId: _activeAddonId,
+    traktProgressPercent: sel.traktProgressPercent,
+  );
 
   /// Catalog auto-best play — the service picks the provider, shows the real
   /// cinematic overlay, searches, and plays (with source list + content
@@ -2854,7 +3061,6 @@ class _SearchScreenState extends State<SearchScreen> {
         .then((_) => _refreshBoundSources());
   }
 
-
   void _snack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2868,29 +3074,55 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kStremioBg,
-      // Stremio-style indigo/purple glow: a soft purple bloom near the top
-      // fading into deep near-black indigo.
+      // A restrained indigo bloom near the top fading fast into near-black —
+      // toned down from a saturated purple so the posters carry the colour
+      // (Stremio's home grid is nearly monochrome).
       body: Container(
         decoration: const BoxDecoration(
           gradient: RadialGradient(
             center: Alignment(0, -0.75),
             radius: 1.35,
             colors: [
-              Color(0xFF322A6B), // purple bloom
-              Color(0xFF1A1734),
-              Color(0xFF100E20),
+              Color(0xFF241E44), // dim indigo bloom
+              Color(0xFF161327),
+              Color(0xFF0F0D1D),
               kStremioBg,
             ],
-            stops: [0.0, 0.42, 0.72, 1.0],
+            stops: [0.0, 0.38, 0.68, 1.0],
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(child: _buildBody()),
-            ],
-          ),
+          // On TV the board is chrome-free (no search bar) so the hero + rows
+          // own the screen, Stremio-style; the search field + Catalog/Keyword
+          // toggle + results appear only as an overlay opened from the sidebar
+          // magnifier (re-pressing the already-active Search tab). Desktop and
+          // mobile keep the persistent search bar — there's no re-press-the-rail
+          // gesture there, and the wider canvas has room for it.
+          child: (widget.isTelevision && !_searchOpen)
+              ? Stack(
+                  children: [
+                    _buildBoard(),
+                    // The board's only chrome: a small search icon top-right.
+                    // Visible so search is discoverable; SELECT opens the overlay
+                    // and DPAD-up from the top row also lands here.
+                    Positioned(
+                      top: 6,
+                      right: 18,
+                      child: _BoardSearchButton(
+                        focusNode: _boardSearchNode,
+                        onActivate: _openSearchOverlay,
+                        onDown: _focusContent,
+                        onLeave: () => MainPageBridge.focusTvSidebar?.call(),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  children: [
+                    _buildHeader(),
+                    Expanded(child: _buildBody()),
+                  ],
+                ),
         ),
       ),
     );
@@ -2922,11 +3154,7 @@ class _SearchScreenState extends State<SearchScreen> {
         padding: EdgeInsets.fromLTRB(16, tv ? 16 : 12, 16, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            field,
-            const SizedBox(height: 10),
-            toggle,
-          ],
+          children: [field, const SizedBox(height: 10), toggle],
         ),
       );
     }
@@ -2983,7 +3211,8 @@ class _SearchScreenState extends State<SearchScreen> {
         if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
           final text = _searchController.text;
           final sel = _searchController.selection;
-          final atEnd = text.isEmpty ||
+          final atEnd =
+              text.isEmpty ||
               sel.baseOffset < 0 ||
               (sel.isCollapsed && sel.baseOffset >= text.length);
           if (atEnd) {
@@ -3013,24 +3242,36 @@ class _SearchScreenState extends State<SearchScreen> {
               hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.32)),
               suffixIcon: hasText
                   ? IconButton(
-                      icon: Icon(Icons.close_rounded,
-                          color: Colors.white.withValues(alpha: 0.55)),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: Colors.white.withValues(alpha: 0.55),
+                      ),
                       onPressed: _clearQuery,
                     )
-                  : Icon(Icons.search_rounded,
-                      color: Colors.white.withValues(alpha: 0.4)),
+                  : Icon(
+                      Icons.search_rounded,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
               border: OutlineInputBorder(
-                  borderRadius: radius, borderSide: BorderSide.none),
+                borderRadius: radius,
+                borderSide: BorderSide.none,
+              ),
               enabledBorder: OutlineInputBorder(
-                  borderRadius: radius, borderSide: BorderSide.none),
+                borderRadius: radius,
+                borderSide: BorderSide.none,
+              ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: radius,
-                borderSide: BorderSide(color: kStremioAccent.withValues(alpha: 0.6)),
+                borderSide: BorderSide(
+                  color: kStremioAccent.withValues(alpha: 0.6),
+                ),
               ),
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.06),
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 20, vertical: tv ? 16 : 14),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: tv ? 16 : 14,
+              ),
             ),
           );
         },
@@ -3089,7 +3330,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   _kwAll.isEmpty ? 'No results' : 'No matches',
                   _kwAll.isEmpty
                       ? 'Nothing found for "$_kwQuery". Try different keywords '
-                          'or enable more sources.'
+                            'or enable more sources.'
                       : 'No results match your filters. Adjust or clear them.',
                 )
               : ListView.builder(
@@ -3098,8 +3339,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   itemCount: _kwResults.length,
                   itemBuilder: (context, i) {
                     final t = _kwResults[i];
-                    final selectable =
-                        !t.isDirectStream && !t.isExternalStream;
+                    final selectable = !t.isDirectStream && !t.isExternalStream;
                     return TorrentResultRow(
                       key: ValueKey(
                         '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
@@ -3121,9 +3361,13 @@ class _SearchScreenState extends State<SearchScreen> {
                         // Swallow a SELECT that leaks through as a toolbar
                         // dialog (sort/filter/sources) closes on TV.
                         if (DialogTapGuard.shouldIgnoreTap()) return;
-                        unawaited(TorrentPlaybackService.activateTorrent(
-                            context, t,
-                            searchKeyword: _kwQuery));
+                        unawaited(
+                          TorrentPlaybackService.activateTorrent(
+                            context,
+                            t,
+                            searchKeyword: _kwQuery,
+                          ),
+                        );
                       },
                       onLongPress: !_kwSelectionMode && selectable
                           ? () {
@@ -3188,11 +3432,14 @@ class _SearchScreenState extends State<SearchScreen> {
             children: [
               Icon(Icons.dns_rounded, size: 16, color: scheme.onSurfaceVariant),
               const SizedBox(width: 8),
-              Text('Sources',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface)),
+              Text(
+                'Sources',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface,
+                ),
+              ),
             ],
           ),
         ),
@@ -3205,55 +3452,65 @@ class _SearchScreenState extends State<SearchScreen> {
   /// toolbar stays Sort/Filters/Sources and never swaps to selection controls.
   Widget _buildKeywordToolbar({bool floatingSelect = false}) {
     final scheme = Theme.of(context).colorScheme;
-    final filterCount = _kwFilters.qualities.length +
+    final filterCount =
+        _kwFilters.qualities.length +
         _kwFilters.ripSources.length +
         _kwFilters.languages.length;
 
     // [navIndex]/[navTotal], when provided, make the pill keyboard/DPAD
     // focusable at that position in the toolbar (left/right between pills, up to
     // the search field, down into the results, select to activate).
-    Widget pill(IconData icon, String label, VoidCallback onTap,
-        {bool active = false,
-        bool compact = false,
-        int? navIndex,
-        int navTotal = 0}) {
+    Widget pill(
+      IconData icon,
+      String label,
+      VoidCallback onTap, {
+      bool active = false,
+      bool compact = false,
+      int? navIndex,
+      int navTotal = 0,
+    }) {
       Widget body(bool focused) => Container(
-            padding: compact
-                ? const EdgeInsets.all(10)
-                : const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-            decoration: BoxDecoration(
-              color: active
-                  ? scheme.primary.withValues(alpha: 0.16)
-                  : scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(999),
-              // Always 2px so focus never shifts layout: white ring when
-              // focused, else the active/idle border.
-              border: Border.all(
-                color: focused
-                    ? Colors.white.withValues(alpha: 0.9)
-                    : active
-                        ? scheme.primary.withValues(alpha: 0.5)
-                        : Colors.white.withValues(alpha: 0.10),
-                width: 2,
-              ),
-            ),
-            child: compact
-                ? Icon(icon,
-                    size: 18,
-                    color: active ? scheme.primary : scheme.onSurfaceVariant)
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 15, color: scheme.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Text(label,
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: scheme.onSurface)),
-                    ],
+        padding: compact
+            ? const EdgeInsets.all(10)
+            : const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+        decoration: BoxDecoration(
+          color: active
+              ? scheme.primary.withValues(alpha: 0.16)
+              : scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(999),
+          // Always 2px so focus never shifts layout: white ring when
+          // focused, else the active/idle border.
+          border: Border.all(
+            color: focused
+                ? Colors.white.withValues(alpha: 0.9)
+                : active
+                ? scheme.primary.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.10),
+            width: 2,
+          ),
+        ),
+        child: compact
+            ? Icon(
+                icon,
+                size: 18,
+                color: active ? scheme.primary : scheme.onSurfaceVariant,
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 15, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface,
+                    ),
                   ),
-          );
+                ],
+              ),
+      );
 
       final Widget tappable = navIndex == null
           ? Material(
@@ -3284,10 +3541,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             );
 
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: tappable,
-      );
+      return Padding(padding: const EdgeInsets.only(right: 8), child: tappable);
     }
 
     if (_kwSelectionMode && !floatingSelect) {
@@ -3299,8 +3553,13 @@ class _SearchScreenState extends State<SearchScreen> {
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
         child: Row(
           children: [
-            pill(Icons.close_rounded, 'Cancel', _exitKwSelection,
-                navIndex: 0, navTotal: 3),
+            pill(
+              Icons.close_rounded,
+              'Cancel',
+              _exitKwSelection,
+              navIndex: 0,
+              navTotal: 3,
+            ),
             pill(
               allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
               allSelected ? 'None' : 'All',
@@ -3329,9 +3588,14 @@ class _SearchScreenState extends State<SearchScreen> {
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Row(
         children: [
-          pill(Icons.sort_rounded, 'Sort · ${_sortLabel(_kwSort)}',
-              _openKeywordSort,
-              compact: floatingSelect, navIndex: 0, navTotal: total),
+          pill(
+            Icons.sort_rounded,
+            'Sort · ${_sortLabel(_kwSort)}',
+            _openKeywordSort,
+            compact: floatingSelect,
+            navIndex: 0,
+            navTotal: total,
+          ),
           pill(
             Icons.filter_list_rounded,
             filterCount > 0 ? 'Filters · $filterCount' : 'Filters',
@@ -3341,11 +3605,22 @@ class _SearchScreenState extends State<SearchScreen> {
             navIndex: 1,
             navTotal: total,
           ),
-          pill(Icons.dns_rounded, 'Sources', _openKeywordSources,
-              compact: floatingSelect, navIndex: 2, navTotal: total),
+          pill(
+            Icons.dns_rounded,
+            'Sources',
+            _openKeywordSources,
+            compact: floatingSelect,
+            navIndex: 2,
+            navTotal: total,
+          ),
           if (showSelect)
-            pill(Icons.checklist_rounded, 'Select', _enterKwSelection,
-                navIndex: 3, navTotal: total),
+            pill(
+              Icons.checklist_rounded,
+              'Select',
+              _enterKwSelection,
+              navIndex: 3,
+              navTotal: total,
+            ),
         ],
       ),
     );
@@ -3355,7 +3630,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// pill, left/right move between pills, up returns to the search field, down
   /// drops into the first result row.
   KeyEventResult _handleKwToolbarKey(
-      int index, int total, VoidCallback onTap, KeyEvent event) {
+    int index,
+    int total,
+    VoidCallback onTap,
+    KeyEvent event,
+  ) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
     if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
@@ -3408,8 +3687,11 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ],
           ),
-          child: const Icon(Icons.checklist_rounded,
-              color: Colors.white, size: 20),
+          child: const Icon(
+            Icons.checklist_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
         ),
       ),
     );
@@ -3424,16 +3706,16 @@ class _SearchScreenState extends State<SearchScreen> {
     final bottomPad = MediaQuery.of(context).padding.bottom;
 
     Widget chip(Widget child, VoidCallback? onTap, Color bg) => GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: child,
-          ),
-        );
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: child,
+      ),
+    );
 
     return Positioned(
       left: 12,
@@ -3477,9 +3759,10 @@ class _SearchScreenState extends State<SearchScreen> {
               Text(
                 allSelected ? 'None' : 'All',
                 style: const TextStyle(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12),
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
               ),
               allSelected ? _deselectAllKw : _selectAllKw,
               Colors.white.withValues(alpha: 0.08),
@@ -3489,15 +3772,20 @@ class _SearchScreenState extends State<SearchScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.playlist_add_rounded,
-                      color: count > 0 ? Colors.white : Colors.white38,
-                      size: 16),
+                  Icon(
+                    Icons.playlist_add_rounded,
+                    color: count > 0 ? Colors.white : Colors.white38,
+                    size: 16,
+                  ),
                   const SizedBox(width: 4),
-                  Text('Add',
-                      style: TextStyle(
-                          color: count > 0 ? Colors.white : Colors.white38,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12)),
+                  Text(
+                    'Add',
+                    style: TextStyle(
+                      color: count > 0 ? Colors.white : Colors.white38,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
               count > 0 ? _openBulkAdd : null,
@@ -3520,6 +3808,28 @@ class _SearchScreenState extends State<SearchScreen> {
         'name': 'Name',
       }[s] ??
       s;
+
+  /// Poster width for a board rail. On TV the logical canvas can be as short as
+  /// 540px (a 1080p panel at density 320 → devicePixelRatio 2.0), where a poster
+  /// tuned for a 720-logical canvas leaves no room for a row (plus its header and
+  /// the next row's header) under the hero. So scale the poster with the screen
+  /// height.
+  double _railPosterW(BuildContext context) {
+    if (!widget.isTelevision) {
+      return MediaQuery.of(context).size.width >= 900 ? 162.0 : 118.0;
+    }
+    return (MediaQuery.of(context).size.height * 0.20).clamp(104.0, 152.0);
+  }
+
+  /// Full height of one board row's poster strip (a titleless 2:3 poster plus
+  /// the hover/focus lift headroom). Kept as a helper so the hero sizing in
+  /// [_buildBoard] reserves exactly what a row (and its neighbours) occupy.
+  double _railRowH(BuildContext context) => _railPosterW(context) * 3 / 2 + 14;
+
+  /// Approximate height of a rail's header (title row). Matches the padding +
+  /// line height in [_railHeader]; used only to budget the hero so a row header
+  /// (current and next) stays visible.
+  double get _railHeaderH => widget.isTelevision ? 44.0 : 52.0;
 
   Widget _buildBoard() {
     if (_loading) {
@@ -3552,73 +3862,96 @@ class _SearchScreenState extends State<SearchScreen> {
 
     final tv = widget.isTelevision;
     final width = MediaQuery.of(context).size.width;
-    final heroH = tv ? 380.0 : (width >= 900 ? 300.0 : 196.0);
 
-    return Column(
-      children: [
-        // The hero spotlight only changes as DPAD focus moves across tiles, so
-        // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
-        // sit frozen on the first item and waste vertical space — hide it.
-        if (tv)
-          ValueListenableBuilder<StremioMeta?>(
-            valueListenable: _heroItem,
-            builder: (context, item, _) {
-              if (item == null) return const SizedBox.shrink();
-              return ValueListenableBuilder<StremioMeta?>(
-                valueListenable: _heroEnriched,
-                builder: (context, enriched, __) {
-                  return _HeroSpotlight(
-                    item: item,
-                    background: item.background?.isNotEmpty == true
-                        ? item.background
-                        : enriched?.background,
-                    description: item.description?.isNotEmpty == true
-                        ? item.description
-                        : enriched?.description,
-                    isTelevision: tv,
-                    height: heroH,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Size the hero from the board's own height (below the search header) so a
+        // full poster row plus the current + next row headers always stay on
+        // screen. On a short-canvas TV (~540 logical) the hero shrinks; tall
+        // canvases keep it large and reveal more rows.
+        final heroH = tv
+            ? (constraints.maxHeight - _railRowH(context) - _railHeaderH * 2)
+                  .clamp(150.0, 380.0)
+            : (width >= 900 ? 300.0 : 196.0);
+
+        return Column(
+          children: [
+            // The hero spotlight only changes as DPAD focus moves across tiles, so
+            // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
+            // sit frozen on the first item and waste vertical space — hide it.
+            if (tv)
+              ValueListenableBuilder<StremioMeta?>(
+                valueListenable: _heroItem,
+                builder: (context, item, _) {
+                  if (item == null) return const SizedBox.shrink();
+                  return ValueListenableBuilder<StremioMeta?>(
+                    valueListenable: _heroEnriched,
+                    builder: (context, enriched, __) {
+                      return _HeroSpotlight(
+                        item: item,
+                        background: item.background?.isNotEmpty == true
+                            ? item.background
+                            : enriched?.background,
+                        description: item.description?.isNotEmpty == true
+                            ? item.description
+                            : enriched?.description,
+                        isTelevision: tv,
+                        height: heroH,
+                      );
+                    },
                   );
                 },
-              );
-            },
-          ),
-        Expanded(
-          child: Builder(builder: (context) {
-            // Leading board rows, in order: Continue Watching (local, then
-            // Trakt), then the favourites rows (IPTV, Debrify TV, Stremio TV —
-            // matching the Home screen); the catalog sections follow, offset by
-            // the total leading row count.
-            final cwRows = showCw ? _cwRows : const <_CwRow>[];
-            final cwCount = cwRows.length;
-            final favKinds = _favRowKinds;
-            final favCount = favKinds.length;
-            final leadingCount = cwCount + favCount;
-            // Footer spinner tracks the actual fetch, not just "more remain":
-            // `_boardCursor` advances synchronously so the final in-flight batch
-            // still shows it, and an idle board with more rows doesn't spin.
-            final showFooter = _boardLoadingMore;
-            return ListView.builder(
-              controller: _boardScroll,
-              padding: const EdgeInsets.only(top: 6, bottom: 32),
-              cacheExtent: 2000,
-              itemCount: _sections.length + leadingCount + (showFooter ? 1 : 0),
-              itemBuilder: (context, i) {
-                if (i < cwCount) {
-                  return _buildContinueWatchingRow(
-                      cwRows[i], i, cwCount, favCount);
-                }
-                if (i < leadingCount) {
-                  final favIndex = i - cwCount;
-                  return _buildFavRow(favKinds[favIndex], favIndex, cwCount);
-                }
-                final s = i - leadingCount;
-                if (s >= _sections.length) return _buildBoardFooter();
-                return _buildRow(s);
-              },
-            );
-          }),
-        ),
-      ],
+              ),
+            Expanded(
+              child: Builder(
+                builder: (context) {
+                  // Leading board rows, in order: Continue Watching (local, then
+                  // Trakt), then the favourites rows (IPTV, Debrify TV, Stremio TV —
+                  // matching the Home screen); the catalog sections follow, offset by
+                  // the total leading row count.
+                  final cwRows = showCw ? _cwRows : const <_CwRow>[];
+                  final cwCount = cwRows.length;
+                  final favKinds = _favRowKinds;
+                  final favCount = favKinds.length;
+                  final leadingCount = cwCount + favCount;
+                  // Footer spinner tracks the actual fetch, not just "more remain":
+                  // `_boardCursor` advances synchronously so the final in-flight batch
+                  // still shows it, and an idle board with more rows doesn't spin.
+                  final showFooter = _boardLoadingMore;
+                  return ListView.builder(
+                    controller: _boardScroll,
+                    padding: const EdgeInsets.only(top: 6, bottom: 32),
+                    cacheExtent: 2000,
+                    itemCount:
+                        _sections.length + leadingCount + (showFooter ? 1 : 0),
+                    itemBuilder: (context, i) {
+                      if (i < cwCount) {
+                        return _buildContinueWatchingRow(
+                          cwRows[i],
+                          i,
+                          cwCount,
+                          favCount,
+                        );
+                      }
+                      if (i < leadingCount) {
+                        final favIndex = i - cwCount;
+                        return _buildFavRow(
+                          favKinds[favIndex],
+                          favIndex,
+                          cwCount,
+                        );
+                      }
+                      final s = i - leadingCount;
+                      if (s >= _sections.length) return _buildBoardFooter();
+                      return _buildRow(s);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -3666,11 +3999,6 @@ class _SearchScreenState extends State<SearchScreen> {
         )
         .then((_) => _afterSeeAllReturn());
   }
-
-  /// The focus node backing a row's leading "See All" DPAD tile ([_SeeAllTile]),
-  /// created on first use and keyed by a stable per-row id.
-  FocusNode _seeAllNodeFor(String key) => _seeAllNodes.putIfAbsent(
-      key, () => FocusNode(debugLabel: 'seeall_tile_$key'));
 
   /// Refresh state that a See-All screen may have changed (Continue Watching
   /// progress/removal, bound sources) when it pops back to the board. Reload
@@ -3770,9 +4098,10 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// Shared header for a board rail: title + optional tag pill, with an optional
-  /// right-pinned "See All" link. Title + tag share all leftover width (Expanded)
-  /// so a plain Spacer can't split the row and truncate the title early.
+  /// Shared header for a board rail: a plain "Popular · Movies"-style title
+  /// (Stremio keeps the type as quiet suffix text, not a coloured pill). The
+  /// "See All" link is a mouse/tap affordance shown on desktop only — TV keeps
+  /// the rail chrome-free and paginates as the user scrolls.
   Widget _railHeader({
     required String title,
     String? tag,
@@ -3780,34 +4109,40 @@ class _SearchScreenState extends State<SearchScreen> {
   }) {
     final tv = widget.isTelevision;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
+      // Tighter vertically on TV so the current row's header + a peek of the
+      // next row fit under the hero on short-canvas panels.
+      padding: EdgeInsets.fromLTRB(24, tv ? 14 : 22, 24, tv ? 10 : 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: tv ? 20 : 19,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.4,
-                      color: Theme.of(context).colorScheme.onSurface,
+            child: Text.rich(
+              TextSpan(
+                text: title,
+                children: [
+                  if (tag != null)
+                    TextSpan(
+                      text: '  ·  $tag',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.34),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ),
-                if (tag != null) ...[
-                  const SizedBox(width: 10),
-                  _CategoryTag(tag),
                 ],
-              ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // Poppins for the rail titles too, so headings share one display
+              // face; loosened from the old -0.2 tracking for the airier look.
+              style: GoogleFonts.poppins(
+                fontSize: tv ? 18 : 17,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0,
+                color: Colors.white.withValues(alpha: 0.92),
+              ),
             ),
           ),
-          if (onSeeAll != null) _SeeAllLink(onTap: onSeeAll),
+          if (onSeeAll != null && !tv) _SeeAllLink(onTap: onSeeAll),
         ],
       ),
     );
@@ -3817,16 +4152,13 @@ class _SearchScreenState extends State<SearchScreen> {
     final section = _sections[rowIndex];
     final nodes = _rowNodes[rowIndex];
     final tv = widget.isTelevision;
-    final width = MediaQuery.of(context).size.width;
     // Bigger, roomier posters on desktop (Stremio-scale); smaller on phones.
-    final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
+    final posterW = _railPosterW(context);
     final posterH = posterW * 3 / 2;
-    // Cell = poster + gap + a 2-line title below. Size the title band from the
-    // actual (accessibility-scaled) line height so a large system font can't
-    // overflow the fixed cell.
-    final titleH = MediaQuery.textScalerOf(context).scale(14) * 1.25 * 2;
-    final cellH = posterH + 10 + titleH + 6;
-    final rowH = cellH + 14; // headroom for the hover/focus lift
+    // Titleless cells (Stremio-style) — just the 2:3 poster + a little headroom
+    // for the hover/focus lift.
+    final cellH = posterH;
+    final rowH = cellH + 14;
     final typeLabel = _sectionTypeLabel(section);
 
     return Column(
@@ -3851,99 +4183,77 @@ class _SearchScreenState extends State<SearchScreen> {
               }
               return false;
             },
-            child: Builder(builder: (context) {
-              // Leading DPAD "See All" tile (TV only). It shifts posters and the
-              // trailing spinner one slot right; each poster keeps its 0-based
-              // `column` into `nodes`.
-              final hasTile = tv;
-              final seeAllKey = 'cat_$rowIndex';
-              // Shared up/down DPAD targets for a given column, used by both the
-              // leading tile (col 0) and the poster cards.
-              VoidCallback up(int col) => rowIndex == 0
-                  ? (_anyFavVisible
-                      ? () => _focusFavRowAt(_favRowCount - 1, col)
-                      : (_cwVisible
-                          ? () => _focusCwRow(_cwRows.length - 1, col)
-                          : () => _searchFocusNode.requestFocus()))
-                  : () => _focusRow(rowIndex - 1, col);
-              VoidCallback down(int col) => () => _focusRow(rowIndex + 1, col);
-              return ListView.builder(
-                scrollDirection: Axis.horizontal,
-                // Clip the horizontal viewport so scrolled-off cards don't paint
-                // over the sidebar to the left. rowH has enough headroom that the
-                // hover/focus lift still isn't clipped.
-                clipBehavior: Clip.hardEdge,
-                cacheExtent: 2000,
-                padding: const EdgeInsets.symmetric(horizontal: 13),
-                // +1 leading See-All tile (TV) and +1 trailing paging spinner.
-                itemCount: (hasTile ? 1 : 0) +
-                    section.items.length +
-                    (section.loadingMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (hasTile && index == 0) {
+            child: Builder(
+              builder: (context) {
+                // Rows start straight on the first poster (Stremio-style, no
+                // leading See-All tile). DPAD-up from row 0 leaves the board;
+                // col-0 DPAD-left drops to the sidebar (handled in _BoardCell
+                // when onLeftEdge is null).
+                VoidCallback up(int col) => rowIndex == 0
+                    ? (_anyFavVisible
+                          ? () => _focusFavRowAt(_favRowCount - 1, col)
+                          : (_cwVisible
+                                ? () => _focusCwRow(_cwRows.length - 1, col)
+                                : () => _leaveBoardTop()))
+                    : () => _focusRow(rowIndex - 1, col);
+                VoidCallback down(int col) =>
+                    () => _focusRow(rowIndex + 1, col);
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  // Clip the horizontal viewport so scrolled-off cards don't paint
+                  // over the sidebar to the left. rowH has enough headroom that the
+                  // hover/focus lift still isn't clipped.
+                  clipBehavior: Clip.hardEdge,
+                  cacheExtent: 2000,
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                  // +1 trailing paging spinner.
+                  itemCount:
+                      section.items.length + (section.loadingMore ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    final col = index;
+                    if (col >= section.items.length) {
+                      return SizedBox(
+                        width: 52,
+                        height: cellH,
+                        child: const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      );
+                    }
+                    final item = section.items[col];
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 11),
-                      child: _SeeAllTile(
-                        focusNode: _seeAllNodeFor(seeAllKey),
-                        width: 64,
-                        posterHeight: posterH,
-                        cellHeight: cellH,
-                        onSelect: () => _openCatalogSeeAll(section),
-                        onLeft: () => MainPageBridge.focusTvSidebar?.call(),
-                        onRight: () {
-                          if (nodes.isNotEmpty) nodes[0].requestFocus();
-                        },
-                        onUp: up(0),
-                        onDown: down(0),
-                      ),
-                    );
-                  }
-                  final col = hasTile ? index - 1 : index;
-                  if (col >= section.items.length) {
-                    return SizedBox(
-                      width: 52,
-                      height: cellH,
-                      child: const Center(
+                      child: Center(
                         child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          width: posterW,
+                          height: cellH,
+                          child: _BoardCell(
+                            item: item,
+                            isTelevision: tv,
+                            focusNode: nodes[col],
+                            column: col,
+                            rowNodes: nodes,
+                            hasBoundSource: _isBound(item),
+                            onQuickPlay: _pikpakOnly
+                                ? null
+                                : () => _onCatalogPlay(item, section.addon),
+                            onFocused: () => _setHero(item),
+                            onUp: up(col),
+                            onDown: down(col),
+                            onOpen: () => _openItem(item, section.addon),
+                            onNearEnd: () => _loadMoreRow(rowIndex),
+                          ),
                         ),
                       ),
                     );
-                  }
-                  final item = section.items[col];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 11),
-                    child: Center(
-                      child: SizedBox(
-                        width: posterW,
-                        height: cellH,
-                        child: _BoardCell(
-                          item: item,
-                          isTelevision: tv,
-                          focusNode: nodes[col],
-                          column: col,
-                          rowNodes: nodes,
-                          hasBoundSource: _isBound(item),
-                          onQuickPlay: _pikpakOnly
-                              ? null
-                              : () => _onCatalogPlay(item, section.addon),
-                          onFocused: () => _setHero(item),
-                          onUp: up(col),
-                          onDown: down(col),
-                          onOpen: () => _openItem(item, section.addon),
-                          onNearEnd: () => _loadMoreRow(rowIndex),
-                          onLeftEdge: hasTile && col == 0
-                              ? () => _seeAllNodeFor(seeAllKey).requestFocus()
-                              : null,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            }),
+                  },
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -3971,13 +4281,15 @@ class _SearchScreenState extends State<SearchScreen> {
   /// [favCount] is the number of favourites rows just below, so the last CW
   /// row's DPAD-down lands on the first of them instead of the first catalog row.
   Widget _buildContinueWatchingRow(
-      _CwRow row, int cwIndex, int cwCount, int favCount) {
+    _CwRow row,
+    int cwIndex,
+    int cwCount,
+    int favCount,
+  ) {
     final tv = widget.isTelevision;
-    final width = MediaQuery.of(context).size.width;
-    final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
+    final posterW = _railPosterW(context);
     final posterH = posterW * 3 / 2;
-    final titleH = MediaQuery.textScalerOf(context).scale(14) * 1.25 * 2;
-    final cellH = posterH + 10 + titleH + 6;
+    final cellH = posterH;
     final rowH = cellH + 14;
     final items = row.items;
     final nodes = row.nodes;
@@ -3985,88 +4297,61 @@ class _SearchScreenState extends State<SearchScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _railHeader(
-          title: row.title,
-          tag: row.tag,
-          onSeeAll: row.onSeeAll,
-        ),
+        _railHeader(title: row.title, tag: row.tag, onSeeAll: row.onSeeAll),
         SizedBox(
           height: rowH,
-          child: Builder(builder: (context) {
-            // A leading DPAD "See All" tile (TV only, and only when this row has
-            // a See-All target). It shifts the posters one slot right in the
-            // list, but each poster keeps its 0-based `column` into `nodes`.
-            final hasTile = tv && row.onSeeAll != null;
-            final seeAllKey = 'cw_${row.title}_${row.tag}';
-            // Shared up/down DPAD targets for a given column, used by both the
-            // leading tile (col 0) and the poster cards.
-            VoidCallback up(int col) => cwIndex == 0
-                ? () => _searchFocusNode.requestFocus()
-                : () => _focusCwRow(cwIndex - 1, col);
-            VoidCallback down(int col) => cwIndex < cwCount - 1
-                ? () => _focusCwRow(cwIndex + 1, col)
-                : (favCount > 0
-                    ? () => _focusFavRowAt(0, col)
-                    : () => _focusRow(0, col));
-            return ListView.builder(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.hardEdge,
-              cacheExtent: 2000,
-              padding: const EdgeInsets.symmetric(horizontal: 13),
-              itemCount: items.length + (hasTile ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (hasTile && index == 0) {
+          child: Builder(
+            builder: (context) {
+              // Rows start on the first poster (no leading See-All tile). DPAD-up
+              // from the first CW row leaves the board; col-0 DPAD-left drops to
+              // the sidebar (handled in _BoardCell when onLeftEdge is null).
+              VoidCallback up(int col) => cwIndex == 0
+                  ? () => _leaveBoardTop()
+                  : () => _focusCwRow(cwIndex - 1, col);
+              VoidCallback down(int col) => cwIndex < cwCount - 1
+                  ? () => _focusCwRow(cwIndex + 1, col)
+                  : (favCount > 0
+                        ? () => _focusFavRowAt(0, col)
+                        : () => _focusRow(0, col));
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.hardEdge,
+                cacheExtent: 2000,
+                padding: const EdgeInsets.symmetric(horizontal: 13),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final col = index;
+                  final item = items[col];
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 11),
-                    child: _SeeAllTile(
-                      focusNode: _seeAllNodeFor(seeAllKey),
-                      width: 64,
-                      posterHeight: posterH,
-                      cellHeight: cellH,
-                      onSelect: row.onSeeAll!,
-                      onLeft: () => MainPageBridge.focusTvSidebar?.call(),
-                      onRight: () {
-                        if (nodes.isNotEmpty) nodes[0].requestFocus();
-                      },
-                      onUp: up(0),
-                      onDown: down(0),
-                    ),
-                  );
-                }
-                final col = hasTile ? index - 1 : index;
-                final item = items[col];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 11),
-                  child: Center(
-                    child: SizedBox(
-                      width: posterW,
-                      height: cellH,
-                      child: _BoardCell(
-                        item: item,
-                        isTelevision: tv,
-                        focusNode: nodes[col],
-                        column: col,
-                        rowNodes: nodes,
-                        hasBoundSource: _isBound(item),
-                        progress: row.progressOf(item),
-                        episodeLabel: row.episodeOf(item),
-                        onQuickPlay:
-                            _pikpakOnly ? null : () => row.onQuickPlay(item),
-                        onFocused: () => _setHero(item),
-                        onUp: up(col),
-                        onDown: down(col),
-                        onOpen: () => row.onOpen(item),
-                        // Column 0 hands LEFT to the leading See-All tile.
-                        onLeftEdge: hasTile && col == 0
-                            ? () => _seeAllNodeFor(seeAllKey).requestFocus()
-                            : null,
+                    child: Center(
+                      child: SizedBox(
+                        width: posterW,
+                        height: cellH,
+                        child: _BoardCell(
+                          item: item,
+                          isTelevision: tv,
+                          focusNode: nodes[col],
+                          column: col,
+                          rowNodes: nodes,
+                          hasBoundSource: _isBound(item),
+                          progress: row.progressOf(item),
+                          episodeLabel: row.episodeOf(item),
+                          onQuickPlay: _pikpakOnly
+                              ? null
+                              : () => row.onQuickPlay(item),
+                          onFocused: () => _setHero(item),
+                          onUp: up(col),
+                          onDown: down(col),
+                          onOpen: () => row.onOpen(item),
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-            );
-          }),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ],
     );
@@ -4099,11 +4384,9 @@ class _SearchScreenState extends State<SearchScreen> {
     required Widget Function(int col, double posterW, double cellH) cellBuilder,
   }) {
     final tv = widget.isTelevision;
-    final width = MediaQuery.of(context).size.width;
-    final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
+    final posterW = _railPosterW(context);
     final posterH = posterW * 3 / 2;
-    final titleH = MediaQuery.textScalerOf(context).scale(14) * 1.25 * 2;
-    final cellH = posterH + 10 + titleH + 6;
+    final cellH = posterH;
     final rowH = cellH + 14;
 
     return Column(
@@ -4172,8 +4455,9 @@ class _SearchScreenState extends State<SearchScreen> {
       itemCount: _tvFavChannels.length,
       cellBuilder: (col, posterW, cellH) {
         final channel = _tvFavChannels[col];
-        final number =
-            channel.channelNumber > 0 ? channel.channelNumber : col + 1;
+        final number = channel.channelNumber > 0
+            ? channel.channelNumber
+            : col + 1;
         return _FavArtCell(
           isTelevision: tv,
           column: col,
@@ -4274,9 +4558,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final tv = widget.isTelevision;
     return _buildFavRowShell(
       title: 'Playlist',
-      tags: const [
-        _CategoryTag('Saved'),
-      ],
+      tags: const [_CategoryTag('Saved')],
       itemCount: _playlistItems.length,
       cellBuilder: (col, posterW, cellH) {
         final item = _playlistItems[col];
@@ -4369,35 +4651,40 @@ class _HeroSpotlight extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           if (bg.isNotEmpty)
-            CachedNetworkImage(
-              imageUrl: bg,
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-              errorWidget: (_, __, ___) => const SizedBox.shrink(),
+            // Fade the backdrop's lower third to transparent so it melts into
+            // the page's own gradient instead of ending on a hard horizontal
+            // edge (the "seam"). The board rows then read as one surface with
+            // the hero rather than two stacked boxes.
+            ShaderMask(
+              shaderCallback: (rect) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.white, Colors.white, Colors.transparent],
+                stops: [0.0, 0.55, 1.0],
+              ).createShader(rect),
+              blendMode: BlendMode.dstIn,
+              child: CachedNetworkImage(
+                imageUrl: bg,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                errorWidget: (_, __, ___) => const SizedBox.shrink(),
+              ),
             ),
-          // Left + bottom scrims for legibility.
+          // Left scrim for title/description legibility (vertical bands, so it
+          // adds no horizontal seam). The bottom is handled by the image fade
+          // above, letting the page background show through.
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
                 colors: [
-                  scheme.surface,
-                  scheme.surface.withValues(alpha: 0.82),
-                  scheme.surface.withValues(alpha: 0.15),
+                  scheme.surface.withValues(alpha: 0.92),
+                  scheme.surface.withValues(alpha: 0.66),
+                  scheme.surface.withValues(alpha: 0.10),
                   Colors.transparent,
                 ],
                 stops: const [0.0, 0.34, 0.66, 1.0],
-              ),
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [scheme.surface, Colors.transparent],
-                stops: const [0.02, 0.5],
               ),
             ),
           ),
@@ -4406,21 +4693,22 @@ class _HeroSpotlight extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.fromLTRB(24, 0, 24, isTelevision ? 22 : 16),
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: isTelevision ? 640 : 520,
-                ),
+                constraints: BoxConstraints(maxWidth: isTelevision ? 640 : 520),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 9, vertical: 4),
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.14)),
+                          color: Colors.white.withValues(alpha: 0.14),
+                        ),
                       ),
                       child: Text(
                         item.type == 'series' ? 'SERIES' : 'MOVIE',
@@ -4437,11 +4725,14 @@ class _HeroSpotlight extends StatelessWidget {
                       item.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: isTelevision ? 40 : 26,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1,
-                        height: 1.04,
+                      // Poppins (rounded geometric) for the display title, airier
+                      // and lighter than Inter-w800/-1 tracking — closer to
+                      // Stremio's hero. Body/metadata stay on the Inter theme.
+                      style: GoogleFonts.poppins(
+                        fontSize: isTelevision ? 38 : 26,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                        height: 1.06,
                         color: Colors.white,
                       ),
                     ),
@@ -4449,8 +4740,11 @@ class _HeroSpotlight extends StatelessWidget {
                     Row(
                       children: [
                         if (item.imdbRating != null) ...[
-                          const Icon(Icons.star_rounded,
-                              size: 16, color: HomeTheme.focusGold),
+                          const Icon(
+                            Icons.star_rounded,
+                            size: 16,
+                            color: HomeTheme.focusGold,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             item.imdbRating!.toStringAsFixed(1),
@@ -4500,16 +4794,16 @@ class _HeroSpotlight extends StatelessWidget {
   }
 
   Widget _dot() => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 9),
-        child: Container(
-          width: 3,
-          height: 3,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.4),
-            shape: BoxShape.circle,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 9),
+    child: Container(
+      width: 3,
+      height: 3,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.4),
+        shape: BoxShape.circle,
+      ),
+    ),
+  );
 }
 
 /// Small pill next to a catalog-row header marking it as Movies / Series / etc.
@@ -4614,10 +4908,6 @@ class _BoardCell extends StatelessWidget {
   /// don't paginate (e.g. Continue Watching).
   final VoidCallback? onNearEnd;
 
-  /// DPAD-left from column 0. When null, focus leaves to the sidebar; when set
-  /// (a row with a leading "See All" tile), it hands focus to that tile instead.
-  final VoidCallback? onLeftEdge;
-
   const _BoardCell({
     required this.item,
     required this.isTelevision,
@@ -4633,7 +4923,6 @@ class _BoardCell extends StatelessWidget {
     required this.onDown,
     required this.onOpen,
     this.onNearEnd,
-    this.onLeftEdge,
   });
 
   KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
@@ -4644,9 +4933,8 @@ class _BoardCell extends StatelessWidget {
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (column > 0) {
         rowNodes[column - 1].requestFocus();
-      } else if (onLeftEdge != null) {
-        onLeftEdge!();
       } else {
+        // First card in the row — leave to the sidebar (no leading tile now).
         MainPageBridge.focusTvSidebar?.call();
       }
       return KeyEventResult.handled;
@@ -4695,8 +4983,8 @@ class _BoardCell extends StatelessWidget {
 }
 
 /// Stremio-style poster card: clean rounded poster with a soft shadow that
-/// lifts on hover/focus, and the title centered BELOW the poster (2 lines).
-/// Deliberately minimal (no MOVIE/rating chips) to mirror Stremio's board.
+/// lifts on hover/focus. Deliberately minimal — no title band, no MOVIE/rating
+/// chips — so the artwork carries the rail exactly like Stremio's board.
 class _StremioCard extends StatefulWidget {
   final StremioMeta item;
   final bool isTelevision;
@@ -4778,10 +5066,12 @@ class _StremioCardState extends State<_StremioCard> {
                   const Positioned(
                     top: 8,
                     right: 8,
-                    child: Icon(Icons.bookmark_rounded,
-                        size: 18,
-                        color: Colors.white,
-                        shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
+                    child: Icon(
+                      Icons.bookmark_rounded,
+                      size: 18,
+                      color: Colors.white,
+                      shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+                    ),
                   ),
                 // Subtle season/episode badge for a Continue Watching series
                 // card — sits just above the progress bar, bottom-left.
@@ -4790,8 +5080,10 @@ class _StremioCardState extends State<_StremioCard> {
                     left: 6,
                     bottom: widget.progress != null ? 11 : 6,
                     child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.66),
                         borderRadius: BorderRadius.circular(5),
@@ -4896,27 +5188,9 @@ class _StremioCardState extends State<_StremioCard> {
           onTap: widget.onOpen,
           onLongPress: widget.onQuickPlay,
           behavior: HitTestBehavior.opaque,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              posterCard,
-              const SizedBox(height: 10),
-              Text(
-                item.name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: _active
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.92),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  height: 1.25,
-                ),
-              ),
-            ],
-          ),
+          // No title beneath the poster — Stremio lets the artwork carry the
+          // rail; the title lives on the hero (focused) and the detail page.
+          child: posterCard,
         ),
       ),
     );
@@ -4944,9 +5218,101 @@ class _StremioCardState extends State<_StremioCard> {
   }
 }
 
+/// The small search icon pinned to the top-right of the chrome-free TV board —
+/// the one visible entry into the search overlay. SELECT opens it; DPAD-down
+/// drops into the board's first row; DPAD-left/up leaves to the sidebar. A
+/// tap works too (for touch TVs / pointer).
+class _BoardSearchButton extends StatefulWidget {
+  final FocusNode focusNode;
+  final VoidCallback onActivate;
+  final VoidCallback onDown;
+  final VoidCallback onLeave;
+
+  const _BoardSearchButton({
+    required this.focusNode,
+    required this.onActivate,
+    required this.onDown,
+    required this.onLeave,
+  });
+
+  @override
+  State<_BoardSearchButton> createState() => _BoardSearchButtonState();
+}
+
+class _BoardSearchButtonState extends State<_BoardSearchButton> {
+  bool _focused = false;
+  bool _keyDown = false;
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+      if (event is KeyDownEvent) {
+        _keyDown = true;
+        return KeyEventResult.handled;
+      } else if (event is KeyUpEvent) {
+        if (_keyDown) widget.onActivate();
+        _keyDown = false;
+        return KeyEventResult.handled;
+      }
+    }
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      widget.onDown();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowUp) {
+      widget.onLeave();
+      return KeyEventResult.handled;
+    }
+    // Swallow arrow-right so focus can't escape into the hero/backdrop.
+    if (key == LogicalKeyboardKey.arrowRight) return KeyEventResult.handled;
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: _onKey,
+      onFocusChange: (f) => setState(() => _focused = f),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onActivate,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _focused
+                  ? kStremioAccent.withValues(alpha: 0.9)
+                  : Colors.black.withValues(alpha: 0.42),
+              border: Border.all(
+                color: _focused
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.22),
+                width: _focused ? 2 : 1,
+              ),
+            ),
+            child: Icon(
+              Icons.search_rounded,
+              size: 22,
+              color: Colors.white.withValues(alpha: _focused ? 1 : 0.85),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The "See All ›" affordance in a rail header — a mouse/tap entry to the
-/// full-screen See-All screen. It stays outside the row's focus graph; DPAD
-/// users reach the same target via the leading [_SeeAllTile] instead.
+/// full-screen See-All screen, shown on desktop only. Kept understated (quiet
+/// grey that brightens on hover, no accent fill) so it doesn't compete with the
+/// posters. TV rails are chrome-free and paginate on scroll instead.
 class _SeeAllLink extends StatefulWidget {
   final VoidCallback onTap;
   const _SeeAllLink({required this.onTap});
@@ -4960,7 +5326,7 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
 
   @override
   Widget build(BuildContext context) {
-    final color = _hover ? Colors.white : const Color(0xFFB9A9FF);
+    final color = _hover ? Colors.white : Colors.white.withValues(alpha: 0.5);
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -4972,7 +5338,7 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
           decoration: BoxDecoration(
             color: _hover
-                ? kStremioAccent.withValues(alpha: 0.14)
+                ? Colors.white.withValues(alpha: 0.08)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
@@ -4984,147 +5350,12 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
                 style: TextStyle(
                   color: color,
                   fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(width: 4),
               Icon(Icons.chevron_right_rounded, size: 17, color: color),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Leading DPAD-focusable "See All" tile for a rail (TV only). Sits at the head
-/// of a row's horizontal strip so a remote can reach the full-screen grid:
-/// SELECT opens it, RIGHT enters the posters, LEFT exits to the sidebar, and
-/// UP/DOWN move between rows exactly like the row's first card. Off-TV the
-/// header [_SeeAllLink] handles the pointer, so this tile is TV-only.
-class _SeeAllTile extends StatefulWidget {
-  final FocusNode focusNode;
-  final double width;
-  final double posterHeight;
-  final double cellHeight;
-  final VoidCallback onSelect;
-  final VoidCallback onLeft;
-  final VoidCallback onRight;
-  final VoidCallback onUp;
-  final VoidCallback onDown;
-
-  const _SeeAllTile({
-    required this.focusNode,
-    required this.width,
-    required this.posterHeight,
-    required this.cellHeight,
-    required this.onSelect,
-    required this.onLeft,
-    required this.onRight,
-    required this.onUp,
-    required this.onDown,
-  });
-
-  @override
-  State<_SeeAllTile> createState() => _SeeAllTileState();
-}
-
-class _SeeAllTileState extends State<_SeeAllTile> {
-  bool _focused = false;
-  bool _keyDown = false;
-
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    final key = event.logicalKey;
-    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-      if (event is KeyDownEvent) {
-        _keyDown = true;
-        return KeyEventResult.handled;
-      } else if (event is KeyUpEvent) {
-        if (_keyDown) widget.onSelect();
-        _keyDown = false;
-        return KeyEventResult.handled;
-      }
-    }
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      widget.onLeft();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowRight) {
-      widget.onRight();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      widget.onUp();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowDown) {
-      widget.onDown();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: _onKey,
-      onFocusChange: (f) {
-        setState(() => _focused = f);
-        if (!f) _keyDown = false;
-        if (f) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            Scrollable.ensureVisible(context,
-                alignment: 0.5,
-                alignmentPolicy: ScrollPositionAlignmentPolicy.explicit);
-          });
-        }
-      },
-      child: SizedBox(
-        width: widget.width,
-        height: widget.cellHeight,
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: GestureDetector(
-            onTap: widget.onSelect,
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              width: widget.width,
-              height: widget.posterHeight,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: kStremioAccent.withValues(alpha: _focused ? 0.22 : 0.10),
-                border: Border.all(
-                  color: kStremioAccent.withValues(alpha: _focused ? 1 : 0.4),
-                  width: _focused ? 2.5 : 1.4,
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.chevron_right_rounded,
-                      size: 24,
-                      color:
-                          const Color(0xFFB9A9FF).withValues(alpha: _focused ? 1 : 0.85)),
-                  const SizedBox(height: 8),
-                  RotatedBox(
-                    quarterTurns: 3,
-                    child: Text(
-                      'SEE ALL',
-                      style: TextStyle(
-                        color: const Color(0xFFB9A9FF)
-                            .withValues(alpha: _focused ? 1 : 0.85),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ),
@@ -5554,15 +5785,20 @@ class _PlaylistMenuItemState extends State<_PlaylistMenuItem> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.label,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w500)),
+                  Text(
+                    widget.label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     widget.subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: widget.subtitleColor ??
+                      color:
+                          widget.subtitleColor ??
                           Colors.white.withValues(alpha: 0.4),
                     ),
                   ),
@@ -5642,10 +5878,18 @@ class _ModeToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final catalog =
-        _segment(context, _Mode.catalog, 'Catalog', Icons.grid_view_rounded);
-    final keyword =
-        _segment(context, _Mode.keyword, 'Keyword', Icons.bolt_rounded);
+    final catalog = _segment(
+      context,
+      _Mode.catalog,
+      'Catalog',
+      Icons.grid_view_rounded,
+    );
+    final keyword = _segment(
+      context,
+      _Mode.keyword,
+      'Keyword',
+      Icons.bolt_rounded,
+    );
     return Container(
       height: isTelevision ? 54 : 48,
       padding: const EdgeInsets.all(4),
@@ -5663,49 +5907,56 @@ class _ModeToggle extends StatelessWidget {
     );
   }
 
-  Widget _segment(BuildContext context, _Mode value, String label, IconData icon) {
+  Widget _segment(
+    BuildContext context,
+    _Mode value,
+    String label,
+    IconData icon,
+  ) {
     final on = mode == value;
     final node = value == _Mode.catalog ? catalogNode : keywordNode;
 
     Widget content(bool focused) => AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: EdgeInsets.symmetric(horizontal: isTelevision ? 16 : 12),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: on ? kStremioAccent : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            // A white ring shows the remote's DPAD position. Drawn whenever the
-            // segment is focused — including the selected one, since focus lands
-            // there first (its accent fill alone wouldn't signal focus moved).
-            border: Border.all(
-              color: focused
-                  ? Colors.white.withValues(alpha: 0.9)
-                  : Colors.transparent,
-              width: 2,
+      duration: const Duration(milliseconds: 150),
+      padding: EdgeInsets.symmetric(horizontal: isTelevision ? 16 : 12),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: on ? kStremioAccent : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        // A white ring shows the remote's DPAD position. Drawn whenever the
+        // segment is focused — including the selected one, since focus lands
+        // there first (its accent fill alone wouldn't signal focus moved).
+        border: Border.all(
+          color: focused
+              ? Colors.white.withValues(alpha: 0.9)
+              : Colors.transparent,
+          width: 2,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 16,
+            color: on
+                ? Colors.white
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: isTelevision ? 14 : 13,
+              fontWeight: FontWeight.w700,
+              color: on
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon,
-                  size: 16,
-                  color: on
-                      ? Colors.white
-                      : Theme.of(context).colorScheme.onSurfaceVariant),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: isTelevision ? 14 : 13,
-                  fontWeight: FontWeight.w700,
-                  color: on
-                      ? Colors.white
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        );
+        ],
+      ),
+    );
 
     if (node == null) {
       return InkWell(
@@ -5804,8 +6055,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   Future<void> _reloadBound() async {
-    final bound =
-        _imdbId.isEmpty ? <SeriesSource>[] : await SeriesSourceService.getSources(_imdbId);
+    final bound = _imdbId.isEmpty
+        ? <SeriesSource>[]
+        : await SeriesSourceService.getSources(_imdbId);
     if (!mounted) return;
     setState(() => _bound = bound);
   }
@@ -5890,22 +6142,23 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   void _playNow(Torrent t, int i) {
-    unawaited(TorrentPlaybackService.activateTorrent(
-      context,
-      t,
-      meta: widget.meta,
-      sources: _torrents,
-      sourceIndex: i,
-      searchKeyword: widget.selection.title,
-    ));
+    unawaited(
+      TorrentPlaybackService.activateTorrent(
+        context,
+        t,
+        meta: widget.meta,
+        sources: _torrents,
+        sourceIndex: i,
+        searchKeyword: widget.selection.title,
+      ),
+    );
   }
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      behavior: SnackBarBehavior.floating,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
   }
 
   Future<void> _pin(Torrent t) async {
@@ -5977,7 +6230,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.play_arrow_rounded, color: Colors.white),
+              leading: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+              ),
               title: const Text('Play', style: TextStyle(color: Colors.white)),
               onTap: () {
                 DialogTapGuard.markKeyAction();
@@ -5986,10 +6242,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               },
             ),
             ListTile(
-              leading: Icon(bound ? Icons.link_off_rounded : Icons.link_rounded,
-                  color: const Color(0xFFF59E0B)),
-              title: Text(bound ? 'Unpin source' : 'Pin as source',
-                  style: const TextStyle(color: Colors.white)),
+              leading: Icon(
+                bound ? Icons.link_off_rounded : Icons.link_rounded,
+                color: const Color(0xFFF59E0B),
+              ),
+              title: Text(
+                bound ? 'Unpin source' : 'Pin as source',
+                style: const TextStyle(color: Colors.white),
+              ),
               subtitle: Text(
                 bound
                     ? 'Stop reusing this source'
@@ -6029,8 +6289,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 external ? Icons.open_in_new_rounded : Icons.play_arrow_rounded,
                 color: Colors.white,
               ),
-              title: Text(external ? 'Open externally' : 'Play now',
-                  style: const TextStyle(color: Colors.white)),
+              title: Text(
+                external ? 'Open externally' : 'Play now',
+                style: const TextStyle(color: Colors.white),
+              ),
               subtitle: Text(
                 external
                     ? 'Open this link in your browser'
@@ -6045,8 +6307,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
-              title:
-                  const Text('Copy URL', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Copy URL',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () async {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
@@ -6075,8 +6339,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           _keywordMode
               ? 'Find a source for ${widget.selection.title}'
               : widget.bindMode
-                  ? 'Pick a source for ${widget.selection.title}'
-                  : widget.selection.formattedLabel,
+              ? 'Pick a source for ${widget.selection.title}'
+              : widget.selection.formattedLabel,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -6084,7 +6348,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           // Pin an on-device file/folder as the source. Desktop only — hidden on
           // Android/iOS (incl. Android TV) where local binding is unavailable, so
           // it's never a dead-end D-pad stop.
-          if (_imdbId.isNotEmpty && TorrentPlaybackService.localBindingAvailable)
+          if (_imdbId.isNotEmpty &&
+              TorrentPlaybackService.localBindingAvailable)
             IconButton(
               tooltip: 'Pin an on-device file or folder',
               icon: const Icon(Icons.folder_open_rounded),
@@ -6099,47 +6364,49 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? _centered(scheme, 'Search failed.\n$_error')
-                    : Column(
-                        children: [
-                          if (_bound.isNotEmpty) _pinnedBanner(),
-                          Expanded(
-                            child: _torrents.isEmpty
-                                ? _centered(scheme, 'No sources found.')
-                                : ListView.builder(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              cacheExtent: 1200,
-                              itemCount: _torrents.length,
-                              itemBuilder: (context, i) {
-                                final t = _torrents[i];
-                                return TorrentResultRow(
-                                  torrent: t,
-                                  index: i,
-                                  focusNode: _nodes[i],
-                                  isTelevision: widget.isTelevision,
-                                  qualityTier: t.qualityTier,
-                                  onTap: () {
-                                    if (widget.bindMode) {
-                                      unawaited(_pin(t));
-                                    } else {
-                                      _play(t, i);
-                                    }
-                                  },
-                                  onLongPress: () => _showRowMenu(t, i),
-                                  onNavigateUp: () {
-                                    if (i > 0) _nodes[i - 1].requestFocus();
-                                  },
-                                  onNavigateDown: () {
-                                    if (i < _nodes.length - 1) {
-                                      _nodes[i + 1].requestFocus();
-                                    }
-                                  },
-                                );
-                              },
-                            ),
-                          ),
-                        ],
+                ? _centered(scheme, 'Search failed.\n$_error')
+                : Column(
+                    children: [
+                      if (_bound.isNotEmpty) _pinnedBanner(),
+                      Expanded(
+                        child: _torrents.isEmpty
+                            ? _centered(scheme, 'No sources found.')
+                            : ListView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                cacheExtent: 1200,
+                                itemCount: _torrents.length,
+                                itemBuilder: (context, i) {
+                                  final t = _torrents[i];
+                                  return TorrentResultRow(
+                                    torrent: t,
+                                    index: i,
+                                    focusNode: _nodes[i],
+                                    isTelevision: widget.isTelevision,
+                                    qualityTier: t.qualityTier,
+                                    onTap: () {
+                                      if (widget.bindMode) {
+                                        unawaited(_pin(t));
+                                      } else {
+                                        _play(t, i);
+                                      }
+                                    },
+                                    onLongPress: () => _showRowMenu(t, i),
+                                    onNavigateUp: () {
+                                      if (i > 0) _nodes[i - 1].requestFocus();
+                                    },
+                                    onNavigateDown: () {
+                                      if (i < _nodes.length - 1) {
+                                        _nodes[i + 1].requestFocus();
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
                       ),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -6182,14 +6449,20 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.link_rounded, color: Color(0xFFF59E0B), size: 16),
+              const Icon(
+                Icons.link_rounded,
+                color: Color(0xFFF59E0B),
+                size: 16,
+              ),
               const SizedBox(width: 6),
               Text(
                 _bound.length == 1 ? 'Pinned source' : 'Pinned sources',
@@ -6202,44 +6475,53 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             ],
           ),
           const SizedBox(height: 6),
-          ..._bound.map((s) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        s.torrentName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 12.5),
+          ..._bound.map(
+            (s) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      s.torrentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
                       ),
                     ),
-                    InkWell(
-                      onTap: () => unawaited(_unpin(s.torrentHash)),
-                      borderRadius: BorderRadius.circular(8),
-                      child: const Padding(
-                        padding: EdgeInsets.all(4),
-                        child: Icon(Icons.close_rounded,
-                            color: Colors.white70, size: 18),
+                  ),
+                  InkWell(
+                    onTap: () => unawaited(_unpin(s.torrentHash)),
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: Colors.white70,
+                        size: 18,
                       ),
                     ),
-                  ],
-                ),
-              )),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _centered(ColorScheme scheme, String text) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(text,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurfaceVariant)),
-        ),
-      );
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: scheme.onSurfaceVariant),
+      ),
+    ),
+  );
 }
 
 /// Active-sources checklist for keyword search: toggle which torrent engines
@@ -6286,27 +6568,29 @@ class _KeywordSourcesDialogState extends State<_KeywordSourcesDialog> {
         width: 360,
         child: _loading
             ? const SizedBox(
-                height: 80, child: Center(child: CircularProgressIndicator()))
+                height: 80,
+                child: Center(child: CircularProgressIndicator()),
+              )
             : _engines.isEmpty
-                ? const Text('No search sources installed.')
-                : SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: _engines.map((e) {
-                        final on = _enabled[e.name] ?? true;
-                        return SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                          title: Text(e.displayName),
-                          value: on,
-                          onChanged: (v) {
-                            setState(() => _enabled[e.name] = v);
-                            _settings.setEnabled(e.name, v);
-                          },
-                        );
-                      }).toList(),
-                    ),
-                  ),
+            ? const Text('No search sources installed.')
+            : SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _engines.map((e) {
+                    final on = _enabled[e.name] ?? true;
+                    return SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text(e.displayName),
+                      value: on,
+                      onChanged: (v) {
+                        setState(() => _enabled[e.name] = v);
+                        _settings.setEnabled(e.name, v);
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
       ),
       actions: [
         TextButton(

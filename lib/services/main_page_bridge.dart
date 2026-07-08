@@ -97,8 +97,14 @@ class MainPageBridge {
     _tabHandlers[key] = handler;
   }
 
-  /// Unregister a tab's back handler. Call in dispose of tab screens.
-  static void unregisterTabBackHandler(String key) {
+  /// Unregister a tab's back handler. Call in dispose of tab screens. Pass the
+  /// same [handler] that was registered so a screen tearing down mid-transition
+  /// only removes its own entry — during the tab AnimatedSwitcher the new
+  /// instance may have already re-registered under the same key, and a blind
+  /// key-only remove would clobber the newer handler. Key-only remove (omit
+  /// [handler]) is kept for callers that don't hold onto their closure.
+  static void unregisterTabBackHandler(String key, [bool Function()? handler]) {
+    if (handler != null && _tabHandlers[key] != handler) return;
     _tabHandlers.remove(key);
   }
 
@@ -278,6 +284,12 @@ class MainPageBridge {
 
   /// Callback to focus the TV sidebar. Set by main.dart.
   static VoidCallback? focusTvSidebar;
+
+  /// Opens the Search screen's search overlay (field + Catalog/Keyword toggle +
+  /// results) over its chrome-free board. Set by SearchScreen when mounted;
+  /// main.dart calls it when the already-active Search tab is re-selected from
+  /// the sidebar, so the magnifier acts as the search entry point.
+  static VoidCallback? openSearchOverlay;
 
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.

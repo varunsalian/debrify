@@ -1620,11 +1620,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       case 12:
         activeTabKey = 'alldebrid';
         break;
+      case 15:
+        // So back closes the Search overlay before leaving the tab; the handler
+        // (registered by SearchScreen) returns false when the overlay is shut.
+        activeTabKey = 'search';
+        break;
     }
     MainPageBridge.setActiveTab(activeTabKey);
 
     // Update active tab for TV sidebar navigation
     MainPageBridge.setActiveTvTab(index);
+
+    // TV only: the chrome-free Search board has no persistent search bar, so
+    // re-pressing the already-active Search tab from the sidebar is the entry
+    // point that opens its search overlay. On mobile/desktop the search bar is
+    // always visible and a re-tap conventionally means "scroll to top" — firing
+    // the overlay there would yank focus into the field and pop the keyboard.
+    if (index == 15 && !changed && _isAndroidTv) {
+      MainPageBridge.openSearchOverlay?.call();
+    }
 
     if (changed) {
       _hasTrackedInitialTab = true;
@@ -2006,12 +2020,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final hasRealDebrid = rdEnabled && rdKey != null && rdKey.isNotEmpty;
     final hasTorbox =
         torboxEnabled && torboxKey != null && torboxKey.isNotEmpty;
-    final hasPremiumize = premiumizeEnabledPref &&
+    final hasPremiumize =
+        premiumizeEnabledPref &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
-    final hasAllDebrid = allDebridEnabledPref &&
-        allDebridKey != null &&
-        allDebridKey.isNotEmpty;
+    final hasAllDebrid =
+        allDebridEnabledPref && allDebridKey != null && allDebridKey.isNotEmpty;
 
     _applyIntegrationState(
       hasRealDebrid: hasRealDebrid,
@@ -2302,12 +2316,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 350),
         transitionBuilder: (child, animation) {
-          final offsetAnimation = Tween<Offset>(
-            begin: const Offset(0.02, 0.02),
-            end: Offset.zero,
-          ).animate(
-            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-          );
+          final offsetAnimation =
+              Tween<Offset>(
+                begin: const Offset(0.02, 0.02),
+                end: Offset.zero,
+              ).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              );
           return FadeTransition(
             opacity: animation,
             child: SlideTransition(position: offsetAnimation, child: child),
@@ -2459,8 +2474,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           ),
         )
         .then((_) {
-      if (mounted) _cloudProviderRouteOpen = false;
-    });
+          if (mounted) _cloudProviderRouteOpen = false;
+        });
   }
 
   @override
@@ -2584,17 +2599,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                 final isDesktopWide =
                     !_isAndroidTv && constraints.maxWidth >= 1000;
                 if (isDesktopWide) {
-                  final sidebarIndices =
-                      _sidebarOrderedIndices(visibleIndices);
-                  final sidebarSelected =
-                      sidebarIndices.indexOf(_selectedIndex);
+                  final sidebarIndices = _sidebarOrderedIndices(visibleIndices);
+                  final sidebarSelected = sidebarIndices.indexOf(
+                    _selectedIndex,
+                  );
                   return Scaffold(
                     backgroundColor: Colors.transparent,
                     body: Row(
                       children: [
                         DesktopSidebarNav(
-                          currentIndex:
-                              sidebarSelected == -1 ? 0 : sidebarSelected,
+                          currentIndex: sidebarSelected == -1
+                              ? 0
+                              : sidebarSelected,
                           entries: [
                             for (final index in sidebarIndices)
                               DesktopNavEntry(
@@ -2671,8 +2687,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                       // Floating nav on mobile
                       if (isMobile)
                         MobileFloatingNav(
-                          currentIndex:
-                              mobileSelected == -1 ? 0 : mobileSelected,
+                          currentIndex: mobileSelected == -1
+                              ? 0
+                              : mobileSelected,
                           items: [
                             for (final index in mobileIndices)
                               MobileNavItem(
