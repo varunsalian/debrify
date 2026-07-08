@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/advanced_search_selection.dart';
+import '../models/debrify_tv/channel.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
+import '../services/debrify_tv_repository.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/engine_registry.dart';
 import '../services/engine/settings_manager.dart';
@@ -92,6 +94,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
+  // DPAD focus targets for the Catalog / Keyword toggle (TV only), so the
+  // toggle is reachable with a remote (arrow-up from the search field).
+  final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
+  final FocusNode _modeKeywordNode = FocusNode(debugLabel: 'mode_keyword');
 
   _Mode _mode = _Mode.catalog;
 
@@ -111,6 +117,10 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Torrent> _kwAll = []; // unfiltered results from the last search
   List<Torrent> _kwResults = []; // filtered + sorted view actually rendered
   final List<FocusNode> _kwNodes = [];
+  // Keyboard/DPAD focus targets for the keyword toolbar pills (Sort / Filters /
+  // Sources / Select). A fixed pool of 4 covers the most pills ever shown.
+  final List<FocusNode> _kwToolbarNodes =
+      List.generate(4, (i) => FocusNode(debugLabel: 'kw_tb_$i'));
   TorrentFilterState _kwFilters = const TorrentFilterState.empty();
   String _kwSort = 'relevance';
   Map<String, List<String>> _kwCache = {}; // infohash(lower) → ['TB','PM']
@@ -188,6 +198,13 @@ class _SearchScreenState extends State<SearchScreen> {
   final Map<String, TraktContinueWatchingItem> _traktByImdb = {};
   final List<FocusNode> _traktMovieNodes = [];
   final List<FocusNode> _traktSeriesNodes = [];
+
+  // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
+  // keyword channels, shown between Continue Watching and the catalog rows.
+  // Channels have no artwork, so they render as Stremio-shaped cards with a
+  // gradient + glyph placeholder (see [_ChannelPoster]).
+  List<DebrifyTvChannel> _tvFavChannels = [];
+  final List<FocusNode> _tvFavNodes = [];
   int _traktCwToken = 0;
 
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
@@ -227,8 +244,8 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         if (_traktMovies.isNotEmpty)
           _CwRow(
-            title: 'Trakt Movies',
-            tag: null,
+            title: 'Trakt Continue Watching',
+            tag: 'Movies',
             items: _traktMovies,
             nodes: _traktMovieNodes,
             progressOf: (m) => _traktProgress[m.imdbId],
@@ -238,8 +255,8 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         if (_traktSeries.isNotEmpty)
           _CwRow(
-            title: 'Trakt Shows',
-            tag: null,
+            title: 'Trakt Continue Watching',
+            tag: 'Shows',
             items: _traktSeries,
             nodes: _traktSeriesNodes,
             progressOf: (m) => _traktProgress[m.imdbId],
@@ -276,6 +293,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _load();
     _loadContinueWatching();
     _loadTraktContinueWatching();
+    _loadTvFavorites();
     _refreshTraktAuthState();
   }
 
@@ -304,6 +322,8 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroEnriched.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _modeCatalogNode.dispose();
+    _modeKeywordNode.dispose();
     _boardScroll.dispose();
     _disposeNodes();
     _disposeKwNodes();
@@ -312,6 +332,8 @@ class _SearchScreenState extends State<SearchScreen> {
       ..._cwSeriesNodes,
       ..._traktMovieNodes,
       ..._traktSeriesNodes,
+      ..._tvFavNodes,
+      ..._kwToolbarNodes, // fixed pool — only disposed here, not in _disposeKwNodes
     ]) {
       n.dispose();
     }
@@ -319,6 +341,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _cwSeriesNodes.clear();
     _traktMovieNodes.clear();
     _traktSeriesNodes.clear();
+    _tvFavNodes.clear();
     super.dispose();
   }
 
@@ -738,6 +761,68 @@ class _SearchScreenState extends State<SearchScreen> {
     nodes[column.clamp(0, nodes.length - 1)].requestFocus();
   }
 
+  /// Whether the Debrify TV favourites row is currently on-screen (drives the
+  /// focus wiring between Continue Watching, this row, and the first catalog
+  /// row). Mirrors [_cwVisible]: only on the board, never over search results.
+  bool get _tvFavVisible =>
+      _tvFavChannels.isNotEmpty &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
+
+  void _focusTvFavRow(int column) {
+    if (_tvFavNodes.isEmpty) return;
+    _tvFavNodes[column.clamp(0, _tvFavNodes.length - 1)].requestFocus();
+  }
+
+  /// Load the user's starred Debrify TV channels for the leading favourites row.
+  /// Silently leaves the row empty on any error (it just won't render).
+  Future<void> _loadTvFavorites() async {
+    try {
+      final ids = await StorageService.getDebrifyTvFavoriteChannelIds();
+      if (ids.isEmpty) {
+        if (!mounted) return;
+        setState(() => _tvFavChannels = const []);
+        _syncTvFavNodes();
+        return;
+      }
+      final records = await DebrifyTvRepository.instance.fetchAllChannels();
+      // fetchAllChannels() is already ordered by channel number; preserve that
+      // order (matching the Home row) rather than a redundant, non-stable
+      // re-sort that could shuffle channels sharing channelNumber 0.
+      final favs = records
+          .map(DebrifyTvChannel.fromRecord)
+          .where((c) => ids.contains(c.id))
+          .toList();
+      if (!mounted) return;
+      setState(() => _tvFavChannels = favs);
+      _syncTvFavNodes();
+    } catch (_) {
+      // Favourites row just stays hidden.
+    }
+  }
+
+  /// Grow/shrink the favourites row's focus nodes to match the channel count.
+  void _syncTvFavNodes() {
+    while (_tvFavNodes.length < _tvFavChannels.length) {
+      _tvFavNodes
+          .add(FocusNode(debugLabel: 'search_tvfav_${_tvFavNodes.length}'));
+    }
+    while (_tvFavNodes.length > _tvFavChannels.length) {
+      _tvFavNodes.removeLast().dispose();
+    }
+  }
+
+  /// Launch a Debrify TV channel (same path the Home screen uses): hand off to
+  /// the live player if it's mounted, else queue an auto-play and switch tabs.
+  void _playChannel(DebrifyTvChannel channel) {
+    if (MainPageBridge.watchDebrifyTvChannel != null) {
+      MainPageBridge.watchDebrifyTvChannel!(channel.id);
+      return;
+    }
+    MainPageBridge.notifyDebrifyTvChannelToAutoPlay(channel.id);
+    MainPageBridge.switchTab?.call(3); // 3 = Debrify TV (see main.dart _pages)
+  }
+
   /// Resolve the addon that a Continue Watching title should route through.
   /// Prefers the stored source addon; falls back to any homepage addon, then a
   /// minimal placeholder so Play still works even if the addon is gone.
@@ -958,11 +1043,15 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _focusContent() {
     if (_mode == _Mode.keyword) {
-      if (_kwNodes.isNotEmpty) {
-        _kwNodes.first.requestFocus();
-        return;
+      // Toolbar + result rows render together, so entering the content lands on
+      // the toolbar first (Down then reaches the rows). When it isn't visible
+      // (loading / error / pre-search) nothing below is focusable, so keep the
+      // search field rather than a stale, detached result node.
+      if (_kwToolbarVisible) {
+        _kwToolbarNodes.first.requestFocus();
+      } else {
+        _searchFocusNode.requestFocus();
       }
-      _searchFocusNode.requestFocus();
       return;
     }
     if (_cwVisible) {
@@ -972,12 +1061,39 @@ class _SearchScreenState extends State<SearchScreen> {
         return;
       }
     }
+    if (_tvFavVisible && _tvFavNodes.isNotEmpty) {
+      _tvFavNodes.first.requestFocus();
+      return;
+    }
     if (_rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
       _rowNodes.first.first.requestFocus();
       return;
     }
     _searchFocusNode.requestFocus();
   }
+
+  /// Focus the Catalog/Keyword toggle, landing on the segment for the current
+  /// mode so its highlight lines up with where the remote cursor sits.
+  void _focusModeToggle() {
+    (_mode == _Mode.keyword ? _modeKeywordNode : _modeCatalogNode)
+        .requestFocus();
+  }
+
+  /// Return focus to the search field with the caret at the end of the text, so
+  /// leaving the toggle leftward and pressing right again jumps straight back.
+  void _focusSearchFieldAtEnd() {
+    _searchFocusNode.requestFocus();
+    _searchController.selection =
+        TextSelection.collapsed(offset: _searchController.text.length);
+  }
+
+  /// Whether the keyword results toolbar (Sort/Filters/Sources/…) is on-screen,
+  /// so focus can route into it between the search field and the result rows.
+  bool get _kwToolbarVisible =>
+      _mode == _Mode.keyword &&
+      !_kwLoading &&
+      _kwError == null &&
+      _kwQuery.isNotEmpty;
 
   void _focusRow(int row, int column) {
     if (row >= _rowNodes.length) {
@@ -1111,10 +1227,19 @@ class _SearchScreenState extends State<SearchScreen> {
       _kwResults.where((t) => !t.isDirectStream && !t.isExternalStream).toList();
 
   void _enterKwSelection() {
+    // Entering selection swaps the toolbar to 3 pills; if DPAD focus was on the
+    // now-gone "Select" pill (index 3), pull it back to the new first pill so
+    // the remote doesn't lose focus.
+    final refocusToolbar = _kwToolbarNodes.any((n) => n.hasFocus);
     setState(() {
       _kwSelectionMode = true;
       _kwSelected.clear();
     });
+    if (refocusToolbar) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _kwToolbarNodes.first.requestFocus();
+      });
+    }
   }
 
   void _exitKwSelection() {
@@ -1288,12 +1413,20 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _openKeywordSources() async {
+    // If the remote was on the toolbar, the re-search below unmounts it (loading
+    // spinner) and would strand DPAD focus — so restore it once results return.
+    final fromToolbar = _kwToolbarNodes.any((n) => n.hasFocus);
     await showDialog<void>(
       context: context,
       builder: (_) => const _KeywordSourcesDialog(),
     );
     if (!mounted || _kwQuery.isEmpty) return;
-    _runKeyword(_kwQuery); // re-search with the new enabled set
+    await _runKeyword(_kwQuery); // re-search with the new enabled set
+    if (fromToolbar && mounted && _kwToolbarVisible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _kwToolbarNodes.first.requestFocus();
+      });
+    }
   }
 
   void _disposeKwNodes() {
@@ -2206,6 +2339,13 @@ class _SearchScreenState extends State<SearchScreen> {
       isTelevision: tv,
       fullWidth: narrow,
       onChanged: _switchMode,
+      // Keyboard/DPAD wiring (both desktop + TV): the two segments are
+      // focusable; up/left leave back to the search field, down drops into the
+      // content, select switches mode.
+      catalogNode: _modeCatalogNode,
+      keywordNode: _modeKeywordNode,
+      onLeaveToField: _focusSearchFieldAtEnd,
+      onLeaveToContent: _focusContent,
     );
 
     if (narrow) {
@@ -2254,10 +2394,34 @@ class _SearchScreenState extends State<SearchScreen> {
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
           _focusContent();
           return KeyEventResult.handled;
+        }
+        // Arrow-up jumps to the Catalog/Keyword toggle (top-right). Works on
+        // both TV (DPAD) and desktop (keyboard) — up is safe to intercept, a
+        // single-line field doesn't use it for the cursor and nothing sits
+        // above the search field.
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _focusModeToggle();
+          return KeyEventResult.handled;
+        }
+        // Arrow-right reaches the toggle too — its natural spatial direction —
+        // but only once the caret is at the very end of the text, so right
+        // still moves the cursor through what you've typed first. A blank field
+        // (or caret already at the end) jumps to the toggle immediately.
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          final text = _searchController.text;
+          final sel = _searchController.selection;
+          final atEnd = text.isEmpty ||
+              sel.baseOffset < 0 ||
+              (sel.isCollapsed && sel.baseOffset >= text.length);
+          if (atEnd) {
+            _focusModeToggle();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored; // let the caret move right first
         }
         return KeyEventResult.ignored;
       },
@@ -2401,6 +2565,10 @@ class _SearchScreenState extends State<SearchScreen> {
                       onNavigateUp: () {
                         if (i > 0) {
                           _kwNodes[i - 1].requestFocus();
+                        } else if (_kwToolbarVisible) {
+                          // From the top row, Up lands on the toolbar (Sort…),
+                          // not straight back to the search field.
+                          _kwToolbarNodes.first.requestFocus();
                         } else {
                           _searchFocusNode.requestFocus();
                         }
@@ -2472,49 +2640,84 @@ class _SearchScreenState extends State<SearchScreen> {
         _kwFilters.ripSources.length +
         _kwFilters.languages.length;
 
+    // [navIndex]/[navTotal], when provided, make the pill keyboard/DPAD
+    // focusable at that position in the toolbar (left/right between pills, up to
+    // the search field, down into the results, select to activate).
     Widget pill(IconData icon, String label, VoidCallback onTap,
-        {bool active = false, bool compact = false}) {
+        {bool active = false,
+        bool compact = false,
+        int? navIndex,
+        int navTotal = 0}) {
+      Widget body(bool focused) => Container(
+            padding: compact
+                ? const EdgeInsets.all(10)
+                : const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+            decoration: BoxDecoration(
+              color: active
+                  ? scheme.primary.withValues(alpha: 0.16)
+                  : scheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(999),
+              // Always 2px so focus never shifts layout: white ring when
+              // focused, else the active/idle border.
+              border: Border.all(
+                color: focused
+                    ? Colors.white.withValues(alpha: 0.9)
+                    : active
+                        ? scheme.primary.withValues(alpha: 0.5)
+                        : Colors.white.withValues(alpha: 0.10),
+                width: 2,
+              ),
+            ),
+            child: compact
+                ? Icon(icon,
+                    size: 18,
+                    color: active ? scheme.primary : scheme.onSurfaceVariant)
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 15, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Text(label,
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface)),
+                    ],
+                  ),
+          );
+
+      final Widget tappable = navIndex == null
+          ? Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(999),
+                child: body(false),
+              ),
+            )
+          : Focus(
+              focusNode: _kwToolbarNodes[navIndex],
+              onKeyEvent: (n, event) =>
+                  _handleKwToolbarKey(navIndex, navTotal, onTap, event),
+              child: Builder(
+                builder: (context) {
+                  final focused = Focus.of(context).hasFocus;
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onTap,
+                      borderRadius: BorderRadius.circular(999),
+                      canRequestFocus: false,
+                      child: body(focused),
+                    ),
+                  );
+                },
+              ),
+            );
+
       return Padding(
         padding: const EdgeInsets.only(right: 8),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(999),
-            child: Container(
-              padding: compact
-                  ? const EdgeInsets.all(10)
-                  : const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-              decoration: BoxDecoration(
-                color: active
-                    ? scheme.primary.withValues(alpha: 0.16)
-                    : scheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: active
-                      ? scheme.primary.withValues(alpha: 0.5)
-                      : Colors.white.withValues(alpha: 0.10),
-                ),
-              ),
-              child: compact
-                  ? Icon(icon,
-                      size: 18,
-                      color: active ? scheme.primary : scheme.onSurfaceVariant)
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 15, color: scheme.onSurfaceVariant),
-                        const SizedBox(width: 6),
-                        Text(label,
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: scheme.onSurface)),
-                      ],
-                    ),
-            ),
-          ),
-        ),
+        child: tappable,
       );
     }
 
@@ -2527,17 +2730,22 @@ class _SearchScreenState extends State<SearchScreen> {
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
         child: Row(
           children: [
-            pill(Icons.close_rounded, 'Cancel', _exitKwSelection),
+            pill(Icons.close_rounded, 'Cancel', _exitKwSelection,
+                navIndex: 0, navTotal: 3),
             pill(
               allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
               allSelected ? 'None' : 'All',
               allSelected ? _deselectAllKw : _selectAllKw,
+              navIndex: 1,
+              navTotal: 3,
             ),
             pill(
               Icons.playlist_add_rounded,
               count > 0 ? 'Add · $count' : 'Add',
               count > 0 ? _openBulkAdd : () {},
               active: count > 0,
+              navIndex: 2,
+              navTotal: 3,
             ),
           ],
         ),
@@ -2545,6 +2753,8 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     final canSelect = _kwSelectableResults.isNotEmpty;
+    final showSelect = canSelect && !floatingSelect;
+    final total = showSelect ? 4 : 3;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
@@ -2552,21 +2762,58 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           pill(Icons.sort_rounded, 'Sort · ${_sortLabel(_kwSort)}',
               _openKeywordSort,
-              compact: floatingSelect),
+              compact: floatingSelect, navIndex: 0, navTotal: total),
           pill(
             Icons.filter_list_rounded,
             filterCount > 0 ? 'Filters · $filterCount' : 'Filters',
             _openKeywordFilters,
             active: filterCount > 0,
             compact: floatingSelect,
+            navIndex: 1,
+            navTotal: total,
           ),
           pill(Icons.dns_rounded, 'Sources', _openKeywordSources,
-              compact: floatingSelect),
-          if (canSelect && !floatingSelect)
-            pill(Icons.checklist_rounded, 'Select', _enterKwSelection),
+              compact: floatingSelect, navIndex: 2, navTotal: total),
+          if (showSelect)
+            pill(Icons.checklist_rounded, 'Select', _enterKwSelection,
+                navIndex: 3, navTotal: total),
         ],
       ),
     );
+  }
+
+  /// DPAD/keyboard handling for a focused keyword-toolbar pill: select fires the
+  /// pill, left/right move between pills, up returns to the search field, down
+  /// drops into the first result row.
+  KeyEventResult _handleKwToolbarKey(
+      int index, int total, VoidCallback onTap, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+      onTap();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _focusSearchFieldAtEnd();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      if (_kwNodes.isNotEmpty) _kwNodes.first.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (index > 0) {
+        _kwToolbarNodes[index - 1].requestFocus();
+      } else {
+        MainPageBridge.focusTvSidebar?.call();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (index < total - 1) _kwToolbarNodes[index + 1].requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   /// Floating checklist FAB (bottom-left) that enters multi-select on small
@@ -2717,7 +2964,7 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
     final showCw = _cwVisible;
-    if (_sections.isEmpty && !showCw) {
+    if (_sections.isEmpty && !showCw && !_tvFavVisible) {
       if (_catalogQuery.isNotEmpty) {
         return _message(
           Icons.search_off_rounded,
@@ -2768,10 +3015,13 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         Expanded(
           child: Builder(builder: (context) {
-            // Continue Watching rows (local, then Trakt) are the leading board
-            // rows; the catalog sections follow, offset by the CW row count.
+            // Leading board rows, in order: Continue Watching (local, then
+            // Trakt), then the Debrify TV favourites row; the catalog sections
+            // follow, offset by the leading row count.
             final cwRows = showCw ? _cwRows : const <_CwRow>[];
             final cwCount = cwRows.length;
+            final tvFavCount = _tvFavVisible ? 1 : 0;
+            final leadingCount = cwCount + tvFavCount;
             // Footer spinner tracks the actual fetch, not just "more remain":
             // `_boardCursor` advances synchronously so the final in-flight batch
             // still shows it, and an idle board with more rows doesn't spin.
@@ -2780,12 +3030,16 @@ class _SearchScreenState extends State<SearchScreen> {
               controller: _boardScroll,
               padding: const EdgeInsets.only(top: 6, bottom: 32),
               cacheExtent: 2000,
-              itemCount: _sections.length + cwCount + (showFooter ? 1 : 0),
+              itemCount: _sections.length + leadingCount + (showFooter ? 1 : 0),
               itemBuilder: (context, i) {
                 if (i < cwCount) {
-                  return _buildContinueWatchingRow(cwRows[i], i, cwCount);
+                  return _buildContinueWatchingRow(
+                      cwRows[i], i, cwCount, tvFavCount);
                 }
-                final s = i - cwCount;
+                if (tvFavCount == 1 && i == cwCount) {
+                  return _buildTvFavRow(cwCount);
+                }
+                final s = i - leadingCount;
                 if (s >= _sections.length) return _buildBoardFooter();
                 return _buildRow(s);
               },
@@ -2914,9 +3168,11 @@ class _SearchScreenState extends State<SearchScreen> {
                             : () => _onCatalogPlay(item, section.addon),
                         onFocused: () => _setHero(item),
                         onUp: rowIndex == 0
-                            ? (_cwVisible
-                                ? () => _focusCwRow(_cwRows.length - 1, col)
-                                : () => _searchFocusNode.requestFocus())
+                            ? (_tvFavVisible
+                                ? () => _focusTvFavRow(col)
+                                : (_cwVisible
+                                    ? () => _focusCwRow(_cwRows.length - 1, col)
+                                    : () => _searchFocusNode.requestFocus()))
                             : () => _focusRow(rowIndex - 1, col),
                         onDown: () => _focusRow(rowIndex + 1, col),
                         onOpen: () => _openItem(item, section.addon),
@@ -2951,7 +3207,10 @@ class _SearchScreenState extends State<SearchScreen> {
   /// catalog rows, plus a bottom progress bar and an optional type tag.
   /// [cwIndex] is this row's position among the visible CW rows and [cwCount]
   /// the total, so DPAD up/down can move between CW rows and into the catalog.
-  Widget _buildContinueWatchingRow(_CwRow row, int cwIndex, int cwCount) {
+  /// [tvFavCount] is 1 when the Debrify TV favourites row sits just below, so
+  /// the last CW row's DPAD-down lands there instead of the first catalog row.
+  Widget _buildContinueWatchingRow(
+      _CwRow row, int cwIndex, int cwCount, int tvFavCount) {
     final tv = widget.isTelevision;
     final width = MediaQuery.of(context).size.width;
     final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
@@ -3022,11 +3281,101 @@ class _SearchScreenState extends State<SearchScreen> {
                       onUp: cwIndex == 0
                           ? () => _searchFocusNode.requestFocus()
                           : () => _focusCwRow(cwIndex - 1, col),
-                      // Down: next CW row, or the first catalog row from the last.
+                      // Down: next CW row; from the last, into the Debrify TV
+                      // favourites row if present, else the first catalog row.
                       onDown: cwIndex < cwCount - 1
                           ? () => _focusCwRow(cwIndex + 1, col)
-                          : () => _focusRow(0, col),
+                          : (tvFavCount == 1
+                              ? () => _focusTvFavRow(col)
+                              : () => _focusRow(0, col)),
                       onOpen: () => row.onOpen(item),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The leading "Debrify TV" row of favourited keyword channels, styled to
+  /// match the catalog rows (same poster-shaped cards + title below). [cwCount]
+  /// is the number of Continue Watching rows above it, so DPAD-up lands on the
+  /// last CW row (or the search field when there is none).
+  Widget _buildTvFavRow(int cwCount) {
+    final tv = widget.isTelevision;
+    final width = MediaQuery.of(context).size.width;
+    final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
+    final posterH = posterW * 3 / 2;
+    final titleH = MediaQuery.textScalerOf(context).scale(14) * 1.25 * 2;
+    final cellH = posterH + 10 + titleH + 6;
+    final rowH = cellH + 14;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  'Debrify TV',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: tv ? 20 : 19,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const _CategoryTag('Channels'),
+              const SizedBox(width: 6),
+              // Make it explicit this row is the user's STARRED channels, not
+              // every channel — otherwise people expect all channels here.
+              const _CategoryTag('Favorites', icon: Icons.star_rounded),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: rowH,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.hardEdge,
+            cacheExtent: 2000,
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            itemCount: _tvFavChannels.length,
+            itemBuilder: (context, col) {
+              final channel = _tvFavChannels[col];
+              final number = channel.channelNumber > 0
+                  ? channel.channelNumber
+                  : col + 1;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 11),
+                child: Center(
+                  child: SizedBox(
+                    width: posterW,
+                    height: cellH,
+                    child: _ChannelBoardCell(
+                      channel: channel,
+                      channelNumber: number,
+                      isTelevision: tv,
+                      focusNode: _tvFavNodes[col],
+                      column: col,
+                      rowNodes: _tvFavNodes,
+                      // Up: last Continue Watching row, or the search field.
+                      onUp: cwCount > 0
+                          ? () => _focusCwRow(cwCount - 1, col)
+                          : () => _searchFocusNode.requestFocus(),
+                      // Down: into the first catalog row (no-op if none loaded).
+                      onDown: () => _focusRow(0, col),
+                      onOpen: () => _playChannel(channel),
                     ),
                   ),
                 ),
@@ -3250,9 +3599,12 @@ class _HeroSpotlight extends StatelessWidget {
 }
 
 /// Small pill next to a catalog-row header marking it as Movies / Series / etc.
+/// An optional leading [icon] lets a pill carry meaning beyond the label (e.g.
+/// a star on the Debrify TV "Favorites" pill).
 class _CategoryTag extends StatelessWidget {
   final String label;
-  const _CategoryTag(this.label);
+  final IconData? icon;
+  const _CategoryTag(this.label, {this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -3263,14 +3615,23 @@ class _CategoryTag extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: kStremioAccent.withValues(alpha: 0.35)),
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Color(0xFFB9A9FF),
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.3,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: const Color(0xFFB9A9FF)),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFB9A9FF),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3658,6 +4019,271 @@ class _StremioCardState extends State<_StremioCard> {
   }
 }
 
+/// DPAD arrow-handling wrapper for a Debrify TV channel card — the channel
+/// counterpart to [_BoardCell]. Holds no focus itself (the inner
+/// [_ChannelPoster] does); it only routes left/right within the row and
+/// up/down out of it, matching the catalog cards' navigation exactly.
+class _ChannelBoardCell extends StatelessWidget {
+  final DebrifyTvChannel channel;
+  final int channelNumber;
+  final bool isTelevision;
+  final FocusNode focusNode;
+  final int column;
+  final List<FocusNode> rowNodes;
+  final VoidCallback onUp;
+  final VoidCallback onDown;
+  final VoidCallback onOpen;
+
+  const _ChannelBoardCell({
+    required this.channel,
+    required this.channelNumber,
+    required this.isTelevision,
+    required this.focusNode,
+    required this.column,
+    required this.rowNodes,
+    required this.onUp,
+    required this.onDown,
+    required this.onOpen,
+  });
+
+  KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
+    if (!isTelevision || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (column > 0) {
+        rowNodes[column - 1].requestFocus();
+      } else {
+        MainPageBridge.focusTvSidebar?.call();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (column < rowNodes.length - 1) {
+        rowNodes[column + 1].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      onUp();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      onDown();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _handleArrows,
+      child: _ChannelPoster(
+        channel: channel,
+        channelNumber: channelNumber,
+        isTelevision: isTelevision,
+        focusNode: focusNode,
+        onOpen: onOpen,
+      ),
+    );
+  }
+}
+
+/// Stremio-shaped card for a Debrify TV channel (the channel counterpart to
+/// [_StremioCard]). Channels have no artwork, so the 2:3 tile is a purple
+/// gradient with a live-TV glyph and channel number, with the name below —
+/// same size, corner radius, hover/focus lift and selection ring as the
+/// catalog cards so the row reads as part of the same board.
+class _ChannelPoster extends StatefulWidget {
+  final DebrifyTvChannel channel;
+  final int channelNumber;
+  final bool isTelevision;
+  final FocusNode focusNode;
+  final VoidCallback onOpen;
+
+  const _ChannelPoster({
+    required this.channel,
+    required this.channelNumber,
+    required this.isTelevision,
+    required this.focusNode,
+    required this.onOpen,
+  });
+
+  @override
+  State<_ChannelPoster> createState() => _ChannelPosterState();
+}
+
+class _ChannelPosterState extends State<_ChannelPoster> {
+  bool _focused = false;
+  bool _hovered = false;
+  bool _keyDown = false;
+  bool get _active => _focused || _hovered;
+
+  @override
+  Widget build(BuildContext context) {
+    final fx = widget.isTelevision
+        ? Duration.zero
+        : const Duration(milliseconds: 160);
+
+    final posterCard = AnimatedScale(
+      duration: fx,
+      curve: Curves.easeOutCubic,
+      scale: _active ? 1.05 : 1.0,
+      child: AspectRatio(
+        aspectRatio: 2 / 3,
+        child: AnimatedContainer(
+          duration: fx,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: _active ? 0.6 : 0.35),
+                blurRadius: _active ? 28 : 12,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF2A1D5C),
+                        Color(0xFF1A1440),
+                        Color(0xFF0D0B1A),
+                      ],
+                      stops: [0.0, 0.55, 1.0],
+                    ),
+                  ),
+                ),
+                // Channel number, top-left.
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: Text(
+                    '${widget.channelNumber}',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+                // Centered live-TV glyph.
+                Center(
+                  child: Icon(
+                    Icons.live_tv_rounded,
+                    size: 40,
+                    color: kStremioAccent.withValues(alpha: _active ? 1 : 0.85),
+                  ),
+                ),
+                // Selection ring — accent on TV focus, subtle white on hover.
+                if (_active)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: widget.isTelevision
+                                ? kStremioAccent
+                                : Colors.white.withValues(alpha: 0.6),
+                            width: widget.isTelevision ? 2.5 : 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (f) {
+        setState(() => _focused = f);
+        if (!f) _keyDown = false;
+        if (f) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.5,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              duration: widget.isTelevision
+                  ? Duration.zero
+                  : const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+            );
+          });
+        }
+      },
+      onKeyEvent: (node, event) {
+        if (isActivateKey(event.logicalKey) ||
+            event.logicalKey == LogicalKeyboardKey.space) {
+          if (event is KeyDownEvent) {
+            _keyDown = true;
+            return KeyEventResult.handled;
+          } else if (event is KeyUpEvent) {
+            if (_keyDown) widget.onOpen();
+            _keyDown = false;
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onEnter: (_) {
+          if (mounted) setState(() => _hovered = true);
+        },
+        onExit: (_) {
+          if (mounted) setState(() => _hovered = false);
+        },
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onOpen,
+          behavior: HitTestBehavior.opaque,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              posterCard,
+              const SizedBox(height: 10),
+              Text(
+                widget.channel.name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: _active
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.92),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.25,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Catalog / Keyword segmented toggle.
 class _ModeToggle extends StatelessWidget {
   final _Mode mode;
@@ -3668,12 +4294,58 @@ class _ModeToggle extends StatelessWidget {
   final bool fullWidth;
   final ValueChanged<_Mode> onChanged;
 
+  /// TV-only DPAD focus nodes for the two segments (null off-TV, where the
+  /// InkWell handles pointer taps and normal Tab traversal instead).
+  final FocusNode? catalogNode;
+  final FocusNode? keywordNode;
+
+  /// Leave the toggle back to the search field (arrow-up, or arrow-left off the
+  /// leftmost segment) / down into the board content.
+  final VoidCallback? onLeaveToField;
+  final VoidCallback? onLeaveToContent;
+
   const _ModeToggle({
     required this.mode,
     required this.isTelevision,
     required this.onChanged,
     this.fullWidth = false,
+    this.catalogNode,
+    this.keywordNode,
+    this.onLeaveToField,
+    this.onLeaveToContent,
   });
+
+  /// DPAD handling for a focused segment: select switches mode, arrows move
+  /// between the segments and out to the field (up/left) or content (down).
+  KeyEventResult _handleSegmentKey(_Mode value, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+      onChanged(value);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      onLeaveToField?.call();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      onLeaveToContent?.call();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (value == _Mode.keyword) {
+        catalogNode?.requestFocus();
+      } else {
+        onLeaveToField?.call();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (value == _Mode.catalog) keywordNode?.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3701,38 +4373,71 @@ class _ModeToggle extends StatelessWidget {
 
   Widget _segment(BuildContext context, _Mode value, String label, IconData icon) {
     final on = mode == value;
-    return InkWell(
-      onTap: () => onChanged(value),
-      borderRadius: BorderRadius.circular(10),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: EdgeInsets.symmetric(horizontal: isTelevision ? 16 : 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: on ? kStremioAccent : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                size: 16,
-                color: on
-                    ? Colors.white
-                    : Theme.of(context).colorScheme.onSurfaceVariant),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: isTelevision ? 14 : 13,
-                fontWeight: FontWeight.w700,
-                color: on
-                    ? Colors.white
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+    final node = value == _Mode.catalog ? catalogNode : keywordNode;
+
+    Widget content(bool focused) => AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: EdgeInsets.symmetric(horizontal: isTelevision ? 16 : 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: on ? kStremioAccent : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            // A white ring shows the remote's DPAD position. Drawn whenever the
+            // segment is focused — including the selected one, since focus lands
+            // there first (its accent fill alone wouldn't signal focus moved).
+            border: Border.all(
+              color: focused
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : Colors.transparent,
+              width: 2,
             ),
-          ],
-        ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  size: 16,
+                  color: on
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: isTelevision ? 14 : 13,
+                  fontWeight: FontWeight.w700,
+                  color: on
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        );
+
+    if (node == null) {
+      return InkWell(
+        onTap: () => onChanged(value),
+        borderRadius: BorderRadius.circular(10),
+        child: content(false),
+      );
+    }
+
+    // The wrapping Focus owns the keyboard/DPAD focus node; the InkWell stays
+    // pointer-only (canRequestFocus:false) so it doesn't compete for focus.
+    return Focus(
+      focusNode: node,
+      onKeyEvent: (n, event) => _handleSegmentKey(value, event),
+      child: Builder(
+        builder: (context) {
+          final focused = Focus.of(context).hasFocus;
+          return InkWell(
+            onTap: () => onChanged(value),
+            borderRadius: BorderRadius.circular(10),
+            canRequestFocus: false,
+            child: content(focused),
+          );
+        },
       ),
     );
   }
