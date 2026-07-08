@@ -1193,6 +1193,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     );
   }
 
+  /// Pushed (from the Cloud hub or the openAllDebridFolder deep link) to browse
+  /// — the root has no other Back affordance, so show one.
+  bool get _isBrowsePush => widget.isPushedRoute;
+
   Widget _buildToolbar() {
     final theme = Theme.of(context);
     final isWeb = _selectedView == _AdView.webDownloads;
@@ -1218,6 +1222,21 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           ),
           child: Row(
             children: [
+              if (_isBrowsePush) ...[
+                Tooltip(
+                  message: 'Back',
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: const Icon(Icons.arrow_back),
+                    color: theme.colorScheme.onSurface,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                SizedBox(width: isCompact ? 4 : 8),
+              ],
               Expanded(child: _buildViewSelector(isCompact)),
               SizedBox(width: isCompact ? 6 : 12),
               // Selection mode is torrents-only (it bulk-deletes magnets).

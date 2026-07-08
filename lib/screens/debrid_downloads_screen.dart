@@ -3218,6 +3218,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
+  /// Opened from the Cloud hub to browse (pushed, no deep-link target, not
+  /// select-source) — the list root has no other Back affordance, so show one.
+  bool get _isBrowsePush =>
+      widget.isPushedRoute &&
+      !widget.selectSourceMode &&
+      widget.initialTorrentForOptions == null;
+
   Widget _buildTorrentToolbar() {
     final theme = Theme.of(context);
     return LayoutBuilder(
@@ -3239,6 +3246,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ),
           child: Row(
             children: [
+              if (_isBrowsePush) ...[
+                Tooltip(
+                  message: 'Back',
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: const Icon(Icons.arrow_back),
+                    color: theme.colorScheme.onSurface,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                SizedBox(width: isCompact ? 4 : 8),
+              ],
               Expanded(child: _buildViewSelector(isCompact: isCompact)),
               SizedBox(width: isCompact ? 6 : 12),
               Tooltip(
@@ -3327,6 +3349,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ),
           child: Row(
             children: [
+              if (_isBrowsePush) ...[
+                Tooltip(
+                  message: 'Back',
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: const Icon(Icons.arrow_back),
+                    color: theme.colorScheme.onSurface,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                SizedBox(width: isCompact ? 4 : 8),
+              ],
               Expanded(child: _buildViewSelector(isCompact: isCompact)),
               SizedBox(width: isCompact ? 6 : 12),
               if (_downloads.isNotEmpty) ...[

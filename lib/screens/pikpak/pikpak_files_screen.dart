@@ -1864,6 +1864,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     );
   }
 
+  /// Pushed from the Cloud hub to browse (no folder target) — the root has no
+  /// folder-up Back, so the AppBar offers a Back-to-hub instead.
+  bool get _isBrowsePush =>
+      widget.isPushedRoute && widget.initialFolderId == null;
+
   @override
   Widget build(BuildContext context) {
     // When pushed as a route and still at root, show loading state
@@ -1939,7 +1944,15 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   tooltip: 'Back',
                 ),
               )
-            : null,
+            // At the browse root (opened from the Cloud hub with no folder
+            // target) there's no folder-up back — offer a Back-to-hub instead.
+            : (_isBrowsePush
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  )
+                : null),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,

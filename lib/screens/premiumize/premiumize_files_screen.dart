@@ -1318,6 +1318,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  /// Pushed from the Cloud hub to browse (no folder target) — the root has no
+  /// folder-up Back, so the AppBar offers a Back-to-hub instead.
+  bool get _isBrowsePush =>
+      widget.isPushedRoute && widget.initialFolderId == null;
+
   @override
   Widget build(BuildContext context) {
     if (widget.isPushedRoute && _isAtRoot && _initialLoad) {
@@ -1377,7 +1382,15 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   tooltip: 'Back',
                 ),
               )
-            : null,
+            // At the browse root (pushed from the Cloud hub with no folder
+            // target) there's no folder-up back — offer a Back-to-hub instead.
+            : (_isBrowsePush
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  )
+                : null),
         title: Text(_isAtRoot ? 'Premiumize' : _currentFolderName),
         actions: [
           if (_selectedView == _PremiumizeView.files &&

@@ -7044,6 +7044,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
+  /// Opened from the Cloud hub to browse (pushed, no deep-link target, not
+  /// select-source) — the list root otherwise has no Back affordance.
+  bool get _isBrowsePush =>
+      widget.isPushedRoute &&
+      !widget.selectSourceMode &&
+      widget.initialTorrentToOpen == null;
+
   Widget _buildToolbar() {
     final theme = Theme.of(context);
     final isTorrentsView = _selectedView == _TorboxDownloadsView.torrents;
@@ -7068,6 +7075,21 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           ),
           child: Row(
             children: [
+              if (_isBrowsePush) ...[
+                Tooltip(
+                  message: 'Back',
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: const Icon(Icons.arrow_back),
+                    color: theme.colorScheme.onSurface,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                SizedBox(width: isCompact ? 4 : 8),
+              ],
               Expanded(child: _buildViewSelector(isCompact: isCompact)),
               SizedBox(width: isCompact ? 6 : 12),
               if (hasItems) ...[
