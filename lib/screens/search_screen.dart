@@ -7,7 +7,11 @@ import 'package:flutter/services.dart';
 
 import '../models/advanced_search_selection.dart';
 import '../models/debrify_tv/channel.dart';
+import '../models/iptv_playlist.dart';
+import '../models/playlist_view_mode.dart';
 import '../models/stremio_addon.dart';
+import '../models/stremio_tv/stremio_tv_channel.dart';
+import '../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/debrify_tv_repository.dart';
@@ -26,6 +30,7 @@ import '../services/torrent_playback_service.dart';
 import '../services/torrent_service.dart';
 import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/video_player_launcher.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
@@ -37,6 +42,7 @@ import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'debrid_downloads_screen.dart';
 import 'episodes_screen.dart';
+import 'stremio_tv/stremio_tv_service.dart';
 import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'torbox/torbox_downloads_screen.dart';
 
@@ -202,9 +208,25 @@ class _SearchScreenState extends State<SearchScreen> {
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
-  // gradient + glyph placeholder (see [_ChannelPoster]).
+  // gradient + glyph placeholder (see [_ArtPoster]).
   List<DebrifyTvChannel> _tvFavChannels = [];
   final List<FocusNode> _tvFavNodes = [];
+
+  // Stremio TV favourites — a leading row of the user's starred Stremio
+  // "channels" (catalogs treated as TV channels). Each card shows the channel's
+  // current now-playing item poster (same time-based rotation as the Home /
+  // Stremio TV screens); tapping opens the channel. Loaded once on init.
+  List<StremioTvChannel> _stvFavChannels = [];
+  final List<FocusNode> _stvFavNodes = [];
+  int _stvRotationMinutes = 90;
+  int _stvSeriesRotationMinutes = 45;
+
+  // IPTV favourites — a leading row of the user's starred live IPTV channels.
+  // Cards show the channel logo (glyph fallback); tapping plays the stream
+  // directly via VideoPlayerLauncher (no tab switch). Loaded once on init.
+  List<IptvChannel> _iptvFavChannels = [];
+  final List<FocusNode> _iptvFavNodes = [];
+
   int _traktCwToken = 0;
 
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
@@ -294,6 +316,8 @@ class _SearchScreenState extends State<SearchScreen> {
     _loadContinueWatching();
     _loadTraktContinueWatching();
     _loadTvFavorites();
+    _loadStremioTvFavorites();
+    _loadIptvFavorites();
     _refreshTraktAuthState();
   }
 
@@ -333,6 +357,8 @@ class _SearchScreenState extends State<SearchScreen> {
       ..._traktMovieNodes,
       ..._traktSeriesNodes,
       ..._tvFavNodes,
+      ..._stvFavNodes,
+      ..._iptvFavNodes,
       ..._kwToolbarNodes, // fixed pool — only disposed here, not in _disposeKwNodes
     ]) {
       n.dispose();
@@ -342,6 +368,8 @@ class _SearchScreenState extends State<SearchScreen> {
     _traktMovieNodes.clear();
     _traktSeriesNodes.clear();
     _tvFavNodes.clear();
+    _stvFavNodes.clear();
+    _iptvFavNodes.clear();
     super.dispose();
   }
 
@@ -761,18 +789,66 @@ class _SearchScreenState extends State<SearchScreen> {
     nodes[column.clamp(0, nodes.length - 1)].requestFocus();
   }
 
-  /// Whether the Debrify TV favourites row is currently on-screen (drives the
-  /// focus wiring between Continue Watching, this row, and the first catalog
-  /// row). Mirrors [_cwVisible]: only on the board, never over search results.
+  // The leading favourites rows (between Continue Watching and the catalog) are
+  // only shown on the board, never over search results — same gate as
+  // [_cwVisible]. Each has its own visibility so an empty source just drops out.
+  bool get _iptvFavVisible =>
+      _iptvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
   bool get _tvFavVisible =>
-      _tvFavChannels.isNotEmpty &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _tvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
+  bool get _stvFavVisible =>
+      _stvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
 
-  void _focusTvFavRow(int column) {
-    if (_tvFavNodes.isEmpty) return;
-    _tvFavNodes[column.clamp(0, _tvFavNodes.length - 1)].requestFocus();
+  /// The visible favourites rows in render order: Debrify TV, Stremio TV, then
+  /// IPTV. This is the single source of truth for both rendering ([_buildBoard])
+  /// and the index-based DPAD focus wiring below, so the two never drift out of
+  /// sync.
+  List<_FavKind> get _favRowKinds => [
+        if (_tvFavVisible) _FavKind.debrify,
+        if (_stvFavVisible) _FavKind.stremio,
+        if (_iptvFavVisible) _FavKind.iptv,
+      ];
+
+  int get _favRowCount => _favRowKinds.length;
+  bool get _anyFavVisible => _favRowKinds.isNotEmpty;
+
+  /// The focus-node list backing a favourites row of the given [kind].
+  List<FocusNode> _favNodesFor(_FavKind kind) {
+    switch (kind) {
+      case _FavKind.iptv:
+        return _iptvFavNodes;
+      case _FavKind.debrify:
+        return _tvFavNodes;
+      case _FavKind.stremio:
+        return _stvFavNodes;
+    }
   }
+
+  /// Focus a card in the favourites row at [favIndex] (index into the visible
+  /// favourites rows), clamping the column to that row's length.
+  void _focusFavRowAt(int favIndex, int column) {
+    final kinds = _favRowKinds;
+    if (favIndex < 0 || favIndex >= kinds.length) return;
+    final nodes = _favNodesFor(kinds[favIndex]);
+    if (nodes.isEmpty) return;
+    nodes[column.clamp(0, nodes.length - 1)].requestFocus();
+  }
+
+  /// DPAD-up target for a favourites row: the previous favourites row, else the
+  /// last Continue Watching row, else the search field.
+  VoidCallback _favRowOnUp(int favIndex, int cwCount, int column) =>
+      favIndex > 0
+          ? () => _focusFavRowAt(favIndex - 1, column)
+          : (cwCount > 0
+              ? () => _focusCwRow(cwCount - 1, column)
+              : () => _searchFocusNode.requestFocus());
+
+  /// DPAD-down target for a favourites row: the next favourites row, else the
+  /// first catalog row (a no-op if none have loaded yet).
+  VoidCallback _favRowOnDown(int favIndex, int column) =>
+      favIndex < _favRowCount - 1
+          ? () => _focusFavRowAt(favIndex + 1, column)
+          : () => _focusRow(0, column);
 
   /// Load the user's starred Debrify TV channels for the leading favourites row.
   /// Silently leaves the row empty on any error (it just won't render).
@@ -821,6 +897,136 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     MainPageBridge.notifyDebrifyTvChannelToAutoPlay(channel.id);
     MainPageBridge.switchTab?.call(3); // 3 = Debrify TV (see main.dart _pages)
+  }
+
+  /// Load the user's starred Stremio TV channels for the leading favourites row.
+  /// Mirrors the Home section: discover all channels, keep the favourited ones
+  /// (preserving discovery order), then fetch their items so each card can show
+  /// a now-playing poster. Silently leaves the row empty on any error.
+  Future<void> _loadStremioTvFavorites() async {
+    try {
+      final ids = await StorageService.getStremioTvFavoriteChannelIds();
+      if (ids.isEmpty) {
+        if (!mounted) return;
+        setState(() => _stvFavChannels = const []);
+        _syncStvFavNodes();
+        return;
+      }
+      final rotations = await Future.wait([
+        StorageService.getStremioTvRotationMinutes(),
+        StorageService.getStremioTvSeriesRotationMinutes(),
+      ]);
+      final rotation = rotations[0];
+      final seriesRotation = rotations[1];
+      final all = await StremioTvService.instance.discoverChannels();
+      final favs = all.where((c) => ids.contains(c.id)).toList();
+      await StremioTvService.instance.loadAllChannelItems(favs);
+      if (!mounted) return;
+      setState(() {
+        _stvRotationMinutes = rotation;
+        _stvSeriesRotationMinutes = seriesRotation;
+        _stvFavChannels = favs;
+      });
+      _syncStvFavNodes();
+    } catch (_) {
+      // Favourites row just stays hidden.
+    }
+  }
+
+  void _syncStvFavNodes() {
+    while (_stvFavNodes.length < _stvFavChannels.length) {
+      _stvFavNodes
+          .add(FocusNode(debugLabel: 'search_stvfav_${_stvFavNodes.length}'));
+    }
+    while (_stvFavNodes.length > _stvFavChannels.length) {
+      _stvFavNodes.removeLast().dispose();
+    }
+  }
+
+  /// First of [a], [b] that is a non-empty string, else null.
+  String? _firstNonEmpty(String? a, String? b) {
+    if (a != null && a.isNotEmpty) return a;
+    if (b != null && b.isNotEmpty) return b;
+    return null;
+  }
+
+  /// The now-playing item for a Stremio TV channel, using the same time-based
+  /// rotation as the Home / Stremio TV screens (series rotate on their own
+  /// cadence). Null when the channel has no loaded items.
+  StremioTvNowPlaying? _stvNowPlaying(StremioTvChannel channel) {
+    return StremioTvService.instance.getNowPlaying(
+      channel,
+      rotationMinutes: channel.type == 'series'
+          ? _stvSeriesRotationMinutes
+          : _stvRotationMinutes,
+    );
+  }
+
+  /// Open a Stremio TV channel (same path the Home screen uses): hand off to the
+  /// live player if it's mounted, else queue an auto-play and switch tabs.
+  void _playStremioTvChannel(StremioTvChannel channel) {
+    if (MainPageBridge.watchStremioTvChannel != null) {
+      MainPageBridge.watchStremioTvChannel!(channel.id);
+      return;
+    }
+    MainPageBridge.notifyStremioTvChannelToAutoPlay(channel.id);
+    MainPageBridge.switchTab?.call(9); // 9 = Stremio TV (see main.dart _pages)
+  }
+
+  /// Load the user's starred IPTV channels for the leading favourites row.
+  /// Favourites are stored as a url → {name, logoUrl, group} map, so rebuild
+  /// [IptvChannel] objects from it (mirroring the Home section). Sorted by name.
+  Future<void> _loadIptvFavorites() async {
+    try {
+      final map = await StorageService.getIptvFavoriteChannels();
+      if (map.isEmpty) {
+        if (!mounted) return;
+        setState(() => _iptvFavChannels = const []);
+        _syncIptvFavNodes();
+        return;
+      }
+      final favs = map.entries.map((e) {
+        final meta = e.value;
+        return IptvChannel(
+          name: meta['name'] as String? ?? 'Unknown Channel',
+          url: e.key,
+          logoUrl: meta['logoUrl'] as String?,
+          group: meta['group'] as String?,
+          duration: -1, // live stream
+          attributes: const {},
+        );
+      }).toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      if (!mounted) return;
+      setState(() => _iptvFavChannels = favs);
+      _syncIptvFavNodes();
+    } catch (_) {
+      // Favourites row just stays hidden.
+    }
+  }
+
+  void _syncIptvFavNodes() {
+    while (_iptvFavNodes.length < _iptvFavChannels.length) {
+      _iptvFavNodes
+          .add(FocusNode(debugLabel: 'search_iptvfav_${_iptvFavNodes.length}'));
+    }
+    while (_iptvFavNodes.length > _iptvFavChannels.length) {
+      _iptvFavNodes.removeLast().dispose();
+    }
+  }
+
+  /// Play an IPTV favourite. Unlike the TV channels there's no bridge/tab
+  /// handoff — the stream launches directly in the player (same as Home).
+  void _playIptvChannel(IptvChannel channel) {
+    VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: channel.url,
+        title: channel.name,
+        subtitle: channel.group ?? 'IPTV',
+        viewMode: PlaylistViewMode.sorted,
+      ),
+    );
   }
 
   /// Resolve the addon that a Continue Watching title should route through.
@@ -1061,8 +1267,8 @@ class _SearchScreenState extends State<SearchScreen> {
         return;
       }
     }
-    if (_tvFavVisible && _tvFavNodes.isNotEmpty) {
-      _tvFavNodes.first.requestFocus();
+    if (_anyFavVisible) {
+      _focusFavRowAt(0, 0);
       return;
     }
     if (_rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
@@ -2964,7 +3170,7 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
     final showCw = _cwVisible;
-    if (_sections.isEmpty && !showCw && !_tvFavVisible) {
+    if (_sections.isEmpty && !showCw && !_anyFavVisible) {
       if (_catalogQuery.isNotEmpty) {
         return _message(
           Icons.search_off_rounded,
@@ -3016,12 +3222,14 @@ class _SearchScreenState extends State<SearchScreen> {
         Expanded(
           child: Builder(builder: (context) {
             // Leading board rows, in order: Continue Watching (local, then
-            // Trakt), then the Debrify TV favourites row; the catalog sections
-            // follow, offset by the leading row count.
+            // Trakt), then the favourites rows (IPTV, Debrify TV, Stremio TV —
+            // matching the Home screen); the catalog sections follow, offset by
+            // the total leading row count.
             final cwRows = showCw ? _cwRows : const <_CwRow>[];
             final cwCount = cwRows.length;
-            final tvFavCount = _tvFavVisible ? 1 : 0;
-            final leadingCount = cwCount + tvFavCount;
+            final favKinds = _favRowKinds;
+            final favCount = favKinds.length;
+            final leadingCount = cwCount + favCount;
             // Footer spinner tracks the actual fetch, not just "more remain":
             // `_boardCursor` advances synchronously so the final in-flight batch
             // still shows it, and an idle board with more rows doesn't spin.
@@ -3034,10 +3242,11 @@ class _SearchScreenState extends State<SearchScreen> {
               itemBuilder: (context, i) {
                 if (i < cwCount) {
                   return _buildContinueWatchingRow(
-                      cwRows[i], i, cwCount, tvFavCount);
+                      cwRows[i], i, cwCount, favCount);
                 }
-                if (tvFavCount == 1 && i == cwCount) {
-                  return _buildTvFavRow(cwCount);
+                if (i < leadingCount) {
+                  final favIndex = i - cwCount;
+                  return _buildFavRow(favKinds[favIndex], favIndex, cwCount);
                 }
                 final s = i - leadingCount;
                 if (s >= _sections.length) return _buildBoardFooter();
@@ -3168,8 +3377,8 @@ class _SearchScreenState extends State<SearchScreen> {
                             : () => _onCatalogPlay(item, section.addon),
                         onFocused: () => _setHero(item),
                         onUp: rowIndex == 0
-                            ? (_tvFavVisible
-                                ? () => _focusTvFavRow(col)
+                            ? (_anyFavVisible
+                                ? () => _focusFavRowAt(_favRowCount - 1, col)
                                 : (_cwVisible
                                     ? () => _focusCwRow(_cwRows.length - 1, col)
                                     : () => _searchFocusNode.requestFocus()))
@@ -3207,10 +3416,10 @@ class _SearchScreenState extends State<SearchScreen> {
   /// catalog rows, plus a bottom progress bar and an optional type tag.
   /// [cwIndex] is this row's position among the visible CW rows and [cwCount]
   /// the total, so DPAD up/down can move between CW rows and into the catalog.
-  /// [tvFavCount] is 1 when the Debrify TV favourites row sits just below, so
-  /// the last CW row's DPAD-down lands there instead of the first catalog row.
+  /// [favCount] is the number of favourites rows just below, so the last CW
+  /// row's DPAD-down lands on the first of them instead of the first catalog row.
   Widget _buildContinueWatchingRow(
-      _CwRow row, int cwIndex, int cwCount, int tvFavCount) {
+      _CwRow row, int cwIndex, int cwCount, int favCount) {
     final tv = widget.isTelevision;
     final width = MediaQuery.of(context).size.width;
     final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
@@ -3281,12 +3490,12 @@ class _SearchScreenState extends State<SearchScreen> {
                       onUp: cwIndex == 0
                           ? () => _searchFocusNode.requestFocus()
                           : () => _focusCwRow(cwIndex - 1, col),
-                      // Down: next CW row; from the last, into the Debrify TV
+                      // Down: next CW row; from the last, into the first
                       // favourites row if present, else the first catalog row.
                       onDown: cwIndex < cwCount - 1
                           ? () => _focusCwRow(cwIndex + 1, col)
-                          : (tvFavCount == 1
-                              ? () => _focusTvFavRow(col)
+                          : (favCount > 0
+                              ? () => _focusFavRowAt(0, col)
                               : () => _focusRow(0, col)),
                       onOpen: () => row.onOpen(item),
                     ),
@@ -3300,11 +3509,30 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// The leading "Debrify TV" row of favourited keyword channels, styled to
-  /// match the catalog rows (same poster-shaped cards + title below). [cwCount]
-  /// is the number of Continue Watching rows above it, so DPAD-up lands on the
-  /// last CW row (or the search field when there is none).
-  Widget _buildTvFavRow(int cwCount) {
+  /// Dispatch to the right favourites-row builder for [kind]. [favIndex] is the
+  /// row's position among the visible favourites rows and [cwCount] the number
+  /// of Continue Watching rows above them (both drive the DPAD up/down wiring).
+  Widget _buildFavRow(_FavKind kind, int favIndex, int cwCount) {
+    switch (kind) {
+      case _FavKind.iptv:
+        return _buildIptvFavRow(favIndex, cwCount);
+      case _FavKind.debrify:
+        return _buildTvFavRow(favIndex, cwCount);
+      case _FavKind.stremio:
+        return _buildStremioTvFavRow(favIndex, cwCount);
+    }
+  }
+
+  /// Shared scaffold for a favourites row: a header (title + tag pills) above a
+  /// horizontal strip of poster-shaped cards, sized exactly like the catalog
+  /// rows so the whole board reads as one grid. [cellBuilder] gets the poster
+  /// width and full cell height (poster + title band) for each column.
+  Widget _buildFavRowShell({
+    required String title,
+    required List<Widget> tags,
+    required int itemCount,
+    required Widget Function(int col, double posterW, double cellH) cellBuilder,
+  }) {
     final tv = widget.isTelevision;
     final width = MediaQuery.of(context).size.width;
     final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
@@ -3323,7 +3551,7 @@ class _SearchScreenState extends State<SearchScreen> {
             children: [
               Flexible(
                 child: Text(
-                  'Debrify TV',
+                  title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -3334,12 +3562,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              const _CategoryTag('Channels'),
-              const SizedBox(width: 6),
-              // Make it explicit this row is the user's STARRED channels, not
-              // every channel — otherwise people expect all channels here.
-              const _CategoryTag('Favorites', icon: Icons.star_rounded),
+              for (final t in tags) ...[const SizedBox(width: 6), t],
             ],
           ),
         ),
@@ -3350,33 +3573,15 @@ class _SearchScreenState extends State<SearchScreen> {
             clipBehavior: Clip.hardEdge,
             cacheExtent: 2000,
             padding: const EdgeInsets.symmetric(horizontal: 13),
-            itemCount: _tvFavChannels.length,
+            itemCount: itemCount,
             itemBuilder: (context, col) {
-              final channel = _tvFavChannels[col];
-              final number = channel.channelNumber > 0
-                  ? channel.channelNumber
-                  : col + 1;
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 11),
                 child: Center(
                   child: SizedBox(
                     width: posterW,
                     height: cellH,
-                    child: _ChannelBoardCell(
-                      channel: channel,
-                      channelNumber: number,
-                      isTelevision: tv,
-                      focusNode: _tvFavNodes[col],
-                      column: col,
-                      rowNodes: _tvFavNodes,
-                      // Up: last Continue Watching row, or the search field.
-                      onUp: cwCount > 0
-                          ? () => _focusCwRow(cwCount - 1, col)
-                          : () => _searchFocusNode.requestFocus(),
-                      // Down: into the first catalog row (no-op if none loaded).
-                      onDown: () => _focusRow(0, col),
-                      onOpen: () => _playChannel(channel),
-                    ),
+                    child: cellBuilder(col, posterW, cellH),
                   ),
                 ),
               );
@@ -3384,6 +3589,116 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// The "Debrify TV" row of favourited keyword channels, styled to match the
+  /// catalog rows (same poster-shaped cards + title below).
+  Widget _buildTvFavRow(int favIndex, int cwCount) {
+    final tv = widget.isTelevision;
+    return _buildFavRowShell(
+      title: 'Debrify TV',
+      tags: const [
+        _CategoryTag('Channels'),
+        // Make it explicit this row is the user's STARRED channels, not every
+        // channel — otherwise people expect all channels here.
+        _CategoryTag('Favorites', icon: Icons.star_rounded),
+      ],
+      itemCount: _tvFavChannels.length,
+      cellBuilder: (col, posterW, cellH) {
+        final channel = _tvFavChannels[col];
+        final number =
+            channel.channelNumber > 0 ? channel.channelNumber : col + 1;
+        return _FavArtCell(
+          isTelevision: tv,
+          column: col,
+          rowNodes: _tvFavNodes,
+          onUp: _favRowOnUp(favIndex, cwCount, col),
+          onDown: _favRowOnDown(favIndex, col),
+          // Debrify channels have no artwork — the glyph fallback + channel
+          // number badge is the intended look.
+          child: _ArtPoster(
+            imageUrl: null,
+            title: channel.name,
+            badge: '$number',
+            isTelevision: tv,
+            focusNode: _tvFavNodes[col],
+            onOpen: () => _playChannel(channel),
+          ),
+        );
+      },
+    );
+  }
+
+  /// The "Stremio TV" row of favourited channels. Each card shows the channel's
+  /// current now-playing item poster (rotating on the same schedule as the Home
+  /// / Stremio TV screens); tapping opens the channel.
+  Widget _buildStremioTvFavRow(int favIndex, int cwCount) {
+    final tv = widget.isTelevision;
+    return _buildFavRowShell(
+      title: 'Stremio TV',
+      tags: const [
+        _CategoryTag('Channels'),
+        _CategoryTag('Favorites', icon: Icons.star_rounded),
+      ],
+      itemCount: _stvFavChannels.length,
+      cellBuilder: (col, posterW, cellH) {
+        final channel = _stvFavChannels[col];
+        final item = _stvNowPlaying(channel)?.item;
+        // Prefer the 2:3 poster for this poster-shaped tile; fall back to the
+        // (landscape) background so channels whose now-playing meta lacks a
+        // poster still show art instead of a blank glyph.
+        final art = _firstNonEmpty(item?.poster, item?.background);
+        return _FavArtCell(
+          isTelevision: tv,
+          column: col,
+          rowNodes: _stvFavNodes,
+          onUp: _favRowOnUp(favIndex, cwCount, col),
+          onDown: _favRowOnDown(favIndex, col),
+          child: _ArtPoster(
+            imageUrl: art,
+            title: channel.displayName,
+            live: true,
+            isTelevision: tv,
+            focusNode: _stvFavNodes[col],
+            onOpen: () => _playStremioTvChannel(channel),
+          ),
+        );
+      },
+    );
+  }
+
+  /// The "IPTV" row of favourited live channels. Cards show the channel logo
+  /// (glyph fallback); tapping plays the stream directly.
+  Widget _buildIptvFavRow(int favIndex, int cwCount) {
+    final tv = widget.isTelevision;
+    return _buildFavRowShell(
+      title: 'IPTV',
+      tags: const [
+        _CategoryTag('Live'),
+        _CategoryTag('Favorites', icon: Icons.star_rounded),
+      ],
+      itemCount: _iptvFavChannels.length,
+      cellBuilder: (col, posterW, cellH) {
+        final channel = _iptvFavChannels[col];
+        return _FavArtCell(
+          isTelevision: tv,
+          column: col,
+          rowNodes: _iptvFavNodes,
+          onUp: _favRowOnUp(favIndex, cwCount, col),
+          onDown: _favRowOnDown(favIndex, col),
+          child: _ArtPoster(
+            imageUrl: channel.logoUrl,
+            title: channel.name,
+            // Logos are usually square/wide, not 2:3 — contain so they aren't
+            // cropped; the gradient shows around them.
+            imageFit: BoxFit.contain,
+            isTelevision: tv,
+            focusNode: _iptvFavNodes[col],
+            onOpen: () => _playIptvChannel(channel),
+          ),
+        );
+      },
     );
   }
 
@@ -4019,31 +4334,31 @@ class _StremioCardState extends State<_StremioCard> {
   }
 }
 
-/// DPAD arrow-handling wrapper for a Debrify TV channel card — the channel
-/// counterpart to [_BoardCell]. Holds no focus itself (the inner
-/// [_ChannelPoster] does); it only routes left/right within the row and
-/// up/down out of it, matching the catalog cards' navigation exactly.
-class _ChannelBoardCell extends StatelessWidget {
-  final DebrifyTvChannel channel;
-  final int channelNumber;
+/// The kinds of leading favourites rows. Render order (Debrify TV, Stremio TV,
+/// IPTV) is defined by [_SearchScreenState._favRowKinds], the single source of
+/// truth for both rendering and the index-based DPAD focus wiring.
+enum _FavKind { iptv, debrify, stremio }
+
+/// Generic DPAD arrow-handling wrapper for a favourites-row card — the arrow
+/// counterpart to [_BoardCell] for the IPTV / Debrify TV / Stremio TV rows.
+/// Holds no focus itself — the inner [_ArtPoster] does; this only routes
+/// left/right within the row and up/down out of it, matching the catalog
+/// cards' navigation exactly.
+class _FavArtCell extends StatelessWidget {
   final bool isTelevision;
-  final FocusNode focusNode;
   final int column;
   final List<FocusNode> rowNodes;
   final VoidCallback onUp;
   final VoidCallback onDown;
-  final VoidCallback onOpen;
+  final Widget child;
 
-  const _ChannelBoardCell({
-    required this.channel,
-    required this.channelNumber,
+  const _FavArtCell({
     required this.isTelevision,
-    required this.focusNode,
     required this.column,
     required this.rowNodes,
     required this.onUp,
     required this.onDown,
-    required this.onOpen,
+    required this.child,
   });
 
   KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
@@ -4082,52 +4397,71 @@ class _ChannelBoardCell extends StatelessWidget {
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: _handleArrows,
-      child: _ChannelPoster(
-        channel: channel,
-        channelNumber: channelNumber,
-        isTelevision: isTelevision,
-        focusNode: focusNode,
-        onOpen: onOpen,
-      ),
+      child: child,
     );
   }
 }
 
-/// Stremio-shaped card for a Debrify TV channel (the channel counterpart to
-/// [_StremioCard]). Channels have no artwork, so the 2:3 tile is a purple
-/// gradient with a live-TV glyph and channel number, with the name below —
-/// same size, corner radius, hover/focus lift and selection ring as the
-/// catalog cards so the row reads as part of the same board.
-class _ChannelPoster extends StatefulWidget {
-  final DebrifyTvChannel channel;
-  final int channelNumber;
+/// Stremio-shaped artwork card for a favourite that has a real image (a Stremio
+/// TV channel's now-playing poster, or an IPTV channel's logo). Shows the image
+/// over a purple gradient — with a live-TV glyph fallback when it's missing or
+/// fails to load — and the title below, matching [_StremioCard]'s size, corner
+/// radius, hover/focus lift and selection ring so the row reads as one board.
+class _ArtPoster extends StatefulWidget {
+  final String? imageUrl;
+  final String title;
+
+  /// How the image fills the 2:3 tile — cover for posters, contain for logos.
+  final BoxFit imageFit;
+
+  /// Optional top-left badge text (e.g. a channel number) drawn over the tile.
+  final String? badge;
+
+  /// When true, a red "LIVE" pill is drawn top-right — signalling that this is a
+  /// channel and the artwork is what's playing on it right now.
+  final bool live;
   final bool isTelevision;
   final FocusNode focusNode;
   final VoidCallback onOpen;
 
-  const _ChannelPoster({
-    required this.channel,
-    required this.channelNumber,
+  const _ArtPoster({
+    required this.imageUrl,
+    required this.title,
     required this.isTelevision,
     required this.focusNode,
     required this.onOpen,
+    this.imageFit = BoxFit.cover,
+    this.badge,
+    this.live = false,
   });
 
   @override
-  State<_ChannelPoster> createState() => _ChannelPosterState();
+  State<_ArtPoster> createState() => _ArtPosterState();
 }
 
-class _ChannelPosterState extends State<_ChannelPoster> {
+class _ArtPosterState extends State<_ArtPoster> {
   bool _focused = false;
   bool _hovered = false;
   bool _keyDown = false;
   bool get _active => _focused || _hovered;
+
+  Widget _glyph() {
+    return Center(
+      child: Icon(
+        Icons.live_tv_rounded,
+        size: 40,
+        color: kStremioAccent.withValues(alpha: _active ? 1 : 0.85),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final fx = widget.isTelevision
         ? Duration.zero
         : const Duration(milliseconds: 160);
+    final url = widget.imageUrl;
+    final hasImage = url != null && url.isNotEmpty;
 
     final posterCard = AnimatedScale(
       duration: fx,
@@ -4152,8 +4486,10 @@ class _ChannelPosterState extends State<_ChannelPoster> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                DecoratedBox(
-                  decoration: const BoxDecoration(
+                // Base gradient — the fallback backdrop and the ground behind
+                // any letterboxed (contain-fit) logo.
+                const DecoratedBox(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -4166,28 +4502,75 @@ class _ChannelPosterState extends State<_ChannelPoster> {
                     ),
                   ),
                 ),
-                // Channel number, top-left.
-                Positioned(
-                  top: 10,
-                  left: 10,
-                  child: Text(
-                    '${widget.channelNumber}',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.2,
+                if (hasImage)
+                  Padding(
+                    padding: widget.imageFit == BoxFit.contain
+                        ? const EdgeInsets.all(12)
+                        : EdgeInsets.zero,
+                    child: CachedNetworkImage(
+                      imageUrl: url,
+                      fit: widget.imageFit,
+                      placeholder: (_, __) => _glyph(),
+                      errorWidget: (_, __, ___) => _glyph(),
+                    ),
+                  )
+                else
+                  _glyph(),
+                // Optional channel-number badge, top-left.
+                if (widget.badge != null)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Text(
+                      widget.badge!,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
                     ),
                   ),
-                ),
-                // Centered live-TV glyph.
-                Center(
-                  child: Icon(
-                    Icons.live_tv_rounded,
-                    size: 40,
-                    color: kStremioAccent.withValues(alpha: _active ? 1 : 0.85),
+                // "LIVE" pill, top-right — marks this as a channel currently
+                // playing the shown artwork.
+                if (widget.live)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: _kCwProgressRed,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'LIVE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
                 // Selection ring — accent on TV focus, subtle white on hover.
                 if (_active)
                   Positioned.fill(
@@ -4263,7 +4646,7 @@ class _ChannelPosterState extends State<_ChannelPoster> {
               posterCard,
               const SizedBox(height: 10),
               Text(
-                widget.channel.name,
+                widget.title,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
