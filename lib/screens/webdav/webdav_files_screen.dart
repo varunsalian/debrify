@@ -19,7 +19,12 @@ import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../settings/webdav_settings_page.dart';
 
 class WebDavFilesScreen extends StatefulWidget {
-  const WebDavFilesScreen({super.key});
+  const WebDavFilesScreen({super.key, this.isPushedRoute = false});
+
+  /// True when opened as a pushed route (from the Cloud hub) rather than as a
+  /// nav tab — registers a pushed-route back handler so system/remote Back
+  /// folds up the folder stack before popping, and shows a root Back button.
+  final bool isPushedRoute;
 
   @override
   State<WebDavFilesScreen> createState() => _WebDavFilesScreenState();
@@ -57,25 +62,35 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   void initState() {
     super.initState();
     _loadSettingsAndRoot();
-    MainPageBridge.registerTabBackHandler('webdav', _handleBackNavigation);
-    _tvContentFocusHandler = () {
-      if (_items.isNotEmpty) {
-        _firstItemFocusNode.requestFocus();
-      } else {
-        _refreshFocusNode.requestFocus();
-      }
-    };
-    MainPageBridge.registerTvContentFocusHandler(10, _tvContentFocusHandler!);
+    if (widget.isPushedRoute) {
+      // Pushed from the Cloud hub — system/remote Back should fold the folder
+      // stack before popping, matching the other provider screens.
+      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+    } else {
+      MainPageBridge.registerTabBackHandler('webdav', _handleBackNavigation);
+      _tvContentFocusHandler = () {
+        if (_items.isNotEmpty) {
+          _firstItemFocusNode.requestFocus();
+        } else {
+          _refreshFocusNode.requestFocus();
+        }
+      };
+      MainPageBridge.registerTvContentFocusHandler(10, _tvContentFocusHandler!);
+    }
   }
 
   @override
   void dispose() {
-    MainPageBridge.unregisterTabBackHandler('webdav');
-    if (_tvContentFocusHandler != null) {
-      MainPageBridge.unregisterTvContentFocusHandler(
-        10,
-        _tvContentFocusHandler!,
-      );
+    if (widget.isPushedRoute) {
+      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+    } else {
+      MainPageBridge.unregisterTabBackHandler('webdav');
+      if (_tvContentFocusHandler != null) {
+        MainPageBridge.unregisterTvContentFocusHandler(
+          10,
+          _tvContentFocusHandler!,
+        );
+      }
     }
     _scrollController.dispose();
     _searchController.dispose();
@@ -627,7 +642,10 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       ),
       child: Row(
         children: [
-          if (_stack.isNotEmpty)
+          // Show Back when inside a folder (fold up) OR when pushed from the
+          // Cloud hub (so the root has a visible Back-to-hub on desktop). A
+          // single handler folds the stack first, then pops the route at root.
+          if (_stack.isNotEmpty || widget.isPushedRoute)
             Focus(
               onKeyEvent: (node, event) {
                 if (event is KeyDownEvent &&
@@ -640,7 +658,11 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
               },
               child: IconButton(
                 focusNode: _backButtonFocusNode,
-                onPressed: _handleBackNavigation,
+                onPressed: () {
+                  if (!_handleBackNavigation()) {
+                    Navigator.of(context).maybePop();
+                  }
+                },
                 icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
                 tooltip: 'Back',
               ),

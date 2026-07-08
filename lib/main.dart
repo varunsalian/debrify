@@ -2402,12 +2402,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         enabled = _webDavEnabled;
         hidden = _webDavHiddenFromNav;
         name = 'WebDAV';
-        // WebDAV renders a bare Column (no Scaffold/AppBar) and has no
-        // isPushedRoute of its own, so wrap it with a Scaffold + AppBar back
-        // affordance for the pushed route. Its own toolbar handles folder nav.
-        child = Scaffold(
-          appBar: AppBar(title: const Text('WebDAV')),
-          body: const SafeArea(child: WebDavFilesScreen()),
+        // WebDAV renders a bare Column (no Scaffold), so wrap it in a Scaffold
+        // for a Material/ScaffoldMessenger ancestor. No AppBar — in pushed mode
+        // its own toolbar shows a Back button (root + folder-up) and it registers
+        // a pushed-route back handler, so system/remote Back folds the stack.
+        child = const Scaffold(
+          body: SafeArea(child: WebDavFilesScreen(isPushedRoute: true)),
         );
         break;
       default:
