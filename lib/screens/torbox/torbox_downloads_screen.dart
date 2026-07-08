@@ -5908,9 +5908,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   Widget build(BuildContext context) {
     // Back navigation is handled via MainPageBridge.handleBackNavigation
 
-    // When pushed as a route and still at root, show loading state
-    // (we're waiting for navigation into the specific torrent)
-    if (widget.isPushedRoute && !widget.selectSourceMode && _isAtRoot) {
+    // When DEEP-LINKED into a specific torrent (pushed WITH a target) and still
+    // at root, show the loading state. Browsing from the Cloud hub has no target,
+    // so the list root is the real content — don't gate it behind a spinner.
+    if (widget.isPushedRoute &&
+        !widget.selectSourceMode &&
+        widget.initialTorrentToOpen != null &&
+        _isAtRoot) {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(

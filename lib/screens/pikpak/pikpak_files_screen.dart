@@ -1871,9 +1871,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // When pushed as a route and still at root, show loading state
-    // (we're waiting for navigation into the specific folder)
-    if (widget.isPushedRoute && _currentFolderId == null) {
+    // When DEEP-LINKED into a specific folder (pushed WITH a target) and still
+    // at root, show the loading state. Browsing from the Cloud hub has no target
+    // (and non-restricted accounts stay at a null root folder), so don't gate the
+    // real content behind a spinner.
+    if (widget.isPushedRoute &&
+        widget.initialFolderId != null &&
+        _currentFolderId == null) {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(

@@ -2652,9 +2652,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // When pushed as a route and still at root, show loading state
-    // (we're waiting for navigation into the specific torrent)
-    if (widget.isPushedRoute && !widget.selectSourceMode && _currentTorrentId == null) {
+    // When DEEP-LINKED into a specific torrent (pushed WITH a target) and still
+    // at root, show the loading state while we navigate into it. When browsing
+    // from the Cloud hub there's no target, so the torrents-list root is the
+    // real content — don't gate it behind a spinner.
+    if (widget.isPushedRoute &&
+        !widget.selectSourceMode &&
+        widget.initialTorrentForOptions != null &&
+        _currentTorrentId == null) {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(
