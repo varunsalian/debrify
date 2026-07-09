@@ -3235,14 +3235,13 @@ class _SearchScreenState extends State<SearchScreen> {
     StremioMeta item, {
     bool isTraktSource = false,
   }) => AdvancedSearchSelection(
-    // Keep the raw addon id ONLY for non-standard types (IPTV / TV / channel)
-    // so playback/Sources can resolve the addon's own stream endpoint. A
-    // movie/series without a `tt…` id (e.g. tmdb/kitsu-only) keeps '' so it
-    // still shows the clear "No IMDb match" message instead of a doomed
-    // torrent search — the isolated engine can't resolve those ids anyway.
-    imdbId:
-        item.effectiveImdbId ??
-        (item.type == 'movie' || item.type == 'series' ? '' : item.id),
+    // Keep the raw catalog id when there's no `tt…` id — for IPTV/TV channels
+    // AND tmdb/kitsu-only movies — so playback/Sources resolve the addon's own
+    // /stream endpoint, matching old home (which passed effectiveImdbId ?? id).
+    // The torrent engines can't resolve a non-`tt` id, but the addon stream can
+    // (playFromSelection routes any non-`tt` id to _playAddonStream), so this
+    // plays instead of dead-ending on "No IMDb match".
+    imdbId: item.effectiveImdbId ?? item.id,
     isSeries: false,
     title: item.name,
     year: item.year,
