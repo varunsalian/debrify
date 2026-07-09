@@ -5,6 +5,74 @@ import '../../models/stremio_addon.dart';
 import '../catalog_item_tile.dart';
 import 'see_all_theme.dart';
 
+/// The single source of truth for a See-All poster grid's layout maths: column
+/// count, cell size and the spacing/padding constants. Both the real grid
+/// ([SeeAllPosterGrid]) and its loading placeholder (SkeletonPosterGrid) resolve
+/// geometry through here, so the placeholder hands off to the real posters with
+/// zero layout shift — the two can't drift because there's only one formula.
+class SeeAllGridMetrics {
+  final int columns;
+  final double childWidth;
+
+  /// Full cell height: a 2:3 poster + [titleGap] + a 2-line [titleHeight] band.
+  final double cellHeight;
+
+  /// Height of the 2-line title band below each poster.
+  final double titleHeight;
+
+  const SeeAllGridMetrics({
+    required this.columns,
+    required this.childWidth,
+    required this.cellHeight,
+    required this.titleHeight,
+  });
+
+  // Horizontal padding around the grid (24 each side) and the inter-column gap.
+  static const double _hPad = 48;
+  static const double columnGap = 16;
+
+  /// Gap between rows (SliverGrid mainAxisSpacing).
+  static const double rowGap = 20;
+
+  /// Gap between a poster and its title band, inside a cell.
+  static const double titleGap = 8;
+
+  /// Padding wrapping the grid, matching [_hPad] horizontally.
+  static const EdgeInsets padding = EdgeInsets.fromLTRB(24, 8, 24, 8);
+
+  /// Resolve the geometry for the current width + text scale.
+  ///
+  /// Android TV renders on a low logical canvas (~960×540 at 2.0 DPR), so a
+  /// large target yields only ~4 columns and posters that eat over half the
+  /// screen height. Aim for a smaller poster (~130px) → ~6–7 columns and ~2 rows
+  /// of comfortably-sized cards, matching how Stremio's own grid reads on a
+  /// 10-foot display.
+  static SeeAllGridMetrics resolve(
+    BuildContext context, {
+    required bool isTelevision,
+  }) {
+    final width = MediaQuery.of(context).size.width;
+    final target = isTelevision ? 132.0 : 178.0;
+    final usable = (width - _hPad).clamp(0.0, double.infinity);
+    final cols = ((usable + columnGap) / (target + columnGap))
+        .floor()
+        .clamp(isTelevision ? 5 : 3, 10);
+    // Size each cell = a 2:3 poster + a fixed 2-line title band below (matching
+    // the board rails and Stremio), sized off the actual column width so the
+    // poster stays 2:3 regardless of title length.
+    final usableForCell = (width - _hPad).clamp(1.0, double.infinity);
+    final childWidth = (usableForCell - (cols - 1) * columnGap) / cols;
+    final titleH = MediaQuery.textScalerOf(context).scale(13) * 1.3 * 2;
+    final cellH = childWidth * 1.5 + titleGap + titleH;
+    return SeeAllGridMetrics(
+      columns: cols,
+      childWidth: childWidth,
+      cellHeight: cellH,
+      titleHeight: titleH,
+    );
+  }
+}
+
 /// A responsive, paginated poster grid shared by every See-All screen (catalog
 /// browse, continue watching, Trakt). It owns its focus nodes and scroll
 /// controller, walks the grid with the DPAD on TV, and asks for the next page
@@ -139,26 +207,6 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
     if (_nodes.isNotEmpty) _nodes.first.requestFocus();
   }
 
-  // Horizontal padding around the grid (kept in sync with the SliverPadding
-  // below) and the gap between columns.
-  static const double _hPad = 48; // 24 each side
-  static const double _colGap = 16;
-
-  /// Column count from a target poster width, so the grid matches Stremio's
-  /// denser posters rather than the roomier board tile size.
-  ///
-  /// Android TV renders on a low logical canvas (~960×540 at 2.0 DPR), so a
-  /// large target yields only ~4 columns and posters that eat over half the
-  /// screen height. Aim for a smaller poster (~130px) → ~6–7 columns and ~2
-  /// rows of comfortably-sized cards, matching how Stremio's own grid reads on
-  /// a 10-foot display.
-  int _columnsFor(double width) {
-    final target = widget.isTelevision ? 132.0 : 178.0;
-    final usable = (width - _hPad).clamp(0.0, double.infinity);
-    final n = ((usable + _colGap) / (target + _colGap)).floor();
-    return n.clamp(widget.isTelevision ? 5 : 3, 10);
-  }
-
   KeyEventResult _handleArrows(int index, int cols, KeyEvent event) {
     if (!widget.isTelevision || event is! KeyDownEvent) {
       return KeyEventResult.ignored;
@@ -201,29 +249,22 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final cols = _columnsFor(width);
-
-    // Size each cell = a 2:3 poster + a fixed 2-line title band below (matching
-    // the board rails and Stremio), sized off the actual column width so the
-    // poster stays 2:3 regardless of title length.
-    final usable = (width - _hPad).clamp(1.0, double.infinity);
-    final childWidth = (usable - (cols - 1) * _colGap) / cols;
-    final titleH = MediaQuery.textScalerOf(context).scale(13) * 1.3 * 2;
-    const titleGap = 8.0;
-    final cellH = childWidth * 1.5 + titleGap + titleH;
+    final m = SeeAllGridMetrics.resolve(context, isTelevision: widget.isTelevision);
+    final cols = m.columns;
+    final titleH = m.titleHeight;
+    const titleGap = SeeAllGridMetrics.titleGap;
 
     return CustomScrollView(
       controller: _scroll,
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+          padding: SeeAllGridMetrics.padding,
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: cols,
-              childAspectRatio: childWidth / cellH,
-              mainAxisSpacing: 20,
-              crossAxisSpacing: _colGap,
+              childAspectRatio: m.childWidth / m.cellHeight,
+              mainAxisSpacing: SeeAllGridMetrics.rowGap,
+              crossAxisSpacing: SeeAllGridMetrics.columnGap,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {

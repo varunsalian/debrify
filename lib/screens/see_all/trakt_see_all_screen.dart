@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/main_page_bridge.dart';
+import '../../widgets/skeleton_poster.dart';
 import '../../services/trakt/trakt_list_source.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
@@ -486,16 +487,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(
-        child: SizedBox(
-          width: 30,
-          height: 30,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            valueColor: AlwaysStoppedAnimation<Color>(kSeeAllAccent),
-          ),
-        ),
-      );
+      return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
     if (_visible.isEmpty) {
       return Center(

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/main_page_bridge.dart';
+import '../../widgets/skeleton_poster.dart';
 import '../../services/stremio_service.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
@@ -394,16 +395,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
 
   Widget _buildBody() {
     if (_loadingInitial) {
-      return const Center(
-        child: SizedBox(
-          width: 26,
-          height: 26,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            valueColor: AlwaysStoppedAnimation<Color>(kSeeAllAccent),
-          ),
-        ),
-      );
+      return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
     if (_items.isEmpty) {
       return Center(

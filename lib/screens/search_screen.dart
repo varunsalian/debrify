@@ -38,6 +38,7 @@ import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/home/home_theme.dart';
+import '../widgets/skeleton_poster.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
 import 'playlist_content_view_screen.dart';
@@ -5528,9 +5529,8 @@ class _TraktSkeletonRowState extends State<_TraktSkeletonRow>
   }
 }
 
-/// A poster-shaped shimmer placeholder driven by a shared [animation]: a muted
-/// rounded card with a soft highlight band sweeping across it, matching the
-/// board's poster radius.
+/// A poster-shaped shimmer placeholder driven by a shared [animation], matching
+/// the board's poster radius. Thin wrapper that sizes the shared [ShimmerBox].
 class _SkeletonPoster extends StatelessWidget {
   final double width;
   final double height;
@@ -5547,29 +5547,7 @@ class _SkeletonPoster extends StatelessWidget {
     return SizedBox(
       width: width,
       height: height,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: AnimatedBuilder(
-          animation: animation,
-          builder: (context, _) {
-            // Sweep a soft highlight band left→right across a muted base.
-            final t = animation.value;
-            return DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment(-1.6 + 3.2 * t, 0),
-                  end: Alignment(-0.4 + 3.2 * t, 0),
-                  colors: [
-                    Colors.white.withValues(alpha: 0.04),
-                    Colors.white.withValues(alpha: 0.10),
-                    Colors.white.withValues(alpha: 0.04),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
+      child: ShimmerBox(animation: animation),
     );
   }
 }
