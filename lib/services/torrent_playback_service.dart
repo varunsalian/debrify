@@ -367,6 +367,34 @@ class TorrentPlaybackService {
         if (cancelled()) return; // Cancel landed during magnet resolution
         final r = await _add(prov, magnet, t);
         if (r.playUrl != null && r.playUrl!.isNotEmpty) {
+          // For a series episode, don't accept a pack that resolved fine but
+          // doesn't actually contain the requested episode (mislabeled or
+          // wrong-season result) — mirror _playViaBound instead of letting the
+          // player silently start the wrong/first episode. Keep probing the
+          // remaining candidates for one that genuinely has it.
+          final mSeason = meta?.season;
+          final mEpisode = meta?.episode;
+          if (mSeason != null &&
+              mEpisode != null &&
+              !_resolvedHasEpisode(r, mSeason, mEpisode)) {
+            // Delete the fresh RD/PikPak entry this probe created so skips
+            // don't pile up orphans (TorBox/AllDebrid dedup the add; Premiumize
+            // adds nothing), matching _playViaBound's cleanup.
+            if (prov == 'debrid' && (r.rdTorrentId?.isNotEmpty ?? false)) {
+              try {
+                final apiKey = (await StorageService.getApiKey()) ?? '';
+                await DebridService.deleteTorrent(apiKey, r.rdTorrentId!);
+              } catch (_) {}
+            } else if (prov == 'pikpak' &&
+                (r.pikpakFileId?.isNotEmpty ?? false)) {
+              try {
+                await PikPakApiService.instance.batchDeleteFiles([
+                  r.pikpakFileId!,
+                ]);
+              } catch (_) {}
+            }
+            continue;
+          }
           res = r;
           winner = t;
           break;
