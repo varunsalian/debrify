@@ -817,6 +817,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         MainPageBridge.focusTvSidebar = () {
           _tvSidebarKey.currentState?.requestFocus();
         };
+        MainPageBridge.isTvSidebarFocused = () =>
+            _tvSidebarKey.currentState?.hasFocus ?? false;
       }
 
       if (!_hasTrackedInitialTab) {
@@ -853,6 +855,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openCloudProvider = null;
     MainPageBridge.hideAutoLaunchOverlay = null;
     MainPageBridge.focusTvSidebar = null;
+    MainPageBridge.isTvSidebarFocused = null;
     _animationController.dispose();
     DeepLinkService().dispose();
     RemoteControlState().stop();
@@ -2567,6 +2570,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
                 // TV Layout: Sidebar + Content
                 if (_isAndroidTv) {
+                  // Keep the bridge's active-tab index in lock-step with the tab
+                  // actually being rendered — startup and integration-driven tab
+                  // changes set _selectedIndex without routing through
+                  // _onNavItemSelected, so a screen can't otherwise trust it.
+                  MainPageBridge.setActiveTvTab(_selectedIndex);
                   final tvIndices = _sidebarOrderedIndices(visibleIndices);
                   final tvSelected = tvIndices.indexOf(_selectedIndex);
                   return Scaffold(

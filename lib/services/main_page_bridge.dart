@@ -285,6 +285,11 @@ class MainPageBridge {
   /// Callback to focus the TV sidebar. Set by main.dart.
   static VoidCallback? focusTvSidebar;
 
+  /// Whether the TV sidebar currently holds focus. Set by main.dart. Lets a
+  /// screen avoid auto-focusing its content (stealing focus) when the user has
+  /// stepped out to the sidebar while that content was still loading.
+  static bool Function()? isTvSidebarFocused;
+
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.
   /// Key is the tab index (0=Home, 1=Playlist, 2=Downloads, etc.)
@@ -317,6 +322,11 @@ class MainPageBridge {
   static void setActiveTvTab(int index) {
     _activeTvTabIndex = index;
   }
+
+  /// The currently active TV tab index. Lets a screen tell whether it's the tab
+  /// the user is actually looking at (e.g. to avoid grabbing focus onto an
+  /// outgoing page mid tab-transition).
+  static int get activeTvTabIndex => _activeTvTabIndex;
 
   /// Request focus on the current screen's content.
   /// Called by sidebar when user exits (right arrow or select).

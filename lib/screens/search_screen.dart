@@ -328,6 +328,31 @@ class _SearchScreenState extends State<SearchScreen> {
 
   int _traktCwToken = 0;
 
+  /// Whether a Trakt Continue Watching fetch is currently in flight for a
+  /// connected account. While true — and there are no real Trakt rows to show
+  /// yet — the Trakt slot is held open with skeleton placeholders (see
+  /// [_traktReserving]) so the real rows fill in place instead of inserting
+  /// mid-board and shoving everything below them down. Set at the start of each
+  /// load and cleared on every terminal path, so a mid-session connect (which
+  /// re-runs the load) reserves the slot again.
+  bool _traktCwLoading = false;
+
+  /// TV auto-focus "settle to the top" state. On arrival the board focuses the
+  /// best card available immediately (an addon row if the Trakt rows above it
+  /// are still loading), remembering that node in [_autoFocusedNode]. As higher
+  /// rows load (Trakt, local Continue Watching), focus slides up to the new top
+  /// card — but only while the user is idle (focus still sits on the node we
+  /// placed). The instant the user moves focus themselves, [_autoFocusSettled]
+  /// latches and we never touch focus again.
+  FocusNode? _autoFocusedNode;
+  bool _autoFocusSettled = false;
+
+  /// Coalesces auto-focus passes: multiple content loads finishing in one frame
+  /// schedule a single post-frame placement (which reads the final top after all
+  /// their setStates apply), instead of racing several callbacks whose
+  /// primaryFocus reads haven't caught up to each other's requestFocus.
+  bool _autoFocusScheduled = false;
+
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
   /// (watchlist / collection / watched / rate / list). App actions (Select
   /// Source, Add to Stremio TV, Search Packs) show regardless.
@@ -401,6 +426,36 @@ class _SearchScreenState extends State<SearchScreen> {
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
+  /// Whether the Trakt rows should be held open with skeleton placeholders: the
+  /// account is connected, its (slow, network) Continue Watching fetch is in
+  /// flight, and there are no real Trakt rows on-screen yet. Reserving the slot
+  /// keeps the row count stable so the real rows fill in place — nothing below
+  /// reflows, and the auto-focus anchor stays put.
+  ///
+  /// TV-only (the placeholder header omits the phone/desktop See-All link, and
+  /// the DPAD-stranding this was built alongside is a TV problem) and only on
+  /// the homepage board (not the dedicated Search / Discover tabs, and not while
+  /// a catalog search is showing its own results). Requiring the real rows to be
+  /// empty means a refresh that already has data updates in place — no skeletons
+  /// stacked on top of live rows.
+  bool get _traktReserving =>
+      widget.isTelevision &&
+      !widget.searchMode &&
+      !widget.discoverMode &&
+      _isTraktAuthenticated &&
+      _traktCwLoading &&
+      _traktMovies.isEmpty &&
+      _traktSeries.isEmpty &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
+
+  /// How many skeleton Trakt rows to reserve while [_traktReserving]. Two —
+  /// Movies then Shows — matches the shape most connected accounts resolve to,
+  /// so the common case fills in with zero layout shift. (A connected account
+  /// with fewer real rows collapses the extras once, early, before the user is
+  /// deep in the board — far less jarring than a mid-navigation insert.)
+  int get _traktSkeletonRowCount => _traktReserving ? 2 : 0;
+
   // Hero state. Driven by ValueNotifiers so focus-driven hero swaps rebuild
   // only the spotlight, never the whole board (important on low-power TVs).
   final ValueNotifier<StremioMeta?> _heroItem = ValueNotifier<StremioMeta?>(
@@ -447,14 +502,34 @@ class _SearchScreenState extends State<SearchScreen> {
       _loadDiscoverAddons();
       _primeDiscoverRows();
     } else {
-      _load();
-      _loadContinueWatching();
-      _loadTraktContinueWatching();
-      _loadTvFavorites();
-      _loadStremioTvFavorites();
-      _loadIptvFavorites();
-      _loadPlaylistFavorites();
+      // Kick off every leading-content load. Auto-focus settles to the top as
+      // these complete; once they've ALL settled the arrival window is over and
+      // re-anchoring latches off (see [_settleAutoFocusAfter]), so a later
+      // background reload or a return from playback never yanks focus.
+      _settleAutoFocusAfter([
+        _load(),
+        _loadContinueWatching(),
+        _loadTraktContinueWatching(),
+        _loadTvFavorites(),
+        _loadStremioTvFavorites(),
+        _loadIptvFavorites(),
+        _loadPlaylistFavorites(),
+      ]);
     }
+  }
+
+  /// Await the initial board content loads, then end the auto-focus "arrival
+  /// window": one final placement pass, then latch [_autoFocusSettled] so
+  /// re-anchoring never fires again (a background CW/Trakt refresh, or focus
+  /// restoration after returning from playback, must not move the user's focus).
+  Future<void> _settleAutoFocusAfter(List<Future<void>> loads) async {
+    await Future.wait(loads.map((f) => f.catchError((_) {})));
+    if (!mounted) return;
+    _maybeAutoFocusBoard();
+    // Latch on the following frame so the placement pass above runs first.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _autoFocusSettled = true;
+    });
   }
 
   /// Back on the dedicated Search tab: clear an in-progress search (returning to
@@ -581,6 +656,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _homeSections = first;
       setState(() => _loading = false);
       _applySections(first);
+      _maybeAutoFocusBoard();
       _maybeAutoFillBoard();
     } catch (e) {
       if (!mounted) return;
@@ -943,6 +1019,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ..clear()
         ..addAll(addonIds);
     });
+    _maybeAutoFocusBoard();
   }
 
   /// Resize a Continue Watching row's focus-node list to [count], reusing the
@@ -1062,6 +1139,7 @@ class _SearchScreenState extends State<SearchScreen> {
       if (!mounted) return;
       setState(() => _tvFavChannels = favs);
       _syncTvFavNodes();
+      _maybeAutoFocusBoard();
     } catch (_) {
       // Favourites row just stays hidden.
     }
@@ -1119,6 +1197,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _stvFavChannels = favs;
       });
       _syncStvFavNodes();
+      _maybeAutoFocusBoard();
     } catch (_) {
       // Favourites row just stays hidden.
     }
@@ -1194,6 +1273,7 @@ class _SearchScreenState extends State<SearchScreen> {
       if (!mounted) return;
       setState(() => _iptvFavChannels = favs);
       _syncIptvFavNodes();
+      _maybeAutoFocusBoard();
     } catch (_) {
       // Favourites row just stays hidden.
     }
@@ -1259,6 +1339,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _playlistFavKeys = favKeys;
       });
       _syncPlaylistFavNodes();
+      _maybeAutoFocusBoard();
     } catch (_) {
       // Row just stays hidden.
     }
@@ -1559,6 +1640,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// caller already refreshes bound sources itself (avoids a double pass).
   Future<void> _loadTraktContinueWatching({bool refreshBound = true}) async {
     final token = ++_traktCwToken;
+    // Mark the fetch in flight so the skeleton slot reserves while it runs (only
+    // reserves when there are no real rows yet — see [_traktReserving]). Plain
+    // assignment, not setState: the sync prefix runs during initState on cold
+    // start, and the first build reads the field anyway.
+    _traktCwLoading = true;
     final List<TraktContinueWatchingItem> movies;
     final List<TraktContinueWatchingItem> shows;
     try {
@@ -1568,6 +1654,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _syncCwNodes(_traktMovieNodes, 0, 'tmovie');
         _syncCwNodes(_traktSeriesNodes, 0, 'tseries');
         setState(() {
+          _traktCwLoading = false;
           _traktMovies = [];
           _traktSeries = [];
           _traktAll = [];
@@ -1581,8 +1668,12 @@ class _SearchScreenState extends State<SearchScreen> {
       movies = await cw.fetchMovies();
       shows = await cw.fetchShows();
     } catch (e) {
-      // Leave any existing rows in place on a transient Trakt/network error.
+      // Leave any existing rows in place on a transient Trakt/network error,
+      // but stop reserving the skeleton slot so it doesn't shimmer forever.
       debugPrint('SearchScreen: Trakt continue-watching load failed: $e');
+      if (mounted && token == _traktCwToken) {
+        setState(() => _traktCwLoading = false);
+      }
       return;
     }
     if (!mounted || token != _traktCwToken) return;
@@ -1632,6 +1723,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _syncCwNodes(_traktMovieNodes, movieMetas.length, 'tmovie');
     _syncCwNodes(_traktSeriesNodes, showMetas.length, 'tseries');
     setState(() {
+      _traktCwLoading = false;
       _traktMovies = movieMetas;
       _traktSeries = showMetas;
       _traktAll = allMetas;
@@ -1645,6 +1737,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ..clear()
         ..addAll(byImdb);
     });
+    _maybeAutoFocusBoard();
     if (refreshBound) unawaited(_refreshBoundSources());
   }
 
@@ -1776,6 +1869,114 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ── Focus entry ──────────────────────────────────────────────────────────
 
+  /// Place — or re-anchor — the board's auto-focus after content loads, so
+  /// arriving on the Home tab lands on a card (no stray arrow press) and then
+  /// *settles to the top*: focus the best card available now, and as higher rows
+  /// arrive (Trakt filling its reserved slot, local Continue Watching) slide up
+  /// to the new top card while the user is idle. See [_autoFocusedNode] /
+  /// [_autoFocusSettled] for the state machine.
+  ///
+  /// TV-only, homepage board only. Deferred a frame so the target row is mounted.
+  void _maybeAutoFocusBoard() {
+    if (_autoFocusSettled || _autoFocusScheduled) return;
+    if (!widget.isTelevision) return;
+    if (widget.searchMode || widget.discoverMode) return;
+    _autoFocusScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Coalesced pass: reads the final top after every same-frame load's
+      // setState has applied, so multiple loads don't race.
+      _autoFocusScheduled = false;
+      if (!mounted || _autoFocusSettled) return;
+      if (widget.searchMode || widget.discoverMode) return;
+      // Only when this is the tab the user is actually looking at. During the
+      // ~350ms tab cross-fade the outgoing board is still mounted and shares the
+      // ModalRoute, so isCurrent can't tell them apart — the active-tab index
+      // can. (main.dart keeps it in lock-step with the rendered tab.)
+      if (MainPageBridge.activeTvTabIndex != _tabIndex) return;
+      // Don't grab focus if the board isn't the top route — e.g. the user
+      // opened a detail page or player and a slow CW/Trakt load only just
+      // finished. Stealing focus here would yank it off the pushed screen onto
+      // the hidden board below.
+      final route = ModalRoute.of(context);
+      if (route != null && !route.isCurrent) return;
+      if (MainPageBridge.isTvSidebarFocused?.call() ?? false) return;
+
+      final primary = FocusManager.instance.primaryFocus;
+      final boardFocused = _boardHasFocus();
+      if (_autoFocusedNode == null) {
+        // Never placed focus yet. If the user already reached a board card on
+        // their own, leave it and latch — nothing to auto-place.
+        if (boardFocused) {
+          _autoFocusSettled = true;
+          return;
+        }
+      } else if (boardFocused && primary != _autoFocusedNode) {
+        // We placed focus earlier and it now sits on a *different* board card —
+        // the user has taken control. Stop re-anchoring so we never fight them.
+        // (Guarded by boardFocused so our own just-applied requestFocus, or a
+        // transient null primaryFocus between loads, can't false-trigger this.)
+        _autoFocusSettled = true;
+        return;
+      }
+
+      final top = _topBoardFocusNode();
+      if (top == null) return; // nothing focusable yet — retry on the next load
+      if (top == _autoFocusedNode) return; // already anchored to the current top
+      top.requestFocus();
+      _autoFocusedNode = top;
+    });
+  }
+
+  /// Whether any focusable element on this screen currently holds focus. Used to
+  /// avoid stealing focus from the user in [_maybeAutoFocusBoard].
+  bool _boardHasFocus() {
+    bool anyOf(List<FocusNode> ns) => ns.any((n) => n.hasFocus);
+    if (_searchFocusNode.hasFocus ||
+        _modeCatalogNode.hasFocus ||
+        _modeKeywordNode.hasFocus ||
+        _discSourceNode.hasFocus) {
+      return true;
+    }
+    if (anyOf(_cwMovieNodes) ||
+        anyOf(_cwSeriesNodes) ||
+        anyOf(_traktMovieNodes) ||
+        anyOf(_traktSeriesNodes) ||
+        anyOf(_tvFavNodes) ||
+        anyOf(_stvFavNodes) ||
+        anyOf(_iptvFavNodes) ||
+        anyOf(_playlistFavNodes)) {
+      return true;
+    }
+    for (final row in _rowNodes) {
+      if (anyOf(row)) return true;
+    }
+    return false;
+  }
+
+  /// The focus node for the board's current top card — the same target
+  /// [_focusContent] would pick on the board path (Continue Watching →
+  /// favourites → catalog rows), or null if nothing is focusable yet. Skeleton
+  /// Trakt rows carry no nodes, so they're naturally skipped: while Trakt is
+  /// reserving, the top is whatever real row sits below the skeletons, and once
+  /// the real Trakt rows land they become the top. Drives the "settle to the
+  /// top" re-anchor in [_maybeAutoFocusBoard].
+  FocusNode? _topBoardFocusNode() {
+    if (_cwVisible) {
+      final rows = _cwRows;
+      if (rows.isNotEmpty && rows.first.nodes.isNotEmpty) {
+        return rows.first.nodes.first;
+      }
+    }
+    if (_anyFavVisible) {
+      final favNodes = _favNodesFor(_favRowKinds.first);
+      if (favNodes.isNotEmpty) return favNodes.first;
+    }
+    if (_rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
+      return _rowNodes.first.first;
+    }
+    return null;
+  }
+
   /// DPAD-up from the top row. On the dedicated Search tab the field sits above
   /// the results, so land there; on the Home-New board there's nothing above, so
   /// hand focus to the sidebar.
@@ -1831,19 +2032,11 @@ class _SearchScreenState extends State<SearchScreen> {
       }
       return;
     }
-    if (_cwVisible) {
-      final rows = _cwRows;
-      if (rows.isNotEmpty && rows.first.nodes.isNotEmpty) {
-        rows.first.nodes.first.requestFocus();
-        return;
-      }
-    }
-    if (_anyFavVisible) {
-      _focusFavRowAt(0, 0);
-      return;
-    }
-    if (_rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
-      _rowNodes.first.first.requestFocus();
+    // Same top-of-board target the auto-focus "settle to the top" uses, so
+    // remote entry and auto-focus always agree on the landing card.
+    final top = _topBoardFocusNode();
+    if (top != null) {
+      top.requestFocus();
       return;
     }
     // Board tab with nothing focusable (empty catalogs). The search field is in
@@ -4154,7 +4347,11 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
     final showCw = _cwVisible;
-    if (_sections.isEmpty && !showCw && !_anyFavVisible) {
+    // Don't fall through to the empty-state message while Trakt rows are being
+    // reserved — the skeletons below are the board's content until the fetch
+    // settles, and showing "No catalogs yet" first would flip to rows with the
+    // exact reflow the reservation exists to prevent.
+    if (_sections.isEmpty && !showCw && !_anyFavVisible && !_traktReserving) {
       if (_catalogQuery.isNotEmpty) {
         return _message(
           Icons.search_off_rounded,
@@ -4237,9 +4434,16 @@ class _SearchScreenState extends State<SearchScreen> {
                   // the total leading row count.
                   final cwRows = showCw ? _cwRows : const <_CwRow>[];
                   final cwCount = cwRows.length;
+                  // Skeleton Trakt rows, held open in the Trakt slot (right after
+                  // the local Continue Watching rows) while the slow fetch is in
+                  // flight, so the real rows fill in place instead of inserting
+                  // and shoving everything below them down. Non-focusable — the
+                  // DPAD wiring skips straight over them (see `down`/`up` in
+                  // [_buildContinueWatchingRow]).
+                  final skelCount = _traktSkeletonRowCount;
                   final favKinds = _favRowKinds;
                   final favCount = favKinds.length;
-                  final leadingCount = cwCount + favCount;
+                  final leadingCount = cwCount + skelCount + favCount;
                   // Footer spinner tracks the actual fetch, not just "more remain":
                   // `_boardCursor` advances synchronously so the final in-flight batch
                   // still shows it, and an idle board with more rows doesn't spin.
@@ -4259,8 +4463,11 @@ class _SearchScreenState extends State<SearchScreen> {
                           favCount,
                         );
                       }
+                      if (i < cwCount + skelCount) {
+                        return _buildTraktSkeletonRow(i - cwCount);
+                      }
                       if (i < leadingCount) {
-                        final favIndex = i - cwCount;
+                        final favIndex = i - cwCount - skelCount;
                         return _buildFavRow(
                           favKinds[favIndex],
                           favIndex,
@@ -4693,6 +4900,26 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// A skeleton Trakt Continue Watching row shown while the account's fetch is
+  /// still in flight (see [_traktReserving]). Sized identically to a real CW row
+  /// — same header, poster width and cell height — so when the data arrives and
+  /// replaces it there's zero layout shift. Purely decorative: no focus nodes,
+  /// so the DPAD skips over it entirely. [idx] is 0 (Movies) or 1 (Shows).
+  Widget _buildTraktSkeletonRow(int idx) {
+    final posterW = _railPosterW(context);
+    final cellH = posterW * 3 / 2;
+    final rowH = cellH + 14;
+    return _TraktSkeletonRow(
+      header: _railHeader(
+        title: 'Trakt Continue Watching',
+        tag: idx == 0 ? 'Movies' : 'Shows',
+      ),
+      posterW: posterW,
+      cellH: cellH,
+      rowH: rowH,
     );
   }
 
@@ -5231,6 +5458,120 @@ class _CwRow {
     required this.onQuickPlay,
     this.onSeeAll,
   });
+}
+
+/// A reserved-but-not-yet-loaded Trakt row: a header above a strip of shimmer
+/// poster placeholders (see [_SearchScreenState._buildTraktSkeletonRow]). Owns a
+/// single repeating controller that drives every poster in the row, so a pair of
+/// these reserves the Trakt slot with 2 tickers total — not one per poster —
+/// which matters on the weak TV hardware this board targets.
+class _TraktSkeletonRow extends StatefulWidget {
+  final Widget header;
+  final double posterW;
+  final double cellH;
+  final double rowH;
+
+  const _TraktSkeletonRow({
+    required this.header,
+    required this.posterW,
+    required this.cellH,
+    required this.rowH,
+  });
+
+  @override
+  State<_TraktSkeletonRow> createState() => _TraktSkeletonRowState();
+}
+
+class _TraktSkeletonRowState extends State<_TraktSkeletonRow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        widget.header,
+        SizedBox(
+          height: widget.rowH,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.hardEdge,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            itemCount: 6,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 11),
+                child: Center(
+                  child: _SkeletonPoster(
+                    width: widget.posterW,
+                    height: widget.cellH,
+                    animation: _controller,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A poster-shaped shimmer placeholder driven by a shared [animation]: a muted
+/// rounded card with a soft highlight band sweeping across it, matching the
+/// board's poster radius.
+class _SkeletonPoster extends StatelessWidget {
+  final double width;
+  final double height;
+  final Animation<double> animation;
+
+  const _SkeletonPoster({
+    required this.width,
+    required this.height,
+    required this.animation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedBuilder(
+          animation: animation,
+          builder: (context, _) {
+            // Sweep a soft highlight band left→right across a muted base.
+            final t = animation.value;
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment(-1.6 + 3.2 * t, 0),
+                  end: Alignment(-0.4 + 3.2 * t, 0),
+                  colors: [
+                    Colors.white.withValues(alpha: 0.04),
+                    Colors.white.withValues(alpha: 0.10),
+                    Colors.white.withValues(alpha: 0.04),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 }
 
 /// [_StremioCard] plus DPAD arrow navigation. The card owns SELECT, its
