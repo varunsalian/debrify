@@ -3103,7 +3103,9 @@ class _AndroidTvPlaybackPayloadBuilder {
     }
 
     // Target episode override (e.g. Trakt Quick Play next episode)
-    if (args.contentSeason != null && args.contentEpisode != null) {
+    final hadExplicitTarget =
+        args.contentSeason != null && args.contentEpisode != null;
+    if (hadExplicitTarget) {
       final targetIndex = playlist.findOriginalIndexBySeasonEpisode(
         args.contentSeason!,
         args.contentEpisode!,
@@ -3116,9 +3118,15 @@ class _AndroidTvPlaybackPayloadBuilder {
       }
     }
 
-    final lastEpisode = await StorageService.getLastPlayedEpisode(
-      seriesTitle: playlist.seriesTitle ?? 'Unknown Series',
-    );
+    // Only resume from last-played when NO explicit episode was requested. When
+    // a target WAS requested but isn't in this pack, falling back to last-played
+    // would replay the just-finished episode (the "Next replays the same
+    // episode" bug), so skip straight to the first episode below.
+    final lastEpisode = hadExplicitTarget
+        ? null
+        : await StorageService.getLastPlayedEpisode(
+            seriesTitle: playlist.seriesTitle ?? 'Unknown Series',
+          );
     if (lastEpisode == null) {
       final candidate = playlist.getFirstEpisodeOriginalIndex();
       if (candidate == -1) {

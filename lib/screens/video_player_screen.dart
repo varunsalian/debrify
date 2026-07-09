@@ -818,7 +818,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // If a specific target episode was requested (e.g. quick play from Trakt),
           // jump directly to it instead of resuming from last played.
           bool targetEpisodeResolved = false;
-          if (widget.contentSeason != null && widget.contentEpisode != null) {
+          final hadExplicitTarget =
+              widget.contentSeason != null && widget.contentEpisode != null;
+          if (hadExplicitTarget) {
             final targetIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(
               widget.contentSeason!,
               widget.contentEpisode!,
@@ -833,8 +835,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           }
 
           if (!targetEpisodeResolved) {
-            // Try to restore the last played episode first
-            final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
+            // Only resume from the last-played episode when NO specific episode
+            // was requested. If a target WAS requested but isn't in this pack
+            // (e.g. "Next" with no bound source landed on a source that lacks
+            // that episode), resuming would replay the last-played — usually the
+            // episode the user just finished — which is the "Next replays the
+            // same episode" bug. In that case skip straight to the first episode.
+            final lastEpisode = hadExplicitTarget
+                ? null
+                : await _getLastPlayedEpisode(seriesPlaylist);
             if (lastEpisode != null) {
               debugPrint(
                 'VideoPlayer: resume series "${seriesPlaylist.seriesTitle}" at S${lastEpisode['season']}E${lastEpisode['episode']} originalIndex=${lastEpisode['originalIndex']}',
@@ -850,7 +859,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 initialIndex = widget.startIndex ?? 0;
               }
               debugPrint(
-                'VideoPlayer: no stored resume for "${seriesPlaylist.seriesTitle}", defaulting to index=$initialIndex',
+                'VideoPlayer: no resume target for "${seriesPlaylist.seriesTitle}"'
+                '${hadExplicitTarget ? ' (requested S${widget.contentSeason}E${widget.contentEpisode} not in pack)' : ''}, defaulting to index=$initialIndex',
               );
             }
           }
