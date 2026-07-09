@@ -442,6 +442,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isTransitioning = false; // Show black screen during transitions
+
+  /// One-shot guard set the moment we pop to hand the next episode back to the
+  /// host for Quick Play. End-of-video auto-advance (_onPlaybackEnded) and a
+  /// manual Next press both funnel into _handleSeriesNextEpisode, which awaits a
+  /// network lookup and then pops — without this, the two can race and pop
+  /// twice, ejecting the user off the host screen instead of playing the next.
+  bool _seriesNextDispatched = false;
   bool _currentEpisodeMarkedAsFinished = false;
   // We render using a large logical surface; fit is controlled by BoxFit
   StreamSubscription? _posSub;
@@ -1911,6 +1918,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// find the next episode via Stremio meta and pop the player with the result.
   /// The caller (TorrentSearchScreen) will receive this and trigger Quick Play.
   Future<bool> _handleSeriesNextEpisode() async {
+    // Already popping to hand off the next episode — a second trigger (manual
+    // Next racing end-of-video auto-advance) must not run again.
+    if (_seriesNextDispatched) return true;
     if (widget.contentType != 'series' || widget.contentImdbId == null) {
       return false;
     }
@@ -1962,16 +1972,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     debugPrint(
       'Player: Found next episode S${nextEp.season}E${nextEp.episode}, popping for Quick Play',
     );
-    if (mounted) {
-      Navigator.of(context).pop(<String, dynamic>{
-        'quickPlayNext': true,
-        'imdbId': widget.contentImdbId,
-        'season': nextEp.season,
-        'episode': nextEp.episode,
-        'title': widget.contentTitle ?? widget.title,
-        'contentType': widget.contentType,
-      });
-    }
+    // Re-check the guard right before popping. Because nothing awaits between
+    // here and the pop, this set-and-pop is atomic on Dart's single thread, so
+    // a concurrent call that already passed the top guard and is resuming from
+    // its own await will see the flag set and return without a second pop.
+    if (!mounted || _seriesNextDispatched) return true;
+    _seriesNextDispatched = true;
+    Navigator.of(context).pop(<String, dynamic>{
+      'quickPlayNext': true,
+      'imdbId': widget.contentImdbId,
+      'season': nextEp.season,
+      'episode': nextEp.episode,
+      'title': widget.contentTitle ?? widget.title,
+      'contentType': widget.contentType,
+    });
     return true;
   }
 
