@@ -3167,6 +3167,10 @@ class _SearchScreenState extends State<SearchScreen> {
     StremioAddon addon, {
     bool isTraktSource = false,
   }) async {
+    // Set the active addon before any early return so a movie play carries the
+    // right addon id into meta.addonId (addon-stream resume/next), instead of a
+    // stale one left over from a previously-browsed series.
+    _activeAddonId = addon.id;
     if (item.type != 'series') {
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
@@ -3174,7 +3178,6 @@ class _SearchScreenState extends State<SearchScreen> {
       return;
     }
 
-    _activeAddonId = addon.id;
     final imdbId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
     // Without an IMDb id we can't search torrents for a specific episode, so
     // fall back to the manual episode picker.

@@ -1449,6 +1449,8 @@ class TorrentPlaybackService {
     int? stremioCurrentSourceIndex,
     Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist,
     PlaybackMeta? meta,
+    String? rdTorrentId,
+    int? torboxTorrentId,
   }) =>
       VideoPlayerLaunchArgs(
         videoUrl: videoUrl,
@@ -1469,6 +1471,12 @@ class TorrentPlaybackService {
         addonId: meta?.addonId,
         traktScrobble: meta?.traktScrobble ?? false,
         traktProgressPercent: meta?.traktProgressPercent,
+        // Debrid torrent ids let the player back-fill poster/IMDb onto a saved
+        // Playlist-library entry and power the in-player "Fix Metadata" action
+        // (matching Home). PikPak is intentionally omitted: the launcher wants a
+        // collection/folder id, but _Resolved only carries a per-file id.
+        rdTorrentId: rdTorrentId,
+        torboxTorrentId: torboxTorrentId?.toString(),
       );
 
   /// Providers with credentials configured (in this service's precedence
@@ -1554,6 +1562,8 @@ class TorrentPlaybackService {
         resolveSourceToPlaylist:
             (sources != null && sources.length > 1) ? _resolverFor(provider) : null,
         meta: meta,
+        rdTorrentId: r.rdTorrentId,
+        torboxTorrentId: r.torboxTorrentId,
       ),
       // 'local' isn't a debrid provider the advance could search with — the
       // null makes the advance replay bound sources first, then addon streams.
