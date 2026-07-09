@@ -5,10 +5,13 @@ import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_episode_model.dart';
+import '../services/trakt/trakt_service.dart';
+import '../services/tvmaze_service.dart';
 import '../services/storage_service.dart';
 import '../utils/tv_keys.dart';
 import 'debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../widgets/episode_tile.dart';
+import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../widgets/home/home_theme.dart';
 
 /// Route name for [EpisodesScreen]'s pushed route (a `MaterialPageRoute`,
@@ -94,6 +97,7 @@ class EpisodesScreen extends StatefulWidget {
 
 class _EpisodesScreenState extends State<EpisodesScreen> {
   final StremioService _stremioService = StremioService.instance;
+  final TraktService _traktService = TraktService.instance;
 
   // Episode drill-down state
   int _episodeModeGeneration = 0;
@@ -102,6 +106,16 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
   int _selectedSeasonNumber = 1;
   bool _isLoadingEpisodes = false;
   Map<String, double> _episodeWatchProgress = {};
+
+  /// The next episode to watch for the current show (from Trakt), used only to
+  /// highlight the corresponding tile. Landing still prefers the last-played
+  /// episode; this is purely a visual "up next" marker.
+  ({int season, int episode})? _nextEpisode;
+
+  /// Whether a Trakt account is connected. This screen is reachable from
+  /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
+  /// watched/unwatched, rate) is only offered when this is true.
+  bool _isTraktAuthenticated = false;
 
   /// Set before any terminal pop (episode chosen / quick-play / fallback) so
   /// [dispose] can tell a real selection apart from a plain back-out and only
@@ -121,6 +135,7 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     super.initState();
     _episodeSeasonDropdownFocusNode.onKeyEvent =
         _handleEpisodeSeasonDropdownKeyEvent;
+    _resolveTraktAuth();
     _enterEpisodeMode(
       widget.show,
       initialSeason: widget.initialSeason,
@@ -149,15 +164,132 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
   }
 
   /// Load episode watch progress for the selected show.
-  Future<void> _loadEpisodeWatchProgress(StremioMeta show) async {
+  ///
+  /// Merges two sources so both local (in-app, offline) and Trakt-tracked
+  /// watches are reflected — the old inline Trakt episode view only read Trakt,
+  /// the old catalog view only read local storage; a series opened from
+  /// Discover→Trakt needs both. All three sources key episodes as
+  /// `'<season>-<episode>'`, so they merge directly.
+  Future<void> _loadEpisodeWatchProgress(StremioMeta show, int generation) async {
     final imdbId = show.effectiveImdbId;
     if (imdbId == null) return;
-    final progress = await StorageService.getEpisodeWatchProgressByImdbId(
-      imdbId,
-    );
-    if (mounted) {
-      setState(() => _episodeWatchProgress = progress);
+
+    // Local in-app playback progress (works without a Trakt account).
+    final merged = <String, double>{
+      ...await StorageService.getEpisodeWatchProgressByImdbId(imdbId),
+    };
+    if (!mounted || generation != _episodeModeGeneration) return;
+
+    // Overlay Trakt state when connected (these are no-ops / empty when not).
+    try {
+      final watched = await _traktService.fetchWatchedShowEpisodes(imdbId);
+      if (!mounted || generation != _episodeModeGeneration) return;
+      final playback = await _traktService.fetchEpisodePlaybackProgress(imdbId);
+      if (!mounted || generation != _episodeModeGeneration) return;
+
+      // Fully-watched episodes win outright.
+      for (final key in watched) {
+        merged[key] = 100.0;
+      }
+      // Partial playback overlays, but never downgrades a completed episode and
+      // only when it's meaningful and higher than what we already have.
+      for (final entry in playback.entries) {
+        final existing = merged[entry.key] ?? 0;
+        if (existing >= 100.0) continue;
+        if (entry.value > 5.0 && entry.value > existing) {
+          merged[entry.key] = entry.value;
+        }
+      }
+    } catch (e) {
+      debugPrint('EpisodesScreen: Trakt episode progress fetch failed: $e');
     }
+
+    if (mounted && generation == _episodeModeGeneration) {
+      setState(() => _episodeWatchProgress = merged);
+    }
+  }
+
+  /// Resolve whether a Trakt account is connected (gates the episode menu).
+  Future<void> _resolveTraktAuth() async {
+    final authed = await _traktService.isAuthenticated();
+    if (mounted && authed != _isTraktAuthenticated) {
+      setState(() => _isTraktAuthenticated = authed);
+    }
+  }
+
+  /// Fetch the "up next" episode from Trakt to highlight its tile. Best-effort
+  /// and generation-guarded; a null result (no Trakt account / fully caught up)
+  /// simply leaves no tile highlighted.
+  Future<void> _loadNextEpisode(StremioMeta show, int generation) async {
+    final showId = show.effectiveImdbId ?? show.id;
+    if (showId.isEmpty) return;
+    try {
+      final next = await _traktService.fetchNextEpisode(showId);
+      if (!mounted || generation != _episodeModeGeneration) return;
+      setState(() => _nextEpisode = next);
+    } catch (e) {
+      debugPrint('EpisodesScreen: next-episode fetch failed: $e');
+    }
+  }
+
+  /// Handle the episode long-press menu (mark watched/unwatched, rate) against
+  /// Trakt, mirroring the inline Trakt view. Watched-state changes are
+  /// reflected locally in [_episodeWatchProgress] so the tile updates at once.
+  Future<void> _onEpisodeMenuAction(
+    TraktEpisode episode,
+    TraktEpisodeMenuAction action,
+  ) async {
+    final show = _selectedShow;
+    if (show == null) return;
+    final showImdbId = show.effectiveImdbId ?? show.id;
+    final key = '${episode.season}-${episode.number}';
+    bool success = false;
+    String actionLabel = '';
+
+    switch (action) {
+      case TraktEpisodeMenuAction.markWatched:
+        actionLabel = 'Marked as Watched';
+        success = await _traktService.markEpisodeWatched(
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
+        if (success && mounted) {
+          setState(() => _episodeWatchProgress[key] = 100.0);
+        }
+      case TraktEpisodeMenuAction.markUnwatched:
+        actionLabel = 'Marked as Unwatched';
+        success = await _traktService.markEpisodeUnwatched(
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
+        if (success && mounted) {
+          setState(() => _episodeWatchProgress.remove(key));
+        }
+      case TraktEpisodeMenuAction.rate:
+        if (!mounted) return;
+        final rating = await showTraktRatingDialog(context);
+        if (rating == null) return;
+        actionLabel = 'Rated $rating/10';
+        success = await _traktService.rateEpisode(
+          showImdbId,
+          episode.season,
+          episode.number,
+          rating,
+        );
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   // ── Episode drill-down ──────────────────────────────────────────────────
@@ -189,6 +321,103 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     widget.onItemSelected?.call(selection);
   }
 
+  /// Build the season list for [show], preferring the addon's meta endpoint
+  /// (real Stremio/catalog addons) and falling back to Trakt's public seasons
+  /// API. Discover→Trakt items carry a stub addon with no `baseUrl`, so their
+  /// addon meta fetch returns nothing — Trakt is the only source that has their
+  /// episodes. Returns an empty list only if neither source yields episodes.
+  Future<List<TraktSeason>> _fetchSeasons(StremioMeta show) async {
+    // 1) Addon meta endpoint — skip when the addon is a stub (no base URL),
+    //    which is the case for Trakt-sourced items.
+    if (widget.addon.baseUrl.isNotEmpty ||
+        widget.addon.manifestUrl.isNotEmpty) {
+      try {
+        final videos = await _stremioService.fetchSeriesMeta(
+          widget.addon,
+          show.id,
+        );
+        final seasons = _groupVideosIntoSeasons(videos);
+        if (seasons.isNotEmpty) return seasons;
+      } catch (e) {
+        debugPrint('EpisodesScreen: addon meta fetch failed: $e');
+      }
+    }
+
+    // 2) Trakt public seasons API (no auth required; keyed off the IMDb id).
+    final traktId = show.effectiveImdbId ?? show.id;
+    if (traktId.isNotEmpty) {
+      try {
+        final raw = await _traktService.fetchShowSeasons(traktId);
+        final seasons =
+            raw
+                .map((s) => TraktSeason.fromJson(s))
+                .where((s) => s.number > 0 && s.episodes.isNotEmpty)
+                .toList()
+              ..sort((a, b) => a.number.compareTo(b.number));
+        if (seasons.isNotEmpty) return seasons;
+      } catch (e) {
+        debugPrint('EpisodesScreen: Trakt seasons fetch failed: $e');
+      }
+    }
+
+    return [];
+  }
+
+  /// Group raw Stremio addon meta `videos` into positive-numbered seasons,
+  /// sorted by season then episode. Returns an empty list when there is nothing
+  /// usable (null/empty input, or only specials).
+  List<TraktSeason> _groupVideosIntoSeasons(List<Map<String, dynamic>>? videos) {
+    if (videos == null || videos.isEmpty) return [];
+
+    final seasonMap = <int, List<TraktEpisode>>{};
+    for (final v in videos) {
+      final seasonRaw = v['season'];
+      final seasonNum = seasonRaw is int
+          ? seasonRaw
+          : (seasonRaw is num ? seasonRaw.toInt() : null);
+      if (seasonNum == null || seasonNum <= 0) continue;
+
+      final epRaw = v['number'] ?? v['episode'];
+      final epNum = epRaw is int
+          ? epRaw
+          : (epRaw is num ? epRaw.toInt() : null);
+      if (epNum == null) continue;
+
+      final title = (v['title'] as String?) ?? (v['name'] as String?) ?? '';
+      final overview = v['overview'] as String?;
+      final released = v['released'] as String?;
+      final thumbnail = v['thumbnail'] as String?;
+      final ratingRaw = v['imdbRating'] ?? v['rating'];
+      final rating = ratingRaw is num
+          ? ratingRaw.toDouble()
+          : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
+
+      final episode = TraktEpisode(
+        season: seasonNum,
+        number: epNum,
+        title: title,
+        overview: overview,
+        firstAired: released,
+        thumbnailUrl: thumbnail,
+        rating: rating,
+      );
+
+      seasonMap.putIfAbsent(seasonNum, () => []);
+      seasonMap[seasonNum]!.add(episode);
+    }
+
+    if (seasonMap.isEmpty) return [];
+
+    return seasonMap.entries.map((e) {
+      final episodes = e.value..sort((a, b) => a.number.compareTo(b.number));
+      return TraktSeason(
+        number: e.key,
+        episodeCount: episodes.length,
+        episodes: episodes,
+      );
+    }).toList()..sort((a, b) => a.number.compareTo(b.number));
+  }
+
   void _enterEpisodeMode(
     StremioMeta show, {
     int? initialSeason,
@@ -201,10 +430,12 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       _isLoadingEpisodes = true;
       _episodeSeasons = [];
       _selectedSeasonNumber = initialSeason ?? 1;
+      _nextEpisode = null;
     });
 
-    // Load watch progress for this show
-    _loadEpisodeWatchProgress(show);
+    // Load watch progress + "up next" marker (non-blocking; generation-guarded)
+    _loadEpisodeWatchProgress(show, generation);
+    _loadNextEpisode(show, generation);
 
     for (final node in _episodeFocusNodes) {
       node.dispose();
@@ -212,70 +443,13 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     _episodeFocusNodes.clear();
 
     try {
-      // Fetch episodes from addon meta endpoint
-      final addon = widget.addon;
-
-      final videos = await _stremioService.fetchSeriesMeta(addon, show.id);
+      final seasons = await _fetchSeasons(show);
       if (!mounted || generation != _episodeModeGeneration) return;
 
-      if (videos == null || videos.isEmpty) {
+      if (seasons.isEmpty) {
         _fallbackToDirectSearch(show);
         return;
       }
-
-      // Group videos into seasons
-      final seasonMap = <int, List<TraktEpisode>>{};
-      for (final v in videos) {
-        final seasonRaw = v['season'];
-        final seasonNum = seasonRaw is int
-            ? seasonRaw
-            : (seasonRaw is num ? seasonRaw.toInt() : null);
-        if (seasonNum == null || seasonNum <= 0) continue;
-
-        final epRaw = v['number'] ?? v['episode'];
-        final epNum = epRaw is int
-            ? epRaw
-            : (epRaw is num ? epRaw.toInt() : null);
-        if (epNum == null) continue;
-
-        final title = (v['title'] as String?) ?? (v['name'] as String?) ?? '';
-        final overview = v['overview'] as String?;
-        final released = v['released'] as String?;
-        final thumbnail = v['thumbnail'] as String?;
-        final ratingRaw = v['imdbRating'] ?? v['rating'];
-        final rating = ratingRaw is num
-            ? ratingRaw.toDouble()
-            : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
-
-        final episode = TraktEpisode(
-          season: seasonNum,
-          number: epNum,
-          title: title,
-          overview: overview,
-          firstAired: released,
-          thumbnailUrl: thumbnail,
-          rating: rating,
-        );
-
-        seasonMap.putIfAbsent(seasonNum, () => []);
-        seasonMap[seasonNum]!.add(episode);
-      }
-
-      if (seasonMap.isEmpty) {
-        if (!mounted || generation != _episodeModeGeneration) return;
-        _fallbackToDirectSearch(show);
-        return;
-      }
-
-      // Sort seasons and episodes
-      final seasons = seasonMap.entries.map((e) {
-        final episodes = e.value..sort((a, b) => a.number.compareTo(b.number));
-        return TraktSeason(
-          number: e.key,
-          episodeCount: episodes.length,
-          episodes: episodes,
-        );
-      }).toList()..sort((a, b) => a.number.compareTo(b.number));
 
       // Resolve where to land. Explicit initialSeason/initialEpisode (deep
       // links, calendar) win; otherwise fall back to this show's last-played
@@ -325,6 +499,11 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
         _isLoadingEpisodes = false;
       });
 
+      // Fill in per-episode thumbnails from TVMaze for any episode that didn't
+      // come with one (Trakt-sourced items have none; addon items keep theirs).
+      // Non-blocking — tiles render immediately with the show-poster fallback.
+      _enrichEpisodeThumbnails(show, seasons, generation);
+
       // Scroll to (and focus) the target episode once its tile is built.
       // Robust against variable EpisodeTile height + lazy ListView building
       // (the old fixed focusIndex*128 estimate is wrong for the new tile).
@@ -340,6 +519,73 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       if (!mounted || generation != _episodeModeGeneration) return;
       debugPrint('EpisodesScreen: Episode fetch failed: $e');
       _fallbackToDirectSearch(show);
+    }
+  }
+
+  /// Fill in per-episode thumbnails from TVMaze, keyed off the show's IMDb id.
+  ///
+  /// Only episodes that arrived without a thumbnail are touched, so addon
+  /// meta-provided stills are preserved and Trakt-sourced episodes (which have
+  /// none) get filled. Best-effort: any failure leaves the show-poster
+  /// fallback in place.
+  Future<void> _enrichEpisodeThumbnails(
+    StremioMeta show,
+    List<TraktSeason> seasons,
+    int generation,
+  ) async {
+    final imdbId = show.effectiveImdbId;
+    if (imdbId == null) return;
+    // Nothing to do if every episode already has a thumbnail (addon path).
+    final needsThumbnails = seasons.any(
+      (s) => s.episodes.any(
+        (e) => e.thumbnailUrl == null || e.thumbnailUrl!.isEmpty,
+      ),
+    );
+    if (!needsThumbnails) return;
+
+    try {
+      final showData = await TVMazeService.lookupByImdbId(imdbId);
+      if (!mounted || generation != _episodeModeGeneration) return;
+      final tvmazeId = showData?['id'] as int?;
+      if (tvmazeId == null) return;
+
+      final tvmazeEpisodes = await TVMazeService.getEpisodes(tvmazeId);
+      if (!mounted || generation != _episodeModeGeneration) return;
+      if (tvmazeEpisodes.isEmpty) return;
+
+      // Build lookup: "S-E" → image URL.
+      final imageMap = <String, String>{};
+      for (final ep in tvmazeEpisodes) {
+        final s = ep['season'] as int?;
+        final e = ep['number'] as int?;
+        final image = ep['image'] as Map<String, dynamic>?;
+        final url = image?['medium'] as String? ?? image?['original'] as String?;
+        if (s != null && e != null && url != null) {
+          imageMap['$s-$e'] = url;
+        }
+      }
+      if (imageMap.isEmpty) return;
+
+      var changed = false;
+      for (final season in seasons) {
+        for (final episode in season.episodes) {
+          if (episode.thumbnailUrl != null &&
+              episode.thumbnailUrl!.isNotEmpty) {
+            continue;
+          }
+          final url = imageMap['${episode.season}-${episode.number}'];
+          if (url != null) {
+            episode.thumbnailUrl = url;
+            changed = true;
+          }
+        }
+      }
+
+      if (changed && mounted && generation == _episodeModeGeneration) {
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('EpisodesScreen: TVMaze thumbnail enrichment failed: $e');
     }
   }
 
@@ -712,8 +958,14 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
                   : null,
               watchProgress: _episodeWatchProgress[
                   '${episode.season}-${episode.number}'],
+              isNext: _nextEpisode != null &&
+                  _nextEpisode!.season == episode.season &&
+                  _nextEpisode!.episode == episode.number,
               onPlay: () => _onEpisodeQuickPlay(episode),
               onSources: () => _onEpisodeTap(episode),
+              onMenuAction: _isTraktAuthenticated
+                  ? (action) => _onEpisodeMenuAction(episode, action)
+                  : null,
             ),
           );
         },
