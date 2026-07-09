@@ -2571,6 +2571,16 @@ class _SearchScreenState extends State<SearchScreen> {
       onSearchPacks: _searchPacksFromDetail,
       onAddToStremioTv: _addToStremioTvFromDetail,
     );
+    // A Trakt watched-state change moves a title in/out of Continue Watching,
+    // so reload the board's Trakt rows — otherwise the board is stale when the
+    // user backs out of the detail (old home reloads its list after these).
+    // Skipped on the dedicated Search tab, which never renders those rows.
+    if (mounted &&
+        !widget.searchMode &&
+        (action == TraktItemMenuAction.markWatched ||
+            action == TraktItemMenuAction.markUnwatched)) {
+      _loadTraktContinueWatching(refreshBound: false);
+    }
   }
 
   /// "Select/Edit Source" entry: edit dialog when a source is already bound,

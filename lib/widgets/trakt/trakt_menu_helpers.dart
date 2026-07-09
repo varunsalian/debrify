@@ -321,6 +321,9 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
   bool isMovie = false,
   bool hasBoundSource = false,
   bool isTraktAuthenticated = true,
+  // null = watched state unknown (offer both mark-watched and mark-unwatched);
+  // true = show only "Unwatched"; false = show only "Watched".
+  bool? isWatched,
 }) {
   return [
     // App / Stremio actions first.
@@ -376,14 +379,29 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
         caption: 'Collection',
         isTrakt: true,
       ),
-      const TraktMenuOption(
-        action: TraktItemMenuAction.markWatched,
-        icon: Icons.check_circle_rounded,
-        color: Color(0xFF34D399),
-        label: 'Mark as Watched on Trakt',
-        caption: 'Watched',
-        isTrakt: true,
-      ),
+      // When the watched state is known (isWatched), show the single relevant
+      // toggle like the old home item menu. When it's unknown (isWatched null —
+      // the Search-tab detail can't reliably tell a title's Trakt watched state)
+      // offer BOTH so an already-watched title can always be un-marked instead
+      // of only re-marked.
+      if (isWatched != true)
+        const TraktMenuOption(
+          action: TraktItemMenuAction.markWatched,
+          icon: Icons.check_circle_rounded,
+          color: Color(0xFF34D399),
+          label: 'Mark as Watched on Trakt',
+          caption: 'Watched',
+          isTrakt: true,
+        ),
+      if (isWatched != false)
+        const TraktMenuOption(
+          action: TraktItemMenuAction.markUnwatched,
+          icon: Icons.visibility_off_rounded,
+          color: Color(0xFF34D399),
+          label: 'Mark as Unwatched on Trakt',
+          caption: 'Unwatch',
+          isTrakt: true,
+        ),
       const TraktMenuOption(
         action: TraktItemMenuAction.rate,
         icon: Icons.star_rounded,
