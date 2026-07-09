@@ -47,6 +47,9 @@ class PlaybackMeta {
   final String? year;
   final String? addonId; // originating Stremio addon (resume / next-episode)
   final double? traktProgressPercent; // Trakt watch position, if known
+  // Play came from a Trakt row → scrobble to Trakt instead of saving a local
+  // Continue Watching entry (mirrors Home passing selection.traktSource).
+  final bool traktScrobble;
   const PlaybackMeta({
     this.imdbId,
     this.contentType,
@@ -57,6 +60,7 @@ class PlaybackMeta {
     this.year,
     this.addonId,
     this.traktProgressPercent,
+    this.traktScrobble = false,
   });
 }
 
@@ -91,13 +95,27 @@ class TorrentPlaybackService {
     int sourceIndex = 0,
     String searchKeyword = '',
   }) async {
-    // Direct-URL addon streams bypass debrid entirely.
+    // Direct-URL addon streams bypass debrid entirely. Content metadata and
+    // the in-player Sources switcher ride along (matching Home's
+    // _playDirectStream) so series streams get Continue Watching, subtitles,
+    // source switching, and the Next Episode hand-back. No provider is
+    // involved, so the advance goes bound-sources → addon-stream flow.
     if (torrent.streamType == StreamType.directUrl &&
         (torrent.directUrl?.isNotEmpty ?? false)) {
       await VideoPlayerLauncher.push(
         context,
-        VideoPlayerLaunchArgs(
-            videoUrl: torrent.directUrl!, title: torrent.displayTitle),
+        _playerArgs(
+          videoUrl: torrent.directUrl!,
+          title: torrent.displayTitle,
+          subtitle: torrent.source.isNotEmpty ? torrent.source : null,
+          stremioSources: sources,
+          stremioCurrentSourceIndex: sources != null ? sourceIndex : null,
+          resolveSourceToPlaylist: (sources != null && sources.length > 1)
+              ? _lazyProviderResolver()
+              : null,
+          meta: meta,
+        ),
+        onQuickPlayNextEpisode: _nextEpisodeHandlerFor(context, meta),
       );
       return;
     }
@@ -268,10 +286,25 @@ class TorrentPlaybackService {
     }
     if (direct != null) {
       if (overlayAlreadyShown) closeLoading();
+      // Content metadata and the Sources switcher ride along (matching Home's
+      // _playDirectStream) so series streams get Continue Watching, subtitles,
+      // source switching, and the Next Episode hand-back. The advance reuses
+      // [provider] when the caller resolved one (torrent chain); otherwise it
+      // stays on the bound-sources → addon-stream path this play came from.
       await VideoPlayerLauncher.push(
         context,
-        VideoPlayerLaunchArgs(
-            videoUrl: direct.directUrl!, title: direct.displayTitle),
+        _playerArgs(
+          videoUrl: direct.directUrl!,
+          title: direct.displayTitle,
+          subtitle: direct.source.isNotEmpty ? direct.source : null,
+          stremioSources: torrents,
+          stremioCurrentSourceIndex: torrents.indexOf(direct),
+          resolveSourceToPlaylist:
+              torrents.length > 1 ? _lazyProviderResolver() : null,
+          meta: meta,
+        ),
+        onQuickPlayNextEpisode:
+            _nextEpisodeHandlerFor(context, meta, provider: provider),
       );
       return;
     }
@@ -381,6 +414,9 @@ class TorrentPlaybackService {
     int? season,
     int? episode,
     required PlaybackMeta meta,
+    // Skip the provider picker and use this provider directly — set by the
+    // next-episode auto-advance so a binge never re-prompts mid-chain.
+    String? preferredProvider,
   }) async {
     final label = meta.title ?? '';
     if (imdbId.isEmpty) {
@@ -425,7 +461,7 @@ class TorrentPlaybackService {
       // Bound source unplayable → fall through to a normal search below.
     }
 
-    final provider = await _pickProvider(context);
+    final provider = preferredProvider ?? await _pickProvider(context);
     if (!context.mounted) return;
     if (provider == _cancelled) return;
     if (provider == null) {
@@ -1266,6 +1302,191 @@ class TorrentPlaybackService {
     );
   }
 
+  /// Player "Next Episode" hand-back (matching Home's _quickPlayNextCallback):
+  /// when a series playback runs out of playlist items and the user taps Next,
+  /// both players hand the next episode back to the host — the Flutter player
+  /// pops with a quickPlayNext payload and the Android TV activity requests it
+  /// over the bridge (VideoPlayerLauncher resolves both to the same callback).
+  /// Without this callback the launcher drops the request and the player just
+  /// closes.
+  ///
+  /// [provider] is the debrid provider the CURRENT episode played with (null
+  /// for direct addon streams and local bound sources) — the advance reuses it
+  /// so a binge never re-prompts the provider picker mid-chain.
+  static Future<void> Function(Map<String, dynamic>)? _nextEpisodeHandlerFor(
+    BuildContext context,
+    PlaybackMeta? meta, {
+    String? provider,
+  }) {
+    final imdbId = meta?.imdbId;
+    if (meta == null ||
+        meta.contentType != 'series' ||
+        imdbId == null ||
+        imdbId.isEmpty) {
+      return null;
+    }
+    return (Map<String, dynamic> result) async {
+      // Both players already resolved WHICH episode comes next (via
+      // NextEpisodeService) — the payload names it directly.
+      final season = result['season'] as int?;
+      final episode = result['episode'] as int?;
+      if (season == null || episode == null) return;
+      final nextMeta = PlaybackMeta(
+        imdbId: imdbId,
+        contentType: 'series',
+        season: season,
+        episode: episode,
+        title: meta.title,
+        posterUrl: meta.posterUrl,
+        year: meta.year,
+        addonId: meta.addonId,
+        // Keep scrobbling across the binge — a Trakt-row play must not stop
+        // updating Trakt (and start saving duplicate local Continue Watching
+        // entries) from episode 2 onward. Home drops this and goes stale
+        // mid-binge; deliberately better here. traktProgressPercent IS
+        // dropped: the next episode starts fresh, not at the previous
+        // episode's resume point.
+        traktScrobble: meta.traktScrobble,
+      );
+      // Defer one frame (matching Home's addPostFrameCallback) so the previous
+      // episode's entire play chain unwinds before the next one starts — an
+      // awaited re-entry would nest one full search+play chain per episode,
+      // retaining every prior episode's scopes across a binge.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        unawaited(_advanceToNextEpisode(
+          context,
+          imdbId: imdbId,
+          meta: nextMeta,
+          provider: provider,
+        ));
+      });
+    };
+  }
+
+  /// Play the next episode of a binge. Provider-backed playbacks re-enter
+  /// [playFromSelection] with the provider the previous episode used; direct
+  /// addon-stream / local playbacks (no debrid provider) replay bound sources
+  /// first, then the addon-stream flow — which plays direct streams without a
+  /// provider, i.e. the same path that produced the episode being advanced.
+  static Future<void> _advanceToNextEpisode(
+    BuildContext context, {
+    required String imdbId,
+    required PlaybackMeta meta,
+    String? provider,
+  }) async {
+    final label = meta.title ?? '';
+    if (provider != null) {
+      await playFromSelection(
+        context,
+        imdbId: imdbId,
+        isMovie: false,
+        season: meta.season,
+        episode: meta.episode,
+        meta: meta,
+        preferredProvider: provider,
+      );
+      return;
+    }
+    final bound = await SeriesSourceService.getSources(imdbId);
+    if (!context.mounted) return;
+    if (bound.isNotEmpty && meta.season != null && meta.episode != null) {
+      final played =
+          await _playViaBound(context, imdbId, bound, label: label, meta: meta);
+      if (played) return;
+      if (!context.mounted) return;
+    }
+    await _playAddonStream(
+      context,
+      imdbId,
+      isMovie: false,
+      season: meta.season,
+      episode: meta.episode,
+      meta: meta,
+      label: label,
+    );
+  }
+
+  /// Shared meta → player-args plumbing. ONE place builds the content-identity
+  /// fields for every push site — a field missed at a single site would
+  /// silently break Continue Watching / scrobble / Next Episode for that entry
+  /// path only.
+  static VideoPlayerLaunchArgs _playerArgs({
+    required String videoUrl,
+    required String title,
+    String? subtitle,
+    List<PlaylistEntry>? playlist,
+    int? startIndex,
+    List<Torrent>? stremioSources,
+    int? stremioCurrentSourceIndex,
+    Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist,
+    PlaybackMeta? meta,
+  }) =>
+      VideoPlayerLaunchArgs(
+        videoUrl: videoUrl,
+        title: title,
+        subtitle: subtitle,
+        playlist: playlist,
+        startIndex: startIndex,
+        stremioSources: stremioSources,
+        stremioCurrentSourceIndex: stremioCurrentSourceIndex,
+        resolveSourceToPlaylist: resolveSourceToPlaylist,
+        contentImdbId: meta?.imdbId,
+        contentType: meta?.contentType,
+        contentSeason: meta?.season,
+        contentEpisode: meta?.episode,
+        contentTitle: meta?.title,
+        posterUrl: meta?.posterUrl,
+        contentYear: meta?.year,
+        addonId: meta?.addonId,
+        traktScrobble: meta?.traktScrobble ?? false,
+        traktProgressPercent: meta?.traktProgressPercent,
+      );
+
+  /// Providers with credentials configured (in this service's precedence
+  /// order) plus the user's saved default when it's still configured — the
+  /// single source of truth shared by [_pickProvider] and
+  /// [_defaultConfiguredProvider], so adding a provider is a one-list edit.
+  static Future<(List<String>, String?)> _configuredProviders() async {
+    final configured = <String>[];
+    for (final p in ['debrid', 'torbox', 'premiumize', 'alldebrid', 'pikpak']) {
+      if (await _isConfigured(p)) configured.add(p);
+    }
+    if (configured.isEmpty) return (configured, null);
+    final def = await StorageService.getDefaultTorrentProvider();
+    final defaultProvider =
+        (def != 'none' && configured.contains(def)) ? def : null;
+    return (configured, defaultProvider);
+  }
+
+  /// The provider a silent (no-dialog) resolution should use: the configured
+  /// default, else the first configured one, else null. Uses this service's
+  /// _pickProvider precedence (Premiumize before PikPak) — deliberately NOT
+  /// Home's resolver order, which prefers PikPak; a silent PikPak fallback
+  /// would queue real downloads on the account.
+  static Future<String?> _defaultConfiguredProvider() async {
+    final (configured, def) = await _configuredProviders();
+    if (configured.isEmpty) return null;
+    return def ?? configured.first;
+  }
+
+  /// In-player Sources-switcher resolver for launches that didn't go through a
+  /// debrid provider (direct addon streams). Direct streams resolve without
+  /// one; a torrent switch silently uses the default/first-configured provider
+  /// (matching Home's _createSourcePlaylistResolver) and fails gracefully
+  /// (null) when none is configured.
+  static Future<List<PlaylistEntry>?> Function(Torrent) _lazyProviderResolver() {
+    return (Torrent t) async {
+      if (t.streamType == StreamType.directUrl &&
+          (t.directUrl?.isNotEmpty ?? false)) {
+        return [PlaylistEntry(url: t.directUrl!, title: t.displayTitle)];
+      }
+      final provider = await _defaultConfiguredProvider();
+      if (provider == null) return null;
+      return _resolverFor(provider)(t);
+    };
+  }
+
   /// Launch the player. Passes the full source list + a resolver (so the player
   /// shows the in-player "Sources" switcher) and content metadata (so Continue
   /// Watching, subtitles and the Episodes button work) — matching Home.
@@ -1294,7 +1515,7 @@ class TorrentPlaybackService {
     }
     await VideoPlayerLauncher.push(
       context,
-      VideoPlayerLaunchArgs(
+      _playerArgs(
         videoUrl: r.playUrl!,
         title: title,
         subtitle: subtitleLine,
@@ -1304,16 +1525,13 @@ class TorrentPlaybackService {
         stremioCurrentSourceIndex: sources != null ? sourceIndex : null,
         resolveSourceToPlaylist:
             (sources != null && sources.length > 1) ? _resolverFor(provider) : null,
-        contentImdbId: meta?.imdbId,
-        contentType: meta?.contentType,
-        contentSeason: meta?.season,
-        contentEpisode: meta?.episode,
-        contentTitle: meta?.title,
-        posterUrl: meta?.posterUrl,
-        contentYear: meta?.year,
-        addonId: meta?.addonId,
-        traktProgressPercent: meta?.traktProgressPercent,
+        meta: meta,
       ),
+      // 'local' isn't a debrid provider the advance could search with — the
+      // null makes the advance replay bound sources first, then addon streams.
+      onQuickPlayNextEpisode: _nextEpisodeHandlerFor(context, meta,
+          provider:
+              provider == SeriesSource.localService ? null : provider),
     );
   }
 
@@ -1798,13 +2016,9 @@ class TorrentPlaybackService {
   /// Resolves which provider to use. Honours the default; when none is set and
   /// more than one is configured, asks the user (mirrors Home's behaviour).
   static Future<String?> _pickProvider(BuildContext context) async {
-    final configured = <String>[];
-    for (final p in ['debrid', 'torbox', 'premiumize', 'alldebrid', 'pikpak']) {
-      if (await _isConfigured(p)) configured.add(p);
-    }
+    final (configured, def) = await _configuredProviders();
     if (configured.isEmpty) return null;
-    final def = await StorageService.getDefaultTorrentProvider();
-    if (def != 'none' && configured.contains(def)) return def;
+    if (def != null) return def;
     if (configured.length == 1) return configured.first;
     if (!context.mounted) return _cancelled;
     final result = await showProviderPickerDialog(

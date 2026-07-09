@@ -2666,7 +2666,22 @@ class _AndroidTvPlaybackPayloadBuilder {
         );
       }
       if (episodeInfo == null) {
-        final fallbackInfo = SeriesParser.parseFilename(entry.title);
+        var fallbackInfo = SeriesParser.parseFilename(entry.title);
+        // Single stream whose title has no parseable S##E## (e.g. an addon
+        // stream named "Torrentio 1080p"): fall back to the episode identity
+        // the caller provided. Without it the TV player's item has null
+        // season/episode and can never hand back a Next Episode request
+        // (AndroidTvTorrentPlayerActivity.playNext requires both) — the
+        // Flutter player has the same fallback via widget.contentSeason.
+        if (preparedEntries.length == 1 &&
+            (fallbackInfo.season == null || fallbackInfo.episode == null) &&
+            args.contentSeason != null &&
+            args.contentEpisode != null) {
+          fallbackInfo = fallbackInfo.copyWith(
+            season: args.contentSeason,
+            episode: args.contentEpisode,
+          );
+        }
         episodeInfo = SeriesEpisode(
           url: entry.url,
           title: entry.title,

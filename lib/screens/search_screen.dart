@@ -3143,6 +3143,9 @@ class _SearchScreenState extends State<SearchScreen> {
     year: sel.year,
     addonId: _activeAddonId,
     traktProgressPercent: sel.traktProgressPercent,
+    // Trakt-row plays scrobble to Trakt instead of saving a duplicate local
+    // Continue Watching entry (mirrors Home passing selection.traktSource).
+    traktScrobble: sel.traktSource,
   );
 
   /// Catalog auto-best play — the service picks the provider, shows the real
