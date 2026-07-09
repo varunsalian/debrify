@@ -14,8 +14,10 @@ import '../screens/video_player/models/playlist_entry.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
+import '../utils/rd_blocked_filter.dart';
 import '../utils/rd_folder_tree_builder.dart';
 import '../utils/series_parser.dart';
+import '../utils/torrent_curation.dart';
 import '../widgets/debrid_action_sheet.dart';
 import '../widgets/debrid_loading_overlay.dart';
 import '../widgets/poster_play_loading_overlay.dart';
@@ -357,8 +359,15 @@ class TorrentPlaybackService {
     Torrent? winner;
     // PikPak has no cache check and each probe queues a real download that we
     // can't cheaply clean up — so only try the top candidate there. Others
-    // (RD/AllDebrid clean up on miss; TorBox/PM gated by cache-check) get a few.
-    final maxAttempts = prov == 'pikpak' ? 1 : 6;
+    // (RD/AllDebrid clean up on miss; TorBox/PM gated by cache-check) honor the
+    // user's Quick-Play retry settings (old home does the same): a single try
+    // when "try multiple torrents" is off, else up to the configured max.
+    final tryMultiple = await StorageService.getQuickPlayTryMultipleTorrents();
+    final maxRetries = await StorageService.getQuickPlayMaxRetries();
+    // Clamp to a floor of 1 so a corrupted/out-of-range pref can never yield 0
+    // probes (getQuickPlayMaxRetries doesn't clamp on read).
+    final maxAttempts =
+        prov == 'pikpak' ? 1 : (tryMultiple ? maxRetries.clamp(1, 10) : 1);
     for (final t in candidates.take(maxAttempts)) {
       if (cancelled()) return; // Cancel tap already dismissed the overlay
       try {
@@ -538,7 +547,25 @@ class TorrentPlaybackService {
       closeLoading();
       return;
     }
-    final torrents = (res['torrents'] as List).cast<Torrent>();
+    var torrents = (res['torrents'] as List).cast<Torrent>();
+    if (torrents.isEmpty) {
+      closeLoading();
+      _snack(context, 'No sources found for "$label".');
+      return;
+    }
+    // Curate candidates so the RIGHT torrent is probed first (mirrors old home):
+    // drop unrelated titles, keep/relevance-sort by the requested episode/season,
+    // then drop RD-blocked keywords when RD is the provider. Without this the raw
+    // seeder-ranked list can lead with wrong-episode/other-season packs that
+    // resolve fine but get rejected by _resolvedHasEpisode, burning the probes.
+    torrents = await _curateCandidates(
+      torrents,
+      label: label,
+      isMovie: isMovie,
+      season: season,
+      episode: episode,
+      provider: provider,
+    );
     if (torrents.isEmpty) {
       closeLoading();
       _snack(context, 'No sources found for "$label".');
@@ -551,6 +578,48 @@ class TorrentPlaybackService {
         overlayAlreadyShown: true,
         overlay: overlay,
         isCancelled: () => cancel.cancelled);
+  }
+
+  /// Curate torrent candidates before probing, mirroring the old Home engine:
+  ///   1. drop torrents whose name doesn't match the title (unrelated packs),
+  ///   2. keep + relevance-sort by the requested episode/season,
+  ///   3. when RD is the provider and the user's "skip blocked" setting is on,
+  ///      drop RD-blocked-keyword torrents.
+  /// Every step falls back to the pre-step list if it would empty the set, so
+  /// curation can never turn a non-empty result into a "no sources" failure.
+  static Future<List<Torrent>> _curateCandidates(
+    List<Torrent> torrents, {
+    required String label,
+    required bool isMovie,
+    int? season,
+    int? episode,
+    required String provider,
+  }) async {
+    var out = torrents;
+
+    // 1. Title match (skip when we have no label to match against).
+    if (label.trim().isNotEmpty) {
+      final matched =
+          out.where((t) => torrentMatchesTitle(t.name, label)).toList();
+      if (matched.isNotEmpty) out = matched;
+    }
+
+    // 2. Episode relevance filter + sort (no-op for movies / missing S-E).
+    out = curateEpisodeCandidates(
+      out,
+      isSeries: !isMovie,
+      season: season,
+      episode: episode,
+    );
+
+    // 3. RD blocked-keyword filter (RD provider + setting enabled).
+    if (provider == 'debrid' &&
+        await StorageService.getRdSkipBlockedTorrents()) {
+      final unblocked = out.where((t) => !isRdBlockedTorrent(t.name)).toList();
+      if (unblocked.isNotEmpty) out = unblocked;
+    }
+
+    return out;
   }
 
   /// Play non-IMDb catalog content (IPTV / TV channels) straight from the
