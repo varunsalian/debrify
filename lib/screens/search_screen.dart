@@ -1700,15 +1700,15 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     setState(() => _sections = sections);
     unawaited(_refreshBoundSources());
-    // The dedicated Search tab hides the hero, so don't seed it or fire the
-    // backdrop-metadata fetch there (the board hero is TV-only otherwise).
-    if (!widget.searchMode) {
+    // Seed the hero with the first item so it isn't blank before DPAD focus
+    // lands (see [_heroActive] for when the hero is shown).
+    if (_heroActive) {
       final first = sections.isNotEmpty && sections.first.items.isNotEmpty
           ? sections.first.items.first
           : null;
       _heroItem.value = first;
       _heroEnriched.value = null;
-      if (first != null && widget.isTelevision) _enrichHero(first);
+      if (first != null) _enrichHero(first);
     }
   }
 
@@ -1756,6 +1756,10 @@ class _SearchScreenState extends State<SearchScreen> {
     } catch (_) {
       if (!mounted || token != _catalogSearchToken) return;
       setState(() => _catalogSearching = false);
+      // Clear the previous query's rows + hero so a failed search doesn't leave
+      // stale results (and now a stale hero) mismatching the current query —
+      // same reset as a successful-but-empty search.
+      _applySections(const []);
     }
   }
 
@@ -1890,10 +1894,18 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ── Hero ─────────────────────────────────────────────────────────────────
 
+  /// Whether the hero spotlight is live for the current tab/state: TV-only, on
+  /// the board always and on the dedicated Search tab once there are results
+  /// (hidden on the blank "type to search" prompt). Single source of truth for
+  /// seeding ([_applySections]), focus tracking ([_setHero]) and rendering
+  /// ([_buildBoard]) so they can't drift.
+  bool get _heroActive =>
+      widget.isTelevision && (!widget.searchMode || _catalogQuery.isNotEmpty);
+
   void _setHero(StremioMeta item) {
-    // The dedicated Search tab suppresses the hero, so don't track it or fire
-    // the backdrop-enrichment timer for results the user never sees it behind.
-    if (widget.searchMode) return;
+    // Off-TV / blank search prompt the hero isn't rendered, so don't track focus
+    // or fire the per-item backdrop-enrichment /meta fetch behind it.
+    if (!_heroActive) return;
     if (_heroItem.value?.id == item.id) return;
     _heroItem.value = item;
     _heroEnriched.value = null;
@@ -1908,7 +1920,8 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroTimer?.cancel();
     final needsBg = item.background == null || item.background!.isEmpty;
     final needsDesc = item.description == null || item.description!.isEmpty;
-    if (!needsBg && !needsDesc) return;
+    final needsRating = item.imdbRating == null;
+    if (!needsBg && !needsDesc && !needsRating) return;
     final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (imdb == null) return;
     final reqId = ++_heroReqId;
@@ -3980,7 +3993,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (!widget.isTelevision) {
       return MediaQuery.of(context).size.width >= 900 ? 162.0 : 118.0;
     }
-    return (MediaQuery.of(context).size.height * 0.20).clamp(104.0, 152.0);
+    return (MediaQuery.of(context).size.height * 0.17).clamp(92.0, 140.0);
   }
 
   /// Height to reserve for one board row in the TV hero budget. Sized to the
@@ -4164,9 +4177,17 @@ class _SearchScreenState extends State<SearchScreen> {
         // full poster row plus the current + next row headers always stay on
         // screen. On a short-canvas TV (~540 logical) the hero shrinks; tall
         // canvases keep it large and reveal more rows.
+        //
+        // On the dedicated Search tab it's a compact strip, not a full spotlight:
+        // the search field above it already eats vertical space, and results —
+        // not a cinematic hero — should dominate, so cap it well below the board's
+        // so the first result row isn't squeezed.
         final heroH = tv
             ? (constraints.maxHeight - _railRowH(context) - _railHeaderH * 2)
-                  .clamp(150.0, 380.0)
+                  .clamp(
+                    150.0,
+                    widget.searchMode ? 180.0 : 380.0,
+                  )
             : (width >= 900 ? 300.0 : 196.0);
 
         return Column(
@@ -4174,9 +4195,10 @@ class _SearchScreenState extends State<SearchScreen> {
             // The hero spotlight only changes as DPAD focus moves across tiles, so
             // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
             // sit frozen on the first item and waste vertical space — hide it.
-            // Also hidden on the dedicated Search tab, where results should read
-            // as a clean grid rather than a browse hero.
-            if (tv && !widget.searchMode)
+            // On the dedicated Search tab it shows once there are results (to help
+            // disambiguate similarly-named titles) but stays hidden on the blank
+            // prompt. See [_heroActive].
+            if (_heroActive)
               ValueListenableBuilder<StremioMeta?>(
                 valueListenable: _heroItem,
                 builder: (context, item, _) {
@@ -4192,6 +4214,10 @@ class _SearchScreenState extends State<SearchScreen> {
                         description: item.description?.isNotEmpty == true
                             ? item.description
                             : enriched?.description,
+                        // Catalog list items usually omit the rating; fall back
+                        // to the enriched /meta details.
+                        rating: item.imdbRating ?? enriched?.imdbRating,
+                        compact: widget.searchMode,
                         isTelevision: tv,
                         height: heroH,
                       );
@@ -4936,12 +4962,23 @@ class _HeroSpotlight extends StatelessWidget {
   final bool isTelevision;
   final double height;
 
+  /// IMDb rating to show in the meta line (resolved by the host from the item
+  /// or its enriched /meta details, since catalog list items often omit it).
+  final double? rating;
+
+  /// Compact layout for the Search tab: smaller title, single-line plot and
+  /// tighter spacing so the whole spotlight fits a short strip without pushing
+  /// the results off-screen.
+  final bool compact;
+
   const _HeroSpotlight({
     required this.item,
     required this.background,
     required this.description,
     required this.isTelevision,
     required this.height,
+    this.rating,
+    this.compact = false,
   });
 
   @override
@@ -4960,6 +4997,9 @@ class _HeroSpotlight extends StatelessWidget {
       height: height,
       width: double.infinity,
       child: Stack(
+        // Clip so a long title/plot can never bleed out of the hero into the
+        // row header below it (the overflow bug on the compact Search hero).
+        clipBehavior: Clip.hardEdge,
         fit: StackFit.expand,
         children: [
           if (bg.isNotEmpty)
@@ -5032,7 +5072,7 @@ class _HeroSpotlight extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: compact ? 7 : 10),
                     Text(
                       item.name,
                       maxLines: 2,
@@ -5041,17 +5081,19 @@ class _HeroSpotlight extends StatelessWidget {
                       // and lighter than Inter-w800/-1 tracking — closer to
                       // Stremio's hero. Body/metadata stay on the Inter theme.
                       style: GoogleFonts.poppins(
-                        fontSize: isTelevision ? 38 : 26,
+                        fontSize: compact
+                            ? (isTelevision ? 24 : 20)
+                            : (isTelevision ? 38 : 26),
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0,
                         height: 1.06,
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: compact ? 6 : 8),
                     Row(
                       children: [
-                        if (item.imdbRating != null) ...[
+                        if (rating != null) ...[
                           const Icon(
                             Icons.star_rounded,
                             size: 16,
@@ -5059,7 +5101,7 @@ class _HeroSpotlight extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            item.imdbRating!.toStringAsFixed(1),
+                            rating!.toStringAsFixed(1),
                             style: const TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
@@ -5083,14 +5125,14 @@ class _HeroSpotlight extends StatelessWidget {
                       ],
                     ),
                     if (description != null && description!.isNotEmpty) ...[
-                      const SizedBox(height: 10),
+                      SizedBox(height: compact ? 6 : 10),
                       Text(
                         description!,
-                        maxLines: isTelevision ? 3 : 2,
+                        maxLines: compact ? 1 : (isTelevision ? 3 : 2),
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: isTelevision ? 14.5 : 13,
-                          height: 1.45,
+                          fontSize: compact ? 12.5 : (isTelevision ? 14.5 : 13),
+                          height: compact ? 1.3 : 1.45,
                           color: Colors.white.withValues(alpha: 0.72),
                         ),
                       ),
