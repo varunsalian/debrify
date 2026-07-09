@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/app_route_observer.dart';
 import '../../services/main_page_bridge.dart';
+import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
@@ -288,6 +289,17 @@ class _ContinueWatchingSeeAllScreenState
     );
   }
 
+  /// Non-default filters, for the collapsed Filters button badge.
+  int get _activeFilterCount {
+    var n = 0;
+    // Compare against how the screen opened, not a hardcoded 'all': a seeded
+    // rail can start _category on 'movie'/'series', which isn't a user filter.
+    if (_category != widget.initialCategory) n++;
+    if (_sort != _CwSort.lastWatched) n++;
+    if (_watch != 'all') n++;
+    return n;
+  }
+
   Widget _buildFilterBar() {
     return Focus(
       canRequestFocus: false,
@@ -295,11 +307,11 @@ class _ContinueWatchingSeeAllScreenState
       onKeyEvent: _handleFilterKeys,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 10,
-          children: [
-            if (widget.leading != null) widget.leading!,
+        child: SeeAllFilterBar(
+          isTelevision: widget.isTelevision,
+          leading: widget.leading,
+          activeCount: _activeFilterCount,
+          buildChips: () => [
             StremioDropdown<String>(
               label: 'Show',
               value: _category,

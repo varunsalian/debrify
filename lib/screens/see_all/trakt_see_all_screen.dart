@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/main_page_bridge.dart';
+import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/skeleton_poster.dart';
 import '../../services/trakt/trakt_list_source.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
@@ -403,6 +404,18 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     );
   }
 
+  /// Non-default secondary filters, for the collapsed Filters button badge. The
+  /// List selector isn't counted (it's the primary source, like Discover's).
+  int get _activeFilterCount {
+    var n = 0;
+    // Compare against how the screen opened, not a hardcoded 'all': a seeded
+    // rail can start _category on 'movie'/'series', which isn't a user filter.
+    if (_category != widget.initialCategory) n++;
+    if (_sort != _Sort.natural) n++;
+    if (_showState && _watch != 'all') n++;
+    return n;
+  }
+
   Widget _buildFilterBar() {
     return Focus(
       canRequestFocus: false,
@@ -410,11 +423,11 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       onKeyEvent: _handleFilterKeys,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 10,
-          children: [
-            if (widget.leading != null) widget.leading!,
+        child: SeeAllFilterBar(
+          isTelevision: widget.isTelevision,
+          leading: widget.leading,
+          activeCount: _activeFilterCount,
+          buildChips: () => [
             StremioDropdown<String>(
               label: 'List',
               value: _primaryKey,

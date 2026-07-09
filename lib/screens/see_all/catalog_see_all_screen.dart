@@ -5,6 +5,7 @@ import '../../models/stremio_addon.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/skeleton_poster.dart';
 import '../../services/stremio_service.dart';
+import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
@@ -347,11 +348,11 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       onKeyEvent: _handleFilterKeys,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 10,
-          children: [
-            if (widget.leading != null) widget.leading!,
+        child: SeeAllFilterBar(
+          isTelevision: widget.isTelevision,
+          leading: widget.leading,
+          activeCount: _genre != null ? 1 : 0,
+          buildChips: () => [
             StremioDropdown<String>(
               label: 'Type',
               value: _type,
