@@ -123,6 +123,23 @@ const String _discCw = 'cw';
 const String _discTrakt = 'trakt';
 const String _discAddonPrefix = 'a:';
 
+// Metrics for the inline caption under an [_ArtPoster] (the favourites rails).
+// Kept as the single source of truth so anything reserving vertical space for
+// the caption (the cell height, the hero's row-reserve budget) can't drift from
+// the widget's own layout.
+const double _kArtTitleGap = 10;
+const double _kArtTitleFontSize = 14;
+const double _kArtTitleHeight = 1.25;
+const int _kArtTitleMaxLines = 2;
+
+/// Height of the caption band under an [_ArtPoster]: the gap plus its up-to-two
+/// lines at the current text scale.
+double _artPosterCaptionBand(BuildContext context) =>
+    _kArtTitleGap +
+    MediaQuery.textScalerOf(context).scale(_kArtTitleFontSize) *
+        _kArtTitleHeight *
+        _kArtTitleMaxLines;
+
 /// Intent for a left-arrow on the search field, remapped (via a [Shortcuts]
 /// override closer than the default text-editing shortcuts) so an empty field
 /// escapes to the sidebar instead of the EditableText silently eating the key.
@@ -3966,10 +3983,13 @@ class _SearchScreenState extends State<SearchScreen> {
     return (MediaQuery.of(context).size.height * 0.20).clamp(104.0, 152.0);
   }
 
-  /// Full height of one board row's poster strip (a titleless 2:3 poster plus
-  /// the hover/focus lift headroom). Kept as a helper so the hero sizing in
-  /// [_buildBoard] reserves exactly what a row (and its neighbours) occupy.
-  double _railRowH(BuildContext context) => _railPosterW(context) * 3 / 2 + 14;
+  /// Height to reserve for one board row in the TV hero budget. Sized to the
+  /// TALLEST row type — a favourites rail, whose poster carries an inline 2-line
+  /// caption — so whichever row sits directly below the hero (a favourites rail
+  /// when Continue Watching is empty, else a titleless catalog/CW row that's a
+  /// little shorter) always stays fully visible.
+  double _railRowH(BuildContext context) =>
+      _railPosterW(context) * 3 / 2 + _artPosterCaptionBand(context) + 14;
 
   /// Approximate height of a rail's header (title row). Matches the padding +
   /// line height in [_railHeader]; used only to budget the hero so a row header
@@ -4676,7 +4696,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final tv = widget.isTelevision;
     final posterW = _railPosterW(context);
     final posterH = posterW * 3 / 2;
-    final cellH = posterH;
+    // Reserve the inline caption band so a long title — e.g. a full release-name
+    // playlist item — doesn't overflow the cell into the next section's header.
+    final cellH = posterH + _artPosterCaptionBand(context);
     final rowH = cellH + 14;
 
     return Column(
@@ -5897,19 +5919,19 @@ class _ArtPosterState extends State<_ArtPoster> {
             mainAxisSize: MainAxisSize.min,
             children: [
               posterCard,
-              const SizedBox(height: 10),
+              const SizedBox(height: _kArtTitleGap),
               Text(
                 widget.title,
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: _kArtTitleMaxLines,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: _active
                       ? Colors.white
                       : Colors.white.withValues(alpha: 0.92),
-                  fontSize: 14,
+                  fontSize: _kArtTitleFontSize,
                   fontWeight: FontWeight.w600,
-                  height: 1.25,
+                  height: _kArtTitleHeight,
                 ),
               ),
             ],
