@@ -117,3 +117,93 @@ class _SkeletonPosterGridState extends State<SkeletonPosterGrid>
     );
   }
 }
+
+/// A vertical stack of shimmer "rails" — a title-bar placeholder above a strip
+/// of poster placeholders — standing in for the horizontal-rail home board
+/// while its first content loads (instead of a bare spinner). Non-interactive,
+/// non-scrolling; fills the (bounded) board area and clips. One shared
+/// [AnimationController] drives every shimmer.
+class SkeletonRailList extends StatefulWidget {
+  /// Poster width for a rail cell, from the board's own `_railPosterW`.
+  final double posterWidth;
+
+  /// Matches the board's per-platform rail-header padding.
+  final bool isTelevision;
+
+  final int rails;
+
+  const SkeletonRailList({
+    super.key,
+    required this.posterWidth,
+    required this.isTelevision,
+    this.rails = 5,
+  });
+
+  @override
+  State<SkeletonRailList> createState() => _SkeletonRailListState();
+}
+
+class _SkeletonRailListState extends State<SkeletonRailList>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tv = widget.isTelevision;
+    final posterW = widget.posterWidth;
+    final cellH = posterW * 3 / 2;
+    final rowH = cellH + 14;
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 6, bottom: 32),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: widget.rails,
+      itemBuilder: (context, i) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title-bar placeholder, aligned to the real rail header's padding.
+            Padding(
+              padding: EdgeInsets.fromLTRB(24, tv ? 14 : 22, 24, tv ? 10 : 12),
+              child: SizedBox(
+                height: 16,
+                width: 150,
+                child: ShimmerBox(animation: _controller, radius: 6),
+              ),
+            ),
+            SizedBox(
+              height: rowH,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.hardEdge,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 13),
+                itemCount: 8,
+                itemBuilder: (context, j) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 11),
+                    child: Center(
+                      child: SizedBox(
+                        width: posterW,
+                        height: cellH,
+                        child: ShimmerBox(animation: _controller),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}

@@ -433,14 +433,13 @@ class _SearchScreenState extends State<SearchScreen> {
   /// keeps the row count stable so the real rows fill in place — nothing below
   /// reflows, and the auto-focus anchor stays put.
   ///
-  /// TV-only (the placeholder header omits the phone/desktop See-All link, and
-  /// the DPAD-stranding this was built alongside is a TV problem) and only on
+  /// Shown on every platform (the placeholder header omits the phone/desktop
+  /// See-All link, which pops in harmlessly when the real row loads). Only on
   /// the homepage board (not the dedicated Search / Discover tabs, and not while
   /// a catalog search is showing its own results). Requiring the real rows to be
   /// empty means a refresh that already has data updates in place — no skeletons
   /// stacked on top of live rows.
   bool get _traktReserving =>
-      widget.isTelevision &&
       !widget.searchMode &&
       !widget.discoverMode &&
       _isTraktAuthenticated &&
@@ -4338,7 +4337,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildBoard() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      // Shimmer rails while the first batch loads, instead of a bare spinner —
+      // so rows shimmer in rather than popping out of nowhere (all platforms).
+      return SkeletonRailList(
+        posterWidth: _railPosterW(context),
+        isTelevision: widget.isTelevision,
+      );
     }
     if (_error != null) {
       return _message(
