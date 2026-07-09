@@ -1817,7 +1817,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           _boundSources[s.effectiveImdbId ?? s.id]?.length ?? 0,
       onSelectSource: widget.onSelectSource == null
           ? null
-          : (s) => _handleSelectSourceAction(s),
+          : (s) async => _handleSelectSourceAction(s),
     );
 
     // Instant, transition-less route when:

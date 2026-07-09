@@ -80,8 +80,9 @@ class EpisodesScreen extends StatefulWidget {
   final int Function(StremioMeta show)? boundSourceCount;
 
   /// Callback when user taps the Select Source button. When null, the button
-  /// is hidden.
-  final void Function(StremioMeta show)? onSelectSource;
+  /// is hidden. Returns a Future that completes when the source picker/editor
+  /// closes, so the header's bound-source count can refresh in place.
+  final Future<void> Function(StremioMeta show)? onSelectSource;
 
   const EpisodesScreen({
     super.key,
@@ -113,6 +114,13 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
   List<TraktSeason> _episodeSeasons = [];
   int _selectedSeasonNumber = 1;
   bool _isLoadingEpisodes = false;
+
+  /// True when a season fetch yielded no episodes. Instead of auto-diverting to
+  /// a whole-series torrent search (which a transient network blip could
+  /// trigger, yanking the user out of the drill-down), we show an inline
+  /// error+Retry panel — matching old home — with an explicit "Search for
+  /// sources" action that preserves the catalog pack-search path on demand.
+  bool _episodesUnavailable = false;
   Map<String, double> _episodeWatchProgress = {};
 
   /// The next episode to watch for the current show (from Trakt), used only to
@@ -136,6 +144,12 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
   );
   final FocusNode _episodeSeasonDropdownFocusNode = FocusNode(
     debugLabel: 'catalog-ep-season',
+  );
+  // Retry button in the "couldn't load episodes" panel, so the back button can
+  // hand focus to it (the season dropdown / episode list aren't in the tree
+  // in that state).
+  final FocusNode _episodeRetryFocusNode = FocusNode(
+    debugLabel: 'catalog-ep-retry',
   );
 
   @override
@@ -165,6 +179,7 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     _episodeScrollController.dispose();
     _episodeBackButtonFocusNode.dispose();
     _episodeSeasonDropdownFocusNode.dispose();
+    _episodeRetryFocusNode.dispose();
     for (final node in _episodeFocusNodes) {
       node.dispose();
     }
@@ -341,12 +356,19 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     if (traktId.isNotEmpty) {
       try {
         final raw = await _traktService.fetchShowSeasons(traktId);
+        // Dedupe by season number: a malformed response can yield >1 season
+        // that both default to number 0, which would give the season dropdown
+        // two items with the same value and trip its assertion. seen.add()
+        // returns false for a number already present, dropping the duplicate.
+        final seen = <int>{};
         final seasons =
             raw
                 .map((s) => TraktSeason.fromJson(s))
-                .where((s) => s.number > 0 && s.episodes.isNotEmpty)
+                // Keep Specials (season 0); drop negatives and duplicate numbers.
+                .where((s) =>
+                    s.number >= 0 && s.episodes.isNotEmpty && seen.add(s.number))
                 .toList()
-              ..sort((a, b) => a.number.compareTo(b.number));
+              ..sort(_seasonsSpecialsLast);
         if (seasons.isNotEmpty) return seasons;
       } catch (e) {
         debugPrint('EpisodesScreen: Trakt seasons fetch failed: $e');
@@ -356,9 +378,9 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     return [];
   }
 
-  /// Group raw Stremio addon meta `videos` into positive-numbered seasons,
-  /// sorted by season then episode. Returns an empty list when there is nothing
-  /// usable (null/empty input, or only specials).
+  /// Group raw Stremio addon meta `videos` into seasons, sorted by season then
+  /// episode with Specials (season 0) last. Returns an empty list when there is
+  /// nothing usable (null/empty input).
   List<TraktSeason> _groupVideosIntoSeasons(List<Map<String, dynamic>>? videos) {
     if (videos == null || videos.isEmpty) return [];
 
@@ -368,7 +390,8 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       final seasonNum = seasonRaw is int
           ? seasonRaw
           : (seasonRaw is num ? seasonRaw.toInt() : null);
-      if (seasonNum == null || seasonNum <= 0) continue;
+      // Keep Specials (season 0); drop only invalid/negative season numbers.
+      if (seasonNum == null || seasonNum < 0) continue;
 
       final epRaw = v['number'] ?? v['episode'];
       final epNum = epRaw is int
@@ -408,7 +431,15 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
         episodeCount: episodes.length,
         episodes: episodes,
       );
-    }).toList()..sort((a, b) => a.number.compareTo(b.number));
+    }).toList()..sort(_seasonsSpecialsLast);
+  }
+
+  /// Sort seasons ascending, but with Specials (season 0) at the very end —
+  /// matching old home so a "Specials" entry sits after the real seasons.
+  static int _seasonsSpecialsLast(TraktSeason a, TraktSeason b) {
+    if (a.number == 0 && b.number != 0) return 1;
+    if (a.number != 0 && b.number == 0) return -1;
+    return a.number.compareTo(b.number);
   }
 
   void _enterEpisodeMode(
@@ -421,6 +452,7 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     setState(() {
       _selectedShow = show;
       _isLoadingEpisodes = true;
+      _episodesUnavailable = false;
       _episodeSeasons = [];
       _selectedSeasonNumber = initialSeason ?? 1;
       _nextEpisode = null;
@@ -440,7 +472,10 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       if (!mounted || generation != _episodeModeGeneration) return;
 
       if (seasons.isEmpty) {
-        _fallbackToDirectSearch(show);
+        setState(() {
+          _isLoadingEpisodes = false;
+          _episodesUnavailable = true;
+        });
         return;
       }
 
@@ -542,7 +577,10 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     } catch (e) {
       if (!mounted || generation != _episodeModeGeneration) return;
       debugPrint('EpisodesScreen: Episode fetch failed: $e');
-      _fallbackToDirectSearch(show);
+      setState(() {
+        _isLoadingEpisodes = false;
+        _episodesUnavailable = true;
+      });
     }
   }
 
@@ -770,11 +808,17 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
                   return KeyEventResult.handled;
                 }
                 if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                  _episodeSeasonDropdownFocusNode.requestFocus();
+                  if (_episodesUnavailable) {
+                    _episodeRetryFocusNode.requestFocus();
+                  } else {
+                    _episodeSeasonDropdownFocusNode.requestFocus();
+                  }
                   return KeyEventResult.handled;
                 }
                 if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  if (_episodeFocusNodes.isNotEmpty) {
+                  if (_episodesUnavailable) {
+                    _episodeRetryFocusNode.requestFocus();
+                  } else if (_episodeFocusNodes.isNotEmpty) {
                     _episodeFocusNodes.first.requestFocus();
                   }
                   return KeyEventResult.handled;
@@ -844,7 +888,12 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
                   return _CatalogSelectSourceButton(
                     hasBoundSource: sourceCount > 0,
                     sourceCount: sourceCount,
-                    onTap: () => widget.onSelectSource!(_selectedShow!),
+                    // Await the picker so the bound-source count updates in
+                    // place when it closes (no need to leave and re-enter).
+                    onTap: () async {
+                      await widget.onSelectSource!(_selectedShow!);
+                      if (mounted) setState(() {});
+                    },
                     onLeftFocus: _episodeSeasons.isNotEmpty
                         ? _episodeSeasonDropdownFocusNode
                         : _episodeBackButtonFocusNode,
@@ -951,18 +1000,74 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     );
   }
 
+  /// Inline "couldn't load episodes" panel with Retry (recovers a transient
+  /// failure without leaving the drill-down) and an explicit "Search for
+  /// sources" action (the old auto-fallback, now opt-in).
+  Widget _buildEpisodesUnavailable() {
+    final show = _selectedShow ?? widget.show;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tv_off_rounded,
+              size: 48,
+              color: Colors.white.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              "Couldn't load episodes",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'The episode list is unavailable right now.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  focusNode: _episodeRetryFocusNode,
+                  autofocus: widget.isTelevision,
+                  onPressed: () => _enterEpisodeMode(
+                    show,
+                    initialSeason: widget.initialSeason,
+                    initialEpisode: widget.initialEpisode,
+                  ),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _fallbackToDirectSearch(show),
+                  icon: const Icon(Icons.search_rounded),
+                  label: const Text('Search for sources'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildEpisodeContent() {
     if (_isLoadingEpisodes) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_episodeSeasons.isEmpty) {
-      return Center(
-        child: Text(
-          'No episodes found',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        ),
-      );
+    if (_episodesUnavailable || _episodeSeasons.isEmpty) {
+      return _buildEpisodesUnavailable();
     }
 
     final currentSeason = _episodeSeasons.firstWhere(

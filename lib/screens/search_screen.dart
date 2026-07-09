@@ -2584,7 +2584,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (bound.isNotEmpty) {
       await _showEditSourceDialog(item, bound);
     } else {
-      _showAddSourcePicker(item);
+      await _showAddSourcePicker(item);
     }
   }
 
