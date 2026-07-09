@@ -1743,7 +1743,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// Open a Trakt Continue Watching title as a normal detail page.
   void _openTraktItem(StremioMeta item) {
-    _openItem(item, _addonForContinue(item.sourceAddon?.id));
+    _openItem(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      isTraktSource: true,
+    );
   }
 
   /// Resume a Trakt Continue Watching title — resolves the paused/next episode
@@ -2457,7 +2461,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ── Playback / detail delegation ───────────────────────────────────────────
 
-  void _openItem(StremioMeta item, StremioAddon addon) {
+  void _openItem(
+    StremioMeta item,
+    StremioAddon addon, {
+    bool isTraktSource = false,
+  }) {
     _activeAddonId = addon.id;
     final imdb = _imdbOf(item);
     // Show a "Remove from Continue Watching" action when this title is on the
@@ -2498,8 +2506,10 @@ class _SearchScreenState extends State<SearchScreen> {
               showQuickPlay: !_pikpakOnly,
               // Gold-tint the Sources button when a source is already pinned.
               hasBoundSource: _isBound(item),
-              onPlay: () => _onCatalogPlay(item, addon),
-              onBrowse: () => _onCatalogBrowse(item, addon),
+              onPlay: () =>
+                  _onCatalogPlay(item, addon, isTraktSource: isTraktSource),
+              onBrowse: () =>
+                  _onCatalogBrowse(item, addon, isTraktSource: isTraktSource),
               traktMenuOptions: options,
               onTraktAction: (a) => _handleDetailQuickAction(
                 item,
@@ -3152,11 +3162,15 @@ class _SearchScreenState extends State<SearchScreen> {
   // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
   // Play auto-plays the resume episode (last-played by imdbId → title, else
   // S01E01) — the Episodes button is the manual picker. Nothing jumps to Home.
-  Future<void> _onCatalogPlay(StremioMeta item, StremioAddon addon) async {
+  Future<void> _onCatalogPlay(
+    StremioMeta item,
+    StremioAddon addon, {
+    bool isTraktSource = false,
+  }) async {
     if (item.type != 'series') {
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
-      _playSelection(_movieSelection(item));
+      _playSelection(_movieSelection(item, isTraktSource: isTraktSource));
       return;
     }
 
@@ -3165,7 +3179,7 @@ class _SearchScreenState extends State<SearchScreen> {
     // Without an IMDb id we can't search torrents for a specific episode, so
     // fall back to the manual episode picker.
     if (imdbId.isEmpty) {
-      _openEpisodes(item, addon);
+      _openEpisodes(item, addon, isTraktSource: isTraktSource);
       return;
     }
 
@@ -3197,21 +3211,27 @@ class _SearchScreenState extends State<SearchScreen> {
         episode: episode,
         contentType: item.type,
         posterUrl: item.poster,
+        traktSource: isTraktSource,
       ),
     );
   }
 
-  void _onCatalogBrowse(StremioMeta item, StremioAddon addon) {
+  void _onCatalogBrowse(
+    StremioMeta item,
+    StremioAddon addon, {
+    bool isTraktSource = false,
+  }) {
     if (item.type == 'series') {
-      _openEpisodes(item, addon);
+      _openEpisodes(item, addon, isTraktSource: isTraktSource);
     } else {
-      _browseSelection(_movieSelection(item));
+      _browseSelection(_movieSelection(item, isTraktSource: isTraktSource));
     }
   }
 
   AdvancedSearchSelection _movieSelection(
-    StremioMeta item,
-  ) => AdvancedSearchSelection(
+    StremioMeta item, {
+    bool isTraktSource = false,
+  }) => AdvancedSearchSelection(
     // Keep the raw addon id ONLY for non-standard types (IPTV / TV / channel)
     // so playback/Sources can resolve the addon's own stream endpoint. A
     // movie/series without a `tt…` id (e.g. tmdb/kitsu-only) keeps '' so it
@@ -3225,9 +3245,17 @@ class _SearchScreenState extends State<SearchScreen> {
     year: item.year,
     contentType: item.type,
     posterUrl: item.poster,
+    // Trakt-sourced movies scrobble to Trakt like the old home view; catalog
+    // movies leave this false so scrobble follows the "Sync Catalog Items"
+    // setting.
+    traktSource: isTraktSource,
   );
 
-  void _openEpisodes(StremioMeta item, StremioAddon addon) {
+  void _openEpisodes(
+    StremioMeta item,
+    StremioAddon addon, {
+    bool isTraktSource = false,
+  }) {
     _activeAddonId = addon.id;
     Navigator.of(context)
         .push(
@@ -3237,6 +3265,7 @@ class _SearchScreenState extends State<SearchScreen> {
               show: item,
               addon: addon,
               isTelevision: widget.isTelevision,
+              isTraktSource: isTraktSource,
               // EpisodesScreen pops itself (and the detail route) before firing
               // these, so we're back on the Search screen when they run.
               onQuickPlay: _playSelection,

@@ -56,6 +56,13 @@ class EpisodesScreen extends StatefulWidget {
   /// Whether to show the Quick Play button on episode tiles.
   final bool showQuickPlay;
 
+  /// Whether this series was opened from a Trakt context (e.g. Discover→Trakt).
+  /// When true, episode Sources/Play carry the Trakt scrobble flag + Trakt
+  /// resume position so playback syncs to Trakt exactly like the old home
+  /// episode view. Left false for plain catalog/addon items so their scrobble
+  /// stays governed by the user's "Sync Catalog Items" setting.
+  final bool isTraktSource;
+
   /// Callback when user selects an episode (Sources) or the series falls back
   /// to a direct search.
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
@@ -84,6 +91,7 @@ class EpisodesScreen extends StatefulWidget {
     this.initialEpisode,
     this.isTelevision = false,
     this.showQuickPlay = true,
+    this.isTraktSource = false,
     this.onItemSelected,
     this.onQuickPlay,
     this.onExitedWithoutSelection,
@@ -691,6 +699,12 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       episode: episode.number,
       contentType: show.type,
       posterUrl: show.poster,
+      // For Trakt-sourced items, carry the Trakt scrobble flag + resume
+      // position so playback syncs to Trakt like the old home view.
+      traktSource: widget.isTraktSource,
+      traktProgressPercent: widget.isTraktSource
+          ? _episodeWatchProgress['${episode.season}-${episode.number}']
+          : null,
       // Lets the host send the user back to this episode list (not the
       // catalog grid) when they back out of the torrent results.
       fromCatalogEpisodeDrillDown: true,
@@ -713,6 +727,10 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       episode: episode.number,
       contentType: show.type,
       posterUrl: show.poster,
+      traktSource: widget.isTraktSource,
+      traktProgressPercent: widget.isTraktSource
+          ? _episodeWatchProgress['${episode.season}-${episode.number}']
+          : null,
       fromCatalogEpisodeDrillDown: true,
     );
 
