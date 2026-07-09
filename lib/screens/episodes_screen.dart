@@ -217,21 +217,6 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     }
   }
 
-  /// Fetch the "up next" episode from Trakt to highlight its tile. Best-effort
-  /// and generation-guarded; a null result (no Trakt account / fully caught up)
-  /// simply leaves no tile highlighted.
-  Future<void> _loadNextEpisode(StremioMeta show, int generation) async {
-    final showId = show.effectiveImdbId ?? show.id;
-    if (showId.isEmpty) return;
-    try {
-      final next = await _traktService.fetchNextEpisode(showId);
-      if (!mounted || generation != _episodeModeGeneration) return;
-      setState(() => _nextEpisode = next);
-    } catch (e) {
-      debugPrint('EpisodesScreen: next-episode fetch failed: $e');
-    }
-  }
-
   /// Handle the episode long-press menu (mark watched/unwatched, rate) against
   /// Trakt, mirroring the inline Trakt view. Watched-state changes are
   /// reflected locally in [_episodeWatchProgress] so the tile updates at once.
@@ -433,9 +418,9 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       _nextEpisode = null;
     });
 
-    // Load watch progress + "up next" marker (non-blocking; generation-guarded)
+    // Load watch progress (non-blocking; generation-guarded). The "up next"
+    // marker is resolved inline below since it also drives where we land.
     _loadEpisodeWatchProgress(show, generation);
-    _loadNextEpisode(show, generation);
 
     for (final node in _episodeFocusNodes) {
       node.dispose();
@@ -451,13 +436,44 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
         return;
       }
 
-      // Resolve where to land. Explicit initialSeason/initialEpisode (deep
-      // links, calendar) win; otherwise fall back to this show's last-played
-      // episode. Catalog has no Trakt-style next-episode service, so without
-      // this it always opens at S01E01. Mirrors _onQuickPlay's lookup.
+      // Resolve where to land (season + episode to auto-switch and scroll to),
+      // mirroring the old home episode view. Priority:
+      //   1. explicit initialSeason/initialEpisode (deep links, calendar)
+      //   2. Trakt's "next episode" — the cross-device resume point
+      //   3. this device's last-played episode (local storage)
+      //   4. first season, first episode
+      // Each tier supplies both fields together so season/episode never mix
+      // across sources.
       int? effectiveSeason = initialSeason;
       int? effectiveEpisode = initialEpisode;
-      if (effectiveSeason == null || effectiveEpisode == null) {
+
+      // 2. Trakt "next episode". Also drives the up-next tile highlight. This
+      //    is instant/null without a Trakt account (no token → no request).
+      //    Guarded so a Trakt failure can never bubble to the outer catch and
+      //    drop us to torrent search — the episode list is already loaded.
+      ({int season, int episode})? nextEpisode;
+      try {
+        nextEpisode = await _traktService.fetchNextEpisode(
+          show.effectiveImdbId ?? show.id,
+        );
+      } catch (e) {
+        debugPrint('EpisodesScreen: next-episode fetch failed: $e');
+      }
+      if (!mounted || generation != _episodeModeGeneration) return;
+      // Keep the raw value for the up-next highlight (it self-limits to a
+      // displayed tile). Only adopt it as the landing target when its season is
+      // actually present, so we never scroll to the wrong episode in season 1.
+      _nextEpisode = nextEpisode;
+      if (effectiveSeason == null &&
+          effectiveEpisode == null &&
+          nextEpisode != null &&
+          seasons.any((s) => s.number == nextEpisode!.season)) {
+        effectiveSeason = nextEpisode.season;
+        effectiveEpisode = nextEpisode.episode;
+      }
+
+      // 3. Last-played (local) fallback — by IMDb id, then by title.
+      if (effectiveSeason == null && effectiveEpisode == null) {
         final imdbId = show.effectiveImdbId;
         if (imdbId != null) {
           final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
@@ -465,18 +481,18 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
           );
           if (!mounted || generation != _episodeModeGeneration) return;
           if (lastPlayed != null) {
-            effectiveSeason ??= lastPlayed['season'] as int?;
-            effectiveEpisode ??= lastPlayed['episode'] as int?;
+            effectiveSeason = lastPlayed['season'] as int?;
+            effectiveEpisode = lastPlayed['episode'] as int?;
           }
         }
-        if (effectiveSeason == null || effectiveEpisode == null) {
+        if (effectiveSeason == null && effectiveEpisode == null) {
           final byTitle = await StorageService.getLastPlayedEpisode(
             seriesTitle: show.name,
           );
           if (!mounted || generation != _episodeModeGeneration) return;
           if (byTitle != null) {
-            effectiveSeason ??= byTitle['season'] as int?;
-            effectiveEpisode ??= byTitle['episode'] as int?;
+            effectiveSeason = byTitle['season'] as int?;
+            effectiveEpisode = byTitle['episode'] as int?;
           }
         }
       }
