@@ -36,18 +36,32 @@ class NextEpisodeService {
         return ea.compareTo(eb);
       });
 
-      // Find the current episode index, then return the next one
+      // Locate the current episode.
+      int curIdx = -1;
       for (int i = 0; i < sorted.length; i++) {
         final s = sorted[i]['season'] as int? ?? 0;
-        final e = sorted[i]['episode'] as int? ?? sorted[i]['number'] as int? ?? 0;
-        if (s == currentSeason && e == currentEpisode && i + 1 < sorted.length) {
-          final next = sorted[i + 1];
-          final ns = next['season'] as int? ?? 0;
-          final ne = next['episode'] as int? ?? next['number'] as int? ?? 0;
-          if (ns > 0 && ne > 0) {
-            return (season: ns, episode: ne);
-          }
+        final e =
+            sorted[i]['episode'] as int? ?? sorted[i]['number'] as int? ?? 0;
+        if (s == currentSeason && e == currentEpisode) {
+          curIdx = i;
+          break;
         }
+      }
+      if (curIdx == -1) return null;
+
+      // Scan forward for the first valid episode strictly after the current
+      // one. Scanning (rather than blindly taking curIdx+1) matters because:
+      //  • some aggregator addons list an episode twice — returning that
+      //    duplicate row would replay the SAME episode forever;
+      //  • a specials / episode-0 boundary row should be skipped over, not
+      //    treated as "no next" (which would halt the binge).
+      for (int i = curIdx + 1; i < sorted.length; i++) {
+        final ns = sorted[i]['season'] as int? ?? 0;
+        final ne =
+            sorted[i]['episode'] as int? ?? sorted[i]['number'] as int? ?? 0;
+        if (ns <= 0 || ne <= 0) continue; // specials / unparseable
+        if (ns == currentSeason && ne == currentEpisode) continue; // duplicate
+        return (season: ns, episode: ne);
       }
       return null;
     } catch (e) {
