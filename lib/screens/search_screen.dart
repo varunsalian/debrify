@@ -44,6 +44,7 @@ import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
 import 'see_all/trakt_see_all_screen.dart';
+import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'debrid_downloads_screen.dart';
@@ -98,10 +99,16 @@ class SearchScreen extends StatefulWidget {
   /// TV; persistent search bar on desktop/mobile).
   final bool searchMode;
 
+  /// Discover-tab mode. A single browsable grid with a "Source" dropdown
+  /// (Continue Watching / Trakt / …) instead of the board's stacked rails —
+  /// reuses this screen's item-open/play handlers and cached CW/Trakt rows.
+  final bool discoverMode;
+
   const SearchScreen({
     super.key,
     this.isTelevision = false,
     this.searchMode = false,
+    this.discoverMode = false,
   });
 
   @override
@@ -109,6 +116,12 @@ class SearchScreen extends StatefulWidget {
 }
 
 enum _Mode { catalog, keyword }
+
+/// Fixed Discover sources; installed addons are appended dynamically (key
+/// 'a:{addonId}').
+const String _discCw = 'cw';
+const String _discTrakt = 'trakt';
+const String _discAddonPrefix = 'a:';
 
 /// Intent for a left-arrow on the search field, remapped (via a [Shortcuts]
 /// override closer than the default text-editing shortcuts) so an empty field
@@ -140,7 +153,8 @@ class _EmptyFieldLeftAction extends Action<_SearchLeftIntent> {
 class _SearchScreenState extends State<SearchScreen> {
   // Which nav tab this instance backs, for the TV content-focus handler: the
   // dedicated Search tab (17) or the Home-New board (15).
-  int get _tabIndex => widget.searchMode ? 17 : 15;
+  int get _tabIndex =>
+      widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
 
   final StremioService _stremio = StremioService.instance;
 
@@ -381,6 +395,14 @@ class _SearchScreenState extends State<SearchScreen> {
   int _heroReqId = 0;
   Timer? _heroTimer;
 
+  // Discover tab: the active source key ('cw' | 'trakt' | 'a:{addonId}') + its
+  // DPAD focus node (the "Source" dropdown is the leading filter of whichever
+  // embedded See-All panel is shown). [_discAddons] is the browsable addon list
+  // appended to the Source dropdown.
+  String _discSource = _discCw;
+  List<StremioAddon> _discAddons = const [];
+  final FocusNode _discSourceNode = FocusNode(debugLabel: 'disc_source');
+
   @override
   void initState() {
     super.initState();
@@ -398,6 +420,15 @@ class _SearchScreenState extends State<SearchScreen> {
     // results grid (_buildBoard) would sit on its initial spinner forever.
     if (widget.searchMode) {
       _loading = false;
+    } else if (widget.discoverMode) {
+      // Discover browses one source at a time via the Source dropdown, so it
+      // skips the board's catalog pipeline and just primes the Continue Watching
+      // + Trakt rows its first two sources draw from. _refreshPikpakOnly gates the
+      // Quick-Play affordance the same way the board does.
+      _loading = false;
+      _refreshPikpakOnly();
+      _loadDiscoverAddons();
+      _primeDiscoverRows();
     } else {
       _load();
       _loadContinueWatching();
@@ -463,6 +494,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _searchFocusNode.dispose();
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
+    _discSourceNode.dispose();
     _boardScroll.dispose();
     _disposeNodes();
     _disposeKwNodes();
@@ -518,8 +550,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ..addAll([
           for (final a in addons)
             for (final c in a.catalogs)
-              if (!c.extras.any((e) => e.name == 'search' && e.isRequired))
-                (a, c),
+              if (c.isBrowsable) (a, c),
         ]);
       _boardCursor = 0;
       _addonsById.clear();
@@ -1736,6 +1767,12 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _focusContent() {
+    // Discover tab: enter on the Source dropdown (the leading filter); Down from
+    // there drops into the grid.
+    if (widget.discoverMode) {
+      _discSourceNode.requestFocus();
+      return;
+    }
     // Dedicated Search tab: land on the results when they're on-screen, else the
     // field (the blank prompt has nothing focusable below it). Only focus board
     // rows when a query is actually showing them — otherwise their nodes aren't
@@ -3150,14 +3187,16 @@ class _SearchScreenState extends State<SearchScreen> {
           //    (search lives in its own tab).
           //  • Home-New board on desktop/mobile — keeps a persistent search bar
           //    above the board (no separate Search tab there).
-          child: (widget.isTelevision && !widget.searchMode)
-              ? _buildBoard()
-              : Column(
-                  children: [
-                    _buildHeader(),
-                    Expanded(child: _buildBody()),
-                  ],
-                ),
+          child: widget.discoverMode
+              ? _buildDiscover()
+              : (widget.isTelevision && !widget.searchMode)
+                  ? _buildBoard()
+                  : Column(
+                      children: [
+                        _buildHeader(),
+                        Expanded(child: _buildBody()),
+                      ],
+                    ),
         ),
       ),
     );
@@ -3936,6 +3975,136 @@ class _SearchScreenState extends State<SearchScreen> {
   /// line height in [_railHeader]; used only to budget the hero so a row header
   /// (current and next) stays visible.
   double get _railHeaderH => widget.isTelevision ? 44.0 : 52.0;
+
+  // ── Discover tab ────────────────────────────────────────────────────────────
+
+  /// Load Continue Watching + Trakt rows, then refresh the pinned-source badge
+  /// counts once. The board's `_load` does this via `_refreshBoundSources`; the
+  /// Trakt loader only refreshes bound counts when Trakt is connected, so
+  /// non-Trakt users would otherwise never get badges in Discover.
+  Future<void> _primeDiscoverRows() async {
+    await Future.wait([
+      _loadContinueWatching(),
+      _loadTraktContinueWatching(refreshBound: false),
+    ]);
+    if (mounted) await _refreshBoundSources();
+  }
+
+  /// Fetch the installed catalog addons (cheap manifest data — no catalog fetch).
+  /// Addons with at least one browsable catalog become Source-dropdown options;
+  /// ALL of them are cached in [_addonsById] so item-open can resolve the owning
+  /// addon (matching the board, which caches every catalog addon).
+  Future<void> _loadDiscoverAddons() async {
+    List<StremioAddon> addons;
+    try {
+      addons = await _stremio.getCatalogAddons();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _discAddons = [
+        for (final a in addons)
+          if (a.catalogs.any((c) => c.isBrowsable)) a,
+      ];
+      for (final a in addons) {
+        _addonsById.putIfAbsent(a.id, () => a);
+      }
+    });
+  }
+
+  /// The Discover tab: a "Source" dropdown over a single browsable grid. Each
+  /// source is rendered by the matching See-All panel in [embedded] mode (no
+  /// Scaffold/back header), with the Source dropdown injected as its leading
+  /// filter so DPAD walks Source → the panel's own filters → grid. All item
+  /// open/play/bound wiring is this screen's existing board handlers.
+  Widget _buildDiscover() {
+    final source = StremioDropdown<String>(
+      label: 'Source',
+      value: _discSource,
+      isTelevision: widget.isTelevision,
+      focusNode: _discSourceNode,
+      options: [
+        const StremioDropdownOption(_discCw, 'Continue Watching'),
+        const StremioDropdownOption(_discTrakt, 'Trakt'),
+        for (final a in _discAddons)
+          StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
+      ],
+      onSelected: (s) {
+        if (s == _discSource) return;
+        setState(() => _discSource = s);
+        // The swap re-mounts the embedded panel (new ValueKey), which re-attaches
+        // this shared node; pin the DPAD ring back on the Source dropdown so it
+        // isn't lost in the dispose/reattach.
+        if (widget.isTelevision) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _discSourceNode.requestFocus();
+          });
+        }
+      },
+    );
+
+    if (_discSource == _discTrakt) {
+      return TraktSeeAllScreen(
+        key: const ValueKey('disc_trakt'),
+        cwItems: _traktAll,
+        cwProgress: _traktProgress,
+        onOpen: _openTraktItem,
+        onQuickPlay: _pikpakOnly ? null : _playTraktItem,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+        embedded: true,
+        leading: source,
+        leadingNode: _discSourceNode,
+      );
+    }
+
+    // An installed addon catalog source.
+    if (_discSource.startsWith(_discAddonPrefix)) {
+      final addon = _addonsById[_discSource.substring(_discAddonPrefix.length)];
+      final catalog = addon?.catalogs.cast<StremioAddonCatalog?>().firstWhere(
+            (c) => c != null && c.isBrowsable,
+            orElse: () => null,
+          );
+      if (addon != null && catalog != null) {
+        return CatalogSeeAllScreen(
+          key: ValueKey('disc_${addon.id}'),
+          addon: addon,
+          initialCatalog: catalog,
+          isTelevision: widget.isTelevision,
+          onOpenItem: (item) => _openItem(item, addon),
+          onQuickPlay:
+              _pikpakOnly ? null : (item) => _onCatalogPlay(item, addon),
+          embedded: true,
+          leading: source,
+          leadingNode: _discSourceNode,
+        );
+      }
+      // Addon vanished (uninstalled) — fall through to Continue Watching.
+    }
+
+    // Default: Continue Watching.
+    return ContinueWatchingSeeAllScreen(
+      key: const ValueKey('disc_cw'),
+      title: 'Continue Watching',
+      items: _cwAll,
+      progressOf: (m) => _cwProgress[m.imdbId],
+      onOpen: _openContinueItem,
+      onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
+      isBound: _isBound,
+      isTelevision: widget.isTelevision,
+      embedded: true,
+      leading: source,
+      leadingNode: _discSourceNode,
+      // Re-fetch when a detail/player route pops back so finished titles drop out
+      // (the quick-play path doesn't reload _cwAll on its own).
+      onReload: () async {
+        await _loadContinueWatching();
+        if (!mounted) return const <StremioMeta>[];
+        return List<StremioMeta>.of(_cwAll);
+      },
+    );
+  }
 
   Widget _buildBoard() {
     if (_loading) {

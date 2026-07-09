@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/app_route_observer.dart';
+import '../../services/main_page_bridge.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
@@ -45,6 +46,13 @@ class ContinueWatchingSeeAllScreen extends StatefulWidget {
   final bool Function(StremioMeta item)? isBound;
   final bool isTelevision;
 
+  /// Embedded mode (e.g. inside the Discover tab): drops the Scaffold + back
+  /// header so the host provides the chrome, and prepends [leading] (a Source
+  /// dropdown) to the filter bar with [leadingNode] in the DPAD focus row.
+  final bool embedded;
+  final Widget? leading;
+  final FocusNode? leadingNode;
+
   const ContinueWatchingSeeAllScreen({
     super.key,
     required this.title,
@@ -56,6 +64,9 @@ class ContinueWatchingSeeAllScreen extends StatefulWidget {
     this.onQuickPlay,
     this.isBound,
     this.isTelevision = false,
+    this.embedded = false,
+    this.leading,
+    this.leadingNode,
   });
 
   @override
@@ -90,7 +101,10 @@ class _ContinueWatchingSeeAllScreenState
     _items = widget.items;
     _category = widget.initialCategory;
     _recompute();
-    if (widget.isTelevision) {
+    // Embedded (Discover): the host focuses the Source dropdown on entry, and a
+    // source swap re-mounts this panel — so don't yank focus into the grid here,
+    // it would steal the DPAD ring off the Source dropdown on every swap.
+    if (widget.isTelevision && !widget.embedded) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _focusEntry());
     }
   }
@@ -100,6 +114,8 @@ class _ContinueWatchingSeeAllScreenState
   /// remote is never stranded.
   void _focusEntry() {
     if (!mounted) return;
+    // Only invoked standalone (initState gates on !embedded); embedded empty-grid
+    // focus recovery lives in didUpdateWidget instead.
     if (_visible.isEmpty) {
       _backNode.requestFocus();
     } else {
@@ -112,6 +128,34 @@ class _ContinueWatchingSeeAllScreenState
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
     if (route is PageRoute) appRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didUpdateWidget(covariant ContinueWatchingSeeAllScreen old) {
+    super.didUpdateWidget(old);
+    // Embedded in Discover, the rows load async after mount, so re-sync when the
+    // host hands us a fresh list (identity change) rather than staying on the
+    // initial empty snapshot.
+    if (!identical(widget.items, old.items)) {
+      _items = widget.items;
+      _recompute();
+      // If the reload drained the grid to empty on TV, its tiles' focus nodes are
+      // gone — move focus to the leading Source dropdown so the remote isn't
+      // stranded on the non-focusable empty state. But only when focus was on the
+      // grid: a background reload shouldn't yank the user off a filter dropdown.
+      if (widget.embedded && widget.isTelevision && _visible.isEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _visible.isNotEmpty) return;
+          if ((widget.leadingNode?.hasFocus ?? false) ||
+              _catNode.hasFocus ||
+              _sortNode.hasFocus ||
+              _watchNode.hasFocus) {
+            return;
+          }
+          (widget.leadingNode ?? _catNode).requestFocus();
+        });
+      }
+    }
   }
 
   // A detail or player route pushed from a grid tile just popped back onto us —
@@ -188,9 +232,20 @@ class _ContinueWatchingSeeAllScreenState
     if (!widget.isTelevision) return KeyEventResult.ignored;
     return handleSeeAllFilterArrows(
       event,
-      [_catNode, _sortNode, _watchNode],
+      [
+        if (widget.leadingNode != null) widget.leadingNode!,
+        _catNode,
+        _sortNode,
+        _watchNode,
+      ],
       onDown: () => _gridKey.currentState?.focusFirst(),
-      onUp: () => _backNode.requestFocus(),
+      // Embedded (Discover tab) has no back button above the bar, so
+      // up-from-filters stays put; the standalone screen returns to it.
+      onUp: () {
+        if (!widget.embedded) _backNode.requestFocus();
+      },
+      // Embedded: Left off the leading Source dropdown escapes to the TV sidebar.
+      onLeftEdge: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
     );
   }
 
@@ -198,6 +253,17 @@ class _ContinueWatchingSeeAllScreenState
 
   @override
   Widget build(BuildContext context) {
+    // Embedded (Discover tab): the host supplies the Scaffold + chrome, so render
+    // just the filter bar (with the leading Source dropdown) over the grid.
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFilterBar(),
+          Expanded(child: _buildBody()),
+        ],
+      );
+    }
     return Scaffold(
       backgroundColor: kSeeAllBg,
       body: SafeArea(
@@ -233,6 +299,7 @@ class _ContinueWatchingSeeAllScreenState
           spacing: 12,
           runSpacing: 10,
           children: [
+            if (widget.leading != null) widget.leading!,
             StremioDropdown<String>(
               label: 'Show',
               value: _category,
@@ -314,6 +381,8 @@ class _ContinueWatchingSeeAllScreenState
       isBound: widget.isBound,
       onLoadMore: () {},
       onExitTop: widget.isTelevision ? () => _catNode.requestFocus() : null,
+      // Embedded: Left at grid column 0 escapes to the TV sidebar.
+      onExitLeft: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
     );
   }
 }

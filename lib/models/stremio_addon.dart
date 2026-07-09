@@ -77,6 +77,11 @@ class StremioAddonCatalog {
   /// Check if this catalog supports genre filter
   bool get supportsGenre => extraSupported?.contains('genre') ?? false;
 
+  /// Whether this catalog can be browsed without a required `search` query. A
+  /// search-only catalog returns empty when browsed, so browse UIs skip them.
+  bool get isBrowsable =>
+      !extras.any((e) => e.name == 'search' && e.isRequired);
+
   /// Get the genre extra param if available (for options)
   StremioExtraParam? get genreParam => extras
       .cast<StremioExtraParam?>()

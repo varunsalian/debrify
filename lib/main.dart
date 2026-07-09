@@ -605,6 +605,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // at index 0 will be deprecated/renamed later)
     'Cloud', // 16: consolidated cloud-provider hub (RD/Torbox/PikPak/…/WebDAV)
     'Search', // 17: dedicated search tab (TV only)
+    'Discover', // 18: source-dropdown browser (Continue Watching / Trakt / …)
   ];
 
   final List<IconData> _icons = [
@@ -626,6 +627,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.home_rounded, // 15: Home New (board)
     Icons.cloud_rounded, // 16: Cloud
     Icons.search_rounded, // 17: Search
+    Icons.explore_rounded, // 18: Discover
   ];
 
   @override
@@ -2146,14 +2148,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final indices = <int>[
         17,
         15,
+        18,
         0,
         2,
         13,
         14,
         3,
         9,
-      ]; // Search, Home New, Torrent, Downloads, IPTV, YouTube, Debrify TV,
-      // Stremio TV. The dedicated Search tab (17) is TV-only; on desktop/mobile
+      ]; // Search, Home New, Discover, Torrent, Downloads, IPTV, YouTube,
+      // Debrify TV, Stremio TV. The dedicated Search tab (17) is TV-only; on
+      // desktop/mobile
       // the Home-New board (15) keeps its own persistent search bar.
       // Consolidated Cloud tab: one entry when ANY provider is enabled & not
       // hidden (replaces the former per-provider RD/Torbox/PikPak/Premiumize/
@@ -2186,16 +2190,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
       return [
         15,
+        18,
         0,
         13,
         14,
         9,
         7,
         8,
-      ]; // Search, Home, IPTV, YouTube, Stremio TV, Addons, Settings
+      ]; // Home New, Discover, Home, IPTV, YouTube, Stremio TV, Addons, Settings
     }
 
-    final indices = <int>[15, 0, 2, 13, 14, 3, 9];
+    final indices = <int>[15, 18, 0, 2, 13, 14, 3, 9];
     // Consolidated Cloud tab (see TV branch above): one entry when any provider
     // is enabled & not hidden.
     if ((rd && !rdHidden) ||
@@ -2217,6 +2222,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     switch (screenIndex) {
       case 17: // Search (TV only)
       case 15: // Home New (board)
+      case 18: // Discover
       case 0: // Home
       case 2: // Downloads
         return 'Main';
@@ -2306,6 +2312,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return CloudScreen(isTelevision: _isAndroidTv);
       case 17: // Search (dedicated tab — TV only)
         return SearchScreen(isTelevision: _isAndroidTv, searchMode: true);
+      case 18: // Discover (source-dropdown browser)
+        return SearchScreen(isTelevision: _isAndroidTv, discoverMode: true);
       default:
         return _pages[index];
     }

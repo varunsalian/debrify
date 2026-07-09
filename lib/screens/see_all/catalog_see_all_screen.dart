@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
@@ -40,6 +41,13 @@ class CatalogSeeAllScreen extends StatefulWidget {
   /// Optional "has a pinned source" flag per item.
   final bool Function(StremioMeta item)? isBound;
 
+  /// Embedded mode (e.g. inside the Discover tab): drops the Scaffold + back
+  /// header so the host provides the chrome, and prepends [leading] (a Source
+  /// dropdown) to the filter bar with [leadingNode] in the DPAD focus row.
+  final bool embedded;
+  final Widget? leading;
+  final FocusNode? leadingNode;
+
   const CatalogSeeAllScreen({
     super.key,
     required this.addon,
@@ -50,6 +58,9 @@ class CatalogSeeAllScreen extends StatefulWidget {
     this.isTelevision = false,
     this.onQuickPlay,
     this.isBound,
+    this.embedded = false,
+    this.leading,
+    this.leadingNode,
   });
 
   @override
@@ -93,12 +104,14 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       _items.addAll(widget.seedItems);
       _nextSkip = widget.seedNextSkip;
       _loadingInitial = false;
-      if (widget.isTelevision) {
+      // Embedded (Discover): the host focuses the Source dropdown; a source swap
+      // re-mounts this panel, so don't steal the DPAD ring into the grid.
+      if (widget.isTelevision && !widget.embedded) {
         WidgetsBinding.instance.addPostFrameCallback(
             (_) => _gridKey.currentState?.focusFirst());
       }
     } else {
-      _reload(autoFocus: true);
+      _reload(autoFocus: !widget.embedded);
     }
   }
 
@@ -118,13 +131,16 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     final seen = <String>{};
     final out = <String>[];
     for (final c in widget.addon.catalogs) {
-      if (seen.add(c.type)) out.add(c.type);
+      // Only offer types that have a browsable catalog — a search-only catalog
+      // returns empty when browsed, and changing Type must never land on one.
+      if (c.isBrowsable && seen.add(c.type)) out.add(c.type);
     }
     return out;
   }
 
-  List<StremioAddonCatalog> _catalogsForType(String type) =>
-      widget.addon.catalogs.where((c) => c.type == type).toList();
+  List<StremioAddonCatalog> _catalogsForType(String type) => widget.addon.catalogs
+      .where((c) => c.type == type && c.isBrowsable)
+      .toList();
 
   /// Matches `search_screen._sectionTypeLabel` so the Type filter reads the same
   /// as the rail tag the user came from ("Movies", not "Movie").
@@ -256,6 +272,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   // ── TV filter-bar focus wiring ─────────────────────────────────────────────
 
   List<FocusNode> get _filterNodes => [
+        if (widget.leadingNode != null) widget.leadingNode!,
         _typeNode,
         _catalogNode,
         if (_catalog.supportsGenre) _genreNode,
@@ -275,7 +292,13 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       onDown: () => _showingEmpty
           ? _retryNode.requestFocus()
           : _gridKey.currentState?.focusFirst(),
-      onUp: () => _backNode.requestFocus(),
+      // Embedded (Discover) has no back button above the bar, so up-from-filters
+      // stays put; the standalone screen returns to it.
+      onUp: () {
+        if (!widget.embedded) _backNode.requestFocus();
+      },
+      // Embedded: Left off the leading Source dropdown escapes to the TV sidebar.
+      onLeftEdge: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
     );
   }
 
@@ -283,6 +306,17 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Embedded (Discover tab): the host supplies the Scaffold + chrome, so render
+    // just the filter bar (with the leading Source dropdown) over the grid.
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFilterBar(),
+          Expanded(child: _buildBody()),
+        ],
+      );
+    }
     return Scaffold(
       backgroundColor: kSeeAllBg,
       body: SafeArea(
@@ -316,6 +350,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
           spacing: 12,
           runSpacing: 10,
           children: [
+            if (widget.leading != null) widget.leading!,
             StremioDropdown<String>(
               label: 'Type',
               value: _type,
@@ -445,6 +480,8 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       isBound: widget.isBound,
       onLoadMore: _loadMore,
       onExitTop: widget.isTelevision ? () => _typeNode.requestFocus() : null,
+      // Embedded: Left at grid column 0 escapes to the TV sidebar.
+      onExitLeft: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
     );
   }
 }

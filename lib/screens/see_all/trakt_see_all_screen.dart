@@ -1,153 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
-import '../../services/trakt/trakt_item_transformer.dart';
-import '../../services/trakt/trakt_service.dart';
+import '../../services/main_page_bridge.dart';
+import '../../services/trakt/trakt_list_source.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
 import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
-
-/// The Trakt lists this See-All screen can switch between. [continueWatching] is
-/// special — it reuses the already-loaded rows the host passed in (no fetch);
-/// every other entry is fetched on demand via [TraktService.fetchList].
-enum TraktSeeAllList {
-  continueWatching,
-  watchlist,
-  history,
-  collection,
-  ratings,
-  recommendations,
-  trending,
-  popular,
-  anticipated,
-}
-
-extension _TraktSeeAllListX on TraktSeeAllList {
-  String get label {
-    switch (this) {
-      case TraktSeeAllList.continueWatching:
-        return 'Continue Watching';
-      case TraktSeeAllList.watchlist:
-        return 'Watchlist';
-      case TraktSeeAllList.history:
-        return 'History';
-      case TraktSeeAllList.collection:
-        return 'Collection';
-      case TraktSeeAllList.ratings:
-        return 'Ratings';
-      case TraktSeeAllList.recommendations:
-        return 'Recommendations';
-      case TraktSeeAllList.trending:
-        return 'Trending';
-      case TraktSeeAllList.popular:
-        return 'Popular';
-      case TraktSeeAllList.anticipated:
-        return 'Anticipated';
-    }
-  }
-
-  /// Trakt API list slug for [TraktService.fetchList]. Empty for
-  /// [continueWatching], which is served from the host's cached rows.
-  String get apiValue {
-    switch (this) {
-      case TraktSeeAllList.continueWatching:
-        return '';
-      case TraktSeeAllList.watchlist:
-        return 'watchlist';
-      case TraktSeeAllList.history:
-        return 'history';
-      case TraktSeeAllList.collection:
-        return 'collection';
-      case TraktSeeAllList.ratings:
-        return 'ratings';
-      case TraktSeeAllList.recommendations:
-        return 'recommendations';
-      case TraktSeeAllList.trending:
-        return 'trending';
-      case TraktSeeAllList.popular:
-        return 'popular';
-      case TraktSeeAllList.anticipated:
-        return 'anticipated';
-    }
-  }
-
-  /// Global (non-personal) lists — served without auth and phrased as "No X
-  /// titles" rather than "Nothing in your X" when empty.
-  bool get isPublic =>
-      this == TraktSeeAllList.trending ||
-      this == TraktSeeAllList.popular ||
-      this == TraktSeeAllList.anticipated;
-
-  /// Lists whose natural order is a genuine cross-type timeline (a watched_at /
-  /// rated_at / collected_at recency), so merging movies + shows must sort by
-  /// that timestamp rather than interleave. Excludes Watchlist — its order is
-  /// user-curated (rank), so forcing a date sort would destroy it — and the
-  /// rank-ordered public/recommendation lists.
-  bool get isTimeOrdered =>
-      this == TraktSeeAllList.history ||
-      this == TraktSeeAllList.ratings ||
-      this == TraktSeeAllList.collection;
-}
-
-/// A selectable entry in the "List" dropdown: either one of the built-in Trakt
-/// lists ([builtin]) or a specific user list — an own custom list or a liked
-/// list ([userList], with [liked] distinguishing the two, since they fetch from
-/// different endpoints). Value-equal by the built-in enum or the list's Trakt id
-/// so the dropdown can match the current selection across rebuilds.
-class TraktListChoice {
-  final TraktSeeAllList? builtin;
-  final Map<String, dynamic>? userList;
-  final bool liked;
-
-  const TraktListChoice.builtin(TraktSeeAllList list)
-      : builtin = list,
-        userList = null,
-        liked = false;
-
-  const TraktListChoice.userList(Map<String, dynamic> list,
-      {required this.liked})
-      : builtin = null,
-        userList = list;
-
-  bool get isBuiltin => builtin != null;
-  bool get isContinueWatching => builtin == TraktSeeAllList.continueWatching;
-
-  /// Trakt id (or slug) of a user list — its stable identity for equality and
-  /// for the items endpoint.
-  String? get userListId {
-    final ids = userList?['ids'];
-    if (ids is Map) {
-      final trakt = ids['trakt'];
-      if (trakt != null) return trakt.toString();
-      final slug = ids['slug'];
-      if (slug != null) return slug.toString();
-    }
-    return null;
-  }
-
-  String get label {
-    if (builtin != null) return builtin!.label;
-    final name = userList?['name'] as String?;
-    return (name == null || name.trim().isEmpty) ? 'Untitled list' : name;
-  }
-
-  @override
-  bool operator ==(Object other) {
-    if (other is! TraktListChoice) return false;
-    if (other.builtin != builtin || other.liked != liked) return false;
-    // Match user lists by their Trakt id; when a list carries no usable id, fall
-    // back to object identity so two id-less lists don't collide in the dropdown.
-    if (userList == null && other.userList == null) return true;
-    final id = userListId;
-    if (id != null || other.userListId != null) return id == other.userListId;
-    return identical(userList, other.userList);
-  }
-
-  @override
-  int get hashCode => Object.hash(builtin, liked, userListId);
-}
 
 /// Sort orders for the grid. [natural] keeps the list's incoming order —
 /// last-watched for Continue Watching, the API's own rank for fetched lists.
@@ -155,16 +15,20 @@ enum _Sort { natural, az, za }
 
 /// Full-screen "See All" for the Trakt source. Opens on Continue Watching (the
 /// row the user came from, handed in already-loaded via [cwItems]) and lets them
-/// switch — via the "List" dropdown — to any standard Trakt list (Watchlist,
+/// switch — via the "List" dropdown — to any built-in Trakt list (Watchlist,
 /// History, Collection, Ratings, Recommendations, Trending, Popular,
-/// Anticipated) as well as their own custom lists and liked lists, which are
-/// loaded lazily and appended to the dropdown.
+/// Anticipated).
+///
+/// The user's own custom lists and liked lists are grouped: the "List" dropdown
+/// gets "Custom Lists" / "Liked Lists" entries (only when the user has any), and
+/// picking one reveals a second dropdown listing that group's specific lists —
+/// so hundreds of lists never clog the primary dropdown.
 ///
 /// Continue Watching is a client-side view over the cached rows (with the
-/// progress/watched filters the local grid has). Every other list is fetched on
-/// selection from both the movies and shows endpoints, merged, then filtered by
-/// category/sort in memory. Progress-based controls (Sort "Last Watched", the
-/// Watched/Unwatched filter) only appear for Continue Watching.
+/// progress/watched filters the local grid has). Every other list is fetched via
+/// [TraktListSource], then filtered by category/sort in memory. Progress-based
+/// controls (Sort "Last Watched", the Watched/Unwatched filter) only appear for
+/// Continue Watching.
 class TraktSeeAllScreen extends StatefulWidget {
   /// Cached Continue Watching rows (last-watched order), shown without a fetch.
   final List<StremioMeta> cwItems;
@@ -181,6 +45,13 @@ class TraktSeeAllScreen extends StatefulWidget {
   final bool Function(StremioMeta item)? isBound;
   final bool isTelevision;
 
+  /// Embedded mode (e.g. inside the Discover tab): drops the Scaffold + back
+  /// header so the host provides the chrome, and prepends [leading] (a Source
+  /// dropdown) to the filter bar with [leadingNode] in the DPAD focus row.
+  final bool embedded;
+  final Widget? leading;
+  final FocusNode? leadingNode;
+
   const TraktSeeAllScreen({
     super.key,
     required this.cwItems,
@@ -190,6 +61,9 @@ class TraktSeeAllScreen extends StatefulWidget {
     this.onQuickPlay,
     this.isBound,
     this.isTelevision = false,
+    this.embedded = false,
+    this.leading,
+    this.leadingNode,
   });
 
   @override
@@ -202,9 +76,14 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   TraktListChoice _list =
       const TraktListChoice.builtin(TraktSeeAllList.continueWatching);
 
-  // The user's own custom lists + liked lists, loaded lazily and appended to the
-  // "List" dropdown after the built-in entries.
-  List<TraktListChoice> _userLists = const [];
+  // The user's own custom + liked lists, loaded lazily and offered under the
+  // "Custom Lists" / "Liked Lists" groups (a secondary dropdown), so they never
+  // flood the primary list dropdown.
+  List<TraktListChoice> _customLists = const [];
+  List<TraktListChoice> _likedLists = const [];
+
+  // Active user-list group: null (a built-in is selected), 'custom' or 'liked'.
+  String? _group;
 
   // Source list for the current selection + the derived, cached view.
   late List<StremioMeta> _items;
@@ -227,6 +106,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
 
   final FocusNode _backNode = FocusNode(debugLabel: 'tsa_back');
   final FocusNode _listNode = FocusNode(debugLabel: 'tsa_list');
+  final FocusNode _groupNode = FocusNode(debugLabel: 'tsa_group');
   final FocusNode _catNode = FocusNode(debugLabel: 'tsa_category');
   final FocusNode _sortNode = FocusNode(debugLabel: 'tsa_sort');
   final FocusNode _watchNode = FocusNode(debugLabel: 'tsa_watch');
@@ -241,10 +121,15 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   /// correctly ("No Trending titles" vs "Nothing in your Watchlist").
   bool get _isPublicList => _list.builtin?.isPublic ?? false;
 
-  /// Filter-bar focus order, recomputed because the State control comes and goes
-  /// with the selected list.
+  List<TraktListChoice> get _groupLists =>
+      _group == 'custom' ? _customLists : _likedLists;
+
+  /// Filter-bar focus order, recomputed because the group + State controls come
+  /// and go with the selected list.
   List<FocusNode> get _filterNodes => [
+        if (widget.leadingNode != null) widget.leadingNode!,
         _listNode,
+        if (_group != null) _groupNode,
         _catNode,
         _sortNode,
         if (_showState) _watchNode,
@@ -256,48 +141,46 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     _items = widget.cwItems;
     _category = widget.initialCategory;
     _recompute();
-    if (widget.isTelevision) {
+    // Embedded (Discover): the host focuses the Source dropdown on entry, and a
+    // source swap re-mounts this panel — so don't yank focus into the grid here,
+    // it would steal the DPAD ring off the Source dropdown on every swap.
+    if (widget.isTelevision && !widget.embedded) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _focusEntry());
     }
     _loadUserLists();
   }
 
-  /// Load the user's own custom lists + liked lists in the background and append
-  /// them to the "List" dropdown. Both fetches return [] when Trakt isn't
-  /// connected or on error, so the dropdown simply keeps only the built-in
-  /// entries — no failure surfaced for a feature the user may not use.
+  @override
+  void didUpdateWidget(covariant TraktSeeAllScreen old) {
+    super.didUpdateWidget(old);
+    // Embedded in Discover, the cached Continue Watching rows load async after
+    // mount — re-sync while actually showing CW so a fetched list isn't clobbered.
+    if (_isCw && !identical(widget.cwItems, old.cwItems)) {
+      _items = widget.cwItems;
+      _recompute();
+      // If the reload drained the grid to empty on TV, move focus off the
+      // vanished tiles to the leading Source dropdown so the remote isn't stranded
+      // — but only when focus was on the grid, not if the user is mid-way through
+      // a filter dropdown (a background reload shouldn't yank them off it).
+      if (widget.embedded && widget.isTelevision && _visible.isEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _visible.isNotEmpty) return;
+          if (_filterNodes.any((n) => n.hasFocus)) return;
+          (widget.leadingNode ?? _listNode).requestFocus();
+        });
+      }
+    }
+  }
+
+  /// Load the user's custom + liked lists in the background and split them into
+  /// the two groups. Returns [] when Trakt isn't connected or on error, so the
+  /// dropdown simply keeps only the built-in entries.
   Future<void> _loadUserLists() async {
-    final svc = TraktService.instance;
-    List<Map<String, dynamic>> custom;
-    List<Map<String, dynamic>> liked;
-    try {
-      final results = await Future.wait([
-        svc.fetchCustomLists(),
-        svc.fetchLikedLists(),
-      ]);
-      custom = results[0];
-      liked = results[1];
-    } catch (_) {
-      return;
-    }
-    if (!mounted || (custom.isEmpty && liked.isEmpty)) return;
-    final ownChoices = [
-      for (final l in custom) TraktListChoice.userList(l, liked: false),
-    ];
-    final ownIds = <String>{
-      for (final c in ownChoices)
-        if (c.userListId != null) c.userListId!,
-    };
-    // Drop any liked list the user also owns (a self-liked list) so it doesn't
-    // appear twice under the same name.
-    final likedChoices = <TraktListChoice>[];
-    for (final l in liked) {
-      final choice = TraktListChoice.userList(l, liked: true);
-      final id = choice.userListId;
-      if (id == null || !ownIds.contains(id)) likedChoices.add(choice);
-    }
+    final lists = await TraktListSource.instance.loadUserLists();
+    if (!mounted || lists.isEmpty) return;
     setState(() {
-      _userLists = [...ownChoices, ...likedChoices];
+      _customLists = [for (final c in lists) if (!c.liked) c];
+      _likedLists = [for (final c in lists) if (c.liked) c];
     });
   }
 
@@ -305,6 +188,8 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   /// is empty — the back button, so the remote is never stranded.
   void _focusEntry() {
     if (!mounted) return;
+    // Only invoked standalone (initState gates on !embedded); embedded empty-grid
+    // focus recovery lives in didUpdateWidget instead.
     if (_visible.isEmpty) {
       _backNode.requestFocus();
     } else {
@@ -316,6 +201,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   void dispose() {
     _backNode.dispose();
     _listNode.dispose();
+    _groupNode.dispose();
     _catNode.dispose();
     _sortNode.dispose();
     _watchNode.dispose();
@@ -364,6 +250,41 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     });
   }
 
+  // ── List selection (primary dropdown + group dropdown) ──────────────────────
+
+  static const String _customGroupKey = 'grp_custom';
+  static const String _likedGroupKey = 'grp_liked';
+
+  String _builtinKey(TraktSeeAllList l) => 'b${l.index}';
+
+  /// Value for the primary dropdown: a group key when a user list is active,
+  /// else the current built-in's key.
+  String get _primaryKey {
+    if (_group == 'custom') return _customGroupKey;
+    if (_group == 'liked') return _likedGroupKey;
+    return _builtinKey(_list.builtin ?? TraktSeeAllList.continueWatching);
+  }
+
+  /// Primary dropdown picked: a built-in list, or a group (which reveals the
+  /// secondary dropdown and lands on that group's first list).
+  void _onPrimary(String key) {
+    if (key == _customGroupKey || key == _likedGroupKey) {
+      final group = key == _customGroupKey ? 'custom' : 'liked';
+      // Already in this group — keep the sub-list the user is viewing rather than
+      // snapping back to the first (re-picking the header must not lose their spot).
+      if (group == _group) return;
+      final lists = group == 'custom' ? _customLists : _likedLists;
+      if (lists.isEmpty) return;
+      setState(() => _group = group);
+      _setList(lists.first);
+      return;
+    }
+    final idx = int.tryParse(key.substring(1));
+    if (idx == null || idx < 0 || idx >= TraktSeeAllList.values.length) return;
+    setState(() => _group = null);
+    _setList(TraktListChoice.builtin(TraktSeeAllList.values[idx]));
+  }
+
   /// Switch the active Trakt list. Continue Watching restores the cached rows;
   /// everything else fetches. Progress-only filters reset so a stale
   /// Watched/Unwatched pick doesn't hide a fetched list.
@@ -393,9 +314,10 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     }
   }
 
-  /// Fetch and display a non-CW list. Surfaces the error state only when nothing
-  /// loaded AND the fetch actually failed (a partial built-in success still
-  /// shows what loaded); a genuinely empty list reads as empty, not error.
+  /// Fetch and display a non-CW list via [TraktListSource]. Surfaces the error
+  /// state only when nothing loaded AND the fetch actually failed (a partial
+  /// built-in success still shows what loaded); a genuinely empty list reads as
+  /// empty, not error.
   Future<void> _fetchList(TraktListChoice choice) async {
     final token = ++_fetchToken;
     setState(() {
@@ -403,7 +325,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       _error = false;
       _visible = const [];
     });
-    final loaded = await _loadItems(choice);
+    final loaded = await TraktListSource.instance.loadList(choice);
     if (!mounted || token != _fetchToken) return;
     if (loaded.items.isEmpty && loaded.failed) {
       setState(() {
@@ -423,172 +345,6 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     if (widget.isTelevision && _visible.isEmpty) _listNode.requestFocus();
   }
 
-  /// Load a list's items + whether the fetch failed.
-  ///
-  /// Built-in lists fetch the movies + shows endpoints concurrently ([_safeFetch]
-  /// returns null on failure) and merge (see [_mergeFetched]); [failed] is true
-  /// when either side failed. User (custom/liked) lists fetch in one ordered
-  /// call — preserving the list's own cross-type order and returning null on
-  /// failure — so they also get a real error state (no longer just "empty").
-  Future<({List<StremioMeta> items, bool failed})> _loadItems(
-      TraktListChoice choice) async {
-    final builtin = choice.builtin;
-    if (builtin != null) {
-      // Fetch each endpoint independently so one failing can't discard the other.
-      final results = await Future.wait([
-        _safeFetch(builtin, 'movies'),
-        _safeFetch(builtin, 'shows'),
-      ]);
-      final movies = results[0];
-      final shows = results[1];
-      return (
-        items: _mergeFetched(choice, movies ?? const [], shows ?? const []),
-        failed: movies == null || shows == null,
-      );
-    }
-
-    List<dynamic>? raw;
-    try {
-      raw = choice.liked
-          ? await TraktService.instance
-              .fetchLikedListItemsOrderedOrNull(choice.userList!)
-          : await TraktService.instance
-              .fetchCustomListItemsOrderedOrNull(_customListRef(choice));
-    } catch (_) {
-      raw = null;
-    }
-    if (raw == null) return (items: const <StremioMeta>[], failed: true);
-    // The single call already returns the list's order across types; each item
-    // carries its own `type`, so transformList resolves movies and shows alike
-    // (episodes/people were never requested). Dedup, preserving order.
-    final metas = TraktItemTransformer.transformList(raw);
-    final seen = <String>{};
-    final deduped = <StremioMeta>[];
-    for (final m in metas) {
-      if (seen.add(m.imdbId ?? m.id)) deduped.add(m);
-    }
-    return (items: deduped, failed: false);
-  }
-
-  /// Own-custom-list reference for the items endpoint — the slug (what Trakt's
-  /// examples use) when present, else the Trakt id.
-  String _customListRef(TraktListChoice choice) {
-    final ids = choice.userList?['ids'];
-    if (ids is Map) {
-      final slug = ids['slug'];
-      if (slug != null && slug.toString().isNotEmpty) return slug.toString();
-      final trakt = ids['trakt'];
-      if (trakt != null) return trakt.toString();
-    }
-    return choice.userListId ?? '';
-  }
-
-  /// Fetch one content type of a built-in list via [TraktService.fetchListOrNull]
-  /// (null on failure). The try/catch guards the one path it doesn't (a throw
-  /// while reading the stored token) so a Future.wait sibling is never lost.
-  Future<List<dynamic>?> _safeFetch(
-      TraktSeeAllList list, String contentType) async {
-    try {
-      return await TraktService.instance
-          .fetchListOrNull(list.apiValue, contentType);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Merge the movies + shows payloads into one deduped list. Time-ordered lists
-  /// are sorted by their row timestamp (newest first) so the combined timeline is
-  /// correct across types; rank-ordered lists are interleaved (movie, show, …) so
-  /// each side keeps its API rank and a top show isn't buried beneath every movie.
-  List<StremioMeta> _mergeFetched(
-      TraktListChoice choice, List<dynamic> movies, List<dynamic> shows) {
-    // Only built-in lists reach here (user lists load via a single ordered call).
-    final timeOrdered = choice.builtin?.isTimeOrdered ?? false;
-    final isHistory = choice.builtin == TraktSeeAllList.history;
-    final List<StremioMeta> ordered;
-    if (timeOrdered) {
-      // History shows are episode-shaped (the show is nested under 'show'); the
-      // movies side and every other list is a plain typed item.
-      final pairs = <({StremioMeta meta, int key})>[
-        ..._pairedByTime(movies, inferredType: 'movie', episodeShaped: false),
-        ..._pairedByTime(shows, inferredType: 'show', episodeShaped: isHistory),
-      ];
-      pairs.sort((a, b) => b.key.compareTo(a.key)); // newest first
-      ordered = [for (final p in pairs) p.meta];
-    } else {
-      final movieMetas =
-          TraktItemTransformer.transformList(movies, inferredType: 'movie');
-      final showMetas =
-          TraktItemTransformer.transformList(shows, inferredType: 'show');
-      ordered = <StremioMeta>[];
-      final maxLen = movieMetas.length > showMetas.length
-          ? movieMetas.length
-          : showMetas.length;
-      for (var i = 0; i < maxLen; i++) {
-        if (i < movieMetas.length) ordered.add(movieMetas[i]);
-        if (i < showMetas.length) ordered.add(showMetas[i]);
-      }
-    }
-    // Dedup by IMDB id: a binged show repeats across history rows, and a title
-    // could in principle surface on both endpoints. Sorted newest-first first, so
-    // the kept copy is the most recent occurrence.
-    final seen = <String>{};
-    final deduped = <StremioMeta>[];
-    for (final m in ordered) {
-      if (seen.add(m.imdbId ?? m.id)) deduped.add(m);
-    }
-    return deduped;
-  }
-
-  /// Transform a raw Trakt payload into (meta, timestamp) pairs for time-ordered
-  /// lists. [episodeShaped] pulls the show out of an episode-shaped history row
-  /// (whose own imdb is null); otherwise the row is a plain typed item.
-  List<({StremioMeta meta, int key})> _pairedByTime(
-    List<dynamic> raw, {
-    required String inferredType,
-    required bool episodeShaped,
-  }) {
-    final out = <({StremioMeta meta, int key})>[];
-    for (final r in raw) {
-      if (r is! Map<String, dynamic>) continue;
-      StremioMeta? meta;
-      if (episodeShaped) {
-        final show = r['show'];
-        if (show is Map<String, dynamic>) {
-          meta = TraktItemTransformer.transformItem({'show': show},
-              inferredType: 'show');
-        }
-      } else {
-        meta = TraktItemTransformer.transformItem(r, inferredType: inferredType);
-      }
-      if (meta == null) continue;
-      out.add((meta: meta, key: _rowTime(r)));
-    }
-    return out;
-  }
-
-  /// Epoch-ms of whichever known Trakt date field a row carries (watched_at,
-  /// rated_at, collected_at / last_collected_at, listed_at); 0 when absent so the
-  /// item sorts last rather than crashing.
-  int _rowTime(Map<String, dynamic> r) {
-    const fields = [
-      'watched_at',
-      'rated_at',
-      'collected_at',
-      'last_collected_at',
-      'listed_at',
-      'last_watched_at',
-    ];
-    for (final f in fields) {
-      final v = r[f];
-      if (v is String) {
-        final t = DateTime.tryParse(v);
-        if (t != null) return t.millisecondsSinceEpoch;
-      }
-    }
-    return 0;
-  }
-
   // ── TV filter-bar focus wiring ──────────────────────────────────────────────
 
   KeyEventResult _handleFilterKeys(FocusNode _, KeyEvent event) {
@@ -597,7 +353,13 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       event,
       _filterNodes,
       onDown: () => _gridKey.currentState?.focusFirst(),
-      onUp: () => _backNode.requestFocus(),
+      // Embedded (Discover tab) has no back button above the filter bar, so
+      // up-from-filters stays put; the standalone screen returns to it.
+      onUp: () {
+        if (!widget.embedded) _backNode.requestFocus();
+      },
+      // Embedded: Left off the leading Source dropdown escapes to the TV sidebar.
+      onLeftEdge: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
     );
   }
 
@@ -606,6 +368,17 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   @override
   Widget build(BuildContext context) {
     final n = _visible.length;
+    // Embedded (Discover tab): the host supplies the Scaffold + chrome, so render
+    // just the filter bar (with the leading Source dropdown) over the grid.
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFilterBar(),
+          Expanded(child: _buildBody()),
+        ],
+      );
+    }
     return Scaffold(
       backgroundColor: kSeeAllBg,
       body: SafeArea(
@@ -640,19 +413,33 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
           spacing: 12,
           runSpacing: 10,
           children: [
-            StremioDropdown<TraktListChoice>(
+            if (widget.leading != null) widget.leading!,
+            StremioDropdown<String>(
               label: 'List',
-              value: _list,
+              value: _primaryKey,
               isTelevision: widget.isTelevision,
               focusNode: _listNode,
               options: [
                 for (final l in TraktSeeAllList.values)
-                  StremioDropdownOption(TraktListChoice.builtin(l), l.label),
-                for (final c in _userLists)
-                  StremioDropdownOption(c, c.label),
+                  StremioDropdownOption(_builtinKey(l), l.label),
+                if (_customLists.isNotEmpty)
+                  const StremioDropdownOption(_customGroupKey, 'Custom Lists'),
+                if (_likedLists.isNotEmpty)
+                  const StremioDropdownOption(_likedGroupKey, 'Liked Lists'),
               ],
-              onSelected: _setList,
+              onSelected: _onPrimary,
             ),
+            if (_group != null)
+              StremioDropdown<TraktListChoice>(
+                label: _group == 'custom' ? 'Custom' : 'Liked',
+                value: _list,
+                isTelevision: widget.isTelevision,
+                focusNode: _groupNode,
+                options: [
+                  for (final c in _groupLists) StremioDropdownOption(c, c.label),
+                ],
+                onSelected: _setList,
+              ),
             StremioDropdown<String>(
               label: 'Show',
               value: _category,
@@ -752,6 +539,8 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       isBound: widget.isBound,
       onLoadMore: () {},
       onExitTop: widget.isTelevision ? () => _listNode.requestFocus() : null,
+      // Embedded: Left at grid column 0 escapes to the TV sidebar.
+      onExitLeft: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
     );
   }
 
