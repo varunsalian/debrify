@@ -452,16 +452,15 @@ class TorrentPlaybackService {
       return;
     }
 
-    // Genuinely non-IMDb catalog content (IPTV channels, TV, etc.) — a
-    // non-standard type AND no `tt…` id, so there's nothing to torrent-search.
-    // It resolves from the addon's own stream endpoint instead. (A non-standard
-    // type that DOES carry a `tt…` id, e.g. some `anime` catalogs, keeps the
-    // normal torrent search below so the on-device engines still run.)
-    final ct = meta.contentType;
-    if (ct != null &&
-        ct != 'movie' &&
-        ct != 'series' &&
-        !imdbId.startsWith('tt')) {
+    // Any non-`tt` id can't be resolved by the torrent engines — they key on
+    // `tt…` ids — so it must resolve from the addon's own /stream endpoint. This
+    // covers IPTV/TV channels AND kitsu/tmdb-only movie & series catalogs, and
+    // matches old home, whose quick-play always ran the Stremio-inclusive search
+    // (so a non-`tt` series episode played from the addon stream instead of
+    // failing a doomed torrent search). A `tt…` id — even a non-standard type
+    // like some anime catalogs — keeps the normal torrent search below so the
+    // on-device engines still run. (imdbId.isEmpty is already handled above.)
+    if (!imdbId.startsWith('tt')) {
       await _playAddonStream(context, imdbId,
           isMovie: isMovie,
           season: season,
