@@ -145,13 +145,18 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
   static const double _colGap = 16;
 
   /// Column count from a target poster width, so the grid matches Stremio's
-  /// denser ~180px posters rather than the roomier board tile size (the shared
-  /// catalogGridColumnsFor caps at 5, which reads as oversized here).
+  /// denser posters rather than the roomier board tile size.
+  ///
+  /// Android TV renders on a low logical canvas (~960×540 at 2.0 DPR), so a
+  /// large target yields only ~4 columns and posters that eat over half the
+  /// screen height. Aim for a smaller poster (~130px) → ~6–7 columns and ~2
+  /// rows of comfortably-sized cards, matching how Stremio's own grid reads on
+  /// a 10-foot display.
   int _columnsFor(double width) {
-    final target = widget.isTelevision ? 210.0 : 178.0;
+    final target = widget.isTelevision ? 132.0 : 178.0;
     final usable = (width - _hPad).clamp(0.0, double.infinity);
     final n = ((usable + _colGap) / (target + _colGap)).floor();
-    return n.clamp(widget.isTelevision ? 4 : 3, 10);
+    return n.clamp(widget.isTelevision ? 5 : 3, 10);
   }
 
   KeyEventResult _handleArrows(int index, int cols, KeyEvent event) {
