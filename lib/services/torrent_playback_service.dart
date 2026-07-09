@@ -593,8 +593,9 @@ class TorrentPlaybackService {
 
   /// Resolve a 'local' bound source (on-device movie file or series folder) into
   /// a playable [_Resolved]. Self-heals (removes) a source whose file/folder is
-  /// gone. Returns null when unavailable so the caller falls back to search.
-  static Future<_Resolved?> _resolveLocalBound(
+  /// gone. Returns (null, hint) when unavailable so the caller falls back to
+  /// search — the hint (may be null) says why, using Home's exact wording.
+  static Future<(_Resolved?, String?)> _resolveLocalBound(
     String imdbId,
     SeriesSource source,
     PlaybackMeta meta,
@@ -602,23 +603,35 @@ class TorrentPlaybackService {
     final localPath = (source.localPath?.trim().isNotEmpty ?? false)
         ? source.localPath!.trim()
         : source.debridTorrentId.trim();
-    if (localPath.isEmpty) return null;
+    if (localPath.isEmpty) return (null, null);
 
     final isSeries = meta.contentType == 'series' || source.isLocalSeriesFolder;
     if (isSeries) {
-      if (meta.season == null || meta.episode == null) return null;
+      if (meta.season == null || meta.episode == null) return (null, null);
       if (!await Directory(localPath).exists()) {
         await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-        return null;
+        return (
+          null,
+          'Saved local folder is no longer available. Falling back to search.'
+        );
       }
       final episodes = await LocalBoundSourceService.scanSeriesFolder(localPath);
       if (episodes.isEmpty) {
         await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-        return null;
+        return (
+          null,
+          'Saved local folder has no playable episodes. Falling back to search.'
+        );
       }
       final targetIndex = episodes.indexWhere(
           (e) => e.season == meta.season && e.episode == meta.episode);
-      if (targetIndex < 0) return null; // episode not in folder → search fallback
+      if (targetIndex < 0) {
+        // Episode not in folder → search fallback.
+        return (
+          null,
+          '${_seLabel(meta.season!, meta.episode!)} not found in local source. Falling back to search.'
+        );
+      }
       final playlist = episodes
           .map((e) => PlaylistEntry(
                 url: Uri.file(e.file.path).toString(),
@@ -628,11 +641,14 @@ class TorrentPlaybackService {
                 sizeBytes: e.sizeBytes,
               ))
           .toList();
-      return _Resolved(
-        title: source.torrentName,
-        playUrl: playlist[targetIndex].url,
-        playlist: playlist,
-        startIndex: targetIndex,
+      return (
+        _Resolved(
+          title: source.torrentName,
+          playUrl: playlist[targetIndex].url,
+          playlist: playlist,
+          startIndex: targetIndex,
+        ),
+        null
       );
     }
 
@@ -641,7 +657,10 @@ class TorrentPlaybackService {
     final fileName = FileUtils.getFileName(localPath);
     if (!await file.exists() || !FileUtils.isVideoFile(fileName)) {
       await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-      return null;
+      return (
+        null,
+        'Saved local source is no longer available. Falling back to search.'
+      );
     }
     final stat = await file.stat();
     final videoUrl = (source.localUri?.trim().isNotEmpty ?? false)
@@ -649,19 +668,62 @@ class TorrentPlaybackService {
         : Uri.file(localPath).toString();
     final title =
         source.torrentName.trim().isNotEmpty ? source.torrentName : fileName;
-    return _Resolved(
-      title: title,
-      playUrl: videoUrl,
-      playlist: [
-        PlaylistEntry(
-          url: videoUrl,
-          title: title,
-          provider: SeriesSource.localService,
-          sizeBytes: stat.size,
-        ),
-      ],
-      startIndex: 0,
+    return (
+      _Resolved(
+        title: title,
+        playUrl: videoUrl,
+        playlist: [
+          PlaylistEntry(
+            url: videoUrl,
+            title: title,
+            provider: SeriesSource.localService,
+            sizeBytes: stat.size,
+          ),
+        ],
+        startIndex: 0,
+      ),
+      null
     );
+  }
+
+  /// "S04E01"-style label for bound-source hint messages.
+  static String _seLabel(int season, int episode) =>
+      'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}';
+
+  /// Whether the resolved add actually contains [season]/[episode] — the same
+  /// SeriesParser filename check Home runs before launching a bound pack
+  /// (_findEpisodeInFilenames). Without it, a binding that only covers earlier
+  /// seasons still resolves fine and the player silently starts a different
+  /// episode (last-played or S1E1) instead of falling back to search.
+  ///
+  /// Parses BASENAMES only — Home and the player's SeriesPlaylist both parse
+  /// the filename, not the folder path; a folder segment like
+  /// "Show.S04E01-E10.Pack/" would make this check disagree with the player.
+  ///
+  /// Errs toward playing: when the resolve exposes no real filename
+  /// (single-file RD/PikPak, RAR archives) or nothing in the pack parses to a
+  /// season/episode at all (absolute-numbered anime, "Episode 5" naming),
+  /// trust the binding and let the player open it — rejecting those would
+  /// regress packs that played fine before this check existed.
+  static bool _resolvedHasEpisode(_Resolved r, int season, int episode) {
+    final List<String> names;
+    if (r.playlist != null && r.playlist!.length > 1) {
+      names = r.playlist!.map((e) => _fileName(e.title)).toList();
+    } else {
+      // Single-file resolve: only RD/PikPak leave fileName unset (RD single
+      // and RAR resolves carry just the torrent name, which isn't the file).
+      final single = r.fileName ??
+          ((r.playlist?.isNotEmpty ?? false) ? r.playlist!.first.title : null);
+      if (single == null) return true; // no filename to judge → play
+      names = <String>[_fileName(single)];
+    }
+    var sawEpisode = false;
+    for (final info in SeriesParser.parsePlaylist(names)) {
+      if (info.season == null || info.episode == null) continue;
+      if (info.season == season && info.episode == episode) return true;
+      sawEpisode = true;
+    }
+    return !sawEpisode;
   }
 
   /// Reconstruct a [Torrent] from a stored binding so it can flow through the
@@ -722,12 +784,21 @@ class TorrentPlaybackService {
       }
     }
 
+    // Series requests carry a concrete season+episode (gated by the caller);
+    // movies leave them null and skip the episode-presence check.
+    final season = meta.season;
+    final episode = meta.episode;
+    // Why the most recent source failed — shown once after the loop so the
+    // user knows why playback fell back to a normal search (mirrors Home's
+    // last-source hints in _tryPlayFromBoundSource*).
+    String? fallbackHint;
+
     for (final source in usable) {
       if (cancel.cancelled) return true; // Cancel already dismissed the overlay.
 
       // Local (on-device file/folder) sources resolve without a debrid add.
       if (source.debridService == SeriesSource.localService) {
-        final r = await _resolveLocalBound(imdbId, source, meta);
+        final (r, hint) = await _resolveLocalBound(imdbId, source, meta);
         if (cancel.cancelled) return true;
         if (r != null) {
           closeLoading();
@@ -740,18 +811,56 @@ class TorrentPlaybackService {
           closeLoading();
           return false;
         }
+        // Always overwrite (even with null) so the hint reflects THIS
+        // source's failure, never a stale one from an earlier attempt.
+        fallbackHint = hint;
         continue; // unavailable / episode not found → try next source
       }
 
       final prov = _providerFromStored(source.debridService);
       final t = _torrentFromSource(source);
       _Resolved? res;
+      // Default reason if this attempt fails without a more specific one
+      // (no magnet, empty play URL, not-cached, transient error) — Home's
+      // generic wording. Overwritten below when we know more.
+      fallbackHint = 'Saved source is no longer available. Falling back to search.';
       try {
         final magnet = await _magnetFor(t);
         if (magnet == null) continue;
         if (cancel.cancelled) return true;
         final r = await _add(prov, magnet, t);
-        if (r.playUrl != null && r.playUrl!.isNotEmpty) res = r;
+        if (r.playUrl != null && r.playUrl!.isNotEmpty) {
+          if (season != null &&
+              episode != null &&
+              !_resolvedHasEpisode(r, season, episode)) {
+            // Pack resolved fine but doesn't contain the requested episode
+            // (e.g. an S1–S3 binding asked for S4E1) — skip it, matching
+            // Home, instead of letting the player silently start a
+            // different file. Keep the binding: it's still valid for the
+            // seasons it covers.
+            fallbackHint =
+                '${_seLabel(season, episode)} not in saved sources. Use Edit Source to change them.';
+            // RD's addMagnet / PikPak's addOfflineDownload created a fresh
+            // account entry just for this attempt — delete it so repeated
+            // fallbacks don't pile up orphans. TorBox/AllDebrid dedup the
+            // add to an existing entry (deleting could break other bindings)
+            // and Premiumize adds nothing, so those are left alone.
+            if (prov == 'debrid' && (r.rdTorrentId?.isNotEmpty ?? false)) {
+              try {
+                final apiKey = (await StorageService.getApiKey()) ?? '';
+                await DebridService.deleteTorrent(apiKey, r.rdTorrentId!);
+              } catch (_) {}
+            } else if (prov == 'pikpak' &&
+                (r.pikpakFileId?.isNotEmpty ?? false)) {
+              try {
+                await PikPakApiService.instance
+                    .batchDeleteFiles([r.pikpakFileId!]);
+              } catch (_) {}
+            }
+          } else {
+            res = r;
+          }
+        }
       } on TorrentNotCachedException catch (e) {
         // Bound RD source is no longer cached → self-heal and try the next.
         try {
@@ -763,6 +872,8 @@ class TorrentPlaybackService {
         try {
           await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
         } catch (_) {}
+        fallbackHint =
+            'Saved source is not ready on AllDebrid. Falling back to search.';
       } catch (_) {
         // TorBox/Premiumize uncached or transient — keep binding, try next.
       }
@@ -780,6 +891,9 @@ class TorrentPlaybackService {
       }
     }
     closeLoading();
+    // Mirror Home: say why bound playback failed before the caller falls back
+    // to a normal search.
+    if (fallbackHint != null && context.mounted) _snack(context, fallbackHint);
     return false;
   }
 
@@ -948,6 +1062,7 @@ class TorrentPlaybackService {
               playlist: playlist,
               startIndex: startIndex,
               isRarArchive: isRar,
+              rdTorrentId: rd.id.isNotEmpty ? rd.id : null,
             );
           }
           return _Resolved(
@@ -955,7 +1070,14 @@ class TorrentPlaybackService {
             playUrl: playUrl,
             downloadUrls: playUrl != null ? [playUrl] : const [],
             openInTab: open,
+            // Single video file: expose its real name so the bound-source
+            // episode check can judge it (RAR resolves keep playlist null AND
+            // fileName null, staying deliberately lenient).
+            fileName: (playlist != null && playlist.length == 1)
+                ? playlist.first.title
+                : null,
             isRarArchive: isRar,
+            rdTorrentId: rd.id.isNotEmpty ? rd.id : null,
           );
         }
       case 'torbox':
@@ -2017,6 +2139,10 @@ class TorrentPlaybackService {
           MainPageBridge.openPikPakFolder?.call(capturedFileId, title),
       playlist: playlist.length > 1 ? playlist : null,
       startIndex: startIndex,
+      // Single video file: expose its real name so the bound-source episode
+      // check can judge it instead of passing vacuously.
+      fileName: playlist.length == 1 ? playlist.first.title : null,
+      pikpakFileId: capturedFileId,
     );
   }
 
@@ -2328,6 +2454,15 @@ class _Resolved {
   /// TorBox only: the torrent id, for the "Copy Download Link (Zip)" action.
   final int? torboxTorrentId;
 
+  /// RD only: the account entry this add created (RD's addMagnet always makes
+  /// a fresh entry), so a rejected bound-source attempt can delete it again.
+  final String? rdTorrentId;
+
+  /// PikPak only: the drive entry (file/folder) this add created (PikPak's
+  /// addOfflineDownload always makes a fresh entry), so a rejected
+  /// bound-source attempt can delete it again.
+  final String? pikpakFileId;
+
   const _Resolved({
     required this.title,
     this.playUrl,
@@ -2338,6 +2473,8 @@ class _Resolved {
     this.fileName,
     this.isRarArchive = false,
     this.torboxTorrentId,
+    this.rdTorrentId,
+    this.pikpakFileId,
   });
 
   bool get hasPlaylist => playlist != null && playlist!.length > 1;
