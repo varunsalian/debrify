@@ -48,6 +48,7 @@ import 'see_all/trakt_see_all_screen.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
+import 'merged_series_detail_screen.dart';
 import 'debrid_downloads_screen.dart';
 import 'episodes_screen.dart';
 import 'stremio_tv/stremio_tv_service.dart';
@@ -221,6 +222,10 @@ class _SearchScreenState extends State<SearchScreen> {
   /// True when PikPak is the ONLY configured provider. PikPak can't quick-play
   /// (it queues a cloud download), so catalog "Play" is hidden — matching Home.
   bool _pikpakOnly = false;
+
+  /// Experimental flag: route series taps to the merged detail+episodes page.
+  /// Loaded once on init; movies and the flag-off path keep the existing flow.
+  bool _mergedSeriesPage = false;
 
   /// imdbId → number of pinned (bound) sources — drives the board tile badge,
   /// detail Sources tint, and the Episodes "Source(s)" button count.
@@ -485,6 +490,7 @@ class _SearchScreenState extends State<SearchScreen> {
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     _boardScroll.addListener(_onBoardScroll);
     _refreshTraktAuthState();
+    _loadMergedSeriesFlag();
     // The dedicated Search tab only shows a field + blank prompt until a query,
     // so it skips the whole board pipeline (home catalogs, Continue Watching,
     // Trakt, favourites) — catalog search fetches its addons on demand. It also
@@ -2461,6 +2467,14 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ── Playback / detail delegation ───────────────────────────────────────────
 
+  /// Load the experimental merged-series-page flag once on init.
+  Future<void> _loadMergedSeriesFlag() async {
+    final on = await StorageService.getMergedSeriesPageEnabled();
+    if (mounted && on != _mergedSeriesPage) {
+      setState(() => _mergedSeriesPage = on);
+    }
+  }
+
   void _openItem(
     StremioMeta item,
     StremioAddon addon, {
@@ -2494,6 +2508,64 @@ class _SearchScreenState extends State<SearchScreen> {
           caption: 'Remove',
         ),
     ];
+
+    // Experimental: series route to the merged detail+episodes page. Movies and
+    // the flag-off path fall through to the existing CatalogItemDetailScreen.
+    if ((item.type == 'series' || item.type == 'movie') && _mergedSeriesPage) {
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              settings: const RouteSettings(name: kCatalogDetailRouteName),
+              builder: (_) => MergedDetailScreen(
+                item: item,
+                addon: addon,
+                isTelevision: widget.isTelevision,
+                showQuickPlay: !_pikpakOnly,
+                isTraktSource: isTraktSource,
+                onResume: () => _onCatalogPlay(
+                  item,
+                  addon,
+                  isTraktSource: isTraktSource,
+                  skipEpisodeFallback: true,
+                ),
+                // Movie only: the Sources (manual list) button.
+                onBrowse: item.type == 'movie'
+                    ? () => _onCatalogBrowse(item, addon,
+                        isTraktSource: isTraktSource)
+                    : null,
+                onItemSelected: _browseSelection,
+                onQuickPlay: _playSelection,
+                boundSourceCount: _boundCountFor,
+                onSelectSource: _handleEditOrSelectSource,
+                traktMenuOptions: options,
+                onTraktAction: (a) => _handleDetailQuickAction(
+                  item,
+                  addon,
+                  a,
+                  inCw: inCw,
+                  imdb: imdb,
+                ),
+                recommendationsLoader: imdb != null
+                    ? () => _stremio.getRecommendations(
+                        imdbId: imdb,
+                        type: item.type,
+                      )
+                    : null,
+                onRecommendationTap: imdb != null
+                    ? (rec) => _openItem(rec, rec.sourceAddon ?? addon)
+                    : null,
+                metaEnricher: (id, type) =>
+                    _stremio.fetchMetaDetails(imdbId: id, type: type),
+              ),
+            ),
+          )
+          .then((_) {
+            _refreshBoundSources();
+            _loadContinueWatching();
+            _refreshTraktAuthState();
+          });
+      return;
+    }
 
     Navigator.of(context)
         .push(
@@ -3176,6 +3248,11 @@ class _SearchScreenState extends State<SearchScreen> {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    // Merged series page: episodes are already shown inline, so a no-IMDb
+    // series must NOT fall back to pushing a standalone EpisodesScreen (that
+    // would stack a duplicate episode list on top). It resolves the resume
+    // episode against the raw catalog id and plays via the addon /stream path.
+    bool skipEpisodeFallback = false,
   }) async {
     // Set the active addon before any early return so a movie play carries the
     // right addon id into meta.addonId (addon-stream resume/next), instead of a
@@ -3188,19 +3265,23 @@ class _SearchScreenState extends State<SearchScreen> {
       return;
     }
 
-    final imdbId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
+    final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
     // Without an IMDb id we can't search torrents for a specific episode, so
-    // fall back to the manual episode picker.
-    if (imdbId.isEmpty) {
+    // fall back to the manual episode picker — except from the merged page
+    // (episodes are inline there), where we play via the raw id's addon stream.
+    if (ttId.isEmpty && !skipEpisodeFallback) {
       _openEpisodes(item, addon, isTraktSource: isTraktSource);
       return;
     }
+    // Play id: the `tt…` id when present (torrent-resolvable); otherwise the raw
+    // catalog id, which playFromSelection routes to the addon /stream endpoint.
+    final playId = ttId.isNotEmpty ? ttId : (item.effectiveImdbId ?? item.id);
 
     // Resolve where to resume, mirroring EpisodesScreen's landing logic:
     // last-played episode for this show (by imdbId, then by title), else S01E01.
     int? season;
     int? episode;
-    final byId = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
+    final byId = await StorageService.getLastPlayedEpisodeByImdbId(playId);
     season = byId?['season'] as int?;
     episode = byId?['episode'] as int?;
     if (season == null || episode == null) {
@@ -3216,7 +3297,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
     _playSelection(
       AdvancedSearchSelection(
-        imdbId: imdbId,
+        imdbId: playId,
         isSeries: true,
         title: item.name,
         year: item.year,

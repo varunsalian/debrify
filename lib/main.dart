@@ -226,6 +226,23 @@ class DebrifyApp extends StatelessWidget {
               );
             }
 
+            // Map the remote "OK" keycodes to widget activation app-wide.
+            // Flutter's default only maps enter/space to ActivateIntent, but TV
+            // remotes commonly send KEYCODE_DPAD_CENTER (select) or
+            // KEYCODE_BUTTON_A (gameButtonA), which otherwise leave plain
+            // Material controls (InkWell / IconButton / DropdownButton / ListTile)
+            // dead on OK. This mirrors [isActivateKey] and is purely additive —
+            // screens with their own onKeyEvent activation still take precedence
+            // (Focus.onKeyEvent runs before Shortcuts), so nothing regresses.
+            content = Shortcuts(
+              shortcuts: const <ShortcutActivator, Intent>{
+                SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+                SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+                SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+              },
+              child: content,
+            );
+
             return MediaQuery(
               data: MediaQuery.of(context).copyWith(
                 // TV: No text scaling (1.0) to prevent zoom issues
