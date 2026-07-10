@@ -6778,6 +6778,98 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     await _runSearch();
   }
 
+  /// Series pack/bind post-filter — ported verbatim from the old Home
+  /// ([TorrentSearchScreen]) so this Sources list matches it. For a series with
+  /// no specific episode: (1) drop direct-link (single-episode) streams — they
+  /// can't be a season/series pack; (2) when a season is requested but no
+  /// episode, keep only torrents that cover that season.
+  List<Torrent> _filterSeriesPacks(
+    List<Torrent> torrents,
+    AdvancedSearchSelection sel,
+  ) {
+    var filtered = torrents;
+
+    // Direct links are individual episode streams that can't be added as a
+    // season/series pack. Movies are single files, so they're left alone.
+    if (sel.isSeries && sel.episode == null) {
+      filtered = filtered
+          .where((torrent) => torrent.streamType == StreamType.torrent)
+          .toList(growable: false);
+    }
+
+    // Filter by season when a season is specified but no episode, so only
+    // torrents that include the requested season remain.
+    if (sel.isSeries && sel.season != null && sel.episode == null) {
+      final requestedSeason = sel.season!;
+      filtered = filtered
+          .where((torrent) {
+            switch (torrent.coverageType) {
+              case 'completeSeries':
+                // Always include complete series (they include all seasons).
+                return true;
+              case 'multiSeasonPack':
+                // Include if the requested season is within the range.
+                if (torrent.startSeason != null && torrent.endSeason != null) {
+                  return torrent.startSeason! <= requestedSeason &&
+                      torrent.endSeason! >= requestedSeason;
+                }
+                // If season range data is missing, exclude to be safe.
+                return false;
+              case 'seasonPack':
+                // Include only if it matches the requested season exactly.
+                return torrent.seasonNumber == requestedSeason;
+              case 'singleEpisode':
+                // Keep only if the name resolves to the requested season.
+                final name = torrent.name.toUpperCase();
+                final seasonPadded =
+                    requestedSeason.toString().padLeft(2, '0');
+                final seasonPatterns = [
+                  'S$seasonPadded', // S04
+                  'S$requestedSeason', // S4
+                  'SEASON $requestedSeason', // Season 4
+                  'SEASON$requestedSeason', // Season4
+                  '${requestedSeason}X', // 4x (for 4x01 format)
+                ];
+                for (final pattern in seasonPatterns) {
+                  if (name.contains(pattern)) return true;
+                }
+                // If we can't determine the season, exclude the single episode.
+                return false;
+              default:
+                // Unknown coverage type — keep it to avoid over-filtering.
+                return true;
+            }
+          })
+          .toList(growable: false);
+    }
+    return filtered;
+  }
+
+  /// Order a series pack search exactly like the old Home's default "relevance"
+  /// sort: coverage priority ascending (completeSeries → multiSeason →
+  /// seasonPack → singleEpisode), then season count descending, then the search
+  /// service's existing seeders-descending order (preserved via a stable index
+  /// tiebreak). Only applies to a series search with no specific episode.
+  List<Torrent> _sortSeriesPacks(
+    List<Torrent> torrents,
+    AdvancedSearchSelection sel,
+  ) {
+    if (!(sel.isSeries && sel.episode == null) || torrents.length < 2) {
+      return torrents;
+    }
+    final indexed = [
+      for (var i = 0; i < torrents.length; i++) (i, torrents[i]),
+    ];
+    indexed.sort((a, b) {
+      final c = a.$2.coveragePriority.compareTo(b.$2.coveragePriority);
+      if (c != 0) return c;
+      final s = b.$2.seasonCount.compareTo(a.$2.seasonCount); // more seasons first
+      if (s != 0) return s;
+      return a.$1.compareTo(b.$1); // stable → keeps seeders-desc within a tier
+    });
+    return [for (final e in indexed) e.$2];
+  }
+
   /// Run the source search (free-text keyword pack search in keyword-bind mode,
   /// otherwise the IMDb-exact search) and rebuild the row focus nodes. Guarded
   /// by a token so a slow earlier re-search can't clobber a newer one's results
@@ -6812,7 +6904,16 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               contentType: sel.contentType,
             );
       if (!mounted || token != _searchToken) return;
-      final torrents = (res['torrents'] as List).cast<Torrent>();
+      final rawTorrents = (res['torrents'] as List).cast<Torrent>();
+      // Series pack/bind post-processing — ported from the old Home
+      // (torrent_search_screen) so this list matches: for a series with no
+      // specific episode, drop direct-link (single-episode) streams, season-
+      // filter when a season is requested, then float season/complete packs to
+      // the top (coverage priority).
+      final torrents = _sortSeriesPacks(
+        _filterSeriesPacks(rawTorrents, sel),
+        sel,
+      );
       for (var i = 0; i < torrents.length; i++) {
         _nodes.add(FocusNode(debugLabel: 'src_$i'));
       }
