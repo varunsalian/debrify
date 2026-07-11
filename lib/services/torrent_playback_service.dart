@@ -1639,6 +1639,39 @@ class TorrentPlaybackService {
     };
   }
 
+  /// Old-screen parity: playing a catalog MOVIE remembers the just-played
+  /// torrent as that title's single bound source (override), so the catalog
+  /// flips "Select Source" → "Edit Source" and the next play reuses it. Series
+  /// never auto-bind (they accumulate an explicit priority list via "Pin as
+  /// source"); keyword play (meta == null) and non-IMDb / on-device plays don't
+  /// bind either. Best-effort — a storage hiccup must never break playback.
+  static Future<void> _autoBindMovieOnPlay(
+    PlaybackMeta? meta,
+    Torrent? winner,
+    String provider,
+  ) async {
+    if (meta == null ||
+        meta.contentType != 'movie' ||
+        meta.imdbId == null ||
+        meta.imdbId!.isEmpty ||
+        winner == null ||
+        winner.infohash.isEmpty ||
+        provider == SeriesSource.localService) {
+      return;
+    }
+    try {
+      await SeriesSourceService.setSources(meta.imdbId!, [
+        SeriesSource(
+          torrentHash: winner.infohash,
+          torrentName: winner.name,
+          debridService: storedProviderKey(provider),
+          debridTorrentId: '',
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      ]);
+    } catch (_) {}
+  }
+
   /// Launch the player. Passes the full source list + a resolver (so the player
   /// shows the in-player "Sources" switcher) and content metadata (so Continue
   /// Watching, subtitles and the Episodes button work) — matching Home.
@@ -1686,6 +1719,9 @@ class TorrentPlaybackService {
       await _launchWithDeoVR(context, videoUrl: r.playUrl!, filename: title);
       return;
     }
+    // Remember a catalog movie's source before handing off to the player, so the
+    // binding is saved even if the screen tears down during playback.
+    await _autoBindMovieOnPlay(meta, winner, provider);
     if (!context.mounted) return;
     await VideoPlayerLauncher.push(
       context,

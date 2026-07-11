@@ -4092,15 +4092,20 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Catalog auto-best play — the service picks the provider, shows the real
   /// cinematic overlay, searches, and plays (with source list + content
   /// metadata so the in-player Sources switcher + Continue Watching work).
-  Future<void> _playSelection(AdvancedSearchSelection sel) =>
-      TorrentPlaybackService.playFromSelection(
-        context,
-        imdbId: sel.imdbId,
-        isMovie: !sel.isSeries,
-        season: sel.season,
-        episode: sel.episode,
-        meta: _metaFor(sel),
-      );
+  Future<void> _playSelection(AdvancedSearchSelection sel) async {
+    await TorrentPlaybackService.playFromSelection(
+      context,
+      imdbId: sel.imdbId,
+      isMovie: !sel.isSeries,
+      season: sel.season,
+      episode: sel.episode,
+      meta: _metaFor(sel),
+    );
+    // Old-screen parity: a movie auto-binds its source on play, so refresh the
+    // board's bound badges once playback returns (harmless no-op for series and
+    // non-IMDb titles, which don't auto-bind).
+    if (mounted) await _refreshBoundSources();
+  }
 
   /// Manual sources list in-tab — the screen searches itself (own loading) and
   /// each tap plays with the full source list + content metadata.

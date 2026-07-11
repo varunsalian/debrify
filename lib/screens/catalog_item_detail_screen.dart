@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../services/app_route_observer.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
+import '../services/series_source_service.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/shimmer.dart';
@@ -72,7 +74,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
 }
 
 class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, RouteAware {
   final FocusNode _playFocus = FocusNode(debugLabel: 'detail-play');
   final FocusNode _browseFocus = FocusNode(debugLabel: 'detail-browse');
 
@@ -109,6 +111,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// Drives the staggered entrance reveal of the content sections.
   late final AnimationController _revealCtrl;
 
+  /// Live bound-source flag (drives the Play button's "pinned" accent). Seeded
+  /// from the parent's snapshot, then re-read when the player route pops back
+  /// onto this screen — so playing a movie (which auto-binds its source) flips
+  /// the accent on immediately instead of staying stale until reopen.
+  late bool _hasBoundSource = widget.hasBoundSource;
+
   @override
   void initState() {
     super.initState();
@@ -133,6 +141,39 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _loadParentsGuide();
       _loadImdbEnrichment();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) appRouteObserver.subscribe(this, route);
+  }
+
+  /// The player pushes on top of this detail screen, so it pops BACK here when
+  /// playback ends. Re-read the binding then: a movie auto-binds on play, and
+  /// the Sources screen (also pushed above) can bind/unbind too.
+  @override
+  void didPopNext() {
+    _refreshBoundState();
+  }
+
+  /// Re-read this title's bound-source count and flip the Play accent to match.
+  Future<void> _refreshBoundState() async {
+    final imdb = _boundKey();
+    if (imdb == null) return;
+    final bound = (await SeriesSourceService.getSources(imdb)).isNotEmpty;
+    if (mounted && bound != _hasBoundSource) {
+      setState(() => _hasBoundSource = bound);
+    }
+  }
+
+  /// The imdb key the binding store is keyed on — mirrors the host's `_imdbOf`
+  /// (a `tt…` id, whether it rode in as `imdbId` or the raw catalog id).
+  String? _boundKey() {
+    final item = widget.item;
+    final id = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
+    return (id != null && id.isNotEmpty) ? id : null;
   }
 
   /// When the item arrived sparse — no year, rating, or genres, the
@@ -235,6 +276,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _revealCtrl.dispose();
     _playFocus.dispose();
     _browseFocus.dispose();
@@ -1171,7 +1213,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         compact: !_wide,
         showQuickPlay: widget.showQuickPlay,
         isSeries: item.type == 'series',
-        hasBoundSource: widget.hasBoundSource,
+        hasBoundSource: _hasBoundSource,
         playFocus: _playFocus,
         browseFocus: _browseFocus,
         tv: widget.isTelevision,
