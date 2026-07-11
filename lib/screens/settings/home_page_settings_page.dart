@@ -20,6 +20,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String _selectedTraktContentType = 'movies';
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
+  bool _trailerAutoplayEnabled = false;
   List<StremioAddon> _addons = [];
 
   @override
@@ -38,6 +39,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final catalogId = await StorageService.getHomeDefaultCatalogId();
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
       final continueWatchingEnabled = await StorageService.getHomeContinueWatchingEnabled();
+      final trailerAutoplayEnabled = await StorageService.getDetailTrailerAutoplayEnabled();
       final traktListType = await StorageService.getHomeDefaultTraktListType();
       final traktContentType = await StorageService.getHomeDefaultTraktContentType();
 
@@ -65,6 +67,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _selectedTraktContentType = traktContentType ?? 'movies';
         _hideProviderCards = hideProviderCards;
         _continueWatchingEnabled = continueWatchingEnabled;
+        _trailerAutoplayEnabled = trailerAutoplayEnabled;
         _loading = false;
       });
     } catch (e) {
@@ -462,6 +465,37 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     if (!mounted) return;
                     setState(() => _continueWatchingEnabled = value);
                     MainPageBridge.notifyHomeSettingsChanged();
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save setting: $e')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Trailer autoplay toggle
+            Card(
+              child: SwitchListTile(
+                secondary: Icon(
+                  Icons.movie_filter_rounded,
+                  color: theme.colorScheme.primary,
+                ),
+                title: const Text('Autoplay Trailers'),
+                subtitle: const Text(
+                  'Play a trailer (with sound) behind the movie/series detail '
+                  'page. '
+                  'Falls back to the poster when off or unavailable.',
+                ),
+                value: _trailerAutoplayEnabled,
+                onChanged: (value) async {
+                  try {
+                    await StorageService.setDetailTrailerAutoplayEnabled(value);
+                    if (!mounted) return;
+                    setState(() => _trailerAutoplayEnabled = value);
                   } catch (e) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(

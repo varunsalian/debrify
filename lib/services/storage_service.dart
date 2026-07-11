@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
+import 'android_native_downloader.dart';
 import 'debrid_service.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
@@ -354,6 +355,28 @@ class StorageService {
   static Future<void> setMergedSeriesPageEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('merged_series_page_enabled', enabled);
+  }
+
+  /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
+  /// metadata addon provides one. Default: ON everywhere EXCEPT Android TV,
+  /// where autoplay + audio is heavy on weak boxes and intrusive on a shared
+  /// screen. Once the user toggles it (Settings → Home Page) their explicit
+  /// choice is stored and the per-device default no longer applies.
+  static Future<bool> getDetailTrailerAutoplayEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getBool('detail_trailer_autoplay_enabled');
+    if (stored != null) return stored;
+    // Unset → per-device default. isTelevision() is false on non-Android.
+    bool isTv = false;
+    try {
+      isTv = await AndroidNativeDownloader.isTelevision();
+    } catch (_) {}
+    return !isTv;
+  }
+
+  static Future<void> setDetailTrailerAutoplayEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('detail_trailer_autoplay_enabled', enabled);
   }
 
   static Future<bool> getTorboxCacheCheckEnabled() async {

@@ -68,6 +68,21 @@ class MainPageBridge {
   /// keep a launch mask up until app resume so the bare UI doesn't flash
   /// during the external activity's launch transition.
   static VoidCallback? onExternalPlayerLaunched;
+
+  /// Multicast companions to [onExternalPlayerLaunched] (which is a single
+  /// slot owned by the torrent search screen). Any number of listeners may
+  /// register — e.g. the detail page's ambient trailer stops itself when
+  /// playback moves to an external player, since no Flutter route is pushed
+  /// in that case and window focus is an unreliable proxy on desktop.
+  static final Set<VoidCallback> _externalPlayerLaunchListeners = {};
+
+  static void addExternalPlayerLaunchListener(VoidCallback listener) {
+    _externalPlayerLaunchListeners.add(listener);
+  }
+
+  static void removeExternalPlayerLaunchListener(VoidCallback listener) {
+    _externalPlayerLaunchListeners.remove(listener);
+  }
   static Future<void> Function(String channelId)? watchDebrifyTvChannel;
   static Future<void> Function(String channelId)? watchStremioTvChannel;
   static Future<void> Function(Map<String, dynamic> item)?
@@ -197,6 +212,10 @@ class MainPageBridge {
   /// (see [onExternalPlayerLaunched]).
   static void notifyExternalPlayerLaunched() {
     onExternalPlayerLaunched?.call();
+    // Copy so a listener removing itself mid-iteration can't break the loop.
+    for (final listener in List.of(_externalPlayerLaunchListeners)) {
+      listener();
+    }
   }
 
   static void notifyAutoLaunchFailed([String? reason]) {

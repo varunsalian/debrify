@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -8,8 +6,10 @@ import '../models/advanced_search_selection.dart';
 import '../models/playlist_view_mode.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
+import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/youtube_service.dart';
+import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
@@ -81,8 +81,7 @@ class MergedDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<MergedDetailScreen> createState() =>
-      _MergedDetailScreenState();
+  State<MergedDetailScreen> createState() => _MergedDetailScreenState();
 }
 
 class _MergedDetailScreenState extends State<MergedDetailScreen> {
@@ -105,6 +104,27 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   /// Guards against a double-launch while a trailer's streams resolve.
   bool _trailerLoading = false;
 
+  /// Whether OTT-style trailer autoplay behind the backdrop is on (settings).
+  bool _trailerAutoplayEnabled = false;
+
+  /// Resolved trailer streams, pre-fetched for the ambient backdrop.
+  YoutubeResolvedStreams? _trailerStreams;
+
+  /// Handle to the backdrop so the Trailer button can promote the *same* player
+  /// to fullscreen in place (seamless — no second decoder, no re-buffer).
+  final GlobalKey<HeroTrailerBackdropState> _backdropKey = GlobalKey();
+
+  /// Whether the trailer is currently brought forward to fullscreen.
+  bool _trailerForeground = false;
+
+  /// The ambient backdrop trailer is live with frames on screen — the Trailer
+  /// button reads "Watch Trailer" to say "it's playing, tap to view".
+  bool _trailerAmbientPlaying = false;
+
+  /// Autoplay pipeline in flight (stream resolve → buffer → first frame) — the
+  /// Trailer button shows a spinner.
+  bool _trailerResolving = false;
+
   /// Scrolls the left info column. Focus-anchored (see [_ScrollAnchor]) so that
   /// focusing the top action row snaps to the very top (revealing the
   /// title/meta/summary above it), and focusing a lower section brings it fully
@@ -114,8 +134,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   /// The stable LEFT-crossing target for episodes: the info column's primary
   /// action (Play/Resume, or the source pill when Play is hidden). Pressing LEFT
   /// on an episode focuses this instead of a geometry-picked mid-column item.
-  final FocusNode _leftEntryFocusNode =
-      FocusNode(debugLabel: 'merged-left-entry');
+  final FocusNode _leftEntryFocusNode = FocusNode(
+    debugLabel: 'merged-left-entry',
+  );
 
   StremioMeta get _item => _enriched ?? widget.item;
 
@@ -144,7 +165,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
     final item = widget.item;
     final imdbId = item.effectiveImdbId;
     if (enrich == null || imdbId == null) return;
-    final alreadyRich = (item.year != null && item.year!.isNotEmpty) ||
+    final alreadyRich =
+        (item.year != null && item.year!.isNotEmpty) ||
         item.imdbRating != null ||
         (item.genres?.isNotEmpty ?? false);
     if (alreadyRich) return;
@@ -164,7 +186,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
               : item.description,
           year: full.year ?? item.year,
           imdbRating: full.imdbRating ?? item.imdbRating,
-          genres: (full.genres?.isNotEmpty ?? false) ? full.genres : item.genres,
+          genres: (full.genres?.isNotEmpty ?? false)
+              ? full.genres
+              : item.genres,
           sourceAddon: item.sourceAddon,
           trailerYtId: full.trailerYtId ?? item.trailerYtId,
         );
@@ -178,29 +202,100 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   /// cached in [StremioService], so this shares that fetch rather than doubling
   /// network. Silent on failure — the button simply never appears.
   Future<void> _loadTrailer() async {
-    // If the item already arrived with a trailer id, use it as-is.
-    final existing = widget.item.trailerYtId;
-    if (existing != null && existing.isNotEmpty) {
-      if (mounted) setState(() => _trailerYtId = existing);
-      return;
+    // Resolve the trailer id: prefer what the item arrived with, else ask the
+    // metadata addon (Cinemeta).
+    String? ytId = widget.item.trailerYtId;
+    if (ytId == null || ytId.isEmpty) {
+      final enrich = widget.metaEnricher;
+      final imdbId = widget.item.effectiveImdbId;
+      if (enrich != null && imdbId != null) {
+        try {
+          final full = await enrich(imdbId, widget.item.type);
+          ytId = full?.trailerYtId;
+        } catch (_) {}
+      }
     }
-    final enrich = widget.metaEnricher;
-    final imdbId = widget.item.effectiveImdbId;
-    if (enrich == null || imdbId == null) return;
+    if (ytId == null || ytId.isEmpty || !mounted) return;
+    setState(() => _trailerYtId = ytId);
+
+    // OTT autoplay: honour the setting, then pre-resolve the stream (also reused
+    // by the Trailer button). Silent on failure — the poster simply stays.
+    final autoplay = await StorageService.getDetailTrailerAutoplayEnabled();
+    if (!mounted) return;
+    // The backdrop refuses to autoplay under OS reduced-motion — skip the whole
+    // pipeline (no resolve, no spinner) rather than spin forever waiting for a
+    // player that will never start.
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final willAutoplay = autoplay && !reduceMotion;
+    setState(() {
+      _trailerAutoplayEnabled = autoplay;
+      // Spinner from here until the backdrop reports first frames (or fails).
+      _trailerResolving = willAutoplay;
+    });
+    if (!willAutoplay) return;
+    YoutubeResolvedStreams? streams;
     try {
-      final full = await enrich(imdbId, widget.item.type);
-      final ytId = full?.trailerYtId;
-      if (ytId == null || ytId.isEmpty || !mounted) return;
-      setState(() => _trailerYtId = ytId);
-    } catch (_) {}
+      streams = await YoutubeService.resolveStreams(ytId);
+    } catch (_) {
+      streams = null;
+    }
+    if (!mounted) return;
+    final playable = streams?.playUrl?.isNotEmpty ?? false;
+    setState(() {
+      _trailerStreams = streams;
+      // No playable stream → the backdrop never starts, so stop the spinner
+      // here; on success the backdrop's onPlayingChanged(true) clears it once
+      // frames actually flow.
+      if (!playable) _trailerResolving = false;
+    });
+    if (!playable) return;
+    // Safety net: a stream that opens but never renders a first frame would
+    // otherwise leave the spinner up forever.
+    Future.delayed(const Duration(seconds: 25), () {
+      if (mounted && _trailerResolving) {
+        setState(() => _trailerResolving = false);
+      }
+    });
   }
 
-  /// Resolve the trailer's YouTube streams on-device and launch the player.
-  /// Mirrors the Lemmy/YouTube playback path. Fails gracefully with a snackbar —
-  /// youtube_explode can be bot-blocked and not every title has a live trailer.
+  void _exitTrailerForeground() {
+    if (!_trailerForeground) return;
+    setState(() => _trailerForeground = false);
+    // TV: the page content was focus-excluded while the trailer was fullscreen,
+    // so nothing holds focus now — re-anchor the remote on the primary action.
+    if (widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // The left-entry node only has a holder when Play or the source pill is
+        // present; if neither is (edge config), fall back to traversal so the
+        // remote isn't stranded rather than no-op on an unattached node.
+        if (_leftEntryFocusNode.context != null) {
+          _leftEntryFocusNode.requestFocus();
+        } else {
+          FocusScope.of(context).nextFocus();
+        }
+      });
+    }
+  }
+
+  /// Trailer button. Seamless path: if the ambient backdrop trailer is already
+  /// playing, bring that *same* player forward (unmute + controls) in place — no
+  /// second decoder, no re-buffer. Fallback path (autoplay off / not resolved /
+  /// reduced motion): resolve fresh and launch the standalone player as before.
   Future<void> _playTrailer() async {
+    if (_backdropKey.currentState?.canPromote ?? false) {
+      setState(() => _trailerForeground = true);
+      return;
+    }
+
     final ytId = _trailerYtId;
     if (ytId == null || _trailerLoading) return;
+
+    // Always resolve fresh on tap. The autoplay-prefetched [_trailerStreams] is
+    // deliberately NOT reused here: googlevideo URLs carry an `expire` param and
+    // go dead after a few hours, so a page left open would hand the player a
+    // stale URL. Re-resolving costs one request and keeps playback reliable.
     setState(() => _trailerLoading = true);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -234,9 +329,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
 
     final playUrl = streams?.playUrl;
     if (playUrl == null || playUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Couldn\'t load trailer')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Couldn\'t load trailer')));
       return;
     }
 
@@ -296,72 +391,135 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final backdropUrl = _item.background ?? _item.poster;
-    return Scaffold(
-      backgroundColor: _bg,
-      body: Stack(
-        children: [
-          // Blurred full-bleed backdrop → the Stremio "one lit surface" feel.
-          if (backdropUrl != null)
+    return PopScope(
+      // While the trailer is fullscreen, Back closes it instead of leaving the
+      // page — the same player stays alive and settles back into the backdrop.
+      canPop: !_trailerForeground,
+      onPopInvoked: (didPop) {
+        if (!didPop) _exitTrailerForeground();
+      },
+      child: Scaffold(
+        backgroundColor: _bg,
+        body: Stack(
+          children: [
+            // Full-bleed backdrop → the Stremio "one lit surface" feel. When a
+            // trailer is available and autoplay is on, it crossfades from this
+            // static poster into a looping preview (OTT-style), and the
+            // Trailer button promotes this same player to fullscreen in place.
+            // Non-focusable and behind all content, so DPAD is unaffected.
             Positioned.fill(
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 42, sigmaY: 42),
-                child: CachedNetworkImage(
-                  imageUrl: backdropUrl,
-                  fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                ),
+              child: HeroTrailerBackdrop(
+                key: _backdropKey,
+                imageUrl: backdropUrl,
+                videoUrl: _trailerAutoplayEnabled
+                    ? _trailerStreams?.playUrl
+                    : null,
+                audioUrl: _trailerAutoplayEnabled
+                    ? _trailerStreams?.audioUrl
+                    : null,
+                enabled: _trailerAutoplayEnabled,
+                foreground: _trailerForeground,
+                onRequestClose: _exitTrailerForeground,
+                onPlayingChanged: (playing) {
+                  if (!mounted) return;
+                  setState(() {
+                    _trailerAmbientPlaying = playing;
+                    _trailerResolving = false;
+                  });
+                },
               ),
             ),
-          // Darker tint so even a bright poster reads as a dark surface.
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _bg.withValues(alpha: 0.60),
-                    _bg.withValues(alpha: 0.88),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: _isMovie
-                // A movie has no episode list — one centered, scrollable Stremio
-                // detail column (same theme as the series page).
-                ? Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: _buildInfoPane(),
+            // Page content (tint + panes + back button). Fades out and stops
+            // taking input while the trailer is foregrounded, revealing the
+            // now-fullscreen, unblurred trailer beneath. ExcludeFocus matters
+            // on TV: IgnorePointer only blocks pointers — without it, DPAD OK
+            // would still activate the invisible Play/episode tiles under the
+            // fullscreen trailer.
+            Positioned.fill(
+              child: ExcludeFocus(
+                excluding: _trailerForeground,
+                child: IgnorePointer(
+                  ignoring: _trailerForeground,
+                  child: AnimatedOpacity(
+                    opacity: _trailerForeground ? 0 : 1,
+                    duration: const Duration(milliseconds: 420),
+                    curve: Curves.easeInOut,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // Darker tint so even a bright poster reads as a dark surface.
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                _bg.withValues(alpha: 0.60),
+                                _bg.withValues(alpha: 0.88),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SafeArea(
+                          child: _isMovie
+                              // A movie has no episode list — one centered,
+                              // scrollable Stremio detail column.
+                              ? Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 720,
+                                    ),
+                                    child: _buildInfoPane(),
+                                  ),
+                                )
+                              : (_wide
+                                    ? _buildTwoPane(backdropUrl)
+                                    : Column(
+                                        children: [
+                                          _buildHero(backdropUrl),
+                                          Expanded(child: _buildStackedBody()),
+                                        ],
+                                      )),
+                        ),
+                        // Back button.
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          child: SafeArea(
+                            child: Padding(
+                              padding: EdgeInsets.all(
+                                widget.isTelevision ? 20 : 8,
+                              ),
+                              child: _circleButton(
+                                Icons.arrow_back_rounded,
+                                () => Navigator.of(context).maybePop(),
+                                tooltip: 'Back',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  )
-                : (_wide
-                    ? _buildTwoPane(backdropUrl)
-                    : Column(
-                        children: [
-                          _buildHero(backdropUrl),
-                          Expanded(child: _buildStackedBody()),
-                        ],
-                      )),
-          ),
-          // Back button.
-          Positioned(
-            top: 0,
-            left: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: EdgeInsets.all(widget.isTelevision ? 20 : 8),
-                child: _circleButton(
-                  Icons.arrow_back_rounded,
-                  () => Navigator.of(context).maybePop(),
-                  tooltip: 'Back',
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+            // Small "trailer playing in background" hint — only while the
+            // ambient trailer is actually playing and not promoted. Tapping it
+            // brings the trailer forward (same as the Trailer button).
+            if (_trailerAmbientPlaying && !_trailerForeground)
+              Positioned(
+                left: 0,
+                bottom: 0,
+                child: SafeArea(
+                  child: Padding(
+                    padding: EdgeInsets.all(widget.isTelevision ? 20 : 12),
+                    child: _TrailerPlayingChip(onTap: _playTrailer),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -469,9 +627,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
           // title / meta / genres above it are revealed (fixes "can't scroll
           // back up to details").
           _ScrollAnchor(
-              toTop: true,
-              active: widget.isTelevision,
-              child: _buildActionRow()),
+            toTop: true,
+            active: widget.isTelevision,
+            child: _buildActionRow(),
+          ),
           if (summary != null && summary.isNotEmpty) ...[
             SizedBox(height: t ? 16 : 20),
             _sectionLabel('Summary'),
@@ -580,9 +739,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
                     Wrap(
                       spacing: 7,
                       runSpacing: 7,
-                      children: [
-                        for (final g in genres.take(4)) _pill(g),
-                      ],
+                      children: [for (final g in genres.take(4)) _pill(g)],
                     ),
                   ],
                   const SizedBox(height: 14),
@@ -608,68 +765,69 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
     if (year != null && year.isNotEmpty) add(_metaText(year));
     final cert = extra?.certificate;
     if (cert != null) {
-      add(Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        decoration: BoxDecoration(
-          color: _glass2,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: _hair),
-        ),
-        child: Text(
-          cert,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+      add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: _glass2,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: _hair),
           ),
-        ),
-      ));
-    }
-    if (rating != null) {
-      add(Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            rating.toStringAsFixed(1),
+          child: Text(
+            cert,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: _imdb,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Text(
-              'IMDb',
-              style: TextStyle(
-                color: Colors.black,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
+        ),
+      );
+    }
+    if (rating != null) {
+      add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              rating.toStringAsFixed(1),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ),
-        ],
-      ));
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: _imdb,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'IMDb',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
     }
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: parts,
-    );
+    return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: parts);
   }
 
   Widget _metaText(String s) => Text(
-        s,
-        style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-      );
+    s,
+    style: const TextStyle(
+      color: Colors.white70,
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    ),
+  );
 
   Widget _buildActionRow() {
     final count = widget.boundSourceCount?.call(_item) ?? 0;
@@ -691,12 +849,16 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
             autofocus: widget.isTelevision && _isMovie,
           ),
         // Trailer — sits right after Play. Only when Cinemeta gave us a YouTube
-        // trailer id. Plays on-device via youtube_explode (same path as the
-        // YouTube/Lemmy tabs).
+        // trailer id. Reflects the ambient backdrop's state: spinner while the
+        // trailer loads, "Watch Trailer" once it's playing (tap = fullscreen),
+        // plain "Trailer" otherwise (tap = resolve & play).
         if (_trailerYtId != null)
           _GhostButton(
-            label: 'Trailer',
-            icon: Icons.movie_outlined,
+            label: _trailerAmbientPlaying ? 'Watch Trailer' : 'Trailer',
+            icon: _trailerAmbientPlaying
+                ? Icons.play_circle_outline_rounded
+                : Icons.movie_outlined,
+            busy: _trailerResolving || _trailerLoading,
             onTap: _playTrailer,
           ),
         // Movie: a Sources (manual list) button — the episode list is the
@@ -715,8 +877,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
             focusNode: widget.showQuickPlay ? null : _leftEntryFocusNode,
             // A movie with Play hidden (PikPak-only) has no episode list to
             // auto-focus and no Play to autofocus — start the remote here.
-            autofocus:
-                widget.isTelevision && _isMovie && !widget.showQuickPlay,
+            autofocus: widget.isTelevision && _isMovie && !widget.showQuickPlay,
             onTap: () async {
               await widget.onSelectSource!(_item);
               if (mounted) setState(() {});
@@ -833,9 +994,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       // screen (series A → recommended series B → pick episode) underneath
       // instead of returning to Search; popUntil the route name tears down any
       // depth (every merged/detail route shares kCatalogDetailRouteName).
-      onBeforeTerminalDispatch: () => Navigator.of(context).popUntil(
-        (r) => r.settings.name != kCatalogDetailRouteName,
-      ),
+      onBeforeTerminalDispatch: () => Navigator.of(
+        context,
+      ).popUntil((r) => r.settings.name != kCatalogDetailRouteName),
     );
   }
 
@@ -909,14 +1070,16 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       sections
         ..add(_sectionLabel('Summary'))
         ..add(const SizedBox(height: 8))
-        ..add(Text(
-          summary,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 13.5,
-            height: 1.55,
+        ..add(
+          Text(
+            summary,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13.5,
+              height: 1.55,
+            ),
           ),
-        ))
+        )
         ..add(const SizedBox(height: 22));
     }
 
@@ -924,31 +1087,33 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
     final awardsLine = extra?.hasAwards == true ? extra!.awardsLine : null;
     if (awardsLine != null && awardsLine.isNotEmpty) {
       sections
-        ..add(Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-          decoration: BoxDecoration(
-            color: _gold.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: _gold.withValues(alpha: 0.24)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.emoji_events_rounded, size: 15, color: _gold),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  awardsLine,
-                  style: const TextStyle(
-                    color: _gold,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+        ..add(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+            decoration: BoxDecoration(
+              color: _gold.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _gold.withValues(alpha: 0.24)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.emoji_events_rounded, size: 15, color: _gold),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    awardsLine,
+                    style: const TextStyle(
+                      color: _gold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ))
+        )
         ..add(const SizedBox(height: 22));
     }
 
@@ -1002,19 +1167,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       sections
         ..add(_sectionLabel('Cast'))
         ..add(const SizedBox(height: 12))
-        ..add(_ScrollAnchor(
-          active: widget.isTelevision,
-          alignment: 0.35,
-          child: SizedBox(
-            height: 92,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: cast.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 14),
-              itemBuilder: (_, i) => _castTile(cast[i]),
+        ..add(
+          _ScrollAnchor(
+            active: widget.isTelevision,
+            alignment: 0.35,
+            child: SizedBox(
+              height: 92,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: cast.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 14),
+                itemBuilder: (_, i) => _castTile(cast[i]),
+              ),
             ),
           ),
-        ))
+        )
         ..add(const SizedBox(height: 22));
     }
 
@@ -1025,19 +1192,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       sections
         ..add(_sectionLabel('More Like This'))
         ..add(const SizedBox(height: 12))
-        ..add(_ScrollAnchor(
-          active: widget.isTelevision,
-          alignment: 0.5,
-          child: SizedBox(
-            height: 168,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: recs.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 11),
-              itemBuilder: (_, i) => _recCard(recs[i]),
+        ..add(
+          _ScrollAnchor(
+            active: widget.isTelevision,
+            alignment: 0.5,
+            child: SizedBox(
+              height: 168,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: recs.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 11),
+                itemBuilder: (_, i) => _recCard(recs[i]),
+              ),
             ),
           ),
-        ))
+        )
         ..add(const SizedBox(height: 22));
     }
 
@@ -1046,34 +1215,35 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       sections
         ..add(_sectionLabel('Parents Guide'))
         ..add(const SizedBox(height: 12))
-        ..add(ParentsGuideSection(
-          guide: guide,
-          tv: widget.isTelevision,
-          dense: true,
-        ));
+        ..add(
+          ParentsGuideSection(
+            guide: guide,
+            tv: widget.isTelevision,
+            dense: true,
+          ),
+        );
     }
 
     return sections;
   }
 
-
   Widget _castTile(CastMember m) => _CastTile(member: m, fallback: _glass2);
 
   Widget _recCard(StremioMeta rec) => _RecCard(
-        rec: rec,
-        fallback: _glass2,
-        onTap: () => widget.onRecommendationTap?.call(rec),
-      );
+    rec: rec,
+    fallback: _glass2,
+    onTap: () => widget.onRecommendationTap?.call(rec),
+  );
 
   Widget _sectionLabel(String s) => Text(
-        s.toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white38,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.6,
-        ),
-      );
+    s.toUpperCase(),
+    style: const TextStyle(
+      color: Colors.white38,
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.6,
+    ),
+  );
 
   /// Label→value rows (Credits / Details), matching the detail screen's layout.
   Widget _kvBlock(List<(String, String)> rows) {
@@ -1106,20 +1276,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   }
 
   Widget _pill(String s) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: _glass2,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: _hair),
-        ),
-        child: Text(
-          s,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+    decoration: BoxDecoration(
+      color: _glass2,
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: _hair),
+    ),
+    child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 12)),
+  );
 
   Widget _circleButton(IconData icon, VoidCallback onTap, {String? tooltip}) {
     return _RoundIconButton(
@@ -1211,8 +1375,10 @@ class _CastTileState extends State<_CastTile> {
                         )
                       : Container(
                           color: widget.fallback,
-                          child:
-                              const Icon(Icons.person, color: Colors.white38),
+                          child: const Icon(
+                            Icons.person,
+                            color: Colors.white38,
+                          ),
                         ),
                 ),
               ),
@@ -1350,14 +1516,69 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
   }
 }
 
+/// Subtle "trailer playing in background" hint pill. An informational hint, not
+/// a primary control (the focusable "Watch Trailer" button is the DPAD way to
+/// promote), so it's pointer/touch-tappable only — `canRequestFocus: false`
+/// keeps it out of DPAD traversal entirely, so it can never steal focus or
+/// strand the remote when it appears/disappears as the trailer plays/pauses.
+class _TrailerPlayingChip extends StatelessWidget {
+  final VoidCallback onTap;
+  const _TrailerPlayingChip({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.42),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        canRequestFocus: false,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.graphic_eq_rounded,
+                size: 14,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                'Trailer playing',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _GhostButton extends StatefulWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+
+  /// Shows a small spinner in place of the icon (e.g. trailer resolving).
+  final bool busy;
+
   const _GhostButton({
     required this.label,
     required this.icon,
     required this.onTap,
+    this.busy = false,
   });
 
   @override
@@ -1388,7 +1609,17 @@ class _GhostButtonState extends State<_GhostButton> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(widget.icon, color: Colors.white, size: 18),
+                if (widget.busy)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white70,
+                    ),
+                  )
+                else
+                  Icon(widget.icon, color: Colors.white, size: 18),
                 const SizedBox(width: 7),
                 Text(
                   widget.label,
@@ -1483,7 +1714,6 @@ class _SourcePillState extends State<_SourcePill> {
   }
 }
 
-
 /// Auto-scrolls the enclosing scrollable when any descendant gains focus.
 ///
 /// [Focus.onFocusChange] fires when this node *or a descendant* changes focus,
@@ -1522,10 +1752,10 @@ class _ScrollAnchor extends StatelessWidget {
           if (!context.mounted) return;
           if (toTop) {
             Scrollable.maybeOf(context)?.position.animateTo(
-                  0,
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                );
+              0,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+            );
           } else {
             Scrollable.ensureVisible(
               context,
@@ -1541,7 +1771,6 @@ class _ScrollAnchor extends StatelessWidget {
     );
   }
 }
-
 
 /// Circular translucent icon button used for the hero "More" (⋮) affordance.
 class _RoundIconButton extends StatefulWidget {
@@ -1613,8 +1842,9 @@ class _QuickActionsMenu extends StatelessWidget {
     return SafeArea(
       top: false,
       child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
