@@ -1035,6 +1035,16 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
                 ElevatedButton.icon(
                   focusNode: _episodeRetryFocusNode,
                   autofocus: widget.isTelevision,
+                  // Default focus overlay is faint on dark — gold ring on focus
+                  // like every other DPAD target in the drill-down.
+                  style: ButtonStyle(
+                    side: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.focused)
+                          ? const BorderSide(
+                              color: HomeTheme.focusGold, width: 2)
+                          : null,
+                    ),
+                  ),
                   onPressed: () => _enterEpisodeMode(
                     show,
                     initialSeason: widget.initialSeason,
@@ -1044,6 +1054,14 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
                   label: const Text('Retry'),
                 ),
                 OutlinedButton.icon(
+                  style: ButtonStyle(
+                    side: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.focused)
+                          ? const BorderSide(
+                              color: HomeTheme.focusGold, width: 2)
+                          : const BorderSide(color: Colors.white24),
+                    ),
+                  ),
                   onPressed: () => _fallbackToDirectSearch(show),
                   icon: const Icon(Icons.search_rounded),
                   label: const Text('Search for sources'),
@@ -1287,6 +1305,9 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
             {Color? color, bool autofocus = false}) {
           return ListTile(
             autofocus: autofocus,
+            // Default focus overlay is invisible on the dark sheet — make the
+            // DPAD cursor obvious.
+            focusColor: Colors.white.withValues(alpha: 0.12),
             leading: Icon(icon, color: color ?? Colors.white),
             title: Text(label,
                 style: TextStyle(color: color ?? Colors.white)),
@@ -1490,14 +1511,28 @@ class _SeasonStepButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // IconButton (not a bare InkWell) so the disabled state at the first/last
+    // season keeps its button semantics for screen readers; the state-resolved
+    // style adds the gold DPAD focus ring the default overlay lacks.
     return IconButton(
       visualDensity: VisualDensity.compact,
+      style: ButtonStyle(
+        side: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.focused)
+              ? const BorderSide(color: HomeTheme.focusGold, width: 2)
+              : null,
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.focused)
+              ? Colors.white.withValues(alpha: 0.10)
+              : null,
+        ),
+      ),
       icon: Icon(
         icon,
         color: enabled ? Colors.white : Colors.white.withValues(alpha: 0.22),
       ),
       onPressed: enabled ? onTap : null,
-      tooltip: enabled ? null : null,
     );
   }
 }

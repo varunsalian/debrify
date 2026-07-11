@@ -8,6 +8,7 @@ import '../models/advanced_search_selection.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../widgets/episodes_panel.dart';
+import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
@@ -611,6 +612,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
           _SourcePill(
             count: count,
             focusNode: widget.showQuickPlay ? null : _leftEntryFocusNode,
+            // A movie with Play hidden (PikPak-only) has no episode list to
+            // auto-focus and no Play to autofocus — start the remote here.
+            autofocus:
+                widget.isTelevision && _isMovie && !widget.showQuickPlay,
             onTap: () async {
               await widget.onSelectSource!(_item);
               if (mounted) setState(() {});
@@ -714,7 +719,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       onSelectSource: widget.onSelectSource,
       showChrome: false,
       compact: true,
-      onFocusLeftEdge: () => _leftEntryFocusNode.requestFocus(),
+      // Null when neither Play nor the source pill exists (no holder for the
+      // node) — the episode row then leaves LEFT to directional traversal
+      // instead of swallowing it as a dead key.
+      onFocusLeftEdge: (widget.showQuickPlay || widget.onSelectSource != null)
+          ? () => _leftEntryFocusNode.requestFocus()
+          : null,
       onBack: () => Navigator.of(context).maybePop(),
       // Terminal episode selection: tear down every merged/detail route back to
       // the Search host, then dispatch — mirroring the standalone
@@ -946,74 +956,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   }
 
 
-  Widget _castTile(CastMember m) {
-    // Focusable (no-op tap) so DPAD-down can land on the cast rail and scroll
-    // the info column, keeping the sections below (details / parents guide /
-    // more like this) reachable on TV.
-    return SizedBox(
-      width: 64,
-      child: Column(
-        children: [
-          Material(
-            color: Colors.transparent,
-            shape: const CircleBorder(),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () {},
-              customBorder: const CircleBorder(),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: (m.imageUrl != null && m.imageUrl!.isNotEmpty)
-                    ? CachedNetworkImage(
-                        imageUrl: m.imageUrl!,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Container(color: _glass2),
-                      )
-                    : Container(
-                        color: _glass2,
-                        child: const Icon(Icons.person, color: Colors.white38),
-                      ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            m.name,
-            maxLines: 2,
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _castTile(CastMember m) => _CastTile(member: m, fallback: _glass2);
 
-  Widget _recCard(StremioMeta rec) {
-    // InkWell (not GestureDetector) so the card is DPAD-focusable on TV.
-    return SizedBox(
-      width: 100,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => widget.onRecommendationTap?.call(rec),
-          child: AspectRatio(
-            aspectRatio: 2 / 3,
-            child: (rec.poster != null && rec.poster!.isNotEmpty)
-                ? CachedNetworkImage(
-                    imageUrl: rec.poster!,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(color: _glass2),
-                  )
-                : Container(color: _glass2),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _recCard(StremioMeta rec) => _RecCard(
+        rec: rec,
+        fallback: _glass2,
+        onTap: () => widget.onRecommendationTap?.call(rec),
+      );
 
   Widget _sectionLabel(String s) => Text(
         s.toUpperCase(),
@@ -1072,21 +1021,172 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       );
 
   Widget _circleButton(IconData icon, VoidCallback onTap, {String? tooltip}) {
-    return Material(
-      color: Colors.black.withValues(alpha: 0.35),
-      shape: const CircleBorder(),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white),
-        onPressed: onTap,
-        tooltip: tooltip,
-      ),
+    return _RoundIconButton(
+      icon: icon,
+      onTap: onTap,
+      tooltip: tooltip,
+      background: Colors.black.withValues(alpha: 0.35),
     );
   }
 }
 
 // ── Small presentational widgets ───────────────────────────────────────────
 
-class _PrimaryButton extends StatelessWidget {
+/// Gold DPAD focus ring — an in-bounds *foreground* border, exactly like the
+/// episode rows in the right pane (and the same [HomeTheme.focusGold] hue, so
+/// the cursor doesn't shift color crossing panes). Every interactive element on
+/// this screen wraps itself in one — the default InkWell focus overlay is
+/// invisible on both the white Play pill and dark glass surfaces, which made
+/// the remote cursor untrackable on TV.
+///
+/// Deliberately NOT a shadow ring: spread shadows paint a *filled* rect behind
+/// the child (they bleed through translucent glass surfaces as a solid gold
+/// fill), and they paint outside bounds (forcing rails to un-clip and leak
+/// scrolled-out tiles). A foreground border stays crisp on any surface, keeps
+/// the glass translucency, and never needs `Clip.none`.
+class _FocusHalo extends StatelessWidget {
+  final bool focused;
+  final BorderRadius? radius; // null → circle
+  final Widget child;
+
+  const _FocusHalo({required this.focused, required this.child, this.radius});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      foregroundDecoration: BoxDecoration(
+        shape: radius == null ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: radius,
+        border: focused
+            ? Border.all(color: HomeTheme.focusGold, width: 2.5)
+            : null,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Cast avatar — focusable (no-op tap) so DPAD-down can walk the info column
+/// through it, with a visible gold ring while focused.
+class _CastTile extends StatefulWidget {
+  final CastMember member;
+  final Color fallback;
+  const _CastTile({required this.member, required this.fallback});
+
+  @override
+  State<_CastTile> createState() => _CastTileState();
+}
+
+class _CastTileState extends State<_CastTile> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.member;
+    return SizedBox(
+      width: 64,
+      child: Column(
+        children: [
+          _FocusHalo(
+            focused: _focused,
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () {},
+                onFocusChange: (f) => setState(() => _focused = f),
+                customBorder: const CircleBorder(),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: (m.imageUrl != null && m.imageUrl!.isNotEmpty)
+                      ? CachedNetworkImage(
+                          imageUrl: m.imageUrl!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) =>
+                              Container(color: widget.fallback),
+                        )
+                      : Container(
+                          color: widget.fallback,
+                          child:
+                              const Icon(Icons.person, color: Colors.white38),
+                        ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            m.name,
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: _focused ? Colors.white : Colors.white54,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "More Like This" poster card — gold ring + slight scale while focused so the
+/// DPAD cursor is unmistakable over artwork.
+class _RecCard extends StatefulWidget {
+  final StremioMeta rec;
+  final Color fallback;
+  final VoidCallback onTap;
+  const _RecCard({
+    required this.rec,
+    required this.fallback,
+    required this.onTap,
+  });
+
+  @override
+  State<_RecCard> createState() => _RecCardState();
+}
+
+class _RecCardState extends State<_RecCard> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final rec = widget.rec;
+    return SizedBox(
+      width: 100,
+      child: _FocusHalo(
+        focused: _focused,
+        radius: BorderRadius.circular(10),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.onTap,
+            onFocusChange: (f) => setState(() => _focused = f),
+            child: AspectRatio(
+              aspectRatio: 2 / 3,
+              child: (rec.poster != null && rec.poster!.isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: rec.poster!,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) =>
+                          Container(color: widget.fallback),
+                    )
+                  : Container(color: widget.fallback),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrimaryButton extends StatefulWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
@@ -1101,31 +1201,47 @@ class _PrimaryButton extends StatelessWidget {
   });
 
   @override
+  State<_PrimaryButton> createState() => _PrimaryButtonState();
+}
+
+class _PrimaryButtonState extends State<_PrimaryButton> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        focusNode: focusNode,
-        autofocus: autofocus,
-        borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: const Color(0xFF0D0D10), size: 20),
-              const SizedBox(width: 7),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Color(0xFF0D0D10),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 140),
+      scale: _focused ? 1.05 : 1.0,
+      child: _FocusHalo(
+        focused: _focused,
+        radius: BorderRadius.circular(999),
+        child: Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          child: InkWell(
+            focusNode: widget.focusNode,
+            autofocus: widget.autofocus,
+            onFocusChange: (f) => setState(() => _focused = f),
+            borderRadius: BorderRadius.circular(999),
+            onTap: widget.onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(widget.icon, color: const Color(0xFF0D0D10), size: 20),
+                  const SizedBox(width: 7),
+                  Text(
+                    widget.label,
+                    style: const TextStyle(
+                      color: Color(0xFF0D0D10),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1133,7 +1249,7 @@ class _PrimaryButton extends StatelessWidget {
   }
 }
 
-class _GhostButton extends StatelessWidget {
+class _GhostButton extends StatefulWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
@@ -1144,33 +1260,45 @@ class _GhostButton extends StatelessWidget {
   });
 
   @override
+  State<_GhostButton> createState() => _GhostButtonState();
+}
+
+class _GhostButtonState extends State<_GhostButton> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
+    return _FocusHalo(
+      focused: _focused,
+      radius: BorderRadius.circular(999),
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 18),
-              const SizedBox(width: 7),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: widget.onTap,
+          onFocusChange: (f) => setState(() => _focused = f),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, color: Colors.white, size: 18),
+                const SizedBox(width: 7),
+                Text(
+                  widget.label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1178,56 +1306,75 @@ class _GhostButton extends StatelessWidget {
   }
 }
 
-class _SourcePill extends StatelessWidget {
+class _SourcePill extends StatefulWidget {
   final int count;
   final VoidCallback onTap;
   final FocusNode? focusNode;
-  const _SourcePill({required this.count, required this.onTap, this.focusNode});
+  final bool autofocus;
+  const _SourcePill({
+    required this.count,
+    required this.onTap,
+    this.focusNode,
+    this.autofocus = false,
+  });
+
+  @override
+  State<_SourcePill> createState() => _SourcePillState();
+}
+
+class _SourcePillState extends State<_SourcePill> {
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
-    final bound = count > 0;
+    final bound = widget.count > 0;
     const gold = _MergedDetailScreenState._gold;
     final label = bound
-        ? (count > 1 ? '$count sources' : '1 source')
+        ? (widget.count > 1 ? '${widget.count} sources' : '1 source')
         : 'Bind source';
-    return Material(
-      color: bound
-          ? gold.withValues(alpha: 0.13)
-          : Colors.white.withValues(alpha: 0.07),
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        focusNode: focusNode,
+    return _FocusHalo(
+      focused: _focused,
+      radius: BorderRadius.circular(999),
+      child: Material(
+        color: bound
+            ? gold.withValues(alpha: 0.13)
+            : Colors.white.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: bound
-                  ? gold.withValues(alpha: 0.30)
-                  : Colors.white.withValues(alpha: 0.14),
+        child: InkWell(
+          focusNode: widget.focusNode,
+          autofocus: widget.autofocus,
+          borderRadius: BorderRadius.circular(999),
+          onTap: widget.onTap,
+          onFocusChange: (f) => setState(() => _focused = f),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: bound
+                    ? gold.withValues(alpha: 0.30)
+                    : Colors.white.withValues(alpha: 0.14),
+              ),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                bound ? Icons.link_rounded : Icons.link_off_rounded,
-                color: bound ? gold : Colors.white70,
-                size: 16,
-              ),
-              const SizedBox(width: 7),
-              Text(
-                label,
-                style: TextStyle(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  bound ? Icons.link_rounded : Icons.link_off_rounded,
                   color: bound ? gold : Colors.white70,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
+                  size: 16,
                 ),
-              ),
-            ],
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: bound ? gold : Colors.white70,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1296,30 +1443,49 @@ class _ScrollAnchor extends StatelessWidget {
 
 
 /// Circular translucent icon button used for the hero "More" (⋮) affordance.
-class _RoundIconButton extends StatelessWidget {
+class _RoundIconButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback onTap;
   final String? tooltip;
-  const _RoundIconButton({required this.icon, required this.onTap, this.tooltip});
+  final Color? background;
+  const _RoundIconButton({
+    required this.icon,
+    required this.onTap,
+    this.tooltip,
+    this.background,
+  });
+
+  @override
+  State<_RoundIconButton> createState() => _RoundIconButtonState();
+}
+
+class _RoundIconButtonState extends State<_RoundIconButton> {
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
-    final btn = Material(
-      color: Colors.white.withValues(alpha: 0.08),
-      shape: CircleBorder(
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
-      ),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 46,
-          height: 46,
-          child: Icon(icon, color: Colors.white, size: 22),
+    final btn = _FocusHalo(
+      focused: _focused,
+      child: Material(
+        color: widget.background ?? Colors.white.withValues(alpha: 0.08),
+        shape: CircleBorder(
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: widget.onTap,
+          onFocusChange: (f) => setState(() => _focused = f),
+          child: SizedBox(
+            width: 46,
+            height: 46,
+            child: Icon(widget.icon, color: Colors.white, size: 22),
+          ),
         ),
       ),
     );
-    return tooltip == null ? btn : Tooltip(message: tooltip!, child: btn);
+    return widget.tooltip == null
+        ? btn
+        : Tooltip(message: widget.tooltip!, child: btn);
   }
 }
 
@@ -1400,6 +1566,9 @@ class _QuickActionsMenu extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         autofocus: isTelevision && index == 0,
+        // The default focus overlay is invisible on the dark sheet — make the
+        // DPAD cursor obvious.
+        focusColor: Colors.white.withValues(alpha: 0.12),
         onTap: () => onSelected(o.action),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 13, 18, 13),
