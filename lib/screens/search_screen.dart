@@ -17,7 +17,6 @@ import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/engine/dynamic_engine.dart';
-import '../services/engine/engine_registry.dart';
 import '../services/engine/settings_manager.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/main_page_bridge.dart';
@@ -38,6 +37,7 @@ import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/home/home_theme.dart';
+import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
@@ -118,6 +118,45 @@ class SearchScreen extends StatefulWidget {
 }
 
 enum _Mode { catalog, keyword }
+
+/// Snapshot of an in-progress keyword search, preserved across a tab switch so
+/// returning restores results + scroll instead of a blank prompt — the nav
+/// rebuilds [SearchScreen] fresh on every switch (main.dart `_buildPage`).
+/// Mirrors the old `TorrentSearchScreen._preservedState`. Keyed by [variant] so
+/// a keyword search started on the Home-New board never restores into the
+/// dedicated Search tab (both are [SearchScreen] instances).
+class _KwPreservedState {
+  final String variant;
+  final String query;
+  final List<Torrent> all;
+  final List<Torrent> results;
+  final TorrentFilterState filters;
+  final String sort;
+  final bool sortAsc;
+  final Map<String, List<String>> cache;
+  final bool cachedOnly;
+  final Map<String, int> directCounts;
+  final Map<String, int> torrentCounts;
+  final Set<String> selectedDirect;
+  final Set<String> selectedTorrent;
+  final double scrollOffset;
+  const _KwPreservedState({
+    required this.variant,
+    required this.query,
+    required this.all,
+    required this.results,
+    required this.filters,
+    required this.sort,
+    required this.sortAsc,
+    required this.cache,
+    required this.cachedOnly,
+    required this.directCounts,
+    required this.torrentCounts,
+    required this.selectedDirect,
+    required this.selectedTorrent,
+    required this.scrollOffset,
+  });
+}
 
 /// Fixed Discover sources; installed addons are appended dynamically (key
 /// 'a:{addonId}').
@@ -203,14 +242,32 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Torrent> _kwResults = []; // filtered + sorted view actually rendered
   final List<FocusNode> _kwNodes = [];
   // Keyboard/DPAD focus targets for the keyword toolbar pills (Sort / Filters /
-  // Sources / Select). A fixed pool of 4 covers the most pills ever shown.
+  // Providers / Sources / Select). A fixed pool of 5 covers the most pills ever
+  // shown.
   final List<FocusNode> _kwToolbarNodes = List.generate(
-    4,
+    5,
     (i) => FocusNode(debugLabel: 'kw_tb_$i'),
   );
   TorrentFilterState _kwFilters = const TorrentFilterState.empty();
   String _kwSort = 'relevance';
+  // Sort direction for _kwSort (ignored for 'relevance', which is engine order).
+  // Defaults follow each field's natural direction; the sort dialog can flip it.
+  bool _kwSortAsc = false;
   Map<String, List<String>> _kwCache = {}; // infohash(lower) → ['TB','PM']
+
+  // Provider (stream-type) multi-select filter, ported from the old search
+  // screen: results are grouped into "Direct" (direct/external URL streams) and
+  // "Torrent" providers by their [Torrent.source], each independently filterable
+  // by which sources are ticked. Empty count maps mean "no such group".
+  Map<String, int> _kwDirectCounts = {}; // source → count (direct/external)
+  Map<String, int> _kwTorrentCounts = {}; // source → count (torrents)
+  Set<String> _kwSelectedDirect = {};
+  Set<String> _kwSelectedTorrent = {};
+
+  /// True when the results list is being narrowed to TorBox-cached torrents
+  /// only (TorBox active, Real-Debrid not, TorBox cache-check on) — mirrors the
+  /// old screen's `_showingTorboxCachedOnly`. Drives the info banner.
+  bool _kwCachedOnly = false;
 
   // Bulk-selection state for keyword results (mirrors Home's multi-select).
   bool _kwSelectionMode = false;
@@ -218,6 +275,29 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// Monotonic token so a slow earlier keyword search can't clobber a newer one.
   int _kwSearchToken = 0;
+
+  /// Scroll controller for the keyword results list, so we can preserve/restore
+  /// the scroll position across a tab switch (see [_KwPreservedState]).
+  final ScrollController _kwScroll = ScrollController();
+
+  /// Last observed keyword-list scroll offset, captured live (the controller is
+  /// detached by the time [dispose] runs, so we can't read it there).
+  double _kwLastScroll = 0;
+
+  /// Set on restore; the keyword list jumps here once laid out, then clears.
+  double? _pendingKwScroll;
+
+  /// Snapshot of the most recently disposed keyword search, kept alive across
+  /// the tab rebuild. Consumed (and cleared) by the next matching-variant init.
+  static _KwPreservedState? _kwPreserved;
+
+  /// Discriminates the three [SearchScreen] variants so a preserved keyword
+  /// search only restores into the same kind of tab it came from.
+  String get _variantKey => widget.searchMode
+      ? 'search'
+      : widget.discoverMode
+      ? 'discover'
+      : 'board';
 
   /// True when PikPak is the ONLY configured provider. PikPak can't quick-play
   /// (it queues a cloud download), so catalog "Play" is hidden — matching Home.
@@ -489,8 +569,18 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     _boardScroll.addListener(_onBoardScroll);
+    _kwScroll.addListener(() {
+      if (_kwScroll.hasClients) _kwLastScroll = _kwScroll.offset;
+    });
     _refreshTraktAuthState();
     _loadMergedSeriesFlag();
+    // Restore a keyword search preserved from a prior tab visit (results +
+    // scroll). If one restored, it carries its own filters, so don't overwrite
+    // them with the saved defaults.
+    final restoredKeyword = _restoreKeywordState();
+    // Seed keyword filters from the user's saved defaults (parity with the old
+    // search screen). Harmless in variants that never expose keyword mode.
+    if (!restoredKeyword) unawaited(_loadDefaultKeywordFilters());
     // The dedicated Search tab only shows a field + blank prompt until a query,
     // so it skips the whole board pipeline (home catalogs, Continue Watching,
     // Trakt, favourites) — catalog search fetches its addons on demand. It also
@@ -577,8 +667,61 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _isTraktAuthenticated = auth);
   }
 
+  /// Restore a preserved keyword search into this instance if one exists for
+  /// this variant. Returns true when a restore happened. Called from initState
+  /// (pre-first-build) so direct field assignment — not setState — is correct.
+  bool _restoreKeywordState() {
+    final snap = _kwPreserved;
+    if (snap == null || snap.variant != _variantKey || snap.query.isEmpty) {
+      return false;
+    }
+    _kwPreserved = null; // one-time consume
+    _mode = _Mode.keyword;
+    _kwQuery = snap.query;
+    _kwAll = snap.all;
+    _kwResults = snap.results;
+    _kwFilters = snap.filters;
+    _kwSort = snap.sort;
+    _kwSortAsc = snap.sortAsc;
+    _kwCache = snap.cache;
+    _kwCachedOnly = snap.cachedOnly;
+    _kwDirectCounts = snap.directCounts;
+    _kwTorrentCounts = snap.torrentCounts;
+    _kwSelectedDirect = snap.selectedDirect;
+    _kwSelectedTorrent = snap.selectedTorrent;
+    _searchController.text = snap.query;
+    _disposeKwNodes();
+    for (var i = 0; i < snap.results.length; i++) {
+      _kwNodes.add(FocusNode(debugLabel: 'kw_$i'));
+    }
+    _pendingKwScroll = snap.scrollOffset;
+    return true;
+  }
+
   @override
   void dispose() {
+    // Preserve an in-progress keyword search so returning to this tab restores
+    // results + scroll instead of the blank prompt (the nav rebuilds us fresh).
+    if (_mode == _Mode.keyword &&
+        _kwQuery.isNotEmpty &&
+        _kwResults.isNotEmpty) {
+      _kwPreserved = _KwPreservedState(
+        variant: _variantKey,
+        query: _kwQuery,
+        all: _kwAll,
+        results: _kwResults,
+        filters: _kwFilters,
+        sort: _kwSort,
+        sortAsc: _kwSortAsc,
+        cache: _kwCache,
+        cachedOnly: _kwCachedOnly,
+        directCounts: _kwDirectCounts,
+        torrentCounts: _kwTorrentCounts,
+        selectedDirect: _kwSelectedDirect,
+        selectedTorrent: _kwSelectedTorrent,
+        scrollOffset: _kwLastScroll,
+      );
+    }
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
     if (widget.searchMode) {
       MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
@@ -594,6 +737,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _modeKeywordNode.dispose();
     _discSourceNode.dispose();
     _boardScroll.dispose();
+    _kwScroll.dispose();
     _disposeNodes();
     _disposeKwNodes();
     for (final n in [
@@ -2181,6 +2325,61 @@ class _SearchScreenState extends State<SearchScreen> {
     _restoreHome();
   }
 
+  /// Seed the keyword filter set from the user's saved defaults (Settings →
+  /// default quality/rip-source/language filters), matching the old search
+  /// screen's `_loadDefaultFilters`. Runs once at init; only applies when at
+  /// least one default is configured so an empty default keeps filters off.
+  Future<void> _loadDefaultKeywordFilters() async {
+    try {
+      final qualities = await StorageService.getDefaultFilterQualities();
+      final sources = await StorageService.getDefaultFilterRipSources();
+      final languages = await StorageService.getDefaultFilterLanguages();
+      if (!mounted) return;
+
+      final qualitySet = <QualityTier>{};
+      final sourceSet = <RipSourceCategory>{};
+      final languageSet = <AudioLanguage>{};
+      for (final q in qualities) {
+        for (final e in QualityTier.values) {
+          if (e.name == q) qualitySet.add(e);
+        }
+      }
+      for (final s in sources) {
+        for (final e in RipSourceCategory.values) {
+          if (e.name == s) sourceSet.add(e);
+        }
+      }
+      for (final l in languages) {
+        for (final e in AudioLanguage.values) {
+          if (e.name == l) languageSet.add(e);
+        }
+      }
+
+      if (qualitySet.isEmpty && sourceSet.isEmpty && languageSet.isEmpty) {
+        return;
+      }
+      // If the user already picked filters while these async reads were in
+      // flight, don't clobber their choice with the saved defaults.
+      if (_kwFilters.qualities.isNotEmpty ||
+          _kwFilters.ripSources.isNotEmpty ||
+          _kwFilters.languages.isNotEmpty) {
+        return;
+      }
+      setState(() {
+        _kwFilters = TorrentFilterState(
+          qualities: qualitySet,
+          ripSources: sourceSet,
+          languages: languageSet,
+        );
+      });
+      // If results are already on screen (defaults resolved after a fast
+      // search), re-apply so the seeded filters take effect immediately.
+      if (_kwAll.isNotEmpty) _recomputeKeyword();
+    } catch (_) {
+      // Non-fatal: fall back to no default filters.
+    }
+  }
+
   Future<void> _runKeyword(String query) async {
     if (query.isEmpty) return;
     final token = ++_kwSearchToken;
@@ -2189,6 +2388,11 @@ class _SearchScreenState extends State<SearchScreen> {
       _kwError = null;
       _kwQuery = query;
       _kwCache = {};
+      _kwCachedOnly = false;
+      _kwDirectCounts = {};
+      _kwTorrentCounts = {};
+      _kwSelectedDirect = {};
+      _kwSelectedTorrent = {};
       _kwSelectionMode = false;
       _kwSelected.clear();
     });
@@ -2198,6 +2402,19 @@ class _SearchScreenState extends State<SearchScreen> {
       if (!mounted || token != _kwSearchToken) return;
       final torrents = (result['torrents'] as List).cast<Torrent>();
       final engineErrors = result['engineErrors'];
+      final engineCounts = result['engineCounts'];
+      // No engine ran at all (empty counts AND errors) → the user has disabled
+      // every source. Point them at Sources instead of a bare "No results".
+      final noEngineRan = (engineCounts is! Map || engineCounts.isEmpty) &&
+          (engineErrors is! Map || engineErrors.isEmpty);
+      if (torrents.isEmpty && noEngineRan) {
+        setState(() {
+          _kwError = 'No sources enabled. Turn on at least one source in '
+              'Sources, then try again.';
+          _kwLoading = false;
+        });
+        return;
+      }
       // Every source errored and nothing came back → surface the failure
       // instead of a misleading "No results" (searchAllEngines fails soft).
       if (torrents.isEmpty && engineErrors is Map && engineErrors.isNotEmpty) {
@@ -2210,16 +2427,31 @@ class _SearchScreenState extends State<SearchScreen> {
         return;
       }
       _kwAll = torrents;
+      _computeKwProviders(_kwAll);
       setState(() => _kwLoading = false);
       _recomputeKeyword();
       unawaited(_checkKeywordCache(_kwAll, token));
     } catch (e) {
       if (!mounted || token != _kwSearchToken) return;
       setState(() {
-        _kwError = e.toString();
+        _kwError = _friendlyKeywordError(e);
         _kwLoading = false;
       });
     }
+  }
+
+  /// Turn a raw search exception into a short, human-readable message — matches
+  /// the old screen's network/timeout/generic buckets.
+  String _friendlyKeywordError(Object e) {
+    final msg = e.toString().replaceAll('Exception: ', '');
+    if (msg.contains('SocketException') || msg.contains('Failed host lookup')) {
+      return 'Network error. Please check your connection.';
+    }
+    if (msg.contains('TimeoutException')) {
+      return 'Search timed out. Please try again.';
+    }
+    if (msg.length > 100) return 'Search failed. Please try again.';
+    return msg;
   }
 
   // ── Bulk selection (keyword results) ──────────────────────────────────────
@@ -2297,9 +2529,153 @@ class _SearchScreenState extends State<SearchScreen> {
     if (mounted && chose && _kwSelectionMode) _exitKwSelection();
   }
 
-  /// Re-apply filters + sort to the last search's results and rebuild nodes.
+  /// True when [t] is (or is treated as) a direct/external URL stream rather
+  /// than an addable torrent — used to bucket results into the provider groups.
+  bool _kwIsDirect(Torrent t) => t.isDirectStream || t.isExternalStream;
+
+  /// Acquisition URL for a result, preferring an explicit magnet, then a
+  /// `.torrent` URL, then a synthesized magnet from the infohash. Mirrors the
+  /// old screen's `_torrentAcquisitionUrlForTorrent`.
+  String _kwMagnetFor(Torrent t) {
+    final magnet = t.magnetUrl?.trim();
+    if (magnet != null && magnet.toLowerCase().startsWith('magnet:')) {
+      return magnet;
+    }
+    final torrentUrl = t.torrentUrl?.trim();
+    if (torrentUrl != null && torrentUrl.isNotEmpty) return torrentUrl;
+    final dn = t.name.isNotEmpty ? '&dn=${Uri.encodeComponent(t.name)}' : '';
+    return 'magnet:?xt=urn:btih:${t.infohash}$dn';
+  }
+
+  /// Action menu for a keyword-result direct/external stream row (parity with
+  /// the old direct-stream action dialog): Play/Open, Copy URL, Download.
+  void _showKwStreamMenu(Torrent t, int i) {
+    final external = t.isExternalStream;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                external ? Icons.open_in_new_rounded : Icons.play_arrow_rounded,
+                color: Colors.white,
+              ),
+              title: Text(external ? 'Open externally' : 'Play now',
+                  style: const TextStyle(color: Colors.white)),
+              onTap: () {
+                DialogTapGuard.markKeyAction();
+                Navigator.of(sheetCtx).pop();
+                unawaited(
+                  TorrentPlaybackService.activateTorrent(
+                    context,
+                    t,
+                    sources: _kwResults,
+                    sourceIndex: i,
+                    searchKeyword: _kwQuery,
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
+              title:
+                  const Text('Copy URL', style: TextStyle(color: Colors.white)),
+              onTap: () async {
+                DialogTapGuard.markKeyAction();
+                Navigator.of(sheetCtx).pop();
+                final url = t.directUrl ?? '';
+                if (url.isEmpty) {
+                  _snack('No stream URL available.');
+                  return;
+                }
+                await Clipboard.setData(ClipboardData(text: url));
+                _snack('URL copied to clipboard');
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.download_rounded, color: Color(0xFF60A5FA)),
+              title: const Text('Download to device',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () {
+                DialogTapGuard.markKeyAction();
+                Navigator.of(sheetCtx).pop();
+                unawaited(
+                    TorrentPlaybackService.downloadDirectStream(context, t));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Copy a keyword result's magnet/torrent link to the clipboard (parity with
+  /// the old screen's `_copyMagnetLink`).
+  void _copyKwMagnet(Torrent t) {
+    Clipboard.setData(ClipboardData(text: _kwMagnetFor(t)));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Magnet link copied to clipboard'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Tally result counts per source, split into Direct vs Torrent groups, and
+  /// default every source to selected. Mirrors the old `_calculateStreamTypeCounts`.
+  void _computeKwProviders(List<Torrent> torrents) {
+    final direct = <String, int>{};
+    final torrent = <String, int>{};
+    for (final t in torrents) {
+      final src = t.source.isNotEmpty ? t.source : 'unknown';
+      final bucket = _kwIsDirect(t) ? direct : torrent;
+      bucket[src] = (bucket[src] ?? 0) + 1;
+    }
+    _kwDirectCounts = direct;
+    _kwTorrentCounts = torrent;
+    _kwSelectedDirect = direct.keys.toSet();
+    _kwSelectedTorrent = torrent.keys.toSet();
+  }
+
+  /// TorBox-cached test used by the cached-only prefilter. Entries without a
+  /// real infohash but with a torrent URL (direct links) are always kept, since
+  /// they can't be cache-checked — matching the old screen.
+  bool _kwIsTorboxCached(Torrent t) {
+    if (!t.hasRealInfoHash && t.torrentUrl != null) return true;
+    // Key exactly as the cache map is built and as rows render badges
+    // (`infohash.toLowerCase()`, no trim) so the filter can't drop a torrent
+    // that still shows a TB badge.
+    final labels = _kwCache[t.infohash.toLowerCase()];
+    return labels != null && labels.contains('TB');
+  }
+
+  /// Re-apply cached-only + provider + attribute filters and sort to the last
+  /// search's results, then rebuild focus nodes.
   void _recomputeKeyword() {
-    final filtered = TorrentFilterMatcher.apply(_kwAll, _kwFilters);
+    Iterable<Torrent> base = _kwAll;
+    // 1) TorBox cached-only prefilter (when active).
+    if (_kwCachedOnly) {
+      base = base.where(_kwIsTorboxCached);
+    }
+    // 2) Provider (stream-type) multi-select. An empty group map means that
+    //    group has no providers, so it imposes no constraint on its members.
+    if (_kwDirectCounts.isNotEmpty || _kwTorrentCounts.isNotEmpty) {
+      base = base.where((t) {
+        final src = t.source.isNotEmpty ? t.source : 'unknown';
+        if (_kwIsDirect(t)) {
+          return _kwDirectCounts.isEmpty || _kwSelectedDirect.contains(src);
+        }
+        return _kwTorrentCounts.isEmpty || _kwSelectedTorrent.contains(src);
+      });
+    }
+    // 3) Quality / rip-source / language attribute filters.
+    final filtered = TorrentFilterMatcher.apply(base.toList(), _kwFilters);
     final sorted = _sortKeyword(filtered);
     _disposeKwNodes();
     for (var i = 0; i < sorted.length; i++) {
@@ -2310,28 +2686,35 @@ class _SearchScreenState extends State<SearchScreen> {
 
   List<Torrent> _sortKeyword(List<Torrent> list) {
     final l = [...list];
+    // Direction multiplier: descending by default (asc flips it). 'name' compares
+    // case-insensitively; the rest are numeric.
+    final int dir = _kwSortAsc ? 1 : -1;
     switch (_kwSort) {
       case 'seeders':
-        l.sort((a, b) => b.seeders.compareTo(a.seeders));
+        l.sort((a, b) => dir * a.seeders.compareTo(b.seeders));
         break;
       case 'size':
-        l.sort((a, b) => b.sizeBytes.compareTo(a.sizeBytes));
+        l.sort((a, b) => dir * a.sizeBytes.compareTo(b.sizeBytes));
         break;
       case 'date':
-        l.sort((a, b) => b.createdUnix.compareTo(a.createdUnix));
+        l.sort((a, b) => dir * a.createdUnix.compareTo(b.createdUnix));
         break;
       case 'name':
-        l.sort(
-          (a, b) => a.displayTitle.toLowerCase().compareTo(
-            b.displayTitle.toLowerCase(),
-          ),
-        );
+        l.sort((a, b) =>
+            dir *
+            a.displayTitle
+                .toLowerCase()
+                .compareTo(b.displayTitle.toLowerCase()));
         break;
       default: // 'relevance' — keep the engine (seeder-deduped) order
         break;
     }
     return l;
   }
+
+  /// Natural default direction for a sort field: names read A→Z (ascending);
+  /// seeders/size/date read most/largest/newest first (descending).
+  bool _naturalAscFor(String field) => field == 'name';
 
   /// Cache-check the results against TorBox/Premiumize (the only providers that
   /// support it) and stamp TB/PM badges onto the rows.
@@ -2342,6 +2725,9 @@ class _SearchScreenState extends State<SearchScreen> {
         .toList();
     if (hashes.isEmpty) return;
     final map = <String, List<String>>{};
+    // Tracks whether a TorBox cache-check actually ran (integration on, cache
+    // check on, key present) — the precondition for cached-only mode below.
+    bool torboxCacheActive = false;
     // Only check a provider when the user has cache-checking enabled AND the
     // integration is on AND a key is saved (matches Home's gating).
     try {
@@ -2354,6 +2740,10 @@ class _SearchScreenState extends State<SearchScreen> {
           apiKey: tb,
           infoHashes: hashes,
         );
+        // Only now (a successful check) treat cached-only as viable — matching
+        // the old screen's `torboxCacheMap != null` guard. A thrown check must
+        // NOT hide every result.
+        torboxCacheActive = true;
         for (final h in cached) {
           (map[h] ??= <String>[]).add('TB');
         }
@@ -2371,9 +2761,30 @@ class _SearchScreenState extends State<SearchScreen> {
         }
       }
     } catch (_) {}
+    // Cached-only mode mirrors the old screen: when TorBox cache-checking is
+    // active and Real-Debrid is NOT configured, narrow the list to TorBox-cached
+    // torrents. RD users keep the full list (RD auto-adds uncached).
+    bool cachedOnly = false;
+    if (torboxCacheActive) {
+      final rdKey = await StorageService.getApiKey();
+      final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
+      final rdActive = rdEnabled && rdKey != null && rdKey.isNotEmpty;
+      cachedOnly = !rdActive;
+    }
     // Drop badges from a superseded search.
     if (!mounted || token != _kwSearchToken) return;
-    setState(() => _kwCache = map);
+    _kwCache = map;
+    if (cachedOnly != _kwCachedOnly) {
+      // Cached-only mode toggles the visible set → full recompute.
+      _kwCachedOnly = cachedOnly;
+      _recomputeKeyword();
+    } else {
+      // Badges-only update: the result list is unchanged, so just repaint the
+      // cache labels. Rebuilding _kwNodes here (as a full recompute would) drops
+      // TV DPAD focus off whatever row the user navigated to while the async
+      // cache check was still in flight.
+      setState(() {});
+    }
   }
 
   Future<void> _openKeywordFilters() async {
@@ -2389,37 +2800,252 @@ class _SearchScreenState extends State<SearchScreen> {
     _recomputeKeyword();
   }
 
-  Future<void> _openKeywordSort() async {
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        final scheme = Theme.of(dialogContext).colorScheme;
-        Widget tile(String value, String label) => ListTile(
-          title: Text(label),
-          trailing: _kwSort == value
-              ? Icon(Icons.check_rounded, color: scheme.primary)
-              : null,
-          onTap: () => Navigator.of(dialogContext).pop(value),
-        );
-        return AlertDialog(
-          backgroundColor: scheme.surfaceContainerHigh,
-          title: const Text('Sort by'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              tile('relevance', 'Relevance'),
-              tile('seeders', 'Seeders'),
-              tile('size', 'Size'),
-              tile('date', 'Date added'),
-              tile('name', 'Name'),
-            ],
+  /// Info banner shown above the results when the list is narrowed to
+  /// TorBox-cached torrents. Mirrors the old `_buildTorboxCachedOnlyNotice`.
+  Widget _kwCachedOnlyNotice() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E3A8A).withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFF38BDF8), size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing Torbox cached results only. Disable "Check Torbox cache '
+              'during searches" in Torbox settings to see every result.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// True when the provider (stream-type) filter is worth surfacing: at least
+  /// two distinct sources exist across both groups, so filtering can change the
+  /// result set. A single source imposes no meaningful choice.
+  bool get _kwHasProviderFilter =>
+      (_kwDirectCounts.length + _kwTorrentCounts.length) >= 2;
+
+  /// Count of source groups the user has narrowed away from "all selected" —
+  /// drives the active state / badge on the Providers pill.
+  int get _kwProviderFilterActive {
+    var n = 0;
+    if (_kwDirectCounts.isNotEmpty &&
+        _kwSelectedDirect.length != _kwDirectCounts.length) {
+      n += _kwDirectCounts.length - _kwSelectedDirect.length;
+    }
+    if (_kwTorrentCounts.isNotEmpty &&
+        _kwSelectedTorrent.length != _kwTorrentCounts.length) {
+      n += _kwTorrentCounts.length - _kwSelectedTorrent.length;
+    }
+    return n;
+  }
+
+  /// Multi-select dialog to filter keyword results by their source, grouped into
+  /// Direct and Torrent providers. Ported from the old screen's stream-type
+  /// dropdowns, adapted to the new toolbar/dialog idiom.
+  Future<void> _openKeywordProviders() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        final scheme = Theme.of(dialogCtx).colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            void apply(VoidCallback mutate) {
+              setLocal(mutate);
+              _recomputeKeyword();
+            }
+
+            Widget group(
+              String title,
+              Map<String, int> counts,
+              Set<String> selected,
+            ) {
+              if (counts.isEmpty) return const SizedBox.shrink();
+              final entries = counts.entries.toList()
+                ..sort((a, b) => b.value.compareTo(a.value));
+              final allOn = selected.length == counts.length;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 2),
+                    child: Row(
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface,
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => apply(() {
+                            if (allOn) {
+                              selected.clear();
+                            } else {
+                              selected
+                                ..clear()
+                                ..addAll(counts.keys);
+                            }
+                          }),
+                          child: Text(allOn ? 'None' : 'All'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ...entries.map(
+                    (e) => CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: selected.contains(e.key),
+                      title: Text(
+                        e.key,
+                        style: TextStyle(fontSize: 13, color: scheme.onSurface),
+                      ),
+                      secondary: Text(
+                        '${e.value}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      onChanged: (_) => apply(() {
+                        if (selected.contains(e.key)) {
+                          selected.remove(e.key);
+                        } else {
+                          selected.add(e.key);
+                        }
+                      }),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            return AlertDialog(
+              title: const Text('Filter by source'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      group('Direct', _kwDirectCounts, _kwSelectedDirect),
+                      group('Torrent', _kwTorrentCounts, _kwSelectedTorrent),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Done'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
-    if (choice == null || !mounted) return;
-    _kwSort = choice;
-    _recomputeKeyword();
+  }
+
+  Future<void> _openKeywordSort() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        final scheme = Theme.of(dialogCtx).colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            // Picking a field resets direction to that field's natural default;
+            // the toggle below can then flip it. Changes apply live.
+            void applyField(String value) {
+              setLocal(() {
+                _kwSort = value;
+                _kwSortAsc = _naturalAscFor(value);
+              });
+              _recomputeKeyword();
+            }
+
+            void applyDir(bool asc) {
+              setLocal(() => _kwSortAsc = asc);
+              _recomputeKeyword();
+            }
+
+            Widget tile(String value, String label) => ListTile(
+                  dense: true,
+                  title: Text(label),
+                  trailing: _kwSort == value
+                      ? Icon(Icons.check_rounded, color: scheme.primary)
+                      : null,
+                  onTap: () => applyField(value),
+                );
+
+            final dirEnabled = _kwSort != 'relevance';
+            return AlertDialog(
+              backgroundColor: scheme.surfaceContainerHigh,
+              title: const Text('Sort by'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  tile('relevance', 'Relevance'),
+                  tile('seeders', 'Seeders'),
+                  tile('size', 'Size'),
+                  tile('date', 'Date added'),
+                  tile('name', 'Name'),
+                  const Divider(height: 12),
+                  // Direction toggle — disabled for 'relevance' (engine order).
+                  Opacity(
+                    opacity: dirEnabled ? 1 : 0.4,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          const Expanded(child: Text('Direction')),
+                          ToggleButtons(
+                            isSelected: [!_kwSortAsc, _kwSortAsc],
+                            onPressed:
+                                dirEnabled ? (i) => applyDir(i == 1) : null,
+                            borderRadius: BorderRadius.circular(8),
+                            constraints: const BoxConstraints(
+                                minHeight: 34, minWidth: 46),
+                            children: const [
+                              Icon(Icons.arrow_downward_rounded, size: 18),
+                              Icon(Icons.arrow_upward_rounded, size: 18),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Done'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _openKeywordSources() async {
@@ -3782,7 +4408,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildKeyword() {
     if (_kwLoading) {
-      return const Center(child: CircularProgressIndicator());
+      // Branded phased loader (parity with the old screen) instead of a bare
+      // spinner. Keyword search is never series-aware, so isSeries stays false.
+      return SearchLoadingAnimation(
+        phase: SearchPhase.searching,
+        isTelevision: widget.isTelevision,
+      );
     }
     if (_kwError != null) {
       return _message(Icons.error_outline_rounded, 'Search failed', _kwError!);
@@ -3813,9 +4444,23 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     final narrow =
         !widget.isTelevision && MediaQuery.of(context).size.width < 600;
+    // Apply a restored scroll offset once the list is laid out, then clear it so
+    // it only fires on the first build after a restore.
+    if (_pendingKwScroll != null && _kwResults.isNotEmpty) {
+      final off = _pendingKwScroll!;
+      _pendingKwScroll = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _kwScroll.hasClients) {
+          _kwScroll.jumpTo(
+            off.clamp(0.0, _kwScroll.position.maxScrollExtent),
+          );
+        }
+      });
+    }
     final content = Column(
       children: [
         _buildKeywordToolbar(floatingSelect: narrow),
+        if (_kwCachedOnly && _kwAll.isNotEmpty) _kwCachedOnlyNotice(),
         Expanded(
           child: _kwResults.isEmpty
               ? _message(
@@ -3827,6 +4472,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       : 'No results match your filters. Adjust or clear them.',
                 )
               : ListView.builder(
+                  controller: _kwScroll,
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   cacheExtent: 1200,
                   itemCount: _kwResults.length,
@@ -3858,16 +4504,27 @@ class _SearchScreenState extends State<SearchScreen> {
                           TorrentPlaybackService.activateTorrent(
                             context,
                             t,
+                            // Pass the whole result set so the in-player Sources
+                            // switcher can hop to any other keyword hit (parity
+                            // with the old screen, which always passed _torrents).
+                            sources: _kwResults,
+                            sourceIndex: i,
                             searchKeyword: _kwQuery,
                           ),
                         );
                       },
-                      onLongPress: !_kwSelectionMode && selectable
+                      onLongPress: _kwSelectionMode
+                          ? null
+                          : selectable
                           ? () {
                               _enterKwSelection();
                               _toggleKwSelection(t);
                             }
-                          : null,
+                          // Direct/external streams aren't selectable — long
+                          // press opens their Play/Copy/Download menu instead
+                          // (parity with the old direct-stream action dialog).
+                          : () => _showKwStreamMenu(t, i),
+                      onCopyMagnet: () => _copyKwMagnet(t),
                       onNavigateUp: () {
                         if (i > 0) {
                           _kwNodes[i - 1].requestFocus();
@@ -4075,47 +4732,62 @@ class _SearchScreenState extends State<SearchScreen> {
 
     final canSelect = _kwSelectableResults.isNotEmpty;
     final showSelect = canSelect && !floatingSelect;
-    final total = showSelect ? 4 : 3;
+    final showProviders = _kwHasProviderFilter;
+    final providerActive = _kwProviderFilterActive;
+    // Build the pill set dynamically so navIndex stays contiguous when the
+    // optional Providers / Select pills come and go. Base pills always present:
+    // Sort, Filters, Sources (3); Providers and Select are optional.
+    final total = 3 + (showProviders ? 1 : 0) + (showSelect ? 1 : 0);
+    var idx = 0;
+    final pills = <Widget>[
+      pill(
+        Icons.sort_rounded,
+        'Sort · ${_sortLabel(_kwSort)}',
+        _openKeywordSort,
+        compact: floatingSelect,
+        navIndex: idx++,
+        navTotal: total,
+      ),
+      pill(
+        Icons.filter_list_rounded,
+        filterCount > 0 ? 'Filters · $filterCount' : 'Filters',
+        _openKeywordFilters,
+        active: filterCount > 0,
+        compact: floatingSelect,
+        navIndex: idx++,
+        navTotal: total,
+      ),
+      if (showProviders)
+        pill(
+          Icons.hub_rounded,
+          providerActive > 0 ? 'Providers · $providerActive' : 'Providers',
+          _openKeywordProviders,
+          active: providerActive > 0,
+          compact: floatingSelect,
+          navIndex: idx++,
+          navTotal: total,
+        ),
+      pill(
+        Icons.dns_rounded,
+        'Sources',
+        _openKeywordSources,
+        compact: floatingSelect,
+        navIndex: idx++,
+        navTotal: total,
+      ),
+      if (showSelect)
+        pill(
+          Icons.checklist_rounded,
+          'Select',
+          _enterKwSelection,
+          navIndex: idx++,
+          navTotal: total,
+        ),
+    ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      child: Row(
-        children: [
-          pill(
-            Icons.sort_rounded,
-            'Sort · ${_sortLabel(_kwSort)}',
-            _openKeywordSort,
-            compact: floatingSelect,
-            navIndex: 0,
-            navTotal: total,
-          ),
-          pill(
-            Icons.filter_list_rounded,
-            filterCount > 0 ? 'Filters · $filterCount' : 'Filters',
-            _openKeywordFilters,
-            active: filterCount > 0,
-            compact: floatingSelect,
-            navIndex: 1,
-            navTotal: total,
-          ),
-          pill(
-            Icons.dns_rounded,
-            'Sources',
-            _openKeywordSources,
-            compact: floatingSelect,
-            navIndex: 2,
-            navTotal: total,
-          ),
-          if (showSelect)
-            pill(
-              Icons.checklist_rounded,
-              'Select',
-              _enterKwSelection,
-              navIndex: 3,
-              navTotal: total,
-            ),
-        ],
-      ),
+      child: Row(children: pills),
     );
   }
 
@@ -7135,6 +7807,27 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 _snack('URL copied to clipboard');
               },
             ),
+            ListTile(
+              leading: const Icon(
+                Icons.download_rounded,
+                color: Color(0xFF60A5FA),
+              ),
+              title: const Text(
+                'Download to device',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                'Save this stream to your device',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+              ),
+              onTap: () {
+                DialogTapGuard.markKeyAction();
+                Navigator.of(sheetCtx).pop();
+                unawaited(
+                  TorrentPlaybackService.downloadDirectStream(context, t),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -7359,9 +8052,17 @@ class _KeywordSourcesDialogState extends State<_KeywordSourcesDialog> {
   }
 
   Future<void> _load() async {
-    final engines = EngineRegistry.instance.getKeywordSearchEngines();
+    // Use the same combined set the search actually queries — registry engines
+    // PLUS user-configured IndexerManager (Jackett/Prowlarr/Torznab) engines —
+    // so those indexers are toggleable here, not silently queried but hidden.
+    final engines = await TorrentService.getKeywordSearchEngines();
     for (final e in engines) {
-      _enabled[e.name] = await _settings.getEnabled(e.name, true);
+      // Seed with the SAME per-engine default the search uses
+      // (TorrentService._isEngineSelected), so a source the user configured as
+      // disabled by default doesn't show ON here while not actually being
+      // queried. Hardcoding `true` desynced IndexerManager engines.
+      final def = e.settingsConfig.enabled?.defaultBool ?? true;
+      _enabled[e.name] = await _settings.getEnabled(e.name, def);
     }
     if (!mounted) return;
     setState(() {

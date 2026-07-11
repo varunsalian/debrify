@@ -29,6 +29,7 @@ class TorrentResultRow extends StatefulWidget {
     this.isSelected = false,
     required this.onTap,
     this.onLongPress,
+    this.onCopyMagnet,
     this.onNavigateUp,
     this.onNavigateDown,
   });
@@ -52,6 +53,10 @@ class TorrentResultRow extends StatefulWidget {
 
   /// Called when row is long-pressed - shows provider selection dialog
   final VoidCallback? onLongPress;
+
+  /// When set (and the result is a real torrent, non-TV, not in selection
+  /// mode), a trailing "copy magnet" button is shown that invokes this.
+  final VoidCallback? onCopyMagnet;
 
   final VoidCallback? onNavigateUp;
   final VoidCallback? onNavigateDown;
@@ -313,6 +318,24 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
               ),
             ),
           ),
+
+          // Copy-magnet button (desktop/mobile, real torrents, not selecting).
+          // TV omits it to keep DPAD navigation to a single focusable per row.
+          if (widget.onCopyMagnet != null &&
+              !widget.isSelectionMode &&
+              !widget.isTelevision &&
+              !widget.torrent.isDirectStream &&
+              !widget.torrent.isExternalStream)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: IconButton(
+                onPressed: widget.onCopyMagnet,
+                tooltip: 'Copy magnet link',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                color: _textSecondary,
+              ),
+            ),
 
           // Chevron or checkbox
           Padding(

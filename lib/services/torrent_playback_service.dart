@@ -1,16 +1,21 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/alldebrid_file.dart';
+import '../models/playlist_view_mode.dart';
 import '../models/premiumize_file.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_file.dart';
 import '../models/torrent.dart';
 import '../screens/video_player/models/playlist_entry.dart';
+import '../utils/deovr_utils.dart' as deovr;
 import '../utils/dialog_tap_guard.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
@@ -229,6 +234,16 @@ class TorrentPlaybackService {
         break;
       case 'playlist':
         await _addToPlaylist(context, resolved, torrent, provider, meta: meta);
+        break;
+      case 'channel':
+        // Saved "Add to channel" action (parity with the old screen): cache the
+        // torrent into a Debrify TV channel instead of playing it. Without this
+        // case the switch fell through to `default` and silently played.
+        await DebrifyTvChannelAddService.addTorrentsToChannel(
+          context,
+          torrents: [torrent],
+          searchKeyword: searchKeyword,
+        );
         break;
       case 'choose':
         await _showChooser(context, resolved, torrent, provider,
@@ -1210,6 +1225,8 @@ class TorrentPlaybackService {
                 : null,
             isRarArchive: isRar,
             rdTorrentId: rd.id.isNotEmpty ? rd.id : null,
+            // Raw restricted link so a saved playlist item re-unrestricts later.
+            restrictedLink: links.isNotEmpty ? links.first : null,
           );
         }
       case 'torbox':
@@ -1250,6 +1267,8 @@ class TorrentPlaybackService {
               openInTab: open,
               fileName: file == null ? null : _fileName(file.name),
               torboxTorrentId: torrentId,
+              // File id so a saved playlist item re-requests a fresh link later.
+              torboxFileId: file?.id,
             );
           }
           final (sorted, startIndex) = _orderBySeries(videos, (f) => f.name);
@@ -1295,6 +1314,8 @@ class TorrentPlaybackService {
               downloadUrls: file?.link != null ? [file!.link] : const [],
               openInTab: open,
               fileName: file == null ? null : _fileName(file.path),
+              // File path so a saved playlist item re-resolves from the cloud.
+              premiumizePath: file?.path,
             );
           }
           // Premiumize direct links are all ready — no lazy resolution needed.
@@ -1340,6 +1361,8 @@ class TorrentPlaybackService {
               downloadUrls: playUrl != null ? [playUrl] : const [],
               openInTab: open,
               fileName: file == null ? null : _fileName(file.path),
+              // Locked link so a saved playlist item re-unlocks a fresh URL.
+              allDebridLink: file?.link,
             );
           }
           final (sorted, startIndex) = _orderBySeries(videos, (f) => f.path);
@@ -1387,10 +1410,33 @@ class TorrentPlaybackService {
       _snack(context, 'No playable link for this source.');
       return;
     }
+    // Refuse a resolved single file that clearly isn't a video (parity with the
+    // old screen's MIME check). Scoped to KEYWORD play (meta == null) so this
+    // shared path doesn't add a new constraint to catalog board plays. Only
+    // fires when we know the real filename; packs are video-filtered upstream.
+    if (meta == null &&
+        !r.hasPlaylist &&
+        r.fileName != null &&
+        r.fileName!.isNotEmpty &&
+        !FileUtils.isVideoFile(r.fileName!)) {
+      _snack(context,
+          'Added to ${_label(provider)}, but the file is not a video.');
+      return;
+    }
+    // For keyword play (no catalog meta) prefer the provider's canonical file
+    // name as the title, so the player's resume/Continue-Watching key matches
+    // the same item played from the Debrid screen (old-screen parity). Catalog
+    // play keeps its clean meta title.
+    final playTitle = (meta == null &&
+            !r.hasPlaylist &&
+            r.fileName != null &&
+            r.fileName!.isNotEmpty)
+        ? r.fileName!
+        : torrent.displayTitle;
     await _launch(
       context,
       r,
-      torrent.displayTitle,
+      playTitle,
       provider: provider,
       meta: meta,
       sources: sources ?? [torrent],
@@ -1519,6 +1565,7 @@ class TorrentPlaybackService {
     PlaybackMeta? meta,
     String? rdTorrentId,
     int? torboxTorrentId,
+    PlaylistViewMode? viewMode,
   }) =>
       VideoPlayerLaunchArgs(
         videoUrl: videoUrl,
@@ -1526,6 +1573,7 @@ class TorrentPlaybackService {
         subtitle: subtitle,
         playlist: playlist,
         startIndex: startIndex,
+        viewMode: viewMode,
         stremioSources: stremioSources,
         stremioCurrentSourceIndex: stremioCurrentSourceIndex,
         resolveSourceToPlaylist: resolveSourceToPlaylist,
@@ -1617,6 +1665,28 @@ class TorrentPlaybackService {
           ? Formatters.formatFileSize(winner.sizeBytes)
           : (winner.source.isNotEmpty ? winner.source : null);
     }
+    // Organize the playlist as a TV series when the file names look like one, so
+    // a keyword-launched season pack groups by season/episode and "next" walks
+    // episode order — parity with the old screen. Scoped to KEYWORD play
+    // (meta == null): catalog already drives series/movie view from its own
+    // contentType, so this shared launcher must not override that. We pass
+    // `series` only when detected and leave it null otherwise (null lets the
+    // launcher's contentType fallback win).
+    final PlaylistViewMode? viewMode =
+        (meta == null && r.hasPlaylist && _isSeriesPlaylist(r.playlist!))
+            ? PlaylistViewMode.series
+            : null;
+    // VR hand-off (parity with the old search screen): for a single video file
+    // played from KEYWORD search (meta == null), when the user's VR mode says
+    // so, play in DeoVR instead of the in-app player. Scoped to keyword so this
+    // shared launcher doesn't newly divert catalog board plays. Packs keep the
+    // normal player (DeoVR takes one video).
+    if (meta == null && !r.hasPlaylist && await _shouldUseDeoVR(title)) {
+      if (!context.mounted) return;
+      await _launchWithDeoVR(context, videoUrl: r.playUrl!, filename: title);
+      return;
+    }
+    if (!context.mounted) return;
     await VideoPlayerLauncher.push(
       context,
       _playerArgs(
@@ -1632,6 +1702,7 @@ class TorrentPlaybackService {
         meta: meta,
         rdTorrentId: r.rdTorrentId,
         torboxTorrentId: r.torboxTorrentId,
+        viewMode: viewMode,
       ),
       // 'local' isn't a debrid provider the advance could search with — the
       // null makes the advance replay bound sources first, then addon streams.
@@ -1639,6 +1710,210 @@ class TorrentPlaybackService {
           provider:
               provider == SeriesSource.localService ? null : provider),
     );
+  }
+
+  /// Whether VR playback (DeoVR) should be used for [filename], per the user's
+  /// VR-mode setting. Android-only. Ported from the old search screen.
+  static Future<bool> _shouldUseDeoVR(String filename) async {
+    if (!Platform.isAndroid) return false;
+    final vrMode = await StorageService.getQuickPlayVrMode();
+    switch (vrMode) {
+      case 'always':
+        return true;
+      case 'auto':
+        return deovr.isVrContent(filename);
+      case 'disabled':
+      default:
+        return false;
+    }
+  }
+
+  /// Hand a single video file off to DeoVR: pick a screen/stereo format (auto
+  /// from the filename or the user's defaults, optionally confirmed via a
+  /// dialog), upload a DeoVR JSON descriptor to jsonblob, then launch the
+  /// `deovr://` intent. Ported verbatim from the old search screen.
+  static Future<void> _launchWithDeoVR(
+    BuildContext context, {
+    required String videoUrl,
+    required String filename,
+  }) async {
+    if (!Platform.isAndroid) return;
+    // Capture the root navigator while context is synchronously valid, so the
+    // loading overlay can always be dismissed even if the widget unmounts during
+    // the awaited upload below.
+    final rootNav = Navigator.of(context, rootNavigator: true);
+
+    final autoDetectFormat =
+        await StorageService.getQuickPlayVrAutoDetectFormat();
+    final showFormatDialog = await StorageService.getQuickPlayVrShowDialog();
+
+    String screenType;
+    String stereoMode;
+    if (autoDetectFormat) {
+      final detected = deovr.detectVRFormat(filename);
+      screenType = detected.screenType;
+      stereoMode = detected.stereoMode;
+    } else {
+      screenType = await StorageService.getQuickPlayVrDefaultScreenType();
+      stereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
+    }
+
+    if (showFormatDialog && context.mounted) {
+      String selectedScreenType = screenType;
+      String selectedStereoMode = stereoMode;
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('DeoVR Format'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  filename,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 16),
+                const Text('Screen Type',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedScreenType,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: deovr.screenTypeLabels.entries
+                      .map((e) => DropdownMenuItem(
+                          value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => selectedScreenType = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                const Text('Stereo Mode',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedStereoMode,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: deovr.stereoModeLabels.entries
+                      .map((e) => DropdownMenuItem(
+                          value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => selectedStereoMode = value);
+                    }
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  DialogTapGuard.markKeyAction();
+                  Navigator.of(context).pop(false);
+                },
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  DialogTapGuard.markKeyAction();
+                  Navigator.of(context).pop(true);
+                },
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Play'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (result != true || !context.mounted) return;
+      screenType = selectedScreenType;
+      stereoMode = selectedStereoMode;
+    }
+
+    // Tracks whether the blocking loading dialog is still on screen, so the
+    // catch below never pops the underlying screen after we've already
+    // dismissed the dialog (e.g. a failed `intent.launch()` when DeoVR isn't
+    // installed would otherwise bounce the user back a screen).
+    bool loadingShown = false;
+    try {
+      if (context.mounted) {
+        loadingShown = true;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) =>
+              const Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      final json = deovr.generateDeoVRJson(
+        videoUrl: videoUrl,
+        title: filename,
+        screenType: screenType,
+        stereoMode: stereoMode,
+      );
+      final response = await http.post(
+        Uri.parse('https://jsonblob.com/api/jsonBlob'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(json),
+      );
+      if (response.statusCode != 201) {
+        throw Exception('Failed to upload JSON: ${response.statusCode}');
+      }
+      final location = response.headers['location'];
+      if (location == null) {
+        throw Exception('No location header in response');
+      }
+      final jsonUrl = 'https://jsonblob.com$location';
+
+      if (loadingShown) {
+        rootNav.pop();
+        loadingShown = false;
+      }
+
+      final intent =
+          AndroidIntent(action: 'action_view', data: 'deovr://$jsonUrl');
+      await intent.launch();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Launching DeoVR...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (loadingShown) rootNav.pop();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open with DeoVR: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   /// Builds the in-player source-switch resolver: given another [Torrent] the
@@ -1664,18 +1939,209 @@ class TorrentPlaybackService {
     };
   }
 
+  /// Download a direct/external addon stream to device (parity with the old
+  /// screen's direct-stream "Download to device" action). Follows redirects
+  /// first — MediaFusion-style playback URLs 30x-hop to the real file — then
+  /// queues the resolved URL.
+  static Future<void> downloadDirectStream(
+      BuildContext context, Torrent torrent) async {
+    final raw = torrent.directUrl ?? '';
+    if (raw.isEmpty) {
+      _snack(context, 'No stream URL available.');
+      return;
+    }
+    _snack(context, 'Resolving download URL…');
+    final resolved = await _resolveDownloadUrl(raw);
+    try {
+      await DownloadService.instance.enqueueDownload(
+        url: resolved,
+        fileName: torrent.displayTitle,
+        torrentName: torrent.displayTitle,
+      );
+      if (context.mounted) _snack(context, 'Download queued.');
+    } catch (_) {
+      if (context.mounted) _snack(context, 'Failed to queue download.');
+    }
+  }
+
+  /// Follow up to 10 redirects (HEAD, no auto-follow) to resolve a stream URL to
+  /// its final downloadable location, handling relative Location headers. Ported
+  /// from the old screen's `_resolveDownloadUrl`.
+  static Future<String> _resolveDownloadUrl(String url) async {
+    var currentUrl = url;
+    var redirectCount = 0;
+    while (redirectCount < 10) {
+      try {
+        final uri = Uri.parse(currentUrl);
+        final client = http.Client();
+        try {
+          final request = http.Request('HEAD', uri);
+          request.followRedirects = false;
+          request.headers['User-Agent'] =
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+          final response =
+              await client.send(request).timeout(const Duration(seconds: 10));
+          if (response.statusCode == 301 ||
+              response.statusCode == 302 ||
+              response.statusCode == 303 ||
+              response.statusCode == 307 ||
+              response.statusCode == 308) {
+            final location = response.headers['location'];
+            if (location != null && location.isNotEmpty) {
+              currentUrl = uri.resolve(location).toString();
+              redirectCount++;
+              continue;
+            }
+          }
+          return currentUrl; // no redirect → final URL
+        } finally {
+          client.close();
+        }
+      } catch (_) {
+        break;
+      }
+    }
+    return currentUrl; // best effort (possibly partially resolved)
+  }
+
+  /// Resolve a playlist entry to a concrete download URL, unlocking a lazy
+  /// debrid entry on demand: RD `restrictedLink` → unrestrict, TorBox
+  /// torrent+file id → download link, AllDebrid locked link → unlock. Premiumize
+  /// entries already carry a URL. Returns null if it can't be resolved.
+  static Future<String?> _resolveEntryUrl(PlaylistEntry e) async {
+    if (e.url.isNotEmpty) return e.url;
+    try {
+      if (e.restrictedLink != null && e.restrictedLink!.isNotEmpty) {
+        final key = (await StorageService.getApiKey()) ?? '';
+        final r = await DebridService.unrestrictLink(key, e.restrictedLink!);
+        return r['download']?.toString();
+      }
+      if (e.torboxTorrentId != null && e.torboxFileId != null) {
+        final key = (await StorageService.getTorboxApiKey()) ?? '';
+        return await TorboxService.requestFileDownloadLink(
+            apiKey: key, torrentId: e.torboxTorrentId!, fileId: e.torboxFileId!);
+      }
+      if (e.allDebridLink != null && e.allDebridLink!.isNotEmpty) {
+        final key = (await StorageService.getAllDebridApiKey()) ?? '';
+        return await AllDebridService.unlockLink(key, e.allDebridLink!);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Multi-select download picker (parity with the old per-file download
+  /// dialog): lists the pack's files with sizes, defaults all selected, shows a
+  /// running total, and returns the chosen entries — or null if cancelled.
+  static Future<List<PlaylistEntry>?> _showDownloadPicker(
+      BuildContext context, List<PlaylistEntry> entries) {
+    return showDialog<List<PlaylistEntry>>(
+      context: context,
+      builder: (dialogCtx) {
+        final scheme = Theme.of(dialogCtx).colorScheme;
+        final selected = {...entries}; // default: all selected
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final totalBytes = selected.fold<int>(
+                0, (sum, e) => sum + (e.sizeBytes ?? 0));
+            final allOn = selected.length == entries.length;
+            return AlertDialog(
+              title: const Text('Download files'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => setLocal(() {
+                          if (allOn) {
+                            selected.clear();
+                          } else {
+                            selected
+                              ..clear()
+                              ..addAll(entries);
+                          }
+                        }),
+                        child: Text(allOn ? 'None' : 'All'),
+                      ),
+                    ),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final e in entries)
+                            CheckboxListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              controlAffinity:
+                                  ListTileControlAffinity.leading,
+                              value: selected.contains(e),
+                              title: Text(e.title,
+                                  style: TextStyle(
+                                      fontSize: 13, color: scheme.onSurface),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis),
+                              secondary: Text(
+                                (e.sizeBytes ?? 0) > 0
+                                    ? Formatters.formatFileSize(e.sizeBytes!)
+                                    : '',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant),
+                              ),
+                              onChanged: (_) => setLocal(() {
+                                if (selected.contains(e)) {
+                                  selected.remove(e);
+                                } else {
+                                  selected.add(e);
+                                }
+                              }),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: selected.isEmpty
+                      ? null
+                      : () => Navigator.of(dialogCtx)
+                          .pop(entries.where(selected.contains).toList()),
+                  child: Text(totalBytes > 0
+                      ? 'Download · ${Formatters.formatFileSize(totalBytes)}'
+                      : 'Download'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   static Future<void> _download(
       BuildContext context, _Resolved r, Torrent torrent) async {
-    // Multi-file pack: queue every entry that already has a resolved URL, named
-    // by its real filename. Premiumize resolves all files up front; the others
-    // resolve only the start file (lazy entries have no URL to fetch yet).
-    if (r.playlist != null && r.playlist!.isNotEmpty) {
+    // Multi-file pack: let the user choose which files (parity with the old
+    // per-file download dialog), then queue each — unlocking lazy debrid entries
+    // on demand (RD/TorBox/AllDebrid resolve only the start file up front;
+    // Premiumize resolves all).
+    if (r.playlist != null && r.playlist!.length > 1) {
+      final chosen = await _showDownloadPicker(context, r.playlist!);
+      if (chosen == null || chosen.isEmpty) return; // cancelled
       var n = 0;
-      for (final e in r.playlist!) {
-        if (e.url.isEmpty) continue;
+      for (final e in chosen) {
+        final url = await _resolveEntryUrl(e);
+        if (url == null || url.isEmpty) continue;
         try {
           await DownloadService.instance.enqueueDownload(
-            url: e.url,
+            url: url,
             fileName: e.title,
             torrentName: torrent.displayTitle,
           );
@@ -1685,6 +2151,26 @@ class TorrentPlaybackService {
       if (context.mounted) {
         _snack(context,
             n > 0 ? 'Queued $n file(s) for download.' : 'Could not queue downloads.');
+      }
+      return;
+    }
+    if (r.playlist != null && r.playlist!.isNotEmpty) {
+      // Single-entry playlist: queue it directly (no picker for one file).
+      final url = await _resolveEntryUrl(r.playlist!.first);
+      var queued = false;
+      if (url != null && url.isNotEmpty) {
+        try {
+          await DownloadService.instance.enqueueDownload(
+            url: url,
+            fileName: r.playlist!.first.title,
+            torrentName: torrent.displayTitle,
+          );
+          queued = true;
+        } catch (_) {}
+      }
+      if (context.mounted) {
+        _snack(context,
+            queued ? 'Download queued.' : 'Could not queue download.');
       }
       return;
     }
@@ -1707,11 +2193,15 @@ class TorrentPlaybackService {
       Torrent torrent, String provider,
       {PlaybackMeta? meta}) async {
     final isPack = r.hasPlaylist;
-    final ok = await StorageService.addPlaylistItemRaw({
+    final rawTitle =
+        (!isPack && r.fileName != null) ? r.fileName! : torrent.displayTitle;
+    // Base fields shared by every provider. NOTE: no 'url' is stored — the
+    // playlist player RE-RESOLVES a fresh link from the provider-native ids
+    // below, so saved items keep working after the debrid direct link expires
+    // (parity with the old per-provider playlist schema).
+    final item = <String, dynamic>{
       'provider': provider == 'debrid' ? 'realdebrid' : provider,
-      'title':
-          (!isPack && r.fileName != null) ? r.fileName! : torrent.displayTitle,
-      'url': r.playUrl ?? '',
+      'title': FileUtils.cleanPlaylistTitle(rawTitle),
       'kind': isPack ? 'collection' : 'single',
       'torrent_hash': torrent.infohash,
       if (isPack) 'count': r.playlist!.length,
@@ -1722,7 +2212,59 @@ class TorrentPlaybackService {
       if (meta?.contentType != null) 'contentType': meta!.contentType,
       if (meta?.posterUrl != null && meta!.posterUrl!.isNotEmpty)
         'posterUrl': meta.posterUrl,
-    });
+    };
+    // Provider-native identifiers for re-resolution. For packs, per-file ids are
+    // pulled from the resolved playlist entries; for single files they ride on
+    // [_Resolved].
+    switch (provider) {
+      case 'debrid': // Real-Debrid
+        if (r.rdTorrentId != null) item['rdTorrentId'] = r.rdTorrentId;
+        if (!isPack) {
+          item['url'] = ''; // force re-resolution from restrictedLink
+          if (r.restrictedLink != null) {
+            item['restrictedLink'] = r.restrictedLink;
+          }
+        }
+        break;
+      case 'torbox':
+        item['torboxTorrentId'] = r.torboxTorrentId;
+        if (isPack) {
+          item['torboxFileIds'] = [
+            for (final e in r.playlist!)
+              if (e.torboxFileId != null) e.torboxFileId,
+          ];
+        } else if (r.torboxFileId != null) {
+          item['torboxFileId'] = r.torboxFileId;
+        }
+        break;
+      case 'premiumize':
+        // Collections re-resolve from torrent_hash; singles from the file path.
+        if (!isPack && r.premiumizePath != null) {
+          item['premiumizePath'] = r.premiumizePath;
+        }
+        break;
+      case 'alldebrid':
+        // Collections re-resolve from torrent_hash; singles from the locked link.
+        if (!isPack && r.allDebridLink != null) {
+          item['allDebridLink'] = r.allDebridLink;
+        }
+        break;
+      case 'pikpak':
+        if (isPack) {
+          // Pack: folder id + per-file video ids (player collection path).
+          item['pikpakFileId'] = r.pikpakFileId;
+          item['pikpakFileIds'] = [
+            for (final e in r.playlist!)
+              if (e.pikpakFileId != null) e.pikpakFileId,
+          ];
+        } else {
+          // Single: the playable VIDEO-file id, NOT the folder id — else the
+          // player can't get a streaming URL and the item won't play.
+          item['pikpakFileId'] = r.pikpakVideoFileId ?? r.pikpakFileId;
+        }
+        break;
+    }
+    final ok = await StorageService.addPlaylistItemRaw(item);
     if (context.mounted) {
       _snack(context, ok ? 'Added to playlist.' : 'Already in playlist.');
     }
@@ -1793,8 +2335,17 @@ class TorrentPlaybackService {
             searchKeyword: searchKeyword,
           )),
         ),
-        // TorBox power action: copy the whole-torrent ZIP permalink.
-        if (provider == 'torbox' && r.torboxTorrentId != null)
+        // TorBox power actions: download the whole-torrent ZIP to device, or
+        // copy its permalink (parity with the old screen's TorBox download menu).
+        if (provider == 'torbox' && r.torboxTorrentId != null) ...[
+          DebridActionItem(
+            icon: Icons.folder_zip_rounded,
+            color: const Color(0xFFA78BFA),
+            title: 'Download as ZIP',
+            subtitle: 'Download all files as a ZIP to this device.',
+            onTap: () =>
+                unawaited(_downloadTorboxZip(context, r.torboxTorrentId!, name)),
+          ),
           DebridActionItem(
             icon: Icons.link_rounded,
             color: const Color(0xFFEC4899),
@@ -1803,6 +2354,7 @@ class TorrentPlaybackService {
             onTap: () =>
                 unawaited(_copyTorboxZipLink(context, r.torboxTorrentId!)),
           ),
+        ],
         // Premiumize power actions (need the magnet — cloud transfer + ZIP).
         if (provider == 'premiumize' && magnet != null) ...[
           DebridActionItem(
@@ -1854,6 +2406,31 @@ class TorrentPlaybackService {
     await Clipboard.setData(ClipboardData(text: zipLink));
     if (context.mounted) {
       _snack(context, 'ZIP download link copied to clipboard!');
+    }
+  }
+
+  /// Queue the whole-torrent ZIP for download to this device (parity with the
+  /// old TorBox "Download as ZIP to device" option). The `torboxZip` meta lets
+  /// the download service key/retry it as a ZIP job.
+  static Future<void> _downloadTorboxZip(
+      BuildContext context, int torrentId, String torrentName) async {
+    final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
+    if (apiKey.isEmpty) return;
+    final zipLink = TorboxService.createZipPermalink(apiKey, torrentId);
+    try {
+      await DownloadService.instance.enqueueDownload(
+        url: zipLink,
+        fileName: '$torrentName.zip',
+        torrentName: torrentName,
+        meta: jsonEncode({
+          'torboxDownload': true,
+          'torboxZip': true,
+          'torboxTorrentId': torrentId,
+        }),
+      );
+      if (context.mounted) _snack(context, 'ZIP download queued.');
+    } catch (_) {
+      if (context.mounted) _snack(context, 'Failed to queue ZIP download.');
     }
   }
 
@@ -2243,6 +2820,14 @@ class TorrentPlaybackService {
     return idx >= 0 ? norm.substring(idx + 1) : norm;
   }
 
+  /// True when a resolved playlist's file names look like a TV series (multiple
+  /// files parseable as season/episode), so it should play in series view mode.
+  static bool _isSeriesPlaylist(List<PlaylistEntry> entries) {
+    if (entries.length <= 1) return false;
+    final names = [for (final e in entries) _fileName(e.title)];
+    return SeriesParser.isSeriesPlaylist(names);
+  }
+
   /// Order video items by season/episode (falling back to filename) and return
   /// the sorted list plus the first-episode start index — matching Home's
   /// episode-aware playlist builders (so E2 plays before E10, starting at E1).
@@ -2463,6 +3048,11 @@ class TorrentPlaybackService {
       // check can judge it instead of passing vacuously.
       fileName: playlist.length == 1 ? playlist.first.title : null,
       pikpakFileId: capturedFileId,
+      // The playable video-file id (folder id is capturedFileId) so a single
+      // saved to a playlist re-resolves its stream instead of failing on the
+      // folder.
+      pikpakVideoFileId:
+          playlist.length == 1 ? playlist.first.pikpakFileId : null,
     );
   }
 
@@ -2783,6 +3373,20 @@ class _Resolved {
   /// bound-source attempt can delete it again.
   final String? pikpakFileId;
 
+  // Single-file provider-native identifiers, captured so an "Add to playlist"
+  // item can be RE-RESOLVED after the direct URL expires (the playlist player
+  // re-derives a fresh link from these) — parity with the old per-provider
+  // playlist schema. Only the field for the resolved provider is set.
+  final String? restrictedLink; // RD: raw restricted link to re-unrestrict
+  final int? torboxFileId; // TorBox: file id to re-request a download link
+  final String? premiumizePath; // Premiumize: file path (matched on re-resolve)
+  final String? allDebridLink; // AllDebrid: locked link to re-unlock
+  // PikPak: the playable VIDEO-file id for a single (distinct from
+  // [pikpakFileId], which is the offline-download FOLDER id used for
+  // bound-source deletes). A playlist item must store the video-file id or the
+  // player can't get a streaming URL from a folder.
+  final String? pikpakVideoFileId;
+
   const _Resolved({
     required this.title,
     this.playUrl,
@@ -2795,6 +3399,11 @@ class _Resolved {
     this.torboxTorrentId,
     this.rdTorrentId,
     this.pikpakFileId,
+    this.restrictedLink,
+    this.torboxFileId,
+    this.premiumizePath,
+    this.allDebridLink,
+    this.pikpakVideoFileId,
   });
 
   bool get hasPlaylist => playlist != null && playlist!.length > 1;
