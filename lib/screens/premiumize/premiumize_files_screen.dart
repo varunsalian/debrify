@@ -12,6 +12,10 @@ import '../../models/premiumize_transfer.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
+import '../../widgets/cloud/cloud_file_row.dart';
+import '../../widgets/cloud/cloud_row_skeleton.dart';
+import '../../widgets/cloud/cloud_segmented_tabs.dart';
+import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../utils/tv_keys.dart';
@@ -265,6 +269,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   void _switchView(_PremiumizeView view) {
     if (_selectedView == view) return;
     _exitSelectionMode();
+    // Reset the Files list offset so a Files→Transfers→Files round-trip
+    // doesn't land back on a stale scroll position.
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() {
       _selectedView = view;
       _errorMessage = '';
@@ -281,11 +288,17 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   void _navigateIntoFolder(PremiumizeFolderItem folder) {
     _exitSelectionMode();
     _shouldFocusOnLoad = true;
+    // Reset scroll while the outgoing list is still attached, so the new
+    // folder never inherits the old offset.
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() {
       _navigationStack
           .add((id: _currentFolderId, name: _currentFolderName));
       _currentFolderId = folder.id;
       _currentFolderName = folder.name;
+      // Clear stale rows so the loading skeleton shows instead of the
+      // outgoing folder's contents sitting frozen while the fetch runs.
+      _items.clear();
       _isSearchActive = false;
       _searchController.clear();
       _searchResults = [];
@@ -296,10 +309,15 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   void _navigateUp() {
     _exitSelectionMode();
     if (_navigationStack.isEmpty) return;
+    // Refocus the first row once the parent listing loads — clearing _items
+    // disposes the focused row and nothing else reclaims DPAD focus.
+    _shouldFocusOnLoad = true;
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() {
       final previous = _navigationStack.removeLast();
       _currentFolderId = previous.id;
       _currentFolderName = previous.name;
+      _items.clear();
     });
     _loadFolder();
   }
@@ -1326,7 +1344,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   @override
   Widget build(BuildContext context) {
     if (widget.isPushedRoute && _isAtRoot && _initialLoad) {
-      return Scaffold(
+      return CloudScaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
@@ -1340,7 +1358,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
     if (!_premiumizeEnabled) return _buildNotEnabled();
     if (_initialLoad && (_isLoading || _isLoadingTransfers)) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const CloudScaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
     if (_errorMessage.isNotEmpty &&
         _items.isEmpty &&
@@ -1362,7 +1382,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         ? const BoxConstraints(minWidth: 36, minHeight: 36)
         : const BoxConstraints(minWidth: 48, minHeight: 48);
 
-    return Scaffold(
+    return CloudScaffold(
       appBar: AppBar(
         leading: (!_isAtRoot)
             ? Focus(
@@ -1393,8 +1413,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 : null),
         title: Text(_isAtRoot ? 'Premiumize' : _currentFolderName),
         actions: [
+          // Keep the button mounted while a navigation fetch runs (_items is
+          // cleared then) so the AppBar doesn't flicker and TV focus parked
+          // on it isn't dropped.
           if (_selectedView == _PremiumizeView.files &&
-              _items.isNotEmpty &&
+              (_items.isNotEmpty || _isLoading) &&
               !_isSearchActive)
             IconButton(
               icon: Icon(
@@ -1465,66 +1488,26 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   Widget _buildBody() {
     if (_isSearchActive) return _buildSearchResults();
     if (_selectedView == _PremiumizeView.transfers) return _buildTransfersList();
+    // Folder navigation clears _items, so a fetch with nothing to show gets
+    // the shimmer skeleton. Pull-to-refresh keeps its items and never hits
+    // this branch — the RefreshIndicator spinner covers it.
+    if (_isLoading && _items.isEmpty) return const CloudRowSkeletonList();
     if (_items.isEmpty) return _buildEmpty();
     return _buildFileList();
   }
 
   Widget _buildViewSelector() {
-    final theme = Theme.of(context);
-    Widget chip(String label, IconData icon, _PremiumizeView view) {
-      final selected = _selectedView == view;
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Material(
-            color: selected
-                ? theme.colorScheme.primary.withValues(alpha: 0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => _switchView(view),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected
-                        ? theme.colorScheme.primary.withValues(alpha: 0.5)
-                        : theme.dividerColor.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icon,
-                        size: 18,
-                        color: selected ? theme.colorScheme.primary : null),
-                    const SizedBox(width: 8),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
-                        color: selected ? theme.colorScheme.primary : null,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      child: Row(
-        children: [
-          chip('My Files', Icons.folder_rounded, _PremiumizeView.files),
-          chip('Transfers', Icons.swap_vert_rounded, _PremiumizeView.transfers),
+      child: CloudSegmentedTabs<_PremiumizeView>(
+        segments: const [
+          CloudSegment(
+              _PremiumizeView.files, 'My Files', Icons.folder_rounded),
+          CloudSegment(
+              _PremiumizeView.transfers, 'Transfers', Icons.swap_vert_rounded),
         ],
+        selected: _selectedView,
+        onSelected: _switchView,
       ),
     );
   }
@@ -1681,7 +1664,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                       : 'Search files...',
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   filled: true,
-                  fillColor: const Color(0xFF1E293B),
+                  fillColor: Colors.white.withValues(alpha: 0.06),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -1722,7 +1705,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: Colors.white.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(8),
                         border: isFocused
                             ? Border.all(color: Colors.white, width: 2)
@@ -1802,202 +1785,76 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     int index, {
     bool autofocusFirst = true,
   }) {
-    final theme = Theme.of(context);
-    final isSelected = _selectedIds.contains(item.id);
     final isVideo = item.isVideo;
+    final date = _formatUnixDate(item.createdAt);
+    final metaParts = <String>[
+      if (!item.isFolder && item.size > 0) Formatters.formatFileSize(item.size),
+      if (date.isNotEmpty) date,
+    ];
 
-    return TvFocusScrollWrapper(
-      child: GestureDetector(
-        onTap: _isSelectionMode ? () => _toggleSelection(item.id) : null,
-        child: Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: _isSelectionMode && isSelected
-                ? BorderSide(color: theme.colorScheme.primary, width: 2)
-                : BorderSide.none,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (_isSelectionMode) ...[
-                      Checkbox(
-                        value: isSelected,
-                        onChanged: (_) => _toggleSelection(item.id),
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    Icon(
-                      item.isFolder
-                          ? Icons.folder
-                          : isVideo
-                              ? Icons.play_circle_outline
-                              : Icons.insert_drive_file,
-                      color: item.isFolder
-                          ? Colors.amber
-                          : isVideo
-                              ? Colors.blue
-                              : Colors.grey,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.name,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w500, fontSize: 16),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              if (!item.isFolder && item.size > 0) ...[
-                                Text(
-                                  Formatters.formatFileSize(item.size),
-                                  style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 13),
-                                ),
-                                if (_formatUnixDate(item.createdAt)
-                                    .isNotEmpty) ...[
-                                  const SizedBox(width: 8),
-                                  Text('•',
-                                      style: TextStyle(
-                                          color: Colors.grey.shade600)),
-                                  const SizedBox(width: 8),
-                                ],
-                              ],
-                              if (_formatUnixDate(item.createdAt).isNotEmpty)
-                                Text(
-                                  _formatUnixDate(item.createdAt),
-                                  style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 13),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (!_isSelectionMode) ...[
-                  const SizedBox(height: 12),
-                  FocusTraversalGroup(
-                    policy: OrderedTraversalPolicy(),
-                    child: Row(
-                      children: [
-                        if (item.isFolder) ...[
-                          Expanded(
-                            child: _buildActionButton(
-                              focusNode: (autofocusFirst && index == 0)
-                                  ? _firstItemFocusNode
-                                  : null,
-                              autofocus: autofocusFirst && index == 0,
-                              icon: Icons.folder_open,
-                              label: 'Open',
-                              color: const Color(0xFF8B5CF6),
-                              onTap: () => _navigateIntoFolder(item),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildActionButton(
-                              icon: Icons.play_arrow_rounded,
-                              label: 'Play',
-                              color: const Color(0xFF22C55E),
-                              onTap: () => _playFolder(item),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ] else if (isVideo) ...[
-                          Expanded(
-                            child: _buildActionButton(
-                              focusNode: (autofocusFirst && index == 0)
-                                  ? _firstItemFocusNode
-                                  : null,
-                              autofocus: autofocusFirst && index == 0,
-                              icon: Icons.play_arrow_rounded,
-                              label: 'Play',
-                              color: const Color(0xFF22C55E),
-                              onTap: () => _playFile(item),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert),
-                          tooltip: 'More options',
-                          onSelected: (value) {
-                            switch (value) {
-                              case 'download':
-                                if (item.isFolder) {
-                                  _downloadFolder(item);
-                                } else {
-                                  _downloadFile(item);
-                                }
-                                break;
-                              case 'add_to_playlist':
-                                _addToPlaylist(item);
-                                break;
-                              case 'delete':
-                                _showDeleteDialog(item);
-                                break;
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'download',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.download,
-                                      size: 18, color: Colors.green),
-                                  SizedBox(width: 12),
-                                  Text('Download'),
-                                ],
-                              ),
-                            ),
-                            if (item.isFolder || isVideo)
-                              const PopupMenuItem(
-                                value: 'add_to_playlist',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.playlist_add,
-                                        size: 18, color: Colors.blue),
-                                    SizedBox(width: 12),
-                                    Text('Add to Playlist'),
-                                  ],
-                                ),
-                              ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete_outline,
-                                      size: 18, color: Colors.red),
-                                  SizedBox(width: 12),
-                                  Text('Delete'),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+    // Same action set (labels, icons, conditions) the old Open/Play pills +
+    // ⋮ menu offered; the row's tap now carries Open (folders) and Play
+    // (videos).
+    final actions = <CloudRowAction>[
+      // Videos get a ▶ too, even though tapping the row already plays them —
+      // folder rows have one, and a video row without it reads as unplayable.
+      if (item.isFolder || isVideo)
+        CloudRowAction(
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          showInStrip: true,
+          onSelected: () {
+            if (item.isFolder) {
+              _playFolder(item);
+            } else {
+              _playFile(item);
+            }
+          },
         ),
+      CloudRowAction(
+        icon: Icons.download,
+        label: 'Download',
+        showInStrip: true,
+        onSelected: () {
+          if (item.isFolder) {
+            _downloadFolder(item);
+          } else {
+            _downloadFile(item);
+          }
+        },
       ),
+      if (item.isFolder || isVideo)
+        CloudRowAction(
+          icon: Icons.playlist_add,
+          label: 'Add to Playlist',
+          onSelected: () => _addToPlaylist(item),
+        ),
+      CloudRowAction(
+        icon: Icons.delete_outline,
+        label: 'Delete',
+        destructive: true,
+        onSelected: () => _showDeleteDialog(item),
+      ),
+    ];
+
+    return CloudFileRow(
+      kind: item.isFolder
+          ? CloudRowKind.folder
+          : isVideo
+              ? CloudRowKind.video
+              : CloudRowKind.file,
+      title: item.name,
+      meta: metaParts.isEmpty ? null : metaParts.join(' · '),
+      onTap: item.isFolder
+          ? () => _navigateIntoFolder(item)
+          : isVideo
+              ? () => _playFile(item)
+              : null,
+      actions: actions,
+      selectionMode: _isSelectionMode,
+      selected: _selectedIds.contains(item.id),
+      onToggleSelected: () => _toggleSelection(item.id),
+      focusNode: (autofocusFirst && index == 0) ? _firstItemFocusNode : null,
     );
   }
 
@@ -2058,7 +1915,6 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Widget _buildTransferCard(PremiumizeTransfer transfer) {
-    final theme = Theme.of(context);
     Color statusColor;
     IconData statusIcon;
     if (transfer.isFinished) {
@@ -2073,134 +1929,62 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
 
     return TvFocusScrollWrapper(
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(statusIcon, color: statusColor),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      transfer.name,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w500, fontSize: 15),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        size: 20, color: Colors.red),
-                    tooltip: 'Delete transfer',
-                    onPressed: () => _deleteTransfer(transfer),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (transfer.isRunning) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: transfer.progress > 0 ? transfer.progress : null,
-                    minHeight: 6,
-                    backgroundColor:
-                        theme.colorScheme.surfaceContainerHighest,
-                    valueColor: AlwaysStoppedAnimation(statusColor),
-                  ),
-                ),
-                const SizedBox(height: 6),
-              ],
-              Text(
-                transfer.message ??
-                    (transfer.isFinished
-                        ? 'Finished'
-                        : transfer.isError
-                            ? 'Error'
-                            : '${transfer.progressPercent}%'),
-                style: TextStyle(color: statusColor, fontSize: 12),
-              ),
-            ],
-          ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
         ),
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    FocusNode? focusNode,
-    bool autofocus = false,
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Focus(
-      focusNode: focusNode,
-      autofocus: autofocus,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
-          onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(
-        builder: (context) {
-          final isFocused = Focus.of(context).hasFocus;
-          return GestureDetector(
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: isFocused ? color : Colors.black.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isFocused ? color : color.withValues(alpha: 0.6),
-                  width: isFocused ? 1.5 : 1,
-                ),
-                boxShadow: isFocused
-                    ? [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon,
-                      size: 16,
-                      color: isFocused
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.9)),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: isFocused
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.9),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(statusIcon, color: statusColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    transfer.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w500, fontSize: 14),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
-              ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline,
+                      size: 20, color: Colors.red),
+                  tooltip: 'Delete transfer',
+                  onPressed: () => _deleteTransfer(transfer),
+                ),
+              ],
             ),
-          );
-        },
+            const SizedBox(height: 8),
+            if (transfer.isRunning) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: transfer.progress > 0 ? transfer.progress : null,
+                  minHeight: 5,
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  valueColor: AlwaysStoppedAnimation(statusColor),
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+            Text(
+              transfer.message ??
+                  (transfer.isFinished
+                      ? 'Finished'
+                      : transfer.isError
+                          ? 'Error'
+                          : '${transfer.progressPercent}%'),
+              style: TextStyle(color: statusColor, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2239,7 +2023,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Widget _buildNotEnabled() {
-    return Scaffold(
+    return CloudScaffold(
       appBar: AppBar(title: const Text('Premiumize')),
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
@@ -2279,7 +2063,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Widget _buildError() {
-    return Scaffold(
+    return CloudScaffold(
       appBar: AppBar(title: const Text('Premiumize')),
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
@@ -2289,7 +2073,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
+                Icon(Icons.error_outline,
+                    size: 64, color: Colors.red.shade400),
                 const SizedBox(height: 24),
                 Text('Failed to Load',
                     style: Theme.of(context).textTheme.headlineSmall),

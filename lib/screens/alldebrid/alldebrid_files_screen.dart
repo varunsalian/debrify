@@ -14,20 +14,22 @@ import '../../models/playlist_view_mode.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
+import '../../widgets/cloud/cloud_file_row.dart';
+import '../../widgets/cloud/cloud_row_skeleton.dart';
+import '../../widgets/cloud/cloud_segmented_tabs.dart';
+import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../../utils/tv_keys.dart';
-import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
-/// The two root views, switched via the toolbar dropdown (mirrors the
-/// Real-Debrid downloads page): the magnet "cloud" library, and the saved
-/// direct-download links library ("Web Downloads").
+/// The two root views, switched via the segmented tabs under the toolbar:
+/// the magnet "cloud" library, and the saved direct-download links library
+/// ("Web Downloads").
 enum _AdView { torrents, webDownloads }
 
 /// Cloud-library browser for AllDebrid. AllDebrid's cloud is a flat list of
 /// magnets (each with files), so this is a two-level browser (magnet list →
-/// the selected magnet's files), built to match the Torbox/Real-Debrid
-/// downloads pages (same toolbar, cards and action buttons). A toolbar dropdown
-/// also switches to the saved-links ("Web Downloads") view.
+/// the selected magnet's files), built on the shared cloud widgets
+/// (CloudFileRow rows, CloudSegmentedTabs view switcher, CloudScaffold).
 class AllDebridFilesScreen extends StatefulWidget {
   final bool isPushedRoute;
 
@@ -83,7 +85,6 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   final FocusNode _backButtonFocusNode = FocusNode();
   final FocusNode _deleteButtonFocusNode = FocusNode();
   final FocusNode _toolbarSearchFocusNode = FocusNode();
-  final FocusNode _viewSelectorFocusNode = FocusNode(debugLabel: 'ad-view');
   VoidCallback? _tvContentFocusHandler;
 
   // TV: focus the first magnet card when the user moves focus into content.
@@ -166,7 +167,6 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     _backButtonFocusNode.dispose();
     _deleteButtonFocusNode.dispose();
     _toolbarSearchFocusNode.dispose();
-    _viewSelectorFocusNode.dispose();
     _firstItemFocusNode.dispose();
     super.dispose();
   }
@@ -300,6 +300,12 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   void _navigateUp() {
+    // Refocus the first magnet row after this synchronous swap back to the
+    // (already-loaded) magnet list — the file row that binds
+    // _firstItemFocusNode is disposed here and nothing else reclaims DPAD
+    // focus. No reload fires, so do it directly.
+    _shouldFocusOnLoad = true;
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() {
       _currentMagnet = null;
       _currentFiles = [];
@@ -308,6 +314,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       _fileSearchQuery = '';
       _fileSearchController.clear();
     });
+    _focusFirstItem();
   }
 
   bool _handleBackNavigation() {
@@ -1148,7 +1155,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return CloudScaffold(
       appBar: _isAtRoot
           ? null
           : AppBar(
@@ -1184,6 +1191,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         children: [
           const SizedBox(height: 8),
           if (_isAtRoot) _buildToolbar(),
+          if (_isAtRoot) _buildViewSelectorBar(),
           if (_isAtRoot && _searchActive) _buildSearchBar(),
           if (_isAtRoot && _selectionMode) _buildSelectionBar(),
           if (!_isAtRoot && _fileSearchActive) _buildFileSearchBar(),
@@ -1216,9 +1224,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           padding: EdgeInsets.symmetric(
               horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withValues(alpha: 0.4),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF1F2937)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
@@ -1237,8 +1245,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 ),
                 SizedBox(width: isCompact ? 4 : 8),
               ],
-              Expanded(child: _buildViewSelector(isCompact)),
-              SizedBox(width: isCompact ? 6 : 12),
+              const Spacer(),
               // Selection mode is torrents-only (it bulk-deletes magnets).
               if (!isWeb && hasItems)
                 Tooltip(
@@ -1321,36 +1328,31 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     );
   }
 
-  Widget _buildViewSelector(bool isCompact) {
-    final theme = Theme.of(context);
-    return DropdownButtonHideUnderline(
-      child: DropdownButton<_AdView>(
-        focusNode: _viewSelectorFocusNode,
-        value: _selectedView,
-        isDense: isCompact,
-        isExpanded: true,
-        dropdownColor: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        iconEnabledColor: theme.colorScheme.onSurface,
-        iconSize: isCompact ? 20 : 24,
-        style: TextStyle(
-          color: theme.colorScheme.onSurface,
-          fontWeight: FontWeight.w600,
-          fontSize: isCompact ? 13 : 14,
-        ),
-        items: [
-          DropdownMenuItem(
-            value: _AdView.torrents,
-            child: Text(isCompact ? 'Torrents' : 'Torrent Downloads'),
+  /// Full-width view switcher on its own line under the toolbar (two labels
+  /// don't fit the toolbar slot the old single-label dropdown used).
+  Widget _buildViewSelectorBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: CloudSegmentedTabs<_AdView>(
+        segments: const [
+          CloudSegment(
+            _AdView.torrents,
+            'Torrent Downloads',
+            Icons.folder_rounded,
           ),
-          DropdownMenuItem(
-            value: _AdView.webDownloads,
-            child: Text(isCompact ? 'Web' : 'Web Downloads'),
+          CloudSegment(
+            _AdView.webDownloads,
+            'Web Downloads',
+            Icons.link_rounded,
           ),
         ],
-        onChanged: (value) {
-          if (value == null || value == _selectedView) return;
+        selected: _selectedView,
+        onSelected: (value) {
+          if (value == _selectedView) return;
           _exitSelectionMode();
+          // Both root lists share _scrollController; reset so the incoming
+          // view doesn't inherit the outgoing list's scroll offset.
+          if (_scrollController.hasClients) _scrollController.jumpTo(0);
           setState(() {
             _selectedView = value;
             _searchActive = false;
@@ -1407,14 +1409,14 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     );
   }
 
-  /// Shared search-field decoration matching the Torbox/RD pages.
+  /// Shared search-field decoration matching the cloud-screen styling.
   InputDecoration _searchDecoration(String hint) => InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
         prefixIcon: Icon(Icons.search_rounded,
             color: Colors.white.withValues(alpha: 0.4), size: 20),
         filled: true,
-        fillColor: const Color(0xFF1E293B),
+        fillColor: Colors.white.withValues(alpha: 0.06),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         border: OutlineInputBorder(
@@ -1427,7 +1429,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF26A69A)),
+          borderSide: const BorderSide(color: CloudTheme.accent),
         ),
       );
 
@@ -1539,7 +1541,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: Colors.white.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(8),
                         border: isFocused
                             ? Border.all(color: Colors.white, width: 2)
@@ -1595,7 +1597,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       return _buildLinksView();
     }
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const CloudRowSkeletonList();
     }
     if (_error != null) {
       return Center(
@@ -1657,175 +1659,69 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildMagnetCard(AllDebridMagnet m, int index) {
-    final theme = Theme.of(context);
-    final isSelected = _selectedIds.contains(m.id);
-    final statusLine = m.isReady
-        ? Formatters.formatFileSize(m.size)
-        : m.isError
-            ? 'Failed'
-            : 'Downloading ${m.progressPercent}%';
-
-    return TvFocusScrollWrapper(
-      child: GestureDetector(
-        onTap: _selectionMode ? () => _toggleSelection(m.id) : null,
-        child: Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: _selectionMode && isSelected
-                ? BorderSide(color: theme.colorScheme.primary, width: 2)
-                : BorderSide.none,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (_selectionMode) ...[
-                      Checkbox(
-                        value: isSelected,
-                        onChanged: (_) => _toggleSelection(m.id),
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    Icon(
-                      m.isError ? Icons.error_outline : Icons.folder,
-                      color: m.isError ? Colors.red : Colors.amber,
-                      size: 32,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            m.name.isEmpty ? '(unnamed)' : m.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 16,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            statusLine,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (!_selectionMode) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      if (m.isReady) ...[
-                        Expanded(
-                          child: _buildActionButton(
-                            focusNode: index == 0 ? _firstItemFocusNode : null,
-                            icon: Icons.folder_open,
-                            label: 'Open',
-                            color: const Color(0xFF8B5CF6),
-                            onTap: () => _openMagnet(m),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildActionButton(
-                            icon: Icons.play_arrow_rounded,
-                            label: 'Play',
-                            color: const Color(0xFF22C55E),
-                            onTap: () => _playMagnet(m),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ] else
-                        const Spacer(),
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
-                        tooltip: 'More options',
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'open':
-                              _openMagnet(m);
-                              break;
-                            case 'play':
-                              _playMagnet(m);
-                              break;
-                            case 'download':
-                              _downloadMagnet(m);
-                              break;
-                            case 'add_to_playlist':
-                              _addMagnetToPlaylist(m);
-                              break;
-                            case 'delete':
-                              _deleteMagnets([m]);
-                              break;
-                          }
-                        },
-                        itemBuilder: (ctx) => [
-                          if (m.isReady)
-                            const PopupMenuItem(
-                              value: 'open',
-                              child: Row(children: [
-                                Icon(Icons.folder_open,
-                                    size: 18, color: Colors.blue),
-                                SizedBox(width: 12),
-                                Text('Open'),
-                              ]),
-                            ),
-                          if (m.isReady)
-                            const PopupMenuItem(
-                              value: 'download',
-                              child: Row(children: [
-                                Icon(Icons.download,
-                                    size: 18, color: Colors.green),
-                                SizedBox(width: 12),
-                                Text('Download to device'),
-                              ]),
-                            ),
-                          if (m.isReady)
-                            const PopupMenuItem(
-                              value: 'add_to_playlist',
-                              child: Row(children: [
-                                Icon(Icons.playlist_add,
-                                    size: 18, color: Colors.blue),
-                                SizedBox(width: 12),
-                                Text('Add to Playlist'),
-                              ]),
-                            ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Row(children: [
-                              Icon(Icons.delete_outline,
-                                  size: 18, color: Colors.red),
-                              SizedBox(width: 12),
-                              Text('Delete'),
-                            ]),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
+    // Same action set (labels, conditions) the old Open/Play pills + ⋮ menu
+    // offered; the row's tap now carries Open for ready magnets.
+    final actions = <CloudRowAction>[
+      if (m.isReady)
+        CloudRowAction(
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          showInStrip: true,
+          onSelected: () => _playMagnet(m),
         ),
+      if (m.isReady)
+        CloudRowAction(
+          icon: Icons.download,
+          label: 'Download to device',
+          showInStrip: true,
+          onSelected: () => _downloadMagnet(m),
+        ),
+      if (m.isReady)
+        CloudRowAction(
+          icon: Icons.folder_open,
+          label: 'Open',
+          onSelected: () => _openMagnet(m),
+        ),
+      if (m.isReady)
+        CloudRowAction(
+          icon: Icons.playlist_add,
+          label: 'Add to Playlist',
+          onSelected: () => _addMagnetToPlaylist(m),
+        ),
+      CloudRowAction(
+        icon: Icons.delete_outline,
+        label: 'Delete',
+        destructive: true,
+        onSelected: () => _deleteMagnets([m]),
       ),
+    ];
+
+    return CloudFileRow(
+      kind: m.isError ? CloudRowKind.error : CloudRowKind.folder,
+      title: m.name.isEmpty ? '(unnamed)' : m.name,
+      meta: m.isReady ? Formatters.formatFileSize(m.size) : null,
+      badges: [
+        if (m.isError)
+          const CloudRowBadge('Failed', CloudBadgeKind.error)
+        else if (!m.isReady)
+          CloudRowBadge('Downloading ${m.progressPercent}%',
+              CloudBadgeKind.warn),
+      ],
+      // Not-ready magnets keep a tap action too: _openMagnet explains why it
+      // can't open ("still downloading" / "failed") — better than the menu
+      // fallback, which here would be a Delete-only menu.
+      onTap: () => _openMagnet(m),
+      actions: actions,
+      selectionMode: _selectionMode,
+      selected: _selectedIds.contains(m.id),
+      onToggleSelected: () => _toggleSelection(m.id),
+      focusNode: index == 0 ? _firstItemFocusNode : null,
     );
   }
 
   Widget _buildLinksView() {
     if (_loadingLinks) {
-      return const Center(child: CircularProgressIndicator());
+      return const CloudRowSkeletonList();
     }
     if (_linksError != null) {
       return Center(
@@ -1885,133 +1781,48 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     final subtitle = [
       if (l.size > 0) Formatters.formatFileSize(l.size),
       if (l.host.isNotEmpty) l.host,
-    ].join(' • ');
-    return TvFocusScrollWrapper(
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    isVideo
-                        ? Icons.play_circle_outline
-                        : Icons.insert_drive_file,
-                    color: isVideo ? Colors.blue : Colors.grey,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l.fileName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (subtitle.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  if (isVideo)
-                    Expanded(
-                      child: _buildActionButton(
-                        focusNode: index == 0 ? _firstItemFocusNode : null,
-                        icon: Icons.play_arrow_rounded,
-                        label: 'Play',
-                        color: const Color(0xFF22C55E),
-                        onTap: () => _playLink(l),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: _buildActionButton(
-                        focusNode: index == 0 ? _firstItemFocusNode : null,
-                        icon: Icons.download_rounded,
-                        label: 'Download',
-                        color: const Color(0xFF3B82F6),
-                        onTap: () => _downloadLink(l),
-                      ),
-                    ),
-                  const SizedBox(width: 8),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    tooltip: 'More options',
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'download':
-                          _downloadLink(l);
-                          break;
-                        case 'copy':
-                          _copyLink(l);
-                          break;
-                        case 'delete':
-                          _deleteLinks([l]);
-                          break;
-                      }
-                    },
-                    itemBuilder: (ctx) => [
-                      if (isVideo)
-                        const PopupMenuItem(
-                          value: 'download',
-                          child: Row(children: [
-                            Icon(Icons.download, size: 18, color: Colors.green),
-                            SizedBox(width: 12),
-                            Text('Download to device'),
-                          ]),
-                        ),
-                      const PopupMenuItem(
-                        value: 'copy',
-                        child: Row(children: [
-                          Icon(Icons.link, size: 18, color: Colors.orange),
-                          SizedBox(width: 12),
-                          Text('Copy link'),
-                        ]),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(children: [
-                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                          SizedBox(width: 12),
-                          Text('Delete'),
-                        ]),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
+    ].join(' · ');
+
+    final actions = <CloudRowAction>[
+      if (isVideo)
+        CloudRowAction(
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          showInStrip: true,
+          onSelected: () => _playLink(l),
         ),
+      CloudRowAction(
+        icon: Icons.download_rounded,
+        label: isVideo ? 'Download to device' : 'Download',
+        showInStrip: true,
+        onSelected: () => _downloadLink(l),
       ),
+      CloudRowAction(
+        icon: Icons.link,
+        label: 'Copy link',
+        onSelected: () => _copyLink(l),
+      ),
+      CloudRowAction(
+        icon: Icons.delete_outline,
+        label: 'Delete',
+        destructive: true,
+        onSelected: () => _deleteLinks([l]),
+      ),
+    ];
+
+    return CloudFileRow(
+      kind: isVideo ? CloudRowKind.video : CloudRowKind.file,
+      title: l.fileName,
+      meta: subtitle.isEmpty ? null : subtitle,
+      onTap: isVideo ? () => _playLink(l) : null,
+      actions: actions,
+      focusNode: index == 0 ? _firstItemFocusNode : null,
     );
   }
 
   Widget _buildFilesView() {
     if (_loadingFiles) {
-      return const Center(child: CircularProgressIndicator());
+      return const CloudRowSkeletonList();
     }
     final files = _visibleFiles;
     if (files.isEmpty) {
@@ -2038,171 +1849,32 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   Widget _buildFileCard(AllDebridFile f, int index) {
     final isVideo = _looksLikeVideo(f);
-    return TvFocusScrollWrapper(
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    isVideo
-                        ? Icons.play_circle_outline
-                        : Icons.insert_drive_file,
-                    color: isVideo ? Colors.blue : Colors.grey,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          f.fileName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          Formatters.formatFileSize(f.size),
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  if (isVideo)
-                    Expanded(
-                      child: _buildActionButton(
-                        focusNode: index == 0 ? _firstItemFocusNode : null,
-                        icon: Icons.play_arrow_rounded,
-                        label: 'Play',
-                        color: const Color(0xFF22C55E),
-                        onTap: () => _playFile(f),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: _buildActionButton(
-                        focusNode: index == 0 ? _firstItemFocusNode : null,
-                        icon: Icons.download_rounded,
-                        label: 'Download',
-                        color: const Color(0xFF3B82F6),
-                        onTap: () => _downloadFile(f),
-                      ),
-                    ),
-                  const SizedBox(width: 8),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    tooltip: 'More options',
-                    onSelected: (value) {
-                      if (value == 'download') _downloadFile(f);
-                    },
-                    itemBuilder: (ctx) => [
-                      const PopupMenuItem(
-                        value: 'download',
-                        child: Row(children: [
-                          Icon(Icons.download, size: 18, color: Colors.green),
-                          SizedBox(width: 12),
-                          Text('Download'),
-                        ]),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  /// Pill action button matching the Torbox/RD downloads pages: a focusable
-  /// container that fills with [color] and glows when focused (TV/D-pad).
-  Widget _buildActionButton({
-    FocusNode? focusNode,
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Focus(
-      focusNode: focusNode,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            isActivateKey(event.logicalKey)) {
-          onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(
-        builder: (context) {
-          final isFocused = Focus.of(context).hasFocus;
-          return GestureDetector(
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: isFocused ? color : Colors.black.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isFocused ? color : color.withValues(alpha: 0.6),
-                  width: isFocused ? 1.5 : 1,
-                ),
-                boxShadow: isFocused
-                    ? [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    size: 16,
-                    color: isFocused
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.9),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: isFocused
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.9),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+    // Parity with the old card: files inside a magnet only offer Play (video)
+    // and Download — no delete or playlist at file granularity.
+    final actions = <CloudRowAction>[
+      if (isVideo)
+        CloudRowAction(
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          showInStrip: true,
+          onSelected: () => _playFile(f),
+        ),
+      CloudRowAction(
+        icon: Icons.download_rounded,
+        label: 'Download',
+        showInStrip: true,
+        onSelected: () => _downloadFile(f),
       ),
+    ];
+
+    return CloudFileRow(
+      kind: isVideo ? CloudRowKind.video : CloudRowKind.file,
+      title: f.fileName,
+      meta: Formatters.formatFileSize(f.size),
+      onTap: isVideo ? () => _playFile(f) : null,
+      actions: actions,
+      focusNode: index == 0 ? _firstItemFocusNode : null,
     );
   }
 }

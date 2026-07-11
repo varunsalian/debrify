@@ -15,7 +15,9 @@ import '../../services/webdav_service.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
-import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../../widgets/cloud/cloud_file_row.dart';
+import '../../widgets/cloud/cloud_row_skeleton.dart';
+import '../../widgets/cloud/cloud_theme.dart';
 import '../settings/webdav_settings_page.dart';
 
 class WebDavFilesScreen extends StatefulWidget {
@@ -131,6 +133,10 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   }) async {
     final config = _config;
     if (config == null) return;
+    // Every path load starts at the top — folder open, back, server switch,
+    // returning from Settings — so the new listing never inherits a stale
+    // scroll offset via PageStorage.
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() {
       _loading = true;
       _error = '';
@@ -292,6 +298,9 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   }
 
   void _openFolder(WebDavItem item) {
+    // Reset scroll while the outgoing list is still attached, so the new
+    // folder never inherits the old offset.
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     if (_virtualFolders.containsKey(item.path)) {
       _stack.add((path: _currentPath, title: _currentTitle));
       setState(() {
@@ -620,11 +629,18 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _buildToolbar(),
-        Expanded(child: _buildContent()),
-      ],
+    // CloudScaffold paints the bloom edge-to-edge and provides the Material
+    // ancestor the pushed route needs; the SafeArea keeps the toolbar clear
+    // of the status bar without cutting the gradient off at the inset.
+    return CloudScaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildToolbar(),
+            Expanded(child: _buildContent()),
+          ],
+        ),
+      ),
     );
   }
 
@@ -633,12 +649,9 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF020617).withValues(alpha: 0.78),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF334155).withValues(alpha: 0.55),
-          width: 1.2,
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         children: [
@@ -724,21 +737,21 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
             hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.38)),
             prefixIcon: const Icon(
               Icons.search_rounded,
-              color: Color(0xFFA5B4FC),
+              color: CloudTheme.accent,
             ),
             filled: true,
-            fillColor: const Color(0xFF111827),
+            fillColor: Colors.white.withValues(alpha: 0.06),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
-                color: const Color(0xFF334155).withValues(alpha: 0.8),
+                color: Colors.white.withValues(alpha: 0.10),
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(
-                color: Color(0xFFA5B4FC),
+                color: CloudTheme.accent,
                 width: 1.6,
               ),
             ),
@@ -771,30 +784,30 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
               focusNode: _serverDropdownFocusNode,
               value: _config?.id,
               isExpanded: true,
-              dropdownColor: const Color(0xFF1E1B4B),
+              dropdownColor: CloudTheme.menuSurface,
               decoration: InputDecoration(
                 prefixIcon: const Icon(
                   Icons.cloud_sync_rounded,
-                  color: Color(0xFFA5B4FC),
+                  color: CloudTheme.accent,
                 ),
                 filled: true,
-                fillColor: const Color(0xFF2D2578),
+                fillColor: Colors.white.withValues(alpha: 0.06),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.7),
+                    color: Colors.white.withValues(alpha: 0.12),
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.42),
+                    color: Colors.white.withValues(alpha: 0.10),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(
-                    color: Color(0xFFA5B4FC),
+                    color: CloudTheme.accent,
                     width: 1.6,
                   ),
                 ),
@@ -911,7 +924,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                   color: focused ? const Color(0xFF312E81) : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                   border: focused
-                      ? Border.all(color: const Color(0xFFA5B4FC), width: 1.4)
+                      ? Border.all(color: CloudTheme.accent, width: 1.4)
                       : null,
                 ),
                 child: Icon(icon, color: Colors.white, size: 28),
@@ -924,7 +937,12 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   }
 
   Widget _buildContent() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      // Padding matches the real ListView below so the swap doesn't jump.
+      return const CloudRowSkeletonList(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 24),
+      );
+    }
     if (_error.isNotEmpty) {
       return Center(
         child: Column(
@@ -950,258 +968,63 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       itemCount: _items.length,
-      itemBuilder: (context, index) {
-        final item = _items[index];
-        return TvFocusScrollWrapper(child: _buildItemCard(item, index));
-      },
+      itemBuilder: (context, index) => _buildItemCard(_items[index], index),
     );
   }
 
   Widget _buildItemCard(WebDavItem item, int index) {
     final isVideo = !item.isDirectory && FileUtils.isVideoFile(item.name);
-    final canOpen = item.isDirectory;
     final canPlay = item.isDirectory || isVideo;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  item.isDirectory
-                      ? Icons.folder_rounded
-                      : Icons.insert_drive_file_rounded,
-                  color: item.isDirectory ? Colors.amber : Colors.blueGrey,
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _subtitleFor(item),
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildWebDavActionButton(
-                    focusNode: index == 0 && canOpen
-                        ? _firstItemFocusNode
-                        : null,
-                    autofocus: index == 0 && canOpen,
-                    icon: Icons.folder_open,
-                    label: 'Open',
-                    color: const Color(0xFF8B5CF6),
-                    enabled: canOpen,
-                    handoffLeftToSidebar: true,
-                    upFocusNode: index == 0 ? _serverDropdownFocusNode : null,
-                    onTap: () => _openFolder(item),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildWebDavActionButton(
-                    focusNode: index == 0 && !canOpen && canPlay
-                        ? _firstItemFocusNode
-                        : null,
-                    autofocus: index == 0 && !canOpen && canPlay,
-                    icon: Icons.play_arrow_rounded,
-                    label: 'Play',
-                    color: const Color(0xFF22C55E),
-                    enabled: canPlay,
-                    upFocusNode: index == 0 ? _serverDropdownFocusNode : null,
-                    onTap: () => _playItem(item),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  tooltip: 'More options',
-                  onSelected: (value) {
-                    if (value == 'download') _downloadItem(item);
-                    if (value == 'add_to_playlist') _addItemToPlaylist(item);
-                    if (value == 'delete') _deleteItem(item);
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: 'download',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.download_rounded,
-                            size: 18,
-                            color: Colors.green,
-                          ),
-                          SizedBox(width: 12),
-                          Text('Download'),
-                        ],
-                      ),
-                    ),
-                    if (canPlay)
-                      const PopupMenuItem(
-                        value: 'add_to_playlist',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.playlist_add,
-                              size: 18,
-                              color: Colors.blue,
-                            ),
-                            SizedBox(width: 12),
-                            Text('Add to Playlist'),
-                          ],
-                        ),
-                      ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_outline,
-                            size: 18,
-                            color: Colors.red,
-                          ),
-                          SizedBox(width: 12),
-                          Text('Delete'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
+
+    // Same action set the old Open/Play pills + ⋮ menu offered; the row's tap
+    // now carries Open (folders) / Play (videos).
+    final actions = <CloudRowAction>[
+      if (canPlay)
+        CloudRowAction(
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          showInStrip: true,
+          onSelected: () => _playItem(item),
         ),
+      CloudRowAction(
+        icon: Icons.download_rounded,
+        label: 'Download',
+        showInStrip: true,
+        onSelected: () => _downloadItem(item),
       ),
-    );
-  }
-
-  Widget _buildWebDavActionButton({
-    FocusNode? focusNode,
-    bool autofocus = false,
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-    bool enabled = true,
-    bool handoffLeftToSidebar = false,
-    FocusNode? upFocusNode,
-  }) {
-    final button = Focus(
-      focusNode: focusNode,
-      autofocus: autofocus,
-      canRequestFocus: enabled,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-            handoffLeftToSidebar &&
-            MainPageBridge.focusTvSidebar != null) {
-          MainPageBridge.focusTvSidebar!();
-          return KeyEventResult.handled;
-        }
-        if (!enabled) return KeyEventResult.ignored;
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.arrowUp &&
-            upFocusNode != null) {
-          upFocusNode.requestFocus();
-          return KeyEventResult.handled;
-        }
-        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
-          onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(
-        builder: (context) {
-          final isFocused = Focus.of(context).hasFocus;
-          final effectiveColor = enabled ? color : Colors.grey;
-          return GestureDetector(
-            onTap: enabled ? onTap : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: isFocused && enabled
-                    ? effectiveColor
-                    : Colors.black.withValues(alpha: enabled ? 0.85 : 0.35),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: enabled
-                      ? effectiveColor.withValues(alpha: isFocused ? 1 : 0.6)
-                      : Colors.white.withValues(alpha: 0.12),
-                  width: isFocused && enabled ? 1.5 : 1,
-                ),
-                boxShadow: isFocused && enabled
-                    ? [
-                        BoxShadow(
-                          color: effectiveColor.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    size: 16,
-                    color: Colors.white.withValues(alpha: enabled ? 0.9 : 0.35),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: Colors.white.withValues(
-                        alpha: enabled ? 0.9 : 0.35,
-                      ),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+      if (canPlay)
+        CloudRowAction(
+          icon: Icons.playlist_add,
+          label: 'Add to Playlist',
+          onSelected: () => _addItemToPlaylist(item),
+        ),
+      CloudRowAction(
+        icon: Icons.delete_outline,
+        label: 'Delete',
+        destructive: true,
+        onSelected: () => _deleteItem(item),
       ),
-    );
-    if (upFocusNode == null) return button;
+    ];
 
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.arrowUp): () {
-          upFocusNode.requestFocus();
-        },
-      },
-      child: button,
+    return CloudFileRow(
+      kind: item.isDirectory
+          ? CloudRowKind.folder
+          : isVideo
+              ? CloudRowKind.video
+              : CloudRowKind.file,
+      title: item.name,
+      meta: _subtitleFor(item),
+      onTap: item.isDirectory
+          ? () => _openFolder(item)
+          : isVideo
+              ? () => _playItem(item)
+              : null,
+      actions: actions,
+      focusNode: index == 0 ? _firstItemFocusNode : null,
+      upFocusNode: index == 0 ? _serverDropdownFocusNode : null,
+      onNavigateLeft: MainPageBridge.focusTvSidebar == null
+          ? null
+          : () => MainPageBridge.focusTvSidebar?.call(),
     );
   }
 

@@ -20,10 +20,12 @@ import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/series_parser.dart';
 import '../../utils/torbox_folder_tree_builder.dart';
-import '../../widgets/stat_chip.dart';
+import '../../widgets/cloud/cloud_file_row.dart';
+import '../../widgets/cloud/cloud_row_skeleton.dart';
+import '../../widgets/cloud/cloud_segmented_tabs.dart';
+import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../video_player_screen.dart';
-import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../utils/tv_keys.dart';
 
 class TorboxDownloadsScreen extends StatefulWidget {
@@ -4951,6 +4953,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _exitSelectionMode();
     // Focus first item after navigation
     _shouldFocusOnLoad = true;
+    _resetListScroll();
 
     print('🔍 Navigating into torrent: id=${torrent.id}, name=${torrent.name}');
     print('   Files count: ${torrent.files.length}');
@@ -5008,6 +5011,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _exitSelectionMode();
     // Focus first item after navigation
     _shouldFocusOnLoad = true;
+    _resetListScroll();
 
     // Build folder tree for this web download
     final tree = TorboxFolderTreeBuilder.buildTree(webDownload.files);
@@ -5057,6 +5061,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     // Focus first item after navigation
     _shouldFocusOnLoad = true;
+    _resetListScroll();
 
     // Apply view mode to folder children
     // NOTE: Series Arrange only makes sense at root level (it creates virtual Season folders)
@@ -5096,10 +5101,32 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _focusFirstItemOrFallback();
   }
 
+  /// Reset scroll while the outgoing list is still attached, so the next
+  /// listing never inherits the old offset (the torrent and node lists share
+  /// one controller). Load-more listeners are detached around the jump —
+  /// otherwise jumpTo(0) can fire them while the OLD view's pagination state
+  /// is still live and append its next page into the new listing.
+  void _resetListScroll() {
+    if (_scrollController.hasClients) {
+      _scrollController.removeListener(_onScroll);
+      _scrollController.jumpTo(0);
+      _scrollController.addListener(_onScroll);
+    }
+    if (_webDownloadScrollController.hasClients) {
+      _webDownloadScrollController.removeListener(_onWebDownloadScroll);
+      _webDownloadScrollController.jumpTo(0);
+      _webDownloadScrollController.addListener(_onWebDownloadScroll);
+    }
+  }
+
   /// Navigate up one level (back button)
   void _navigateUp() {
     if (_navigationStack.isEmpty) return;
 
+    // Refocus the first row once the previous listing shows — the focused
+    // row is disposed by the swap and nothing else reclaims DPAD focus.
+    _shouldFocusOnLoad = true;
+    _resetListScroll();
     final previous = _navigationStack.removeLast();
 
     // Reapply view mode transformation after navigation
@@ -5733,7 +5760,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   hintText: 'Search all files...',
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   filled: true,
-                  fillColor: const Color(0xFF1E293B),
+                  fillColor: Colors.white.withValues(alpha: 0.06),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -5779,7 +5806,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: Colors.white.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(8),
                         border: isFocused
                             ? Border.all(color: Colors.white, width: 2)
@@ -5915,7 +5942,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         !widget.selectSourceMode &&
         widget.initialTorrentToOpen != null &&
         _isAtRoot) {
-      return Scaffold(
+      return CloudScaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
@@ -5940,7 +5967,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     final currentMode = _getCurrentViewMode();
     final showSearch = !_isAtRoot && currentMode != _FolderViewMode.seriesArrange;
 
-    return Scaffold(
+    return CloudScaffold(
       appBar: _isAtRoot
           ? (widget.selectSourceMode
               ? AppBar(
@@ -5986,6 +6013,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         children: [
           const SizedBox(height: 8),
           if (_isAtRoot && !widget.selectSourceMode) _buildToolbar(),
+          if (_isAtRoot && !widget.selectSourceMode) _buildViewSelectorBar(),
           if (_isAtRoot && _isTorrentSearchActive) _buildTorrentSearchBar(),
           if (_isAtRoot && _isSelectionMode) _buildSelectionBar(),
           if (!_isAtRoot) _buildViewModeDropdown(),
@@ -6015,16 +6043,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     // Loading state
     if (_isLoading && _currentItems.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Loading your Torbox torrents...'),
-          ],
-        ),
-      );
+      return const CloudRowSkeletonList();
     }
 
     // Error state
@@ -6112,16 +6131,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   Widget _buildWebDownloadsList() {
     // Loading state
     if (_isLoadingWebDownloads && _webDownloads.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Loading your Torbox web downloads...'),
-          ],
-        ),
-      );
+      return const CloudRowSkeletonList();
     }
 
     // Error state
@@ -6195,459 +6205,153 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
-  Widget _buildTorrentActionButton({
-    FocusNode? focusNode,
-    bool autofocus = false,
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Focus(
-      focusNode: focusNode,
-      autofocus: autofocus,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
-          onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(
-        builder: (context) {
-          final isFocused = Focus.of(context).hasFocus;
-          return GestureDetector(
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: isFocused ? color : Colors.black.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isFocused ? color : color.withValues(alpha: 0.6),
-                  width: isFocused ? 1.5 : 1,
-                ),
-                boxShadow: isFocused
-                    ? [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          spreadRadius: 0,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    size: 16,
-                    color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   Widget _buildWebDownloadCard(TorboxWebDownload webDownload, int index) {
     final videoCount = webDownload.files.where(_torboxFileLooksLikeVideo).length;
-    final isSelected = _selectedWebDownloadIds.contains(webDownload.id);
-    final theme = Theme.of(context);
 
-    return TvFocusScrollWrapper(
-      child: GestureDetector(
-      onTap: _isSelectionMode ? () => _toggleWebDownloadSelection(webDownload.id) : null,
-      child: Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: _isSelectionMode && isSelected
-            ? BorderSide(color: theme.colorScheme.primary, width: 2)
-            : BorderSide.none,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (_isSelectionMode) ...[
-                  Checkbox(
-                    value: isSelected,
-                    onChanged: (_) => _toggleWebDownloadSelection(webDownload.id),
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                const Icon(Icons.folder, color: Colors.blue, size: 32),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        webDownload.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            Formatters.formatFileSize(webDownload.size),
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text('•', style: TextStyle(color: Colors.grey.shade600)),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${webDownload.files.length} file${webDownload.files.length == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (!_isSelectionMode) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTorrentActionButton(
-                    focusNode: index == 0 ? _firstItemFocusNode : null,
-                    icon: Icons.folder_open,
-                    label: 'Open',
-                    color: const Color(0xFF8B5CF6),
-                    onTap: () => _navigateIntoWebDownload(webDownload),
-                  ),
-                ),
-                if (videoCount > 0) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildTorrentActionButton(
-                      icon: Icons.play_arrow_rounded,
-                      label: 'Play',
-                      color: const Color(0xFF22C55E),
-                      onTap: () => _handlePlayWebDownload(webDownload),
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 8),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  tooltip: 'More options',
-                  onSelected: (value) {
-                    if (value == 'open') {
-                      _navigateIntoWebDownload(webDownload);
-                    } else if (value == 'download') {
-                      _showWebDownloadOptionsDialog(webDownload);
-                    } else if (value == 'copy_link') {
-                      _copyWebDownloadLink(webDownload);
-                    } else if (value == 'delete') {
-                      _confirmDeleteWebDownload(webDownload);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'open',
-                      child: Row(
-                        children: [
-                          Icon(Icons.folder_open, size: 18, color: Colors.blue),
-                          SizedBox(width: 12),
-                          Text('Open'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'download',
-                      child: Row(
-                        children: [
-                          Icon(Icons.download, size: 18, color: Colors.green),
-                          SizedBox(width: 12),
-                          Text('Download to device'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'copy_link',
-                      child: Row(
-                        children: [
-                          Icon(Icons.link, size: 18, color: Color(0xFFEC4899)),
-                          SizedBox(width: 12),
-                          Text('Copy Download Link'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                          SizedBox(width: 12),
-                          Text('Delete'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            ],
-          ],
+    // Same action set (labels, conditions) the old Open/Play pills + ⋮ menu
+    // offered; the row's tap now carries Open.
+    final actions = <CloudRowAction>[
+      if (videoCount > 0)
+        CloudRowAction(
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          showInStrip: true,
+          onSelected: () => _handlePlayWebDownload(webDownload),
         ),
+      CloudRowAction(
+        icon: Icons.download,
+        label: 'Download to device',
+        showInStrip: true,
+        onSelected: () => _showWebDownloadOptionsDialog(webDownload),
       ),
+      CloudRowAction(
+        icon: Icons.folder_open,
+        label: 'Open',
+        onSelected: () => _navigateIntoWebDownload(webDownload),
       ),
+      CloudRowAction(
+        icon: Icons.link,
+        label: 'Copy Download Link',
+        onSelected: () => _copyWebDownloadLink(webDownload),
       ),
+      CloudRowAction(
+        icon: Icons.delete_outline,
+        label: 'Delete',
+        destructive: true,
+        onSelected: () => _confirmDeleteWebDownload(webDownload),
+      ),
+    ];
+
+    return CloudFileRow(
+      kind: CloudRowKind.folder,
+      title: webDownload.name,
+      meta:
+          '${Formatters.formatFileSize(webDownload.size)} · ${webDownload.files.length} file${webDownload.files.length == 1 ? '' : 's'}',
+      onTap: () => _navigateIntoWebDownload(webDownload),
+      actions: actions,
+      selectionMode: _isSelectionMode,
+      selected: _selectedWebDownloadIds.contains(webDownload.id),
+      onToggleSelected: () => _toggleWebDownloadSelection(webDownload.id),
+      focusNode: index == 0 ? _firstItemFocusNode : null,
     );
   }
 
   /// Build a card for a torrent (displayed as a folder at root level)
   Widget _buildTorrentFolderCard(TorboxTorrent torrent, int index) {
     final videoCount = torrent.files.where(_torboxFileLooksLikeVideo).length;
-    final isSelected = _selectedTorrentIds.contains(torrent.id);
-    final theme = Theme.of(context);
+    final meta =
+        '${Formatters.formatFileSize(torrent.size)} · ${torrent.files.length} files';
+    final upNode = (index == 0 && _isTorrentSearchActive)
+        ? _torrentSearchFocusNode
+        : null;
 
-    return TvFocusScrollWrapper(
-      child: GestureDetector(
-      onTap: _isSelectionMode ? () => _toggleTorrentSelection(torrent.id) : null,
-      child: Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: _isSelectionMode && isSelected
-            ? BorderSide(color: theme.colorScheme.primary, width: 2)
-            : BorderSide.none,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (_isSelectionMode) ...[
-                  Checkbox(
-                    value: isSelected,
-                    onChanged: (_) => _toggleTorrentSelection(torrent.id),
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                const Icon(Icons.folder, color: Colors.amber, size: 32),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        torrent.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            Formatters.formatFileSize(torrent.size),
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text('•', style: TextStyle(color: Colors.grey.shade600)),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${torrent.files.length} files',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (!_isSelectionMode) ...[
-            const SizedBox(height: 12),
-            if (widget.selectSourceMode)
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTorrentActionButton(
-                      focusNode: index == 0 ? _firstItemFocusNode : null,
-                      icon: Icons.check_circle_outline,
-                      label: 'Select',
-                      color: const Color(0xFF6366F1),
-                      onTap: () {
-                        final source = SeriesSource(
-                          torrentHash: torrent.hash,
-                          torrentName: torrent.name,
-                          debridService: 'torbox',
-                          debridTorrentId: torrent.id.toString(),
-                          boundAt: DateTime.now().millisecondsSinceEpoch,
-                        );
-                        widget.onSourceSelected?.call(source);
-                        Navigator.of(context).pop();
-                      },
-                    ),
-                  ),
-                ],
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTorrentActionButton(
-                      focusNode: index == 0 ? _firstItemFocusNode : null,
-                      icon: Icons.folder_open,
-                      label: 'Open',
-                      color: const Color(0xFF8B5CF6),
-                      onTap: () => _navigateIntoTorrent(torrent),
-                    ),
-                  ),
-                  if (videoCount > 0) ...[
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildTorrentActionButton(
-                        icon: Icons.play_arrow_rounded,
-                        label: 'Play',
-                        color: const Color(0xFF22C55E),
-                        onTap: () => _handlePlayTorrent(torrent),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(width: 8),
-                  // 3-dot menu
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    tooltip: 'More options',
-                    onSelected: (value) {
-                      if (value == 'open') {
-                        _navigateIntoTorrent(torrent);
-                      } else if (value == 'download') {
-                        _showDownloadOptionsDialog(torrent);
-                      } else if (value == 'copy_zip_link') {
-                        _copyTorboxZipLink(torrent);
-                      } else if (value == 'add_to_playlist') {
-                        _handleAddToPlaylist(torrent);
-                      } else if (value == 'add_to_debrify_tv') {
-                        _handleAddToDebrifyTv(torrent);
-                      } else if (value == 'delete') {
-                        _confirmDeleteTorrent(torrent);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'open',
-                        child: Row(
-                          children: [
-                            Icon(Icons.folder_open, size: 18, color: Colors.blue),
-                            SizedBox(width: 12),
-                            Text('Open'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'download',
-                        child: Row(
-                          children: [
-                            Icon(Icons.download, size: 18, color: Colors.green),
-                            SizedBox(width: 12),
-                            Text('Download to device'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'copy_zip_link',
-                        child: Row(
-                          children: [
-                            Icon(Icons.link, size: 18, color: Color(0xFFEC4899)),
-                            SizedBox(width: 12),
-                            Text('Copy Download Link (Zip)'),
-                          ],
-                        ),
-                      ),
-                      if (videoCount > 0)
-                        const PopupMenuItem(
-                          value: 'add_to_playlist',
-                          child: Row(
-                            children: [
-                              Icon(Icons.playlist_add, size: 18, color: Colors.blue),
-                              SizedBox(width: 12),
-                              Text('Add to Playlist'),
-                            ],
-                          ),
-                        ),
-                      const PopupMenuItem(
-                        value: 'add_to_debrify_tv',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.live_tv_rounded,
-                              size: 18,
-                              color: Color(0xFF10B981),
-                            ),
-                            SizedBox(width: 12),
-                            Text('Add to Debrify TV'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                            SizedBox(width: 12),
-                            Text('Delete'),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ],
+    if (widget.selectSourceMode) {
+      // Select-source flow: the row IS the Select action — no strip, no menu.
+      return CloudFileRow(
+        kind: CloudRowKind.folder,
+        title: torrent.name,
+        meta: meta,
+        onTap: () {
+          final source = SeriesSource(
+            torrentHash: torrent.hash,
+            torrentName: torrent.name,
+            debridService: 'torbox',
+            debridTorrentId: torrent.id.toString(),
+            boundAt: DateTime.now().millisecondsSinceEpoch,
+          );
+          widget.onSourceSelected?.call(source);
+          Navigator.of(context).pop();
+        },
+        focusNode: index == 0 ? _firstItemFocusNode : null,
+        upFocusNode: upNode,
+      );
+    }
+
+    // Same action set (labels, conditions) the old Open/Play pills + ⋮ menu
+    // offered; the row's tap now carries Open.
+    final actions = <CloudRowAction>[
+      if (videoCount > 0)
+        CloudRowAction(
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          showInStrip: true,
+          onSelected: () => _handlePlayTorrent(torrent),
         ),
+      CloudRowAction(
+        icon: Icons.download,
+        label: 'Download to device',
+        showInStrip: true,
+        onSelected: () => _showDownloadOptionsDialog(torrent),
       ),
+      CloudRowAction(
+        icon: Icons.folder_open,
+        label: 'Open',
+        onSelected: () => _navigateIntoTorrent(torrent),
       ),
+      CloudRowAction(
+        icon: Icons.link,
+        label: 'Copy Download Link (Zip)',
+        onSelected: () => _copyTorboxZipLink(torrent),
       ),
+      if (videoCount > 0)
+        CloudRowAction(
+          icon: Icons.playlist_add,
+          label: 'Add to Playlist',
+          onSelected: () => _handleAddToPlaylist(torrent),
+        ),
+      CloudRowAction(
+        icon: Icons.live_tv_rounded,
+        label: 'Add to Debrify TV',
+        onSelected: () => _handleAddToDebrifyTv(torrent),
+      ),
+      CloudRowAction(
+        icon: Icons.delete_outline,
+        label: 'Delete',
+        destructive: true,
+        onSelected: () => _confirmDeleteTorrent(torrent),
+      ),
+    ];
+
+    return CloudFileRow(
+      kind: CloudRowKind.folder,
+      title: torrent.name,
+      meta: meta,
+      badges: [
+        if (torrent.cached)
+          const CloudRowBadge('✓ Cached', CloudBadgeKind.ok)
+        else if (!torrent.downloadFinished)
+          CloudRowBadge(
+            '${(torrent.progress * 100).clamp(0, 100).round()}%',
+            CloudBadgeKind.warn,
+          ),
+      ],
+      onTap: () => _navigateIntoTorrent(torrent),
+      actions: actions,
+      selectionMode: _isSelectionMode,
+      selected: _selectedTorrentIds.contains(torrent.id),
+      onToggleSelected: () => _toggleTorrentSelection(torrent.id),
+      focusNode: index == 0 ? _firstItemFocusNode : null,
+      upFocusNode: upNode,
     );
   }
 
@@ -6655,214 +6359,100 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   Widget _buildFileOrFolderCard(RDFileNode node, int index) {
     final isFolder = node.isFolder;
     final isVideo = !isFolder && FileUtils.isVideoFile(node.name);
+    final folderHasVideos =
+        isFolder && TorboxFolderTreeBuilder.hasVideoFiles(node);
 
-    return TvFocusScrollWrapper(
-      child: Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  isFolder
-                      ? Icons.folder
-                      : isVideo
-                          ? Icons.play_circle_outline
-                          : Icons.insert_drive_file,
-                  color: isFolder
-                      ? Colors.amber
-                      : isVideo
-                          ? Colors.blue
-                          : Colors.grey,
-                  size: 28,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        node.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isFolder
-                            ? '${node.fileCount} items • ${Formatters.formatFileSize(node.totalBytes)}'
-                            : Formatters.formatFileSize(node.bytes ?? 0),
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                if (isFolder) ...[
-                  Expanded(
-                    child: _buildTorrentActionButton(
-                      focusNode: index == 0 ? _firstItemFocusNode : null,
-                      icon: Icons.folder_open,
-                      label: 'Open',
-                      color: const Color(0xFF8B5CF6),
-                      onTap: () => _navigateIntoFolder(node),
-                    ),
-                  ),
-                  if (TorboxFolderTreeBuilder.hasVideoFiles(node)) ...[
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildTorrentActionButton(
-                        icon: Icons.play_arrow_rounded,
-                        label: 'Play',
-                        color: const Color(0xFF22C55E),
-                        onTap: () => _playFolderVideos(node),
-                      ),
-                    ),
-                  ],
-                ] else if (isVideo) ...[
-                  Expanded(
-                    child: _buildTorrentActionButton(
-                      focusNode: index == 0 ? _firstItemFocusNode : null,
-                      icon: Icons.play_arrow_rounded,
-                      label: 'Play',
-                      color: const Color(0xFF22C55E),
-                      onTap: () => _playVideoFile(node),
-                    ),
-                  ),
-                ] else ...[
-                  // Non-video files get a Download button
-                  Expanded(
-                    child: _buildTorrentActionButton(
-                      focusNode: index == 0 ? _firstItemFocusNode : null,
-                      icon: Icons.download_rounded,
-                      label: 'Download',
-                      color: const Color(0xFF3B82F6),
-                      onTap: () => _downloadFileOrFolder(node),
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 8),
-                // 3-dot menu
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  tooltip: 'More options',
-                  onSelected: (value) {
-                    if (value == 'download') {
-                      _downloadFileOrFolder(node);
-                    } else if (value == 'add_to_playlist') {
-                      _addFileOrFolderToPlaylist(node);
-                    } else if (value == 'copy_link') {
-                      _copyFileLink(node);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'download',
-                      child: Row(
-                        children: [
-                          Icon(Icons.download, size: 18, color: Colors.green),
-                          SizedBox(width: 12),
-                          Text('Download'),
-                        ],
-                      ),
-                    ),
-                    // Only show Add to Playlist for torrents, not web downloads
-                    if (_currentWebDownload == null && (isVideo || (isFolder && TorboxFolderTreeBuilder.hasVideoFiles(node))))
-                      const PopupMenuItem(
-                        value: 'add_to_playlist',
-                        child: Row(
-                          children: [
-                            Icon(Icons.playlist_add, size: 18, color: Colors.blue),
-                            SizedBox(width: 12),
-                            Text('Add to Playlist'),
-                          ],
-                        ),
-                      ),
-                    if (!isFolder)
-                      const PopupMenuItem(
-                        value: 'copy_link',
-                        child: Row(
-                          children: [
-                            Icon(Icons.link, size: 18, color: Colors.orange),
-                            SizedBox(width: 12),
-                            Text('Copy Link'),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      ),
-    );
-  }
-
-  Widget _buildViewSelector({bool isCompact = false}) {
-    final theme = Theme.of(context);
-    return Container(
-      height: isCompact ? 36 : 42,
-      padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.1),
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<_TorboxDownloadsView>(
-          value: _selectedView,
-          isDense: isCompact,
-          isExpanded: true,
-          dropdownColor: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          iconEnabledColor: theme.colorScheme.onPrimaryContainer,
-          iconSize: isCompact ? 20 : 24,
-          style: TextStyle(
-            color: theme.colorScheme.onPrimaryContainer,
-            fontWeight: FontWeight.w600,
-            fontSize: isCompact ? 13 : 14,
-          ),
-          items: [
-            const DropdownMenuItem(
-              value: _TorboxDownloadsView.torrents,
-              child: Text('Torrents'),
-            ),
-            DropdownMenuItem(
-              value: _TorboxDownloadsView.webDownloads,
-              child: Text(isCompact ? 'Web DL' : 'Web Downloads'),
-            ),
-          ],
-          onChanged: (value) {
-            if (value != null && value != _selectedView) {
-              setState(() {
-                _selectedView = value;
-                // Exit selection mode when switching views
-                if (_isSelectionMode) {
-                  _isSelectionMode = false;
-                  _selectedTorrentIds.clear();
-                  _selectedWebDownloadIds.clear();
-                }
-              });
+    // Same action set (labels, conditions) the old pills + ⋮ menu offered —
+    // note: no delete at node granularity, and Add to Playlist only for
+    // torrents (not web downloads), exactly as before.
+    final actions = <CloudRowAction>[
+      if (folderHasVideos || isVideo)
+        CloudRowAction(
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          showInStrip: true,
+          onSelected: () {
+            if (isFolder) {
+              _playFolderVideos(node);
+            } else {
+              _playVideoFile(node);
             }
           },
         ),
+      CloudRowAction(
+        icon: Icons.download_rounded,
+        label: 'Download',
+        showInStrip: true,
+        onSelected: () => _downloadFileOrFolder(node),
+      ),
+      if (_currentWebDownload == null && (isVideo || folderHasVideos))
+        CloudRowAction(
+          icon: Icons.playlist_add,
+          label: 'Add to Playlist',
+          onSelected: () => _addFileOrFolderToPlaylist(node),
+        ),
+      if (!isFolder)
+        CloudRowAction(
+          icon: Icons.link,
+          label: 'Copy Link',
+          onSelected: () => _copyFileLink(node),
+        ),
+    ];
+
+    return CloudFileRow(
+      kind: isFolder
+          ? CloudRowKind.folder
+          : isVideo
+              ? CloudRowKind.video
+              : CloudRowKind.file,
+      title: node.name,
+      meta: isFolder
+          ? '${node.fileCount} items · ${Formatters.formatFileSize(node.totalBytes)}'
+          : Formatters.formatFileSize(node.bytes ?? 0),
+      onTap: isFolder
+          ? () => _navigateIntoFolder(node)
+          : isVideo
+              ? () => _playVideoFile(node)
+              : null,
+      actions: actions,
+      focusNode: index == 0 ? _firstItemFocusNode : null,
+    );
+  }
+
+  /// Full-width view switcher on its own line under the toolbar (two labels
+  /// don't fit the toolbar slot the old single-label dropdown used).
+  Widget _buildViewSelectorBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: CloudSegmentedTabs<_TorboxDownloadsView>(
+        segments: const [
+          CloudSegment(
+            _TorboxDownloadsView.torrents,
+            'Torrents',
+            Icons.folder_rounded,
+          ),
+          CloudSegment(
+            _TorboxDownloadsView.webDownloads,
+            'Web Downloads',
+            Icons.link_rounded,
+          ),
+        ],
+        selected: _selectedView,
+        onSelected: (value) {
+          if (value == _selectedView) return;
+          // The two root lists swap in the same element slot, so the incoming
+          // one would inherit the outgoing list's scroll offset.
+          _resetListScroll();
+          setState(() {
+            _selectedView = value;
+            // Exit selection mode when switching views
+            if (_isSelectionMode) {
+              _isSelectionMode = false;
+              _selectedTorrentIds.clear();
+              _selectedWebDownloadIds.clear();
+            }
+          });
+        },
       ),
     );
   }
@@ -6936,7 +6526,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
                 prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.4), size: 20),
                 filled: true,
-                fillColor: const Color(0xFF1E293B),
+                fillColor: Colors.white.withValues(alpha: 0.06),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -6948,7 +6538,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                  borderSide: const BorderSide(color: CloudTheme.accent),
                 ),
               ),
             ),
@@ -7073,9 +6663,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           margin: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withValues(alpha: 0.4),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF1F2937)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
@@ -7094,8 +6684,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 ),
                 SizedBox(width: isCompact ? 4 : 8),
               ],
-              Expanded(child: _buildViewSelector(isCompact: isCompact)),
-              SizedBox(width: isCompact ? 6 : 12),
+              const Spacer(),
               if (hasItems) ...[
                 Tooltip(
                   message: _isSelectionMode ? 'Exit selection' : 'Select items',
@@ -7171,238 +6760,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           ),
         );
       },
-    );
-  }
-}
-
-class _TorboxTorrentCard extends StatelessWidget {
-  const _TorboxTorrentCard({
-    super.key,
-    required this.torrent,
-    required this.onPlay,
-    required this.onDownload,
-    required this.onMoreOptions,
-  });
-
-  final TorboxTorrent torrent;
-  final VoidCallback onPlay;
-  final VoidCallback onDownload;
-  final VoidCallback onMoreOptions;
-
-  @override
-  Widget build(BuildContext context) {
-    final cachedAt = torrent.cachedAt ?? torrent.createdAt;
-    final safeProgress = torrent.progress.clamp(0, 1);
-    final progressPercent = (safeProgress * 100).round();
-    final borderColor = Colors.white.withValues(alpha: 0.08);
-    final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
-
-    const playColor = Color(0xFF7F1D1D);
-    const downloadColor = Color(0xFF065F46);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 12),
-          ),
-          BoxShadow(
-            color: glowColor,
-            blurRadius: 26,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        torrent.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: Colors.white,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildMoreOptionsButton(onMoreOptions),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    StatChip(
-                      icon: Icons.storage,
-                      text: Formatters.formatFileSize(torrent.size),
-                      color: const Color(0xFF6366F1),
-                    ),
-                    const SizedBox(width: 8),
-                    StatChip(
-                      icon: Icons.link,
-                      text:
-                          '${torrent.files.length} file${torrent.files.length == 1 ? '' : 's'}',
-                      color: const Color(0xFFF59E0B),
-                    ),
-                    const SizedBox(width: 8),
-                    StatChip(
-                      icon: Icons.download_done,
-                      text: '$progressPercent%',
-                      color: const Color(0xFF10B981),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.flash_on_rounded,
-                      size: 16,
-                      color: Colors.grey[400],
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        'Server ${torrent.server} • ${torrent.owner.isEmpty ? 'Torbox' : torrent.owner}',
-                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Cached ${Formatters.formatDateTime(cachedAt.toIso8601String())}',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF131E33), Color(0xFF0B1224)],
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(18),
-                bottomRight: Radius.circular(18),
-              ),
-              border: Border(
-                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 380;
-                  final playButton = _buildPrimaryButton(
-                    icon: Icons.play_arrow,
-                    label: 'Play',
-                    backgroundColor: playColor,
-                    onPressed: onPlay,
-                  );
-                  final downloadButton = _buildPrimaryButton(
-                    icon: Icons.download_rounded,
-                    label: 'Download',
-                    backgroundColor: downloadColor,
-                    onPressed: onDownload,
-                  );
-
-                  if (isCompact) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(width: double.infinity, child: playButton),
-                        const SizedBox(height: 8),
-                        SizedBox(width: double.infinity, child: downloadButton),
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: playButton),
-                      const SizedBox(width: 12),
-                      Expanded(child: downloadButton),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrimaryButton({
-    required IconData icon,
-    required String label,
-    required Color backgroundColor,
-    required VoidCallback onPressed,
-  }) {
-    return FilledButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 20),
-      label: Text(label),
-      style: FilledButton.styleFrom(
-        backgroundColor: backgroundColor,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ).copyWith(
-        side: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.focused)) {
-            return const BorderSide(color: Colors.white, width: 3);
-          }
-          return null;
-        }),
-      ),
-    );
-  }
-
-  Widget _buildMoreOptionsButton(VoidCallback onPressed) {
-    return IconButton(
-      onPressed: onPressed,
-      icon: const Icon(Icons.more_vert, size: 20),
-      tooltip: 'More options',
-      style: IconButton.styleFrom(
-        backgroundColor: const Color(0xFF111C32),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.all(12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: const Color(0xFF475569).withValues(alpha: 0.3),
-          ),
-        ),
-      ),
     );
   }
 }

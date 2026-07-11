@@ -20,3 +20,9 @@ bool isActivateKey(LogicalKeyboardKey key) =>
     key == LogicalKeyboardKey.enter ||
     key == LogicalKeyboardKey.numpadEnter ||
     key == LogicalKeyboardKey.gameButtonA;
+
+/// [isActivateKey] plus the space bar — for custom widgets that replace
+/// Material controls (InkWell, PopupMenuButton, buttons), which accepted
+/// space through ActivateIntent, so keyboard users keep it.
+bool isActivateOrSpaceKey(LogicalKeyboardKey key) =>
+    isActivateKey(key) || key == LogicalKeyboardKey.space;

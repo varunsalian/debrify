@@ -11,8 +11,10 @@ import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
 import '../../utils/tv_keys.dart';
+import '../../widgets/cloud/cloud_file_row.dart';
+import '../../widgets/cloud/cloud_row_skeleton.dart';
+import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
-import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
   final String? initialFolderId;
@@ -163,6 +165,18 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _scrollController.position.maxScrollExtent - 200) {
       _loadMoreFiles();
     }
+  }
+
+  /// Reset scroll while the outgoing list is still attached, so the next
+  /// listing never inherits the old offset. The load-more listener is
+  /// detached around the jump — otherwise jumpTo(0) can fire _onScroll while
+  /// the OLD folder's pagination state is still live and append its next
+  /// page into the new folder's list.
+  void _resetListScroll() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.removeListener(_onScroll);
+    _scrollController.jumpTo(0);
+    _scrollController.addListener(_onScroll);
   }
 
   /// Focus first item if data is loaded, otherwise focus add button
@@ -483,11 +497,15 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Focus first item after folder contents load
     _shouldFocusOnLoad = true;
 
+    _resetListScroll();
     setState(() {
       // Push current folder to stack before navigating
       _navigationStack.add((id: _currentFolderId, name: _currentFolderName));
       _currentFolderId = folderId;
       _currentFolderName = folderName;
+      // Clear stale rows so the loading skeleton shows instead of the
+      // outgoing folder's contents sitting frozen while the fetch runs.
+      _files.clear();
       // We're navigating into a subfolder, so we're no longer at restricted root
       _isAtRestrictedRoot = false;
     });
@@ -503,7 +521,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       return;
     }
 
+    // Refocus the first row once the parent listing loads — clearing _files
+    // disposes the focused row and nothing else reclaims DPAD focus.
+    _shouldFocusOnLoad = true;
+    _resetListScroll();
     setState(() {
+      _files.clear();
       // Pop from stack to go back one level
       if (_navigationStack.isNotEmpty) {
         final previous = _navigationStack.removeLast();
@@ -534,6 +557,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   void _navigateUpWithVirtual() {
     if (_isInVirtualFolder) {
       // Exit virtual folder, go back to transformed view
+      _shouldFocusOnLoad = true;
+      _resetListScroll();
       setState(() {
         _isInVirtualFolder = false;
         _virtualFolderName = null;
@@ -543,6 +568,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       // Re-apply current view mode to show the season folders again
       final mode = _getCurrentViewMode();
       _setViewMode(mode);
+      _focusFirstItemOrFallback();
     } else {
       // Normal navigation up real folders
       _navigateUp();
@@ -564,6 +590,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Focus first item after navigation
     _shouldFocusOnLoad = true;
 
+    _resetListScroll();
     try {
       final typedFiles = virtualFiles.cast<Map<String, dynamic>>();
       setState(() {
@@ -1706,7 +1733,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   hintText: 'Search files...',
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   filled: true,
-                  fillColor: const Color(0xFF1E293B),
+                  fillColor: Colors.white.withValues(alpha: 0.06),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -1752,7 +1779,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: Colors.white.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(8),
                         border: isFocused
                             ? Border.all(color: Colors.white, width: 2)
@@ -1878,7 +1905,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     if (widget.isPushedRoute &&
         widget.initialFolderId != null &&
         _currentFolderId == null) {
-      return Scaffold(
+      return CloudScaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
@@ -1905,7 +1932,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
 
     if (_initialLoad && _isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const CloudScaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (_errorMessage.isNotEmpty) {
@@ -1928,7 +1957,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         : const BoxConstraints(minWidth: 48, minHeight: 48);
 
     // Back navigation is handled via MainPageBridge.handleBackNavigation
-    return Scaffold(
+    return CloudScaffold(
       appBar: AppBar(
         leading: (_currentFolderId != null && !_isAtRestrictedRoot) || _isInVirtualFolder
             ? Focus(
@@ -1972,7 +2001,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           ],
         ),
         actions: [
-          if (_files.isNotEmpty && !_isInVirtualFolder)
+          // Keep the button mounted while a navigation fetch runs (_files is
+          // cleared then) so the AppBar doesn't flicker and TV focus parked
+          // on it isn't dropped.
+          if ((_files.isNotEmpty || _isLoading) && !_isInVirtualFolder)
             IconButton(
               icon: Icon(_isSelectionMode ? Icons.close : Icons.checklist_outlined),
               onPressed: _toggleSelectionMode,
@@ -2031,7 +2063,14 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     policy: OrderedTraversalPolicy(),
                     child: RefreshIndicator(
                       onRefresh: _refreshFiles,
-                      child: _files.isEmpty ? _buildEmpty() : _buildFileList(),
+                      // Folder navigation clears _files, so a fetch with
+                      // nothing to show gets the shimmer skeleton;
+                      // pull-to-refresh keeps its items and skips it.
+                      child: _isLoading && _files.isEmpty
+                          ? const CloudRowSkeletonList()
+                          : _files.isEmpty
+                              ? _buildEmpty()
+                              : _buildFileList(),
                     ),
                   ),
           ),
@@ -2041,7 +2080,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Widget _buildNotEnabled() {
-    return Scaffold(
+    return CloudScaffold(
       appBar: AppBar(title: const Text('PikPak Files')),
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
@@ -2094,7 +2133,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Widget _buildError() {
-    return Scaffold(
+    return CloudScaffold(
       appBar: AppBar(title: const Text('PikPak Files')),
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
@@ -2269,79 +2308,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     return const SizedBox.shrink();
   }
 
-  Widget _buildActionButton({
-    FocusNode? focusNode,
-    bool autofocus = false,
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Focus(
-      focusNode: focusNode,
-      autofocus: autofocus,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            isActivateKey(event.logicalKey)) {
-          onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(
-        builder: (context) {
-          final isFocused = Focus.of(context).hasFocus;
-          return GestureDetector(
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: isFocused ? color : Colors.black.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isFocused ? color : color.withValues(alpha: 0.6),
-                  width: isFocused ? 1.5 : 1,
-                ),
-                boxShadow: isFocused
-                    ? [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          spreadRadius: 0,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    size: 16,
-                    color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   Widget _buildFileCard(Map<String, dynamic> file, int index) {
-    final name = file['name'] ?? 'Unknown';
+    final name = file['name']?.toString() ?? 'Unknown';
     final size = file['size'];
     final mimeType = file['mime_type'] ?? '';
     final kind = file['kind'] ?? '';
@@ -2354,247 +2322,103 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     final isVideo = mimeType.startsWith('video/');
     final isComplete = phase == 'PHASE_TYPE_COMPLETE';
 
-    // Videos are ready to play if they're complete
-    // We'll check for actual streaming links when playing
-    final hasStreamingLink = isVideo && isComplete;
+    final date = _formatDate(createdTime);
+    final metaParts = <String>[
+      if (size != null)
+        Formatters.formatFileSize(int.tryParse(size.toString()) ?? 0),
+      if (date.isNotEmpty) date,
+    ];
 
-    final isSelected = fileId != null && _selectedFileIds.contains(fileId);
-    final theme = Theme.of(context);
+    // Same action set (labels, conditions) the old pills + ⋮ menu offered.
+    // Virtual Season folders keep their special shape: Open only (via tap),
+    // no menu, not selectable.
+    final actions = <CloudRowAction>[
+      if (!isVirtualFolder) ...[
+        if (isFolder || (isVideo && isComplete))
+          CloudRowAction(
+            icon: Icons.play_arrow_rounded,
+            label: 'Play',
+            showInStrip: true,
+            onSelected: () {
+              if (isFolder) {
+                _playFolder(file);
+              } else {
+                _playFile(file);
+              }
+            },
+          ),
+        CloudRowAction(
+          icon: Icons.download,
+          label: 'Download',
+          showInStrip: true,
+          onSelected: () {
+            if (isFolder) {
+              _downloadFolder(file);
+            } else {
+              _downloadFile(file);
+            }
+          },
+        ),
+        CloudRowAction(
+          icon: Icons.playlist_add,
+          label: 'Add to Playlist',
+          onSelected: () => _handleAddToPlaylist(file),
+        ),
+        CloudRowAction(
+          icon: Icons.delete_outline,
+          label: 'Delete',
+          destructive: true,
+          onSelected: () => _showDeleteDialog(file),
+        ),
+      ],
+    ];
 
-    return TvFocusScrollWrapper(
-      child: GestureDetector(
-      onTap: _isSelectionMode && fileId != null && !isVirtualFolder
-          ? () => _toggleFileSelection(fileId)
-          : null,
-      child: Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: _isSelectionMode && isSelected
-            ? BorderSide(color: theme.colorScheme.primary, width: 2)
-            : BorderSide.none,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return CloudFileRow(
+      kind: isVirtualFolder
+          ? CloudRowKind.season
+          : isFolder
+              ? CloudRowKind.folder
+              : isVideo
+                  ? CloudRowKind.video
+                  : CloudRowKind.file,
+      title: name,
+      meta: metaParts.isEmpty ? null : metaParts.join(' · '),
+      // Virtual season rows are client-synthesized and carry no 'phase', so
+      // without the !isVirtualFolder gate they'd show a perpetual spinner.
+      extra: (!isComplete && !isVirtualFolder && !_isSelectionMode)
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (_isSelectionMode && fileId != null && !isVirtualFolder) ...[
-                  Checkbox(
-                    value: isSelected,
-                    onChanged: (_) => _toggleFileSelection(fileId),
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                Icon(
-                  isVirtualFolder
-                      ? Icons.video_library
-                      : isFolder
-                      ? Icons.folder
-                      : isVideo
-                      ? Icons.play_circle_outline
-                      : Icons.insert_drive_file,
-                  color: isVirtualFolder
-                      ? Colors.purple
-                      : isFolder
-                      ? Colors.amber
-                      : isVideo
-                      ? Colors.blue
-                      : Colors.grey,
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          if (size != null) ...[
-                            Text(
-                              Formatters.formatFileSize(
-                                int.tryParse(size.toString()) ?? 0,
-                              ),
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '•',
-                              style: TextStyle(color: Colors.grey.shade600),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          Text(
-                            _formatDate(createdTime),
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                const SizedBox(width: 8),
+                Text(
+                  'Downloading...',
+                  style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontSize: 12.5,
                   ),
                 ),
               ],
-            ),
-            if (!isComplete && !_isSelectionMode) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const SizedBox(width: 12),
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Downloading...',
-                    style: TextStyle(
-                      color: Colors.orange.shade700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            if (!_isSelectionMode) ...[
-            const SizedBox(height: 12),
-            // Wrap buttons in FocusTraversalGroup for horizontal navigation
-            FocusTraversalGroup(
-              policy: OrderedTraversalPolicy(),
-              child: Row(
-                children: [
-                  if (isVirtualFolder) ...[
-                    // Virtual Season folder - just open it
-                    Expanded(
-                      child: _buildActionButton(
-                        focusNode: index == 0 ? _firstItemFocusNode : null,
-                        autofocus: index == 0,
-                        icon: Icons.folder_open,
-                        label: 'Open',
-                        color: const Color(0xFF8B5CF6),
-                        onTap: () => _navigateIntoVirtualFolder(file),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ] else if (isFolder) ...[
-                    Expanded(
-                      child: _buildActionButton(
-                        focusNode: index == 0 ? _firstItemFocusNode : null,
-                        autofocus: index == 0,
-                        icon: Icons.folder_open,
-                        label: 'Open',
-                        color: const Color(0xFF8B5CF6),
-                        onTap: () => _navigateIntoFolder(file['id'], name),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildActionButton(
-                        icon: Icons.play_arrow_rounded,
-                        label: 'Play',
-                        color: const Color(0xFF22C55E),
-                        onTap: () => _playFolder(file),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ] else if (isVideo && isComplete) ...[
-                    Expanded(
-                      child: _buildActionButton(
-                        focusNode: index == 0 ? _firstItemFocusNode : null,
-                        autofocus: index == 0,
-                        icon: Icons.play_arrow_rounded,
-                        label: 'Play',
-                        color: const Color(0xFF22C55E),
-                        onTap: () => _playFile(file),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  // 3-dot menu for actions (hidden for virtual folders)
-                  if (!isVirtualFolder)
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert),
-                      tooltip: 'More options',
-                      onSelected: (value) {
-                        if (value == 'delete') {
-                          _showDeleteDialog(file);
-                        } else if (value == 'add_to_playlist') {
-                          _handleAddToPlaylist(file);
-                        } else if (value == 'download') {
-                          if (isFolder) {
-                            _downloadFolder(file);
-                          } else {
-                            _downloadFile(file);
-                          }
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'download',
-                          child: Row(
-                            children: [
-                              Icon(Icons.download, size: 18, color: Colors.green),
-                              SizedBox(width: 12),
-                              Text('Download'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'add_to_playlist',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.playlist_add,
-                                size: 18,
-                                color: Colors.blue,
-                              ),
-                              SizedBox(width: 12),
-                              Text('Add to Playlist'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.delete_outline,
-                                size: 18,
-                                color: Colors.red,
-                              ),
-                              SizedBox(width: 12),
-                              Text('Delete'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
-            ],
-          ],
-        ),
-      ),
-      ),
-      ),
+            )
+          : null,
+      onTap: isVirtualFolder
+          ? () => _navigateIntoVirtualFolder(file)
+          : isFolder
+              ? () => _navigateIntoFolder(file['id'], name)
+              : (isVideo && isComplete)
+                  ? () => _playFile(file)
+                  : null,
+      actions: actions,
+      selectionMode: _isSelectionMode,
+      selected: fileId != null && _selectedFileIds.contains(fileId),
+      selectable: fileId != null && !isVirtualFolder,
+      onToggleSelected:
+          fileId != null ? () => _toggleFileSelection(fileId) : null,
+      focusNode: index == 0 ? _firstItemFocusNode : null,
     );
   }
 
