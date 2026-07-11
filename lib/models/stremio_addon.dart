@@ -169,6 +169,11 @@ class StremioMeta {
   /// The addon this result came from (set during aggregated search)
   final StremioAddon? sourceAddon;
 
+  /// YouTube video ID of a trailer, when the metadata addon (Cinemeta) provides
+  /// one — parsed from `trailerStreams[].ytId` (preferred) or `trailers[].source`.
+  /// Null when the title has no trailer. Played on-device via youtube_explode.
+  final String? trailerYtId;
+
   const StremioMeta({
     required this.id,
     this.imdbId,
@@ -181,6 +186,7 @@ class StremioMeta {
     this.imdbRating,
     this.genres,
     this.sourceAddon,
+    this.trailerYtId,
   });
 
   /// Create a copy with a source addon attached.
@@ -196,7 +202,38 @@ class StremioMeta {
     imdbRating: imdbRating,
     genres: genres,
     sourceAddon: addon,
+    trailerYtId: trailerYtId,
   );
+
+  /// Extract a trailer's YouTube ID from a meta JSON. Cinemeta exposes trailers
+  /// two ways: `trailerStreams: [{title, ytId}]` (preferred — already a bare id)
+  /// and the legacy `trailers: [{source, type}]` where `source` is the id.
+  static String? _parseTrailerYtId(Map<String, dynamic> json) {
+    final streams = json['trailerStreams'];
+    if (streams is List) {
+      for (final s in streams) {
+        if (s is Map) {
+          final ytId = s['ytId'] as String?;
+          if (ytId != null && ytId.isNotEmpty) return ytId;
+        }
+      }
+    }
+    final trailers = json['trailers'];
+    if (trailers is List) {
+      // Prefer an entry explicitly typed as a Trailer, else take the first.
+      String? firstSource;
+      for (final t in trailers) {
+        if (t is Map) {
+          final source = t['source'] as String?;
+          if (source == null || source.isEmpty) continue;
+          firstSource ??= source;
+          if ((t['type'] as String?)?.toLowerCase() == 'trailer') return source;
+        }
+      }
+      if (firstSource != null) return firstSource;
+    }
+    return null;
+  }
 
   static StremioAddon? _parseSourceAddon(dynamic raw) {
     if (raw is! Map) return null;
@@ -293,6 +330,8 @@ class StremioMeta {
       sourceAddon: _parseSourceAddon(
         json['source_addon'] ?? json['sourceAddon'],
       ),
+      trailerYtId:
+          json['trailer_yt_id'] as String? ?? _parseTrailerYtId(json),
     );
   }
 
@@ -323,6 +362,7 @@ class StremioMeta {
       if (imdbRating != null) 'rating': imdbRating,
       if (genres != null && genres!.isNotEmpty) 'genres': genres,
       if (sourceAddonJson != null) 'source_addon': sourceAddonJson,
+      if (trailerYtId != null) 'trailer_yt_id': trailerYtId,
     };
   }
 

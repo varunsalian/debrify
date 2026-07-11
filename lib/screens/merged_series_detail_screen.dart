@@ -5,8 +5,11 @@ import 'package:flutter/material.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
+import '../models/playlist_view_mode.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
+import '../services/video_player_launcher.dart';
+import '../services/youtube_service.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
@@ -95,6 +98,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   List<StremioMeta>? _recommendations;
   StremioMeta? _enriched;
 
+  /// Trailer YouTube ID, resolved from Cinemeta meta. Null until loaded / when
+  /// the title has no trailer — the Trailer button only shows once this is set.
+  String? _trailerYtId;
+
+  /// Guards against a double-launch while a trailer's streams resolve.
+  bool _trailerLoading = false;
+
   /// Scrolls the left info column. Focus-anchored (see [_ScrollAnchor]) so that
   /// focusing the top action row snaps to the very top (revealing the
   /// title/meta/summary above it), and focusing a lower section brings it fully
@@ -118,6 +128,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       _loadImdbEnrichment();
       _loadParentsGuide();
       _loadRecommendations();
+      _loadTrailer();
     });
   }
 
@@ -155,9 +166,90 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
           imdbRating: full.imdbRating ?? item.imdbRating,
           genres: (full.genres?.isNotEmpty ?? false) ? full.genres : item.genres,
           sourceAddon: item.sourceAddon,
+          trailerYtId: full.trailerYtId ?? item.trailerYtId,
         );
       });
     } catch (_) {}
+  }
+
+  /// Resolve the trailer's YouTube ID from Cinemeta. Runs independently of
+  /// [_loadEnrichedMeta] (which short-circuits for already-rich items and so
+  /// can't be relied on to carry the trailer). The `fetchMetaDetails` result is
+  /// cached in [StremioService], so this shares that fetch rather than doubling
+  /// network. Silent on failure — the button simply never appears.
+  Future<void> _loadTrailer() async {
+    // If the item already arrived with a trailer id, use it as-is.
+    final existing = widget.item.trailerYtId;
+    if (existing != null && existing.isNotEmpty) {
+      if (mounted) setState(() => _trailerYtId = existing);
+      return;
+    }
+    final enrich = widget.metaEnricher;
+    final imdbId = widget.item.effectiveImdbId;
+    if (enrich == null || imdbId == null) return;
+    try {
+      final full = await enrich(imdbId, widget.item.type);
+      final ytId = full?.trailerYtId;
+      if (ytId == null || ytId.isEmpty || !mounted) return;
+      setState(() => _trailerYtId = ytId);
+    } catch (_) {}
+  }
+
+  /// Resolve the trailer's YouTube streams on-device and launch the player.
+  /// Mirrors the Lemmy/YouTube playback path. Fails gracefully with a snackbar —
+  /// youtube_explode can be bot-blocked and not every title has a live trailer.
+  Future<void> _playTrailer() async {
+    final ytId = _trailerYtId;
+    if (ytId == null || _trailerLoading) return;
+    setState(() => _trailerLoading = true);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Loading trailer…'),
+            ],
+          ),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+
+    YoutubeResolvedStreams? streams;
+    try {
+      streams = await YoutubeService.resolveStreams(ytId);
+    } catch (_) {
+      streams = null;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    setState(() => _trailerLoading = false);
+
+    final playUrl = streams?.playUrl;
+    if (playUrl == null || playUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t load trailer')),
+      );
+      return;
+    }
+
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: playUrl,
+        audioUrl: streams?.audioUrl,
+        fallbackUrl: streams?.downloadUrl,
+        title: '${_item.name} — Trailer',
+        viewMode: PlaylistViewMode.sorted,
+      ),
+    );
   }
 
   Future<void> _loadImdbEnrichment() async {
@@ -597,6 +689,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
             onTap: widget.onResume,
             focusNode: _leftEntryFocusNode,
             autofocus: widget.isTelevision && _isMovie,
+          ),
+        // Trailer — sits right after Play. Only when Cinemeta gave us a YouTube
+        // trailer id. Plays on-device via youtube_explode (same path as the
+        // YouTube/Lemmy tabs).
+        if (_trailerYtId != null)
+          _GhostButton(
+            label: 'Trailer',
+            icon: Icons.movie_outlined,
+            onTap: _playTrailer,
           ),
         // Movie: a Sources (manual list) button — the episode list is the
         // picker for series, so this is movie-only.
