@@ -1,7 +1,5 @@
 import 'dart:math';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/app_migration_service.dart';
@@ -28,19 +26,12 @@ class _AppInitializerState extends State<AppInitializer>
   late AnimationController _exitController;
   late Animation<double> _exitAnimation;
 
-  ui.Image? _logoImage;
-  // Tight content box of the logo art, normalised 0..1. Replaced with the real
-  // alpha bounds once the image loads; this is only a fallback.
-  Rect _crop = const Rect.fromLTRB(0.06, 0.29, 0.94, 0.71);
-  List<_Blob> _blobs = [];
-  final Random _rng = Random(42);
-
   @override
   void initState() {
     super.initState();
 
     _revealController = AnimationController(
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 1900),
       vsync: this,
     );
 
@@ -54,115 +45,19 @@ class _AppInitializerState extends State<AppInitializer>
       end: 0.0,
     ).animate(CurvedAnimation(parent: _exitController, curve: Curves.easeIn));
 
-    _buildBlobs();
-    _loadLogo();
+    // Kick off the drop-and-bounce reveal on the first frame (nothing to decode
+    // now — the mark and wordmark are drawn as vectors).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _revealController.forward();
+    });
 
     _checkInitializationStatus();
-  }
-
-  // The liquid is a small number of metaball "droplets" that bloom out from the
-  // centre. One large core droplet guarantees the wordmark fully resolves; the
-  // satellites give the spreading edge its organic, undulating shape. Positions
-  // are normalised to the logo box so they scale to any screen.
-  void _buildBlobs() {
-    final blobs = <_Blob>[
-      // Core droplet — grows to cover the entire wordmark.
-      _Blob(
-        nx: 0,
-        ny: 0,
-        radiusFrac: 0.66,
-        phase: 0,
-        freq: 0,
-        wobble: 0,
-      ),
-    ];
-
-    const satellites = 11;
-    for (int i = 0; i < satellites; i++) {
-      final angle = i / satellites * 2 * pi + _rng.nextDouble() * 0.6;
-      final spread = sqrt(_rng.nextDouble());
-      blobs.add(_Blob(
-        nx: cos(angle) * spread,
-        ny: sin(angle) * spread * 0.6,
-        radiusFrac: 0.18 + _rng.nextDouble() * 0.18,
-        phase: _rng.nextDouble() * 2 * pi,
-        freq: 2.0 + _rng.nextDouble() * 2.5,
-        wobble: 0.02 + _rng.nextDouble() * 0.035,
-      ));
-    }
-
-    _blobs = blobs;
-  }
-
-  Future<void> _loadLogo() async {
-    try {
-      final data = await rootBundle.load('assets/splash_logo.png');
-      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
-      final frame = await codec.getNextFrame();
-      if (!mounted) return;
-      final crop = await _computeContentBounds(frame.image);
-      if (!mounted) return;
-      setState(() {
-        _logoImage = frame.image;
-        _crop = crop;
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _revealController.forward();
-      });
-    } catch (e) {
-      debugPrint('AppInitializer: failed to load splash logo: $e');
-      // Still run the controller so timing/handoff stays consistent.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _revealController.forward();
-      });
-    }
-  }
-
-  // Scan the alpha channel for the tight bounding box of visible pixels, so the
-  // art is drawn edge-to-edge with no clipping and no dead margin — whatever the
-  // asset's framing. Returns a normalised (0..1) rect with a hair of padding.
-  Future<Rect> _computeContentBounds(ui.Image img) async {
-    try {
-      final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
-      if (data == null) return _crop;
-      final w = img.width;
-      final h = img.height;
-      final bytes = data.buffer.asUint8List();
-      int minX = w, minY = h, maxX = -1, maxY = -1;
-      const step = 2; // sampling stride — plenty for a bounding box
-      const alphaThreshold = 12;
-      for (int y = 0; y < h; y += step) {
-        final rowOffset = y * w * 4;
-        for (int x = 0; x < w; x += step) {
-          final a = bytes[rowOffset + x * 4 + 3];
-          if (a > alphaThreshold) {
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-          }
-        }
-      }
-      if (maxX < minX || maxY < minY) return _crop;
-      final padX = w * 0.015;
-      final padY = h * 0.015;
-      return Rect.fromLTRB(
-        ((minX - padX) / w).clamp(0.0, 1.0),
-        ((minY - padY) / h).clamp(0.0, 1.0),
-        ((maxX + padX) / w).clamp(0.0, 1.0),
-        ((maxY + padY) / h).clamp(0.0, 1.0),
-      );
-    } catch (e) {
-      debugPrint('AppInitializer: content-bounds scan failed: $e');
-      return _crop;
-    }
   }
 
   @override
   void dispose() {
     _revealController.dispose();
     _exitController.dispose();
-    _logoImage?.dispose();
     super.dispose();
   }
 
@@ -294,12 +189,7 @@ class _AppInitializerState extends State<AppInitializer>
             builder: (context, child) {
               return CustomPaint(
                 size: Size.infinite,
-                painter: _LiquidRevealPainter(
-                  progress: _revealController.value,
-                  blobs: _blobs,
-                  logo: _logoImage,
-                  crop: _crop,
-                ),
+                painter: _DropBouncePainter(_revealController.value),
               );
             },
           ),
@@ -310,215 +200,205 @@ class _AppInitializerState extends State<AppInitializer>
 }
 
 // ---------------------------------------------------------------------------
-// Liquid droplet data
+// Drop & Bounce reveal painter
 // ---------------------------------------------------------------------------
-
-class _Blob {
-  final double nx, ny; // normalised position within the logo box
-  final double radiusFrac; // radius at full coverage, as fraction of logo width
-  final double phase, freq, wobble; // organic surface undulation
-
-  const _Blob({
-    required this.nx,
-    required this.ny,
-    required this.radiusFrac,
-    required this.phase,
-    required this.freq,
-    required this.wobble,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Liquid metaball reveal painter
-// ---------------------------------------------------------------------------
+//
+// Character animation over the old metaball trickery: the play mark drops in
+// from above with real weight (an ease-out bounce), squashing on each contact —
+// and the landing shakes the DEBRIFY letters loose so they pop up one by one.
+// The mark and each letter are drawn as vectors/text so they move
+// independently, and the lockup is sized to ~86% of the frame so it owns the
+// screen on big TVs instead of floating in a void.
 //
 // Timeline (progress 0..1):
-//   0.00 – 0.12   Anticipation — a faint core glow gathers
-//   0.12 – 0.72   Reveal — liquid metaballs bloom out, unveiling the wordmark
-//   0.50 – 0.88   Light-sweep — a diagonal specular highlight crosses the logo
-//   0.74 – 0.95   Settle — wet fill recedes, a clean chromatic glow rests
-//   0.95 – 1.00   Hold
-//
-// The "goo" look comes from the classic metaball trick: draw soft blurred
-// droplets, then push their alpha through a high-contrast colour matrix so the
-// blurred halos snap together into one connected fluid surface. That surface is
-// then used as a dstIn mask to reveal the logo + luminous fill beneath it.
-class _LiquidRevealPainter extends CustomPainter {
-  final double progress;
-  final List<_Blob> blobs;
-  final ui.Image? logo;
-  final Rect crop;
+//   0.00 – 0.52   Drop — mark falls and bounces to rest (contacts ~.36/.73/.91)
+//   0.20 – ~0.75  Shake loose — letters pop up on a damped hop, staggered
+//   0.75 – 1.00   Rest
+class _DropBouncePainter extends CustomPainter {
+  final double p;
+  const _DropBouncePainter(this.p);
 
-  _LiquidRevealPainter({
-    required this.progress,
-    required this.blobs,
-    required this.logo,
-    required this.crop,
-  });
+  static const String _word = 'DEBRIFY';
 
-  // Alpha-threshold matrix: blurred edges below the threshold vanish, above it
-  // snap to opaque — the merge that makes neighbouring droplets read as one.
-  static const ColorFilter _goo = ColorFilter.matrix(<double>[
-    1, 0, 0, 0, 0, //
-    0, 1, 0, 0, 0, //
-    0, 0, 1, 0, 0, //
-    0, 0, 0, 26, -2200.0, //
-  ]);
+  static double _cl(double v, double a, double b) => v < a ? a : (v > b ? b : v);
+  static double _lp(double a, double b, double t) => a + (b - a) * t;
+  static double _outBack(double t, [double s = 1.7]) =>
+      1 + (s + 1) * pow(t - 1, 3).toDouble() + s * pow(t - 1, 2).toDouble();
+  static double _outBounce(double t) {
+    const n = 7.5625, d = 2.75;
+    if (t < 1 / d) return n * t * t;
+    if (t < 2 / d) {
+      t -= 1.5 / d;
+      return n * t * t + 0.75;
+    }
+    if (t < 2.5 / d) {
+      t -= 2.25 / d;
+      return n * t * t + 0.9375;
+    }
+    t -= 2.625 / d;
+    return n * t * t + 0.984375;
+  }
 
-  double _smoothstep(double a, double b, double x) {
-    final t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-    return t * t * (3 - 2 * t);
+  // Rounded right-pointing play triangle, centred at the origin, inscribed in ±s/2.
+  void _playPath(Path path, double s) {
+    final pts = [
+      Offset(-0.30 * s, -0.40 * s),
+      Offset(-0.30 * s, 0.40 * s),
+      Offset(0.43 * s, 0),
+    ];
+    final r = 0.14 * s;
+    for (int i = 0; i < 3; i++) {
+      final a = pts[i], b = pts[(i + 1) % 3], c = pts[(i + 2) % 3];
+      final v1 = a - b, v2 = c - b;
+      final l1 = v1.distance == 0 ? 1.0 : v1.distance;
+      final l2 = v2.distance == 0 ? 1.0 : v2.distance;
+      final t1 = b + v1 * (r / l1), t2 = b + v2 * (r / l2);
+      if (i == 0) {
+        path.moveTo(t1.dx, t1.dy);
+      } else {
+        path.lineTo(t1.dx, t1.dy);
+      }
+      path.quadraticBezierTo(b.dx, b.dy, t2.dx, t2.dy);
+    }
+    path.close();
+  }
+
+  List<TextPainter> _layoutLetters(double fontSize) {
+    return _word.split('').map((ch) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: ch,
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFFE9EDFF),
+            height: 1.0,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      return tp;
+    }).toList();
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = progress;
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    final full = Offset.zero & size;
+    final w = size.width, h = size.height;
+    final cx = w / 2, cy = h / 2;
 
-    // Logo geometry (from the cropped, content-only region of the asset).
-    final aspect = logo != null
-        ? (logo!.width * crop.width) / (logo!.height * crop.height)
-        : 2.1;
-    final logoW = (size.width * 0.72).clamp(240.0, 560.0).toDouble();
-    final logoH = logoW / aspect;
-    final logoRect = Rect.fromCenter(
-      center: Offset(cx, cy),
-      width: logoW,
-      height: logoH,
-    );
+    // ---- lockup layout ----
+    double boxH = min(w * 0.66, h * 1.7) / 2.15;
+    double gs = boxH;
+    double fs = boxH * 0.60;
+    double ls = fs * 0.11;
+    double gap = gs * 0.20;
 
-    final coverage = Curves.easeOutCubic.transform(
-      _smoothstep(0.12, 0.72, p),
-    );
-    final settle = _smoothstep(0.74, 0.95, p);
-    final blurSigma = (logoH * 0.16).clamp(8.0, 26.0);
+    List<TextPainter> letters = _layoutLetters(fs);
+    double total = 0;
+    for (int i = 0; i < letters.length; i++) {
+      total += letters[i].width + (i < letters.length - 1 ? ls : 0);
+    }
+    double lockW = gs + gap + total;
 
-    // --- Glow ---------------------------------------------------------------
-    // A soft indigo halo gathers in anticipation, tracks the reveal, then rests
-    // behind the finished wordmark. Drawn behind the logo so it never washes out
-    // the (intentionally light, thin) letterforms.
-    final anticip = _smoothstep(0.0, 0.12, p);
-    final glowAlpha =
-        (anticip * 0.30 + coverage * 0.18 + settle * 0.28).clamp(0.0, 1.0);
-    if (glowAlpha > 0.01) {
-      final glowRadius = logoW * (0.42 + 0.12 * settle);
-      // Very subtle chromatic fringing — cyan/magenta offset twins.
-      _radialGlow(canvas, Offset(cx - 6, cy), glowRadius,
-          const Color(0xFF22D3EE), 0.05 * settle);
-      _radialGlow(canvas, Offset(cx + 6, cy), glowRadius,
-          const Color(0xFFC084FC), 0.05 * settle);
-      _radialGlow(canvas, Offset(cx, cy), glowRadius,
-          const Color(0xFF4F46E5), glowAlpha * 0.55);
+    final maxW = w * 0.86;
+    if (lockW > maxW) {
+      final k = maxW / lockW;
+      boxH *= k;
+      gs *= k;
+      fs *= k;
+      ls *= k;
+      gap = gs * 0.20;
+      letters = _layoutLetters(fs);
+      total = 0;
+      for (int i = 0; i < letters.length; i++) {
+        total += letters[i].width + (i < letters.length - 1 ? ls : 0);
+      }
+      lockW = gs + gap + total;
     }
 
-    if (logo == null) return;
+    final startX = cx - lockW / 2;
+    final wordX = startX + gs + gap;
+    final glyphCx = startX + gs / 2;
+    final baseY = cy + fs * 0.35;
 
-    final iw = logo!.width.toDouble();
-    final ih = logo!.height.toDouble();
-    final srcRect = Rect.fromLTRB(
-      crop.left * iw,
-      crop.top * ih,
-      crop.right * iw,
-      crop.bottom * ih,
-    );
+    final centers = <double>[];
+    double x = wordX;
+    for (int i = 0; i < letters.length; i++) {
+      centers.add(x + letters[i].width / 2);
+      x += letters[i].width + ls;
+    }
 
-    // --- Liquid-masked reveal -----------------------------------------------
-    canvas.saveLayer(full, Paint());
+    // ---- glyph drop + squash ----
+    final dt = _cl(p / 0.52, 0, 1);
+    final yoff = _lp(-(h * 0.55 + gs), 0, _outBounce(dt));
+    double comp = 0;
+    for (final cpair in const [
+      [0.363, 1.0],
+      [0.727, 0.5],
+      [0.909, 0.28],
+    ]) {
+      comp += cpair[1] * exp(-pow((dt - cpair[0]) / 0.045, 2).toDouble());
+    }
+    comp = _cl(comp, 0, 1) * 0.30;
+    _drawGlyph(canvas, glyphCx, cy + yoff, gs, 1 + comp * 0.85, 1 - comp, 0.7 + comp);
 
-    // 1. The wordmark itself, in its true colours.
-    canvas.drawImageRect(
-      logo!,
-      srcRect,
-      logoRect,
-      Paint()..filterQuality = FilterQuality.high,
-    );
+    // ---- letters shaken loose ----
+    for (int i = 0; i < letters.length; i++) {
+      final st = 0.20 + i * 0.03;
+      final lt = _cl((p - st) / 0.34, 0, 1);
+      if (lt <= 0) continue;
+      final hop = sin(lt * pi * 1.6) * exp(-4 * lt);
+      final scale = _lp(0.6, 1, _outBack(_cl(lt * 1.4, 0, 1)));
+      final alpha = _cl(lt * 1.6, 0, 1);
+      _drawLetter(canvas, letters[i], centers[i], baseY, -hop * gs * 0.16, scale, alpha, fs);
+    }
+  }
 
-    // 2. Diagonal light-sweep — a restrained specular pass over the revealed
-    //    art. Kept low so it sheens, not washes.
-    final sweepT = _smoothstep(0.5, 0.86, p);
-    if (sweepT > 0.0 && sweepT < 1.0) {
-      final sweepIntensity = sin(sweepT * pi);
-      final bandW = logoW * 0.32;
-      final sweepX = ui.lerpDouble(cx - logoW * 0.7, cx + logoW * 0.7, sweepT)!;
-      canvas.save();
-      canvas.translate(cx, cy);
-      canvas.rotate(-0.35);
-      canvas.translate(-cx, -cy);
-      final bandRect = Rect.fromCenter(
-        center: Offset(sweepX, cy),
-        width: bandW,
-        height: size.height * 1.6,
+  void _drawGlyph(Canvas c, double gx, double gy, double s, double sx, double sy, double glow) {
+    c.save();
+    c.translate(gx, gy);
+    c.scale(sx, sy);
+    final path = Path();
+    _playPath(path, s);
+    if (glow > 0) {
+      c.drawPath(
+        path,
+        Paint()
+          ..color = Color.fromRGBO(110, 120, 255, 0.55 * _cl(glow, 0, 1))
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.12 * glow),
       );
-      final sweepPaint = Paint()
-        ..blendMode = BlendMode.plus
-        ..shader = LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [
-            const Color(0x00FFFFFF),
-            Color.fromRGBO(255, 255, 255, 0.20 * sweepIntensity),
-            const Color(0x00FFFFFF),
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(bandRect);
-      canvas.drawRect(bandRect, sweepPaint);
-      canvas.restore();
     }
-
-    // 3. Cut everything above to the liquid surface (metaball mask).
-    canvas.saveLayer(full, Paint()..blendMode = BlendMode.dstIn);
-    canvas.saveLayer(full, Paint()..colorFilter = _goo);
-    canvas.saveLayer(
-      full,
-      Paint()..imageFilter = ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+    const grad = LinearGradient(
+      colors: [Color(0xFF4F74FF), Color(0xFF6E6BFF), Color(0xFF8A5CFF)],
+      stops: [0, 0.5, 1],
     );
-    _drawDroplets(canvas, logoRect, coverage, p);
-    canvas.restore(); // blur
-    canvas.restore(); // goo threshold
-    canvas.restore(); // dstIn mask
-
-    canvas.restore(); // visible composite
+    final rect = Rect.fromCenter(center: Offset.zero, width: s, height: s);
+    c.drawPath(path, Paint()..shader = grad.createShader(rect));
+    // inner sheen for a touch of depth
+    final inner = Path();
+    _playPath(inner, s * 0.52);
+    c.drawPath(inner, Paint()..color = const Color(0xFFDFE6FF).withValues(alpha: 0.22));
+    c.restore();
   }
 
-  void _drawDroplets(Canvas canvas, Rect logo, double coverage, double p) {
-    final paint = Paint()..color = Colors.white;
-    final spreadX = logo.width * 0.5;
-    final spreadY = logo.height * 0.5;
-    final cx = logo.center.dx;
-    final cy = logo.center.dy;
-
-    for (final b in blobs) {
-      final wob = b.wobble == 0
-          ? 0.0
-          : sin(p * pi * 2 * b.freq + b.phase) * b.wobble * logo.width;
-      final x = cx + b.nx * spreadX * coverage + wob;
-      final y = cy + b.ny * spreadY * coverage + wob * 0.6;
-      final r = b.radiusFrac *
-          logo.width *
-          ui.lerpDouble(0.12, 1.0, coverage)!;
-      if (r <= 0.5) continue;
-      canvas.drawCircle(Offset(x, y), r, paint);
+  void _drawLetter(Canvas c, TextPainter tp, double centerX, double baseY, double dy,
+      double scale, double alpha, double fs) {
+    final ascent = tp.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    c.save();
+    c.translate(centerX, baseY + dy);
+    c.scale(scale, scale);
+    final needsLayer = alpha < 0.999;
+    if (needsLayer) {
+      c.saveLayer(
+        Rect.fromLTRB(-tp.width, -fs * 1.6, tp.width, fs * 1.2),
+        Paint()..color = Color.fromRGBO(0, 0, 0, alpha),
+      );
     }
-  }
-
-  void _radialGlow(
-      Canvas canvas, Offset center, double radius, Color color, double alpha) {
-    if (alpha <= 0.01) return;
-    final paint = Paint()
-      ..blendMode = BlendMode.plus
-      ..shader = RadialGradient(
-        colors: [
-          color.withValues(alpha: alpha),
-          color.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 1.0],
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-    canvas.drawCircle(center, radius, paint);
+    tp.paint(c, Offset(-tp.width / 2, -ascent));
+    if (needsLayer) c.restore();
+    c.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _LiquidRevealPainter old) =>
-      old.progress != progress || old.logo != logo || old.crop != crop;
+  bool shouldRepaint(covariant _DropBouncePainter old) => old.p != p;
 }

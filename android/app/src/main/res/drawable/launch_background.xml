@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Seamless cold start: the OS launch window is just the app background colour
+     (no static logo). The Flutter drop-and-bounce reveal in AppInitializer is
+     the first thing to show a logo, so there's no double-logo flash. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />
-    <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@drawable/ic_launcher_foreground" />
-    </item>
 </layer-list>
