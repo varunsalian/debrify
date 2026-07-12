@@ -357,19 +357,6 @@ class StorageService {
     await prefs.setBool('merged_series_page_enabled', enabled);
   }
 
-  /// Use the Stremio-style redesigned Sources screen (format-logo rows + hero +
-  /// sort/filter toolbar) instead of the plain list. Opt-in while it stabilises;
-  /// off by default. Toggle per-device via [setSourcesPageRedesignEnabled].
-  static Future<bool> getSourcesPageRedesignEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('sources_page_redesign_enabled') ?? false;
-  }
-
-  static Future<void> setSourcesPageRedesignEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('sources_page_redesign_enabled', enabled);
-  }
-
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
   /// metadata addon provides one. Default: ON everywhere EXCEPT Android TV,
   /// where autoplay + audio is heavy on weak boxes and intrusive on a shared

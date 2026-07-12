@@ -7452,9 +7452,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// Monotonic guard so a slow earlier search can't clobber a newer one.
   int _searchToken = 0;
 
-  /// Stremio-style redesigned presentation (flag-gated). When false the screen
-  /// renders exactly as before. Resolved once in [initState].
-  bool _redesign = false;
+  /// Stremio-style redesigned presentation — now the default. Kept as a field
+  /// (rather than inlined) so the classic-row branches remain an easy fallback.
+  final bool _redesign = true;
 
   String get _imdbId => widget.selection.imdbId;
   bool get _isMovie => !widget.selection.isSeries;
@@ -7469,18 +7469,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
     _loadCacheConfig();
-    StorageService.getSourcesPageRedesignEnabled().then((on) {
-      if (!mounted || !on) return;
-      _redesign = true;
-      // If results already arrived before the flag resolved, re-derive the
-      // visible list so the toolbar has something to act on.
-      if (_torrents.isNotEmpty) {
-        _rebuildVisible();
-        _maybeCheckCache();
-      } else {
-        setState(() {});
-      }
-    });
     _load();
   }
 
