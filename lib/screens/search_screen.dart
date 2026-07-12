@@ -6513,18 +6513,23 @@ class _StremioCardState extends State<_StremioCard> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final poster = item.poster;
-    final fx = widget.isTelevision
-        ? Duration.zero
+    // Smooth focus "pop" on TV too (was instant for perf). Animate the SCALE
+    // only — a transform, which is cheap on the GPU — so the card eases up
+    // toward the viewer. The shadow SNAPS on TV (animating a large blur radius
+    // every frame is what janks a weak TV GPU). Phones keep their 160ms feel.
+    final scaleFx = widget.isTelevision
+        ? const Duration(milliseconds: 140)
         : const Duration(milliseconds: 160);
+    final shadowFx = widget.isTelevision ? Duration.zero : scaleFx;
 
     final posterCard = AnimatedScale(
-      duration: fx,
+      duration: scaleFx,
       curve: Curves.easeOutCubic,
-      scale: _active ? 1.05 : 1.0,
+      scale: _active ? (widget.isTelevision ? 1.09 : 1.05) : 1.0,
       child: AspectRatio(
         aspectRatio: 2 / 3,
         child: AnimatedContainer(
-          duration: fx,
+          duration: shadowFx,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
@@ -6890,20 +6895,24 @@ class _ArtPosterState extends State<_ArtPoster> {
 
   @override
   Widget build(BuildContext context) {
-    final fx = widget.isTelevision
-        ? Duration.zero
+    // Smooth focus "pop" on TV too (was instant for perf) — animate the SCALE
+    // only (a cheap transform) and snap the shadow, so a weak TV GPU doesn't
+    // re-rasterise a large blur every frame. Phones keep their 160ms feel.
+    final scaleFx = widget.isTelevision
+        ? const Duration(milliseconds: 140)
         : const Duration(milliseconds: 160);
+    final shadowFx = widget.isTelevision ? Duration.zero : scaleFx;
     final url = widget.imageUrl;
     final hasImage = url != null && url.isNotEmpty;
 
     final posterCard = AnimatedScale(
-      duration: fx,
+      duration: scaleFx,
       curve: Curves.easeOutCubic,
-      scale: _active ? 1.05 : 1.0,
+      scale: _active ? (widget.isTelevision ? 1.09 : 1.05) : 1.0,
       child: AspectRatio(
         aspectRatio: 2 / 3,
         child: AnimatedContainer(
-          duration: fx,
+          duration: shadowFx,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
