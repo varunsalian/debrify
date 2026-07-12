@@ -6329,12 +6329,11 @@ class _CwRow {
   });
 }
 
-/// A reserved-but-not-yet-loaded Trakt row: a header above a strip of shimmer
-/// poster placeholders (see [_SearchScreenState._buildTraktSkeletonRow]). Owns a
-/// single repeating controller that drives every poster in the row, so a pair of
-/// these reserves the Trakt slot with 2 tickers total — not one per poster —
-/// which matters on the weak TV hardware this board targets.
-class _TraktSkeletonRow extends StatefulWidget {
+/// A reserved-but-not-yet-loaded Trakt row: a header above a strip of static
+/// poster placeholders (see [_SearchScreenState._buildTraktSkeletonRow]) that
+/// hold the Trakt slot open while its fetch runs. Static — nothing animates
+/// while the CPU is busy loading (see [ShimmerBox]).
+class _TraktSkeletonRow extends StatelessWidget {
   final Widget header;
   final double posterW;
   final double cellH;
@@ -6348,79 +6347,45 @@ class _TraktSkeletonRow extends StatefulWidget {
   });
 
   @override
-  State<_TraktSkeletonRow> createState() => _TraktSkeletonRowState();
-}
-
-class _TraktSkeletonRowState extends State<_TraktSkeletonRow>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1300),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    // Isolate the shimmer's per-frame repaint from the real board rows it sits
-    // among, so its sweep doesn't re-rasterise them each frame.
-    return RepaintBoundary(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          widget.header,
-          SizedBox(
-            height: widget.rowH,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.hardEdge,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 13),
-              itemCount: 6,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 11),
-                  child: Center(
-                    child: _SkeletonPoster(
-                      width: widget.posterW,
-                      height: widget.cellH,
-                      animation: _controller,
-                    ),
-                  ),
-                );
-              },
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        header,
+        SizedBox(
+          height: rowH,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.hardEdge,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            itemCount: 6,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 11),
+                child: Center(
+                  child: _SkeletonPoster(width: posterW, height: cellH),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-/// A poster-shaped shimmer placeholder driven by a shared [animation], matching
-/// the board's poster radius. Thin wrapper that sizes the shared [ShimmerBox].
+/// A poster-shaped static placeholder matching the board's poster radius. Thin
+/// wrapper that sizes a [ShimmerBox].
 class _SkeletonPoster extends StatelessWidget {
   final double width;
   final double height;
-  final Animation<double> animation;
 
-  const _SkeletonPoster({
-    required this.width,
-    required this.height,
-    required this.animation,
-  });
+  const _SkeletonPoster({required this.width, required this.height});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: ShimmerBox(animation: animation),
-    );
+    return SizedBox(width: width, height: height, child: const ShimmerBox());
   }
 }
 
