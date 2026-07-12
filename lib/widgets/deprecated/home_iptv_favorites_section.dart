@@ -1,0 +1,760 @@
+// DEPRECATED — orphaned when the old Home board was retired (2026-07-13).
+// Fully commented; not compiled/used. Kept for reference.
+// import 'dart:async';
+// 
+// import 'package:flutter/material.dart';
+// import 'package:flutter/services.dart';
+// import '../models/iptv_playlist.dart';
+// import '../utils/tv_keys.dart';
+// import '../services/storage_service.dart';
+// import '../services/main_page_bridge.dart';
+// import 'home/home_theme.dart';
+// import 'home/home_section_skeleton.dart';
+// import 'home/home_section_reveal.dart';
+// import 'home_focus_controller.dart';
+// import 'horizontal_mouse_wheel.dart';
+// 
+// /// Horizontal scrollable IPTV channel favorites section for the home screen
+// class HomeIptvFavoritesSection extends StatefulWidget {
+//   final HomeFocusController? focusController;
+//   final VoidCallback? onRequestFocusAbove;
+//   final VoidCallback? onRequestFocusBelow;
+//   final bool isTelevision;
+//   final void Function(IptvChannel channel)? onPlayChannel;
+// 
+//   const HomeIptvFavoritesSection({
+//     super.key,
+//     this.focusController,
+//     this.onRequestFocusAbove,
+//     this.onRequestFocusBelow,
+//     this.isTelevision = false,
+//     this.onPlayChannel,
+//   });
+// 
+//   @override
+//   State<HomeIptvFavoritesSection> createState() =>
+//       _HomeIptvFavoritesSectionState();
+// }
+// 
+// class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection>
+//     with AutomaticKeepAliveClientMixin {
+//   @override
+//   bool get wantKeepAlive => true;
+// 
+//   List<IptvChannel> _favoriteChannels = [];
+//   bool _isLoading = true;
+// 
+//   // Focus management for DPAD navigation
+//   final List<FocusNode> _cardFocusNodes = [];
+//   final ScrollController _scrollController = ScrollController();
+// 
+//   // Scroll indicators
+//   bool _canScrollLeft = false;
+//   bool _canScrollRight = false;
+// 
+//   @override
+//   void initState() {
+//     super.initState();
+//     _scrollController.addListener(_updateScrollIndicators);
+//     _loadFavorites();
+//   }
+// 
+//   void _updateScrollIndicators() {
+//     if (!mounted || !_scrollController.hasClients) return;
+//     final pos = _scrollController.position;
+//     final canLeft = pos.pixels > 0;
+//     final canRight = pos.pixels < pos.maxScrollExtent;
+//     if (canLeft != _canScrollLeft || canRight != _canScrollRight) {
+//       setState(() {
+//         _canScrollLeft = canLeft;
+//         _canScrollRight = canRight;
+//       });
+//     }
+//   }
+// 
+//   @override
+//   void dispose() {
+//     // Unregister from controller
+//     widget.focusController?.unregisterSection(HomeSection.iptvFavorites);
+//     // Dispose focus nodes
+//     for (final node in _cardFocusNodes) {
+//       node.dispose();
+//     }
+//     _scrollController.removeListener(_updateScrollIndicators);
+//     _scrollController.dispose();
+//     super.dispose();
+//   }
+// 
+//   /// Ensure we have the right number of focus nodes for current items
+//   void _ensureFocusNodes() {
+//     while (_cardFocusNodes.length < _favoriteChannels.length) {
+//       _cardFocusNodes.add(FocusNode(debugLabel: 'iptv_channel_card_${_cardFocusNodes.length}'));
+//     }
+//     while (_cardFocusNodes.length > _favoriteChannels.length) {
+//       _cardFocusNodes.removeLast().dispose();
+//     }
+//   }
+// 
+//   Future<void> _loadFavorites() async {
+//     setState(() => _isLoading = true);
+// 
+//     try {
+//       // Get favorite channels with metadata
+//       final favoritesMap = await StorageService.getIptvFavoriteChannels();
+// 
+//       if (favoritesMap.isEmpty) {
+//         if (mounted) {
+//           setState(() {
+//             _favoriteChannels = [];
+//             _isLoading = false;
+//           });
+//           _ensureFocusNodes();
+//           widget.focusController?.registerSection(
+//             HomeSection.iptvFavorites,
+//             hasItems: false,
+//             focusNodes: [],
+//           );
+//         }
+//         return;
+//       }
+// 
+//       // Convert stored favorites to IptvChannel objects
+//       final favorites = favoritesMap.entries.map((entry) {
+//         final url = entry.key;
+//         final metadata = entry.value;
+//         return IptvChannel(
+//           name: metadata['name'] as String? ?? 'Unknown Channel',
+//           url: url,
+//           logoUrl: metadata['logoUrl'] as String?,
+//           group: metadata['group'] as String?,
+//           duration: -1, // Live stream
+//           attributes: {},
+//         );
+//       }).toList();
+// 
+//       // Sort by name
+//       favorites.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+// 
+//       if (mounted) {
+//         setState(() {
+//           _favoriteChannels = favorites;
+//           _isLoading = false;
+//         });
+//         // Update focus nodes and register with controller
+//         _ensureFocusNodes();
+//         widget.focusController?.registerSection(
+//           HomeSection.iptvFavorites,
+//           hasItems: _favoriteChannels.isNotEmpty,
+//           focusNodes: _cardFocusNodes,
+//         );
+//         // Check scroll indicators after frame
+//         WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollIndicators());
+//       }
+//     } catch (e) {
+//       debugPrint('Error loading IPTV favorites: $e');
+//       if (mounted) {
+//         setState(() {
+//           _favoriteChannels = [];
+//           _isLoading = false;
+//         });
+//         // Register as empty section
+//         _ensureFocusNodes();
+//         widget.focusController?.registerSection(
+//           HomeSection.iptvFavorites,
+//           hasItems: false,
+//           focusNodes: [],
+//         );
+//       }
+//     }
+//   }
+// 
+//   Future<void> _confirmRemoveFavorite(IptvChannel channel) async {
+//     final confirmed = await showDialog<bool>(
+//       context: context,
+//       builder: (context) => AlertDialog(
+//         title: const Text('Remove from Favorites?'),
+//         content: Text('Remove "${channel.name}" from your favorites?'),
+//         actions: [
+//           TextButton(
+//             onPressed: () => Navigator.of(context).pop(false),
+//             child: const Text('Cancel'),
+//           ),
+//           FilledButton(
+//             onPressed: () => Navigator.of(context).pop(true),
+//             child: const Text('Remove'),
+//           ),
+//         ],
+//       ),
+//     );
+// 
+//     if (confirmed == true && mounted) {
+//       await StorageService.setIptvChannelFavorited(channel.url, false);
+//       HapticFeedback.mediumImpact();
+//       _loadFavorites();
+//     }
+//   }
+// 
+//   void _openChannel(IptvChannel channel) {
+//     widget.onPlayChannel?.call(channel);
+//   }
+// 
+//   @override
+//   Widget build(BuildContext context) {
+//     super.build(context);
+//     if (_isLoading) {
+//       return HomeSectionSkeleton(
+//         style: HomeSectionSkeletonStyle.channel,
+//         isTelevision: widget.isTelevision,
+//       );
+//     }
+// 
+//     if (_favoriteChannels.isEmpty) {
+//       return const SizedBox.shrink();
+//     }
+// 
+//     return HomeSectionReveal(
+//       child: Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         HomeSectionHeader(
+//           title: 'Live TV',
+//           count: _favoriteChannels.length,
+//           isTelevision: widget.isTelevision,
+//         ),
+//         const SizedBox(height: 8),
+//         // Horizontal scrolling favorites with edge fade and scroll indicators
+//         SizedBox(
+//           height: 115,
+//           child: HorizontalMouseWheel(
+//             controller: _scrollController,
+//             child: Stack(
+//             children: [
+//               // Skip ShaderMask on TV for GPU performance
+//               if (widget.isTelevision)
+//                 ListView.builder(
+//                   controller: _scrollController,
+//                   scrollDirection: Axis.horizontal,
+//                   padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+//                   clipBehavior: Clip.none,
+//                   itemCount: _favoriteChannels.length,
+//                   itemBuilder: (context, index) {
+//                     final channel = _favoriteChannels[index];
+//                     return Padding(
+//                       padding: EdgeInsets.only(right: index < _favoriteChannels.length - 1 ? 12 : 0),
+//                       child: _buildChannelCard(
+//                         channel,
+//                         index: index,
+//                         focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+//                         onLongPress: () => _confirmRemoveFavorite(channel),
+//                       ),
+//                     );
+//                   },
+//                 )
+//               else
+//                 ShaderMask(
+//                   shaderCallback: (Rect bounds) {
+//                     return LinearGradient(
+//                       begin: Alignment.centerLeft,
+//                       end: Alignment.centerRight,
+//                       colors: const [
+//                         Colors.transparent,
+//                         Colors.white,
+//                         Colors.white,
+//                         Colors.transparent,
+//                       ],
+//                       stops: const [0.0, 0.02, 0.98, 1.0],
+//                     ).createShader(bounds);
+//                   },
+//                   blendMode: BlendMode.dstIn,
+//                   child: ListView.builder(
+//                     controller: _scrollController,
+//                     scrollDirection: Axis.horizontal,
+//                     padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+//                     clipBehavior: Clip.none,
+//                     itemCount: _favoriteChannels.length,
+//                     itemBuilder: (context, index) {
+//                       final channel = _favoriteChannels[index];
+//                       return Padding(
+//                         padding: EdgeInsets.only(right: index < _favoriteChannels.length - 1 ? 12 : 0),
+//                         child: _buildChannelCard(
+//                           channel,
+//                           index: index,
+//                           focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+//                           onLongPress: () => _confirmRemoveFavorite(channel),
+//                         ),
+//                       );
+//                     },
+//                   ),
+//                 ),
+//             ],
+//           ),
+//           ),
+//         ),
+//         const SizedBox(height: 10),
+//         Padding(
+//           padding: EdgeInsets.symmetric(horizontal: 24),
+//           child: Divider(height: 1, thickness: 0.5, color: Color(0x14FFFFFF)),
+//         ),
+//         const SizedBox(height: 10),
+//       ],
+//       ),
+//     );
+//   }
+// 
+//   Widget _buildChannelCard(
+//     IptvChannel channel, {
+//     int index = 0,
+//     FocusNode? focusNode,
+//     VoidCallback? onLongPress,
+//   }) {
+//     return _ChannelCardWithFocus(
+//       onTap: () => _openChannel(channel),
+//       onLongPress: onLongPress,
+//       focusNode: focusNode,
+//       index: index,
+//       totalCount: _favoriteChannels.length,
+//       scrollController: _scrollController,
+//       onUpPressed: widget.onRequestFocusAbove,
+//       onDownPressed: widget.onRequestFocusBelow,
+//       onFocusChanged: (focused, idx) {
+//         if (focused) {
+//           widget.focusController?.saveLastFocusedIndex(HomeSection.iptvFavorites, idx);
+//         }
+//       },
+//       allFocusNodes: _cardFocusNodes,
+//       isTelevision: widget.isTelevision,
+//       child: (isFocused, isHovered) {
+//         final isActive = isFocused || isHovered;
+// 
+//         final cardDecoration = BoxDecoration(
+//               gradient: LinearGradient(
+//                 begin: Alignment.topLeft,
+//                 end: Alignment.bottomRight,
+//                 colors: [
+//                   const Color(0xFF1A1A2E),
+//                   const Color(0xFF14B8A6).withValues(alpha: 0.1),
+//                 ],
+//               ),
+//               borderRadius: BorderRadius.circular(12),
+//               border: Border.all(
+//                 color: isActive ? const Color(0xFF14B8A6) : Colors.white.withValues(alpha: 0.08),
+//                 width: isActive ? 2 : 1,
+//               ),
+//               boxShadow: widget.isTelevision ? null : (isActive
+//                   ? [
+//                       BoxShadow(
+//                         color: const Color(0xFF14B8A6).withValues(alpha: 0.4),
+//                         blurRadius: 16,
+//                         spreadRadius: 1,
+//                       ),
+//                       BoxShadow(
+//                         color: Colors.black.withValues(alpha: 0.3),
+//                         blurRadius: 8,
+//                         offset: const Offset(0, 4),
+//                       ),
+//                     ]
+//                   : [
+//                       BoxShadow(
+//                         color: Colors.black.withValues(alpha: 0.3),
+//                         blurRadius: 8,
+//                         offset: const Offset(0, 3),
+//                       ),
+//                     ]),
+//             );
+// 
+//         final playOverlayChild = Container(
+//                           decoration: BoxDecoration(
+//                             color: Colors.black.withValues(alpha: 0.3),
+//                           ),
+//                           child: Center(
+//                             child: Container(
+//                               padding: const EdgeInsets.all(10),
+//                               decoration: BoxDecoration(
+//                                 color: const Color(0xFF14B8A6),
+//                                 shape: BoxShape.circle,
+//                                 boxShadow: [
+//                                   BoxShadow(
+//                                     color: const Color(0xFF14B8A6).withValues(alpha: 0.5),
+//                                     blurRadius: 12,
+//                                   ),
+//                                 ],
+//                               ),
+//                               child: const Icon(
+//                                 Icons.play_arrow_rounded,
+//                                 color: Colors.white,
+//                                 size: 20,
+//                               ),
+//                             ),
+//                           ),
+//                         );
+// 
+//         final cardContent = ClipRRect(
+//               borderRadius: BorderRadius.circular(11),
+//               child: Stack(
+//                 children: [
+//                   // Background logo (skip on TV — Opacity widget forces compositing layer)
+//                   if (!widget.isTelevision && channel.logoUrl != null && channel.logoUrl!.isNotEmpty)
+//                     Positioned.fill(
+//                       child: Image.network(
+//                         channel.logoUrl!,
+//                         fit: BoxFit.cover,
+//                         color: Colors.white.withValues(alpha: 0.15),
+//                         colorBlendMode: BlendMode.modulate,
+//                         errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+//                       ),
+//                     ),
+//                   // Gradient overlay
+//                   Positioned.fill(
+//                     child: DecoratedBox(
+//                       decoration: BoxDecoration(
+//                         gradient: LinearGradient(
+//                           begin: Alignment.topCenter,
+//                           end: Alignment.bottomCenter,
+//                           colors: [
+//                             Colors.transparent,
+//                             const Color(0xFF1A1A2E).withValues(alpha: 0.8),
+//                           ],
+//                         ),
+//                       ),
+//                     ),
+//                   ),
+//                   // Main content
+//                   Padding(
+//                     padding: const EdgeInsets.all(10),
+//                     child: Column(
+//                       crossAxisAlignment: CrossAxisAlignment.start,
+//                       children: [
+//                         // Top row: Live badge + Star
+//                         Row(
+//                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+//                           children: [
+//                             // Animated live badge
+//                             Container(
+//                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+//                               decoration: BoxDecoration(
+//                                 gradient: HomeTheme.livePulseGradient,
+//                                 borderRadius: BorderRadius.circular(6),
+//                                 boxShadow: [
+//                                   BoxShadow(
+//                                     color: HomeTheme.highlight.withValues(alpha: 0.4),
+//                                     blurRadius: 8,
+//                                   ),
+//                                 ],
+//                               ),
+//                               child: Row(
+//                                 mainAxisSize: MainAxisSize.min,
+//                                 children: [
+//                                   Container(
+//                                     width: 6,
+//                                     height: 6,
+//                                     decoration: const BoxDecoration(
+//                                       color: Colors.white,
+//                                       shape: BoxShape.circle,
+//                                     ),
+//                                   ),
+//                                   const SizedBox(width: 4),
+//                                   const Text(
+//                                     'LIVE',
+//                                     style: TextStyle(
+//                                       color: Colors.white,
+//                                       fontSize: 9,
+//                                       fontWeight: FontWeight.w800,
+//                                       letterSpacing: 0.5,
+//                                     ),
+//                                   ),
+//                                 ],
+//                               ),
+//                             ),
+//                             // Star with background
+//                             Container(
+//                               padding: const EdgeInsets.all(4),
+//                               decoration: BoxDecoration(
+//                                 color: Colors.black.withValues(alpha: 0.3),
+//                                 borderRadius: BorderRadius.circular(6),
+//                               ),
+//                               child: const Icon(
+//                                 Icons.star_rounded,
+//                                 size: 12,
+//                                 color: Color(0xFFFFD700),
+//                               ),
+//                             ),
+//                           ],
+//                         ),
+//                         const Spacer(),
+//                         // Channel name
+//                         Text(
+//                           channel.name,
+//                           maxLines: 2,
+//                           overflow: TextOverflow.ellipsis,
+//                           style: const TextStyle(
+//                             fontSize: 12,
+//                             fontWeight: FontWeight.w700,
+//                             color: Colors.white,
+//                             height: 1.2,
+//                           ),
+//                         ),
+//                         if (channel.group != null && channel.group!.isNotEmpty) ...[
+//                           const SizedBox(height: 2),
+//                           Text(
+//                             channel.group!,
+//                             maxLines: 1,
+//                             overflow: TextOverflow.ellipsis,
+//                             style: TextStyle(
+//                               fontSize: 10,
+//                               color: const Color(0xFF14B8A6).withValues(alpha: 0.8),
+//                               fontWeight: FontWeight.w500,
+//                             ),
+//                           ),
+//                         ],
+//                       ],
+//                     ),
+//                   ),
+//                   // Play overlay on focus
+//                   if (isActive)
+//                     Positioned.fill(
+//                       child: widget.isTelevision
+//                         ? playOverlayChild
+//                         : AnimatedOpacity(
+//                             opacity: isActive ? 1.0 : 0.0,
+//                             duration: const Duration(milliseconds: 200),
+//                             child: playOverlayChild,
+//                           ),
+//                     ),
+//                 ],
+//               ),
+//             );
+// 
+//         final containerChild = widget.isTelevision
+//             ? Container(
+//                 width: 170,
+//                 height: 95,
+//                 decoration: cardDecoration,
+//                 child: cardContent,
+//               )
+//             : AnimatedContainer(
+//                 duration: const Duration(milliseconds: 200),
+//                 curve: Curves.easeOutCubic,
+//                 width: 170,
+//                 height: 95,
+//                 decoration: cardDecoration,
+//                 child: cardContent,
+//               );
+// 
+//         if (widget.isTelevision) {
+//           return Transform.scale(
+//             scale: isActive ? 1.06 : 1.0,
+//             child: containerChild,
+//           );
+//         }
+// 
+//         return TweenAnimationBuilder<double>(
+//           tween: Tween(begin: 1.0, end: isActive ? 1.06 : 1.0),
+//           duration: const Duration(milliseconds: 200),
+//           curve: Curves.easeOutBack,
+//           builder: (context, scale, child) {
+//             return Transform.scale(scale: scale, child: child);
+//           },
+//           child: containerChild,
+//         );
+//       },
+//     );
+//   }
+// }
+// 
+// /// Focus-aware wrapper for channel cards with DPAD/TV support
+// class _ChannelCardWithFocus extends StatefulWidget {
+//   final VoidCallback? onTap;
+//   final VoidCallback? onLongPress;
+//   final FocusNode? focusNode;
+//   final int index;
+//   final int totalCount;
+//   final ScrollController? scrollController;
+//   final VoidCallback? onUpPressed;
+//   final VoidCallback? onDownPressed;
+//   final void Function(bool focused, int index)? onFocusChanged;
+//   final Widget Function(bool isFocused, bool isHovered) child;
+//   final List<FocusNode>? allFocusNodes;
+//   final bool isTelevision;
+// 
+//   const _ChannelCardWithFocus({
+//     required this.onTap,
+//     required this.child,
+//     this.onLongPress,
+//     this.focusNode,
+//     this.index = 0,
+//     this.totalCount = 1,
+//     this.scrollController,
+//     this.onUpPressed,
+//     this.onDownPressed,
+//     this.onFocusChanged,
+//     this.allFocusNodes,
+//     this.isTelevision = false,
+//   });
+// 
+//   @override
+//   State<_ChannelCardWithFocus> createState() => _ChannelCardWithFocusState();
+// }
+// 
+// class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
+//   bool _isFocused = false;
+//   bool _isHovered = false;
+//   final GlobalKey _cardKey = GlobalKey();
+//   Timer? _longPressTimer;
+//   bool _longPressTriggered = false;
+//   bool _keyDownReceived = false;
+// 
+//   @override
+//   void dispose() {
+//     _longPressTimer?.cancel();
+//     super.dispose();
+//   }
+// 
+//   void _onFocusChange(bool focused) {
+//     setState(() => _isFocused = focused);
+//     widget.onFocusChanged?.call(focused, widget.index);
+//     if (!focused) {
+//       _longPressTimer?.cancel();
+//       _longPressTriggered = false;
+//       _keyDownReceived = false;
+//     }
+// 
+//     // Scroll card into view when focused
+//     if (focused && widget.scrollController != null) {
+//       WidgetsBinding.instance.addPostFrameCallback((_) {
+//         final context = _cardKey.currentContext;
+//         if (context != null) {
+//           Scrollable.ensureVisible(
+//             context,
+//             alignment: 0.5,
+//             duration: widget.isTelevision ? Duration.zero : const Duration(milliseconds: 200),
+//             curve: Curves.easeOutCubic,
+//           );
+//         }
+//       });
+//     }
+//   }
+// 
+//   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+//     if (isActivateKey(event.logicalKey)) {
+//       if (event is KeyDownEvent) {
+//         _keyDownReceived = true;
+//         _longPressTriggered = false;
+//         _longPressTimer?.cancel();
+//         if (widget.onLongPress != null) {
+//           _longPressTimer = Timer(const Duration(milliseconds: 800), () {
+//             _longPressTriggered = true;
+//             widget.onLongPress!();
+//           });
+//         }
+//         return KeyEventResult.handled;
+//       } else if (event is KeyUpEvent) {
+//         _longPressTimer?.cancel();
+//         if (!_keyDownReceived) return KeyEventResult.handled;
+//         if (!_longPressTriggered) {
+//           widget.onTap?.call();
+//         }
+//         _longPressTriggered = false;
+//         _keyDownReceived = false;
+//         return KeyEventResult.handled;
+//       }
+//     }
+//     if (event is KeyDownEvent) {
+//       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+//         widget.onUpPressed?.call();
+//         return KeyEventResult.handled;
+//       }
+//       if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+//         widget.onDownPressed?.call();
+//         return KeyEventResult.handled;
+//       }
+//       if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+//         if (widget.isTelevision && widget.allFocusNodes != null) {
+//           if (widget.index > 0) {
+//             widget.allFocusNodes![widget.index - 1].requestFocus();
+//           } else {
+//             MainPageBridge.focusTvSidebar?.call();
+//           }
+//           return KeyEventResult.handled;
+//         }
+//         return KeyEventResult.ignored;
+//       }
+//       if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+//         if (widget.isTelevision && widget.allFocusNodes != null) {
+//           if (widget.index < widget.allFocusNodes!.length - 1) {
+//             widget.allFocusNodes![widget.index + 1].requestFocus();
+//           }
+//           return KeyEventResult.handled;
+//         }
+//         return KeyEventResult.ignored;
+//       }
+//     }
+//     return KeyEventResult.ignored;
+//   }
+// 
+//   @override
+//   Widget build(BuildContext context) {
+//     return MouseRegion(
+//       onEnter: (_) => setState(() => _isHovered = true),
+//       onExit: (_) => setState(() => _isHovered = false),
+//       child: Focus(
+//         focusNode: widget.focusNode,
+//         onFocusChange: _onFocusChange,
+//         onKeyEvent: _handleKeyEvent,
+//         child: GestureDetector(
+//           onTap: widget.onTap,
+//           onLongPress: widget.onLongPress,
+//           child: KeyedSubtree(
+//             key: _cardKey,
+//             child: widget.child(_isFocused, _isHovered),
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
+// 
+// /// Direction for scroll indicator
+// enum _ScrollDirection { left, right }
+// 
+// /// Subtle scroll indicator widget
+// class _ScrollIndicator extends StatelessWidget {
+//   final _ScrollDirection direction;
+//   final Color accentColor;
+//   final bool isTelevision;
+// 
+//   const _ScrollIndicator({
+//     required this.direction,
+//     required this.accentColor,
+//     this.isTelevision = false,
+//   });
+// 
+//   @override
+//   Widget build(BuildContext context) {
+//     final isLeft = direction == _ScrollDirection.left;
+// 
+//     final child = Container(
+//       width: 28,
+//       decoration: BoxDecoration(
+//         gradient: LinearGradient(
+//           begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+//           end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
+//           colors: [
+//             const Color(0xFF0F0F1A).withValues(alpha: 0.9),
+//             Colors.transparent,
+//           ],
+//         ),
+//       ),
+//       child: const SizedBox.shrink(),
+//     );
+// 
+//     return IgnorePointer(
+//       child: isTelevision
+//         ? child
+//         : AnimatedOpacity(
+//             opacity: 1.0,
+//             duration: const Duration(milliseconds: 200),
+//             child: child,
+//           ),
+//     );
+//   }
+// }

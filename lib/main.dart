@@ -12,7 +12,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/app_route_observer.dart';
-import 'screens/torrent_search_screen.dart';
+// Old Home board deprecated — moved to screens/deprecated/ and commented out.
+// import 'screens/torrent_search_screen.dart';
 import 'screens/browse_screen.dart';
 import 'screens/cloud_screen.dart';
 import 'screens/search_screen.dart';
@@ -554,7 +555,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // Public getter for other widgets to check
   static bool get isAutoLaunchShowingOverlay => _isAutoLaunchShowingOverlay;
 
-  int _selectedIndex = 0;
+  int _selectedIndex = 15; // Home (the Stremio board); old index-0 Home retired
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   bool _hasRealDebridKey = false;
@@ -603,7 +604,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _cloudProviderRouteOpen = false;
 
   final List<Widget> _pages = [
-    const TorrentSearchScreen(), // 0: Home
+    const SizedBox.shrink(), // 0: (deprecated old Home — kept as an inert slot
+    // so every later tab index stays stable; removed from the visible nav below
+    // and never selected. The new Stremio board at index 15 is now "Home".)
     const PlaylistScreen(), // 1: Playlist
     const DownloadsScreen(), // 2: Downloads
     const DebrifyTVScreen(), // 3: Debrify TV
@@ -621,7 +624,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   ];
 
   final List<String> _titles = [
-    'Home',
+    'Home (deprecated)', // 0: old board, hidden from nav (index kept as a slot)
     'Playlist',
     'Downloads',
     'Debrify TV',
@@ -636,8 +639,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'AllDebrid',
     'IPTV',
     'YouTube',
-    'Home New', // 15: the new Stremio-style board (was 'Search'; the old Home
-    // at index 0 will be deprecated/renamed later)
+    'Home', // 15: the Stremio-style board — now THE Home (old index-0 Home is
+    // deprecated). Built on demand in _buildPage as SearchScreen().
     'Cloud', // 16: consolidated cloud-provider hub (RD/Torbox/PikPak/…/WebDAV)
     'Search', // 17: dedicated search tab (TV only)
     'Discover', // 18: source-dropdown browser (Continue Watching / Trakt / …)
@@ -1730,6 +1733,21 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       // Get startup mode
       final startupMode = await StorageService.getStartupMode();
 
+      // TEMPORARILY DISABLED: the continue-watching / Trakt startup auto-launch
+      // relied on the OLD Home board (now deprecated) to consume the queued
+      // item via MainPageBridge.getAndClear…ToAutoPlay. The new Home doesn't
+      // pick it up yet, so skip these modes to avoid a stuck "Launching…"
+      // overlay. TODO: port that consumption into SearchScreen, then remove.
+      const disabledStartupModes = {
+        'continue_watching',
+        'trakt_continue_watching_movies',
+        'trakt_continue_watching_shows',
+      };
+      if (disabledStartupModes.contains(startupMode)) {
+        _autoLaunchInProgress = false;
+        return;
+      }
+
       switch (startupMode) {
         case 'playlist':
           await _launchPlaylistItem();
@@ -1970,7 +1988,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       return;
     }
 
-    _onItemTapped(0); // Home / Torrent Search tab
+    _onItemTapped(15); // Home (Stremio board). NOTE: the Continue-Watching auto-play
+    // item queued above was consumed by the OLD home only — the new home does
+    // not yet pick it up, so this currently just lands on Home (see review).
   }
 
   /// Launch a selected Trakt Continue Watching movie/show on startup.
@@ -2007,7 +2027,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       return;
     }
 
-    _onItemTapped(0); // Home / Torrent Search tab
+    _onItemTapped(15); // Home (Stremio board). NOTE: the Continue-Watching auto-play
+    // item queued above was consumed by the OLD home only — the new home does
+    // not yet pick it up, so this currently just lands on Home (see review).
   }
 
   void _hideAutoLaunchOverlay() {
@@ -2187,13 +2209,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         17,
         15,
         18,
-        0,
         2,
         13,
         14,
         3,
         9,
-      ]; // Search, Home New, Discover, Torrent, Downloads, IPTV, YouTube,
+      ]; // Search, Home, Discover, Downloads, IPTV, YouTube,
       // Debrify TV, Stremio TV. The dedicated Search tab (17) is TV-only; on
       // desktop/mobile
       // the Home-New board (15) keeps its own persistent search bar.
@@ -2229,16 +2250,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       return [
         15,
         18,
-        0,
         13,
         14,
         9,
         7,
         8,
-      ]; // Home New, Discover, Home, IPTV, YouTube, Stremio TV, Addons, Settings
+      ]; // Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
     }
 
-    final indices = <int>[15, 18, 0, 2, 13, 14, 3, 9];
+    final indices = <int>[15, 18, 2, 13, 14, 3, 9];
     // Consolidated Cloud tab (see TV branch above): one entry when any provider
     // is enabled & not hidden.
     if ((rd && !rdHidden) ||
