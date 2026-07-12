@@ -8036,8 +8036,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// change (source pill, sort, or filter). The ListView stays mounted (no
   /// loading flip), so the old nodes are disposed AFTER the rebuild frame —
   /// letting each reused row State and its Focus widget migrate onto the new
-  /// node first (disposing mid-frame would assert / drop the listener). Re-
-  /// anchors D-pad focus on TV, which `_rebuildVisible` would otherwise lose.
+  /// node first (disposing mid-frame would assert / drop the listener).
+  ///
+  /// Deliberately does NOT move D-pad focus: this is always triggered from a
+  /// toolbar control (pill / sort / funnel) which keeps its own focus. Yanking
+  /// focus into the list would both disorient the user AND let the SELECT that
+  /// triggered the change land on the newly-focused first row — activating it
+  /// (adding the first result to the debrid) as an unwanted "double tap".
   void _rebuildVisible() {
     final old = List<FocusNode>.from(_nodes);
     _nodes.clear();
@@ -8049,9 +8054,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final n in old) {
         n.dispose();
-      }
-      if (mounted && widget.isTelevision && _nodes.isNotEmpty) {
-        _nodes.first.requestFocus();
       }
     });
   }
@@ -8514,6 +8516,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             Image.network(
               poster,
               fit: BoxFit.cover,
+              // Decode at a capped width — the hero is only a ~128px strip, so a
+              // full-res poster is wasted memory (and OOMs 2GB TV boxes).
+              cacheWidth: 640,
+              filterQuality: FilterQuality.low,
+              gaplessPlayback: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           const DecoratedBox(
