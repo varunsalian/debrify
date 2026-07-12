@@ -22684,9 +22684,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Widget _buildHomeSection() {
     return ListView(
       padding: const EdgeInsets.only(top: 4, bottom: 32),
-      // Pre-render adjacent rows so D-pad up/down doesn't blink loading
-      // shimmers or lose focus while a section comes back into view.
-      cacheExtent: 2000,
+      // Pre-render one adjacent row so D-pad up/down doesn't blink loading
+      // shimmers, without keeping ~3 offscreen rails (and all their decoded
+      // posters) alive — that memory footprint OOMs 2GB TV boxes.
+      cacheExtent: 700,
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),

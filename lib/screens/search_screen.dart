@@ -5258,7 +5258,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   return ListView.builder(
                     controller: _boardScroll,
                     padding: const EdgeInsets.only(top: 6, bottom: 32),
-                    cacheExtent: 2000,
+                    cacheExtent: 800,
                     itemCount:
                         _sections.length + leadingCount + (showFooter ? 1 : 0),
                     itemBuilder: (context, i) {
@@ -5557,7 +5557,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   // over the sidebar to the left. rowH has enough headroom that the
                   // hover/focus lift still isn't clipped.
                   clipBehavior: Clip.hardEdge,
-                  cacheExtent: 2000,
+                  cacheExtent: 800,
                   padding: const EdgeInsets.symmetric(horizontal: 13),
                   // +1 trailing paging spinner.
                   itemCount:
@@ -5669,7 +5669,7 @@ class _SearchScreenState extends State<SearchScreen> {
               return ListView.builder(
                 scrollDirection: Axis.horizontal,
                 clipBehavior: Clip.hardEdge,
-                cacheExtent: 2000,
+                cacheExtent: 800,
                 padding: const EdgeInsets.symmetric(horizontal: 13),
                 itemCount: items.length,
                 itemBuilder: (context, index) {
@@ -5794,7 +5794,7 @@ class _SearchScreenState extends State<SearchScreen> {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.hardEdge,
-            cacheExtent: 2000,
+            cacheExtent: 800,
             padding: const EdgeInsets.symmetric(horizontal: 13),
             itemCount: itemCount,
             itemBuilder: (context, col) {
@@ -6056,6 +6056,11 @@ class _HeroSpotlight extends StatelessWidget {
                 imageUrl: bg,
                 fit: BoxFit.cover,
                 alignment: Alignment.topCenter,
+                // Cap the hero backdrop decode so an oversized source doesn't
+                // decode at native res, but keep it generous — it's a single
+                // full-width image (crisp matters, and one instance is cheap;
+                // the memory win is the many small rail posters, not this).
+                memCacheWidth: isTelevision ? 1080 : 1280,
                 errorWidget: (_, __, ___) => const SizedBox.shrink(),
               ),
             ),
@@ -6539,6 +6544,9 @@ class _StremioCardState extends State<_StremioCard> {
                   CachedNetworkImage(
                     imageUrl: poster,
                     fit: BoxFit.cover,
+                    // Decode board posters at a capped width — tiles are small,
+                    // full-res posters are the main memory churn while scrolling.
+                    memCacheWidth: widget.isTelevision ? 320 : 480,
                     placeholder: (_, __) => _placeholder(item.name),
                     errorWidget: (_, __, ___) => _placeholder(item.name),
                   )
@@ -6935,6 +6943,7 @@ class _ArtPosterState extends State<_ArtPoster> {
                     child: CachedNetworkImage(
                       imageUrl: url,
                       fit: widget.imageFit,
+                      memCacheWidth: widget.isTelevision ? 320 : 480,
                       placeholder: (_, __) => _glyph(),
                       errorWidget: (_, __, ___) => _glyph(),
                     ),

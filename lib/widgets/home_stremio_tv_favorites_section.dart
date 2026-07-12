@@ -724,7 +724,7 @@ class _HomeStremioTvFavoritesSectionState
     if (imageUrl != null && imageUrl.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: imageUrl,
-        memCacheWidth: 600,
+        memCacheWidth: widget.isTelevision ? 400 : 600,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(
           color: const Color(0xFF0D1117),

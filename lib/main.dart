@@ -66,6 +66,23 @@ import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
 import 'services/update_service.dart';
 
+/// Flutter's default image cache (1000 images / 100 MB) is far too large for a
+/// 2 GB Android TV box — a screenful of full-res posters plus offscreen ones
+/// pushes it into the OS low-memory killer. Cap it on TV only; phones, tablets
+/// and desktop keep the framework defaults untouched. Evicted posters are
+/// re-fetched from the on-disk cache, so this trades a little re-decode for a
+/// much smaller resident footprint on the constrained device.
+Future<void> _capImageCache() async {
+  var isTv = false;
+  try {
+    isTv = await AndroidNativeDownloader.isTelevision();
+  } catch (_) {}
+  if (!isTv) return; // leave non-TV devices on the framework defaults
+  final cache = PaintingBinding.instance.imageCache;
+  cache.maximumSize = 90;
+  cache.maximumSizeBytes = 40 << 20; // 40 MB
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AptabaseService.init();
@@ -82,6 +99,7 @@ Future<void> main() async {
 
   // Set a sensible default orientation: phones stay portrait, Android TV uses landscape.
   await _initOrientation();
+  await _capImageCache();
   // Clean up old playback state data
   await _cleanupPlaybackState();
   AptabaseService.trackInBackground('app_started');

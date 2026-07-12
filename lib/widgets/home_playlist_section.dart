@@ -568,7 +568,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
                     if (posterUrl != null && posterUrl.isNotEmpty)
                       CachedNetworkImage(
                         imageUrl: posterUrl,
-                        memCacheWidth: 600,
+                        memCacheWidth: widget.isTelevision ? 400 : 600,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Container(
                           color: const Color(0xFF0D1117),

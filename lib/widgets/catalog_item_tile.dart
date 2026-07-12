@@ -86,7 +86,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: _active ? 0.7 : 0.35),
-              blurRadius: _active ? 38 : 14,
+              blurRadius: _active ? (widget.isTelevision ? 20 : 38) : 14,
               offset: const Offset(0, 14),
             ),
             if (_active) ...[
@@ -96,12 +96,15 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                 blurRadius: 30,
                 spreadRadius: 1,
               ),
-              // Wide warm amber bloom for the cinematic falloff.
-              BoxShadow(
-                color: HomeTheme.focusGoldDeep.withValues(alpha: 0.32),
-                blurRadius: 90,
-                spreadRadius: 10,
-              ),
+              // Wide warm amber bloom for the cinematic falloff. Skipped on TV:
+              // a blur-90 soft shadow repainted on every D-pad focus move is the
+              // main scroll-jank source on weak TV GPUs.
+              if (!widget.isTelevision)
+                BoxShadow(
+                  color: HomeTheme.focusGoldDeep.withValues(alpha: 0.32),
+                  blurRadius: 90,
+                  spreadRadius: 10,
+                ),
             ],
           ],
         ),
@@ -114,6 +117,11 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                 CachedNetworkImage(
                   imageUrl: poster,
                   fit: BoxFit.cover,
+                  // Decode posters at a capped width instead of full source
+                  // resolution (~780px → ~3.6MB each). Tiles never exceed ~320px
+                  // wide, so this roughly thirds the decoded bytes per poster —
+                  // the biggest memory win for the catalog grid on low-RAM TVs.
+                  memCacheWidth: widget.isTelevision ? 320 : 480,
                   placeholder: (_, __) => _placeholder(item.name),
                   errorWidget: (_, __, ___) => _placeholder(item.name),
                 )

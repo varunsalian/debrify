@@ -1246,7 +1246,9 @@ class _HomeContinueWatchingSectionState
     if (imageUrl != null && imageUrl.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: imageUrl,
-        memCacheWidth: 600,
+        // TVs render this rail card at ~350px but have little RAM; decode to a
+        // capped width there (full 600 stays for dense phone screens).
+        memCacheWidth: widget.isTelevision ? 400 : 600,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(
           color: const Color(0xFF0D1117),
