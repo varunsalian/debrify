@@ -6049,7 +6049,7 @@ class _SearchScreenState extends State<SearchScreen> {
 /// The Stremio-style spotlight. Reflects the currently focused board title —
 /// backdrop bleeding in from the right behind a left/bottom scrim, with title,
 /// meta line and a short synopsis.
-class _HeroSpotlight extends StatelessWidget {
+class _HeroSpotlight extends StatefulWidget {
   final StremioMeta item;
   final String? background;
   final String? description;
@@ -6076,10 +6076,50 @@ class _HeroSpotlight extends StatelessWidget {
   });
 
   @override
+  State<_HeroSpotlight> createState() => _HeroSpotlightState();
+}
+
+class _HeroSpotlightState extends State<_HeroSpotlight>
+    with SingleTickerProviderStateMixin {
+  // Slow, endless Ken Burns breathe on the backdrop — a pure bottom-anchored
+  // zoom so a static poster reads as cinematic. It's a Transform on an
+  // already-rasterised image (one saveLayer under the existing ShaderMask
+  // re-rastered per frame), which is cheap; the long duration keeps the motion
+  // barely-there.
+  late final AnimationController _ken = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 22),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Respect reduced-motion: hold the backdrop still.
+    if (MediaQuery.of(context).disableAnimations) {
+      _ken.stop();
+    } else if (!_ken.isAnimating) {
+      _ken.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ken.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final background = widget.background;
+    final description = widget.description;
+    final isTelevision = widget.isTelevision;
+    final height = widget.height;
+    final rating = widget.rating;
+    final compact = widget.compact;
     final scheme = Theme.of(context).colorScheme;
-    final bg = (background != null && background!.isNotEmpty)
-        ? background!
+    final bg = (background != null && background.isNotEmpty)
+        ? background
         : (item.poster ?? '');
     final metaParts = <String>[
       if (item.year != null && item.year!.isNotEmpty) item.year!,
@@ -6101,7 +6141,12 @@ class _HeroSpotlight extends StatelessWidget {
             // the page's own gradient instead of ending on a hard horizontal
             // edge (the "seam"). The board rows then read as one surface with
             // the hero rather than two stacked boxes.
-            ShaderMask(
+            //
+            // Isolated in a RepaintBoundary so the Ken Burns drift re-rasterises
+            // only the backdrop layer each frame — the scrim gradient and title
+            // text above it stay cached and don't repaint.
+            RepaintBoundary(
+              child: ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -6109,18 +6154,40 @@ class _HeroSpotlight extends StatelessWidget {
                 stops: [0.0, 0.55, 1.0],
               ).createShader(rect),
               blendMode: BlendMode.dstIn,
-              child: CachedNetworkImage(
-                imageUrl: bg,
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter,
-                // Cap the hero backdrop decode so an oversized source doesn't
-                // decode at native res, but keep it generous — it's a single
-                // full-width image (crisp matters, and one instance is cheap;
-                // the memory win is the many small rail posters, not this).
-                memCacheWidth: isTelevision ? 1080 : 1280,
-                errorWidget: (_, __, ___) => const SizedBox.shrink(),
+              child: AnimatedBuilder(
+                animation: _ken,
+                // The image is the (unchanging) child, so only the Transform's
+                // matrix recomputes each frame — no widget/image rebuild.
+                builder: (context, child) {
+                  final t = Curves.easeInOut.transform(_ken.value);
+                  // Pure slow zoom, no pan. Two things keep it glassy-smooth:
+                  //  • filterQuality: linear sampling — without it a slow
+                  //    transform snaps to whole pixels, which reads as jitter
+                  //    ("shaking") instead of a glide;
+                  //  • a single bottom-anchored scale — the origin never moves,
+                  //    so the bottom edge stays put (no bleed toward the cards)
+                  //    and there's no second motion to fight the first.
+                  return Transform.scale(
+                    scale: 1.0 + 0.06 * t,
+                    alignment: Alignment.bottomCenter,
+                    filterQuality: FilterQuality.low,
+                    child: child,
+                  );
+                },
+                child: CachedNetworkImage(
+                  imageUrl: bg,
+                  fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
+                  // Cap the hero backdrop decode so an oversized source doesn't
+                  // decode at native res, but keep it generous — it's a single
+                  // full-width image (crisp matters, and one instance is cheap;
+                  // the memory win is the many small rail posters, not this).
+                  memCacheWidth: isTelevision ? 1080 : 1280,
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
               ),
             ),
+          ),
           // Left scrim for title/description legibility (vertical bands, so it
           // adds no horizontal seam). The bottom is handled by the image fade
           // above, letting the page background show through.
@@ -6200,7 +6267,7 @@ class _HeroSpotlight extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            rating!.toStringAsFixed(1),
+                            rating.toStringAsFixed(1),
                             style: const TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
@@ -6223,10 +6290,10 @@ class _HeroSpotlight extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (description != null && description!.isNotEmpty) ...[
+                    if (description != null && description.isNotEmpty) ...[
                       SizedBox(height: compact ? 6 : 10),
                       Text(
-                        description!,
+                        description,
                         maxLines: compact ? 1 : (isTelevision ? 3 : 2),
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
