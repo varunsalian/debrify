@@ -31,8 +31,8 @@ class TvSidebarNav extends StatefulWidget {
 
   /// The width the collapsed rail occupies. The content should be inset by this
   /// so nothing hides behind the rail while it's collapsed.
-  static const double collapsedWidth = 76.0;
-  static const double expandedWidth = 250.0;
+  static const double collapsedWidth = 64.0;
+  static const double expandedWidth = 232.0;
 
   @override
   State<TvSidebarNav> createState() => TvSidebarNavState();
@@ -104,6 +104,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
       if (!_focusNodes.any((n) => n.hasFocus)) {
         setState(() => _hasSidebarFocus = false);
         _expandController.reverse();
+        _scrollToCurrent();
       }
     }
   }
@@ -112,6 +113,28 @@ class TvSidebarNavState extends State<TvSidebarNav>
     if (!mounted) return;
     setState(() => _hasSidebarFocus = false);
     _expandController.reverse();
+    _scrollToCurrent();
+  }
+
+  /// Re-centre the collapsed rail on the current tab. On a short screen the
+  /// item list overflows and scrolls while you navigate it; without this the
+  /// resting rail would keep whatever offset you'd scrolled to instead of
+  /// showing where you actually are. No-op when the list fits (no scroll).
+  void _scrollToCurrent() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final idx = widget.currentIndex.clamp(0, _focusNodes.length - 1);
+      final ctx = _focusNodes[idx].context;
+      if (ctx == null) return;
+      final scrollable = Scrollable.maybeOf(ctx);
+      if (scrollable == null || scrollable.position.maxScrollExtent <= 0) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   void _selectMenuItem(int index) {
@@ -140,6 +163,11 @@ class TvSidebarNavState extends State<TvSidebarNav>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.items.length != widget.items.length) {
       _initFocusNodes();
+    }
+    // Selecting a new tab collapses the rail — re-centre it on the new current
+    // item (its index arrives here, one frame after the tap fires).
+    if (oldWidget.currentIndex != widget.currentIndex && !_hasSidebarFocus) {
+      _scrollToCurrent();
     }
   }
 
@@ -257,32 +285,26 @@ class TvSidebarNavState extends State<TvSidebarNav>
               ),
               const SizedBox(height: 8),
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  itemCount: widget.items.length,
-                  itemBuilder: (context, index) {
-                    final item = widget.items[index];
-                    final startsSection = item.section != null &&
-                        (index == 0 ||
-                            widget.items[index - 1].section != item.section);
-                    final row = Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: _TvNavItemWidget(
-                        item: item,
-                        isSelected: index == widget.currentIndex,
-                        isFocused: index == _focusedIndex && _hasSidebarFocus,
-                        expand: _expand,
-                        accent: _accent,
-                        accentSoft: _accentSoft,
-                        focusNode: _focusNodes[index],
-                        onTap: () => _selectMenuItem(index),
-                        onKeyEvent: (e) => _handleKeyEvent(index, e),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Centre the icon group when it fits; scroll if a tall menu
+                    // ever overflows a short screen (keeps ensureVisible working).
+                    return SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints:
+                            BoxConstraints(minHeight: constraints.maxHeight),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: _buildNavItems(),
+                          ),
+                        ),
                       ),
-                    );
-                    if (!startsSection) return row;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [_SectionHeader(item.section!, _expand), row],
                     );
                   },
                 ),
@@ -294,11 +316,44 @@ class TvSidebarNavState extends State<TvSidebarNav>
     );
   }
 
+  /// The nav items as a vertically-centred group. Every tab icon shows on the
+  /// resting rail (dimmed when idle, the current one in its accent pill); labels
+  /// and section headers fade/slide in only when the rail opens. Centring keeps
+  /// the rail balanced rather than top-clustered or a bottom-heavy wall.
+  List<Widget> _buildNavItems() {
+    final widgets = <Widget>[];
+    for (int index = 0; index < widget.items.length; index++) {
+      final item = widget.items[index];
+      final startsSection = item.section != null &&
+          (index == 0 || widget.items[index - 1].section != item.section);
+      if (startsSection) {
+        widgets.add(_SectionHeader(item.section!, _expand));
+      }
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: _TvNavItemWidget(
+            item: item,
+            isSelected: index == widget.currentIndex,
+            isFocused: index == _focusedIndex && _hasSidebarFocus,
+            expand: _expand,
+            accent: _accent,
+            accentSoft: _accentSoft,
+            focusNode: _focusNodes[index],
+            onTap: () => _selectMenuItem(index),
+            onKeyEvent: (e) => _handleKeyEvent(index, e),
+          ),
+        ),
+      );
+    }
+    return widgets;
+  }
+
   Widget _buildBranding() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 10),
       child: SizedBox(
-        height: 44,
+        height: 40,
         child: Row(
           children: [
             SizedBox(
@@ -306,8 +361,8 @@ class TvSidebarNavState extends State<TvSidebarNav>
               child: Center(
                 child: Image.asset(
                   'assets/app_icon.png',
-                  width: 30,
-                  height: 30,
+                  width: 26,
+                  height: 26,
                   fit: BoxFit.contain,
                 ),
               ),
@@ -323,7 +378,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
                     overflow: TextOverflow.clip,
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 19,
+                      fontSize: 17,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.3,
                     ),
@@ -391,7 +446,7 @@ class _TvNavItemWidget extends StatelessWidget {
         // what made item-to-item navigation sluggish on the weak TV GPU). The
         // glow below is now static: painted once when focus lands, not tweened.
         child: Container(
-          height: 48,
+          height: 42,
           decoration: BoxDecoration(
             // Focus = accent gradient pill with a soft glow; selected = a faint
             // glass tint; idle = nothing.
@@ -414,7 +469,7 @@ class _TvNavItemWidget extends StatelessWidget {
                     ],
                   )
                 : null,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(11),
             border: isFocused
                 ? Border.all(color: accent.withValues(alpha: 0.6), width: 1.5)
                 : null,
@@ -433,9 +488,9 @@ class _TvNavItemWidget extends StatelessWidget {
               Row(
                 children: [
                   SizedBox(
-                    width: TvSidebarNav.collapsedWidth - 20, // rail(76) - padding(2×10)
+                    width: TvSidebarNav.collapsedWidth - 20, // rail - padding(2×10)
                     child: Center(
-                      child: Icon(item.icon, color: iconColor, size: 23),
+                      child: Icon(item.icon, color: iconColor, size: 20),
                     ),
                   ),
                   Expanded(
@@ -453,7 +508,7 @@ class _TvNavItemWidget extends StatelessWidget {
                                 overflow: TextOverflow.clip,
                                 style: TextStyle(
                                   color: labelColor,
-                                  fontSize: 15,
+                                  fontSize: 13.5,
                                   fontWeight: active
                                       ? FontWeight.w700
                                       : FontWeight.w500,
@@ -500,8 +555,8 @@ class _TvNavItemWidget extends StatelessWidget {
                 bottom: 0,
                 child: Center(
                   child: Container(
-                    width: active ? 4 : 0,
-                    height: isFocused ? 26 : (isSelected ? 18 : 0),
+                    width: active ? 3.5 : 0,
+                    height: isFocused ? 21 : (isSelected ? 15 : 0),
                     decoration: BoxDecoration(
                       color: isFocused ? accent : accent.withValues(alpha: 0.75),
                       borderRadius: const BorderRadius.horizontal(
@@ -519,7 +574,9 @@ class _TvNavItemWidget extends StatelessWidget {
   }
 }
 
-/// Group header that fades in with the rail (hidden while collapsed).
+/// Group header / section gap. Fixed height so it reads as a constant gap
+/// between icon groups on the collapsed rail; the label just fades in when the
+/// rail opens (no height change, so the centred icon group doesn't drift).
 class _SectionHeader extends StatelessWidget {
   final String text;
   final Animation<double> expand;
@@ -527,15 +584,14 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: SizeTransition(
-        sizeFactor: expand,
-        axis: Axis.vertical,
-        axisAlignment: -1,
-        child: FadeTransition(
-          opacity: expand,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 6),
+    return SizedBox(
+      height: 28,
+      child: FadeTransition(
+        opacity: expand,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 11, 12, 3),
+          child: Align(
+            alignment: Alignment.bottomLeft,
             child: Text(
               text.toUpperCase(),
               maxLines: 1,
