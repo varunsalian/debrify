@@ -1,6 +1,70 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'see_all/see_all_poster_grid.dart';
+
+/// Keeps its child perfectly still for [delay], then starts a slow whole-layer
+/// opacity breathe so a long load doesn't read as a frozen app.
+///
+/// The delay is the point: during the first moments of a load the CPU is busy
+/// fetching/parsing and ANY animation judders on weak TV hardware — and most
+/// loads finish inside the delay anyway, so they stay fully static. Only a
+/// slow load (network, cold start) ever animates, by which time the CPU spike
+/// has passed. Opacity on one RepaintBoundary layer is compositor-only — no
+/// widget repaints per frame.
+class DelayedPulse extends StatefulWidget {
+  final Widget child;
+  final Duration delay;
+
+  const DelayedPulse({
+    super.key,
+    required this.child,
+    this.delay = const Duration(milliseconds: 1500),
+  });
+
+  @override
+  State<DelayedPulse> createState() => _DelayedPulseState();
+}
+
+class _DelayedPulseState extends State<DelayedPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  Timer? _startTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // value 0 → opacity 1.0: identical to the static skeleton until the timer
+    // fires, so a fast load never shows any motion at all.
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    );
+    _opacity = Tween<double>(
+      begin: 1.0,
+      end: 0.55,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _startTimer = Timer(widget.delay, () {
+      if (mounted) _controller.repeat(reverse: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _startTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: FadeTransition(opacity: _opacity, child: widget.child),
+    );
+  }
+}
 
 /// A rounded placeholder box for loading skeletons — a muted fill with a fixed
 /// diagonal sheen (brighter top-left) that reads like a frosted card.
@@ -8,7 +72,9 @@ import 'see_all/see_all_poster_grid.dart';
 /// Deliberately STATIC: during a load the CPU is busy fetching/parsing, so any
 /// per-frame animation drops frames and visibly judders on weak TV hardware. A
 /// still placeholder can't stutter. The rounded corners come from the
-/// [BoxDecoration.borderRadius] (no ClipRRect layer to rasterise).
+/// [BoxDecoration.borderRadius] (no ClipRRect layer to rasterise). The only
+/// motion is [DelayedPulse] at the container level, which waits out the busy
+/// window before breathing.
 class ShimmerBox extends StatelessWidget {
   final double radius;
 
@@ -44,48 +110,50 @@ class SkeletonPosterGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = SeeAllGridMetrics.resolve(context, isTelevision: isTelevision);
-    return GridView.builder(
-      padding: SeeAllGridMetrics.padding,
-      // Fills the (bounded) body and clips the overflow — no scrolling a
-      // placeholder. The parent is always height-bounded here: the real grid it
-      // stands in for is a CustomScrollView, which would itself assert under an
-      // unbounded parent. Over-count rows so tall panels never show a short grid.
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: m.columns * 6,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: m.columns,
-        childAspectRatio: m.childWidth / m.cellHeight,
-        mainAxisSpacing: SeeAllGridMetrics.rowGap,
-        crossAxisSpacing: SeeAllGridMetrics.columnGap,
-      ),
-      itemBuilder: (context, index) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Expanded(child: ShimmerBox()),
-            const SizedBox(height: SeeAllGridMetrics.titleGap),
-            // Two-line title placeholder. Expanded bars flex to fill exactly
-            // [titleHeight], so they can never overflow the band at small text
-            // scales (unlike fixed-height bars).
-            SizedBox(
-              height: m.titleHeight,
-              child: const Column(
-                children: [
-                  Expanded(child: ShimmerBox(radius: 4)),
-                  SizedBox(height: 6),
-                  Expanded(
-                    child: FractionallySizedBox(
-                      widthFactor: 0.6,
-                      alignment: Alignment.centerLeft,
-                      child: ShimmerBox(radius: 4),
+    return DelayedPulse(
+      child: GridView.builder(
+        padding: SeeAllGridMetrics.padding,
+        // Fills the (bounded) body and clips the overflow — no scrolling a
+        // placeholder. The parent is always height-bounded here: the real grid it
+        // stands in for is a CustomScrollView, which would itself assert under an
+        // unbounded parent. Over-count rows so tall panels never show a short grid.
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: m.columns * 6,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: m.columns,
+          childAspectRatio: m.childWidth / m.cellHeight,
+          mainAxisSpacing: SeeAllGridMetrics.rowGap,
+          crossAxisSpacing: SeeAllGridMetrics.columnGap,
+        ),
+        itemBuilder: (context, index) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Expanded(child: ShimmerBox()),
+              const SizedBox(height: SeeAllGridMetrics.titleGap),
+              // Two-line title placeholder. Expanded bars flex to fill exactly
+              // [titleHeight], so they can never overflow the band at small text
+              // scales (unlike fixed-height bars).
+              SizedBox(
+                height: m.titleHeight,
+                child: const Column(
+                  children: [
+                    Expanded(child: ShimmerBox(radius: 4)),
+                    SizedBox(height: 6),
+                    Expanded(
+                      child: FractionallySizedBox(
+                        widthFactor: 0.6,
+                        alignment: Alignment.centerLeft,
+                        child: ShimmerBox(radius: 4),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -93,7 +161,7 @@ class SkeletonPosterGrid extends StatelessWidget {
 /// A loading stand-in that MIRRORS the real home board so the swap is seamless
 /// and uncluttered: an optional hero block on top (matching the TV spotlight),
 /// then just a couple of rail placeholders — not a screenful of dense shimmer.
-/// Non-interactive, static (see [ShimmerBox] for why nothing animates here).
+/// Non-interactive; still for fast loads, breathing on long ones ([DelayedPulse]).
 class SkeletonRailList extends StatelessWidget {
   /// Poster width for a rail cell, from the board's own `_railPosterW`.
   final double posterWidth;
@@ -211,23 +279,25 @@ class SkeletonRailList extends StatelessWidget {
     // With a hero on top there's only room for ~2 rails below it — keep it that
     // restrained so the load reads as premium, not a wall of placeholders.
     final railCount = showHero ? 2 : rails;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (showHero && heroHeight > 0) _heroPlaceholder(tv),
-        // Rails fill the remaining bounded height and clip any overflow — no
-        // scrolling a placeholder.
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.only(top: 6, bottom: 32),
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              for (int i = 0; i < railCount; i++)
-                _rail(tv, posterW, cellH, rowH),
-            ],
+    return DelayedPulse(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showHero && heroHeight > 0) _heroPlaceholder(tv),
+          // Rails fill the remaining bounded height and clip any overflow — no
+          // scrolling a placeholder.
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(top: 6, bottom: 32),
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                for (int i = 0; i < railCount; i++)
+                  _rail(tv, posterW, cellH, rowH),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
