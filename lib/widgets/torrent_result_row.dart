@@ -524,27 +524,34 @@ extension TorrentQualityExtension on Torrent {
   QualityTier get qualityTier {
     final nameLower = name.toLowerCase();
 
-    // 4K/UHD detection
-    if (nameLower.contains('2160p') ||
-        nameLower.contains('4k') ||
+    // Explicit pixel resolutions WIN. "uhd"/"4k" often name the SOURCE, not the
+    // encode — e.g. "UHD BluRay 1080p" is a 1080p file — so those keywords only
+    // classify when no pixel resolution token is present (kept in sync with
+    // FormatTagDetector so the redesign badges, this row, and the quality
+    // filter all agree).
+    if (nameLower.contains('2160p')) return QualityTier.ultraHd;
+    if (nameLower.contains('1080p') || nameLower.contains('1080i')) {
+      return QualityTier.fullHd;
+    }
+    if (nameLower.contains('720p') || nameLower.contains('720i')) {
+      return QualityTier.hd;
+    }
+    if (nameLower.contains('480p') ||
+        nameLower.contains('576p') ||
+        nameLower.contains('360p')) {
+      return QualityTier.sd;
+    }
+
+    // Keyword fallbacks — only reached when the name carries no pixel token.
+    if (nameLower.contains('4k') ||
         nameLower.contains('uhd') ||
         nameLower.contains('4096')) {
       return QualityTier.ultraHd;
     }
-
-    // 1080p detection
-    if (nameLower.contains('1080p') ||
-        nameLower.contains('1080i') ||
-        nameLower.contains('fullhd') ||
-        nameLower.contains('full hd')) {
+    if (nameLower.contains('fullhd') || nameLower.contains('full hd')) {
       return QualityTier.fullHd;
     }
-
-    // 720p detection
-    if (nameLower.contains('720p') ||
-        nameLower.contains('720i') ||
-        nameLower.contains('hd ') ||
-        nameLower.contains('hdrip')) {
+    if (nameLower.contains('hd ') || nameLower.contains('hdrip')) {
       return QualityTier.hd;
     }
 

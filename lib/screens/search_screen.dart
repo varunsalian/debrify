@@ -33,12 +33,15 @@ import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/video_player_launcher.dart';
 import '../utils/dialog_tap_guard.dart';
+import '../utils/format_tag_detector.dart';
+import '../utils/torrent_curation.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
+import '../widgets/source_row.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
 import 'playlist_content_view_screen.dart';
@@ -7410,8 +7413,36 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   bool _loading = true;
   String? _error;
   List<Torrent> _torrents = [];
+
+  /// The rows actually rendered — [_torrents] after the redesign toolbar's
+  /// source-group filter, quality/rip/language filter, and sort are applied.
+  /// Equals [_torrents] when the redesign is off (no toolbar). [_nodes] is kept
+  /// in lock-step with THIS list, never [_torrents].
+  List<Torrent> _visible = [];
   final List<FocusNode> _nodes = [];
   List<SeriesSource> _bound = [];
+
+  // --- redesign toolbar state (unused when _redesign is false) ---
+  TorrentFilterState _filters = const TorrentFilterState.empty();
+  String _sortBy = 'relevance'; // relevance | name | size | seeders | date
+  bool _sortAsc = false;
+  String? _sourceFilter; // null = all sources; else a Torrent.source value
+
+  /// D-pad anchor for the redesigned toolbar: the filter funnel. Pressing UP
+  /// from the first row focuses this on TV so the remote can reach the toolbar
+  /// (the list otherwise consumes UP and the toolbar is unreachable).
+  final FocusNode _filterFocus = FocusNode(debugLabel: 'src_filter');
+
+  // --- cached-availability badges (redesign only): checked async after results
+  // arrive, only for TorBox / Premiumize when their cache-check pref is on and
+  // the provider is configured. Maps: infohash(lowercased) -> isCached. ---
+  bool _tbCacheOn = false;
+  bool _pmCacheOn = false;
+  String? _tbKey;
+  String? _pmKey;
+  Map<String, bool>? _tbCache;
+  Map<String, bool>? _pmCache;
+  int _cacheToken = 0;
 
   /// Free-text keyword-bind mode: an editable query that seeds a pack search.
   bool get _keywordMode => widget.keywordSeed != null;
@@ -7420,6 +7451,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   /// Monotonic guard so a slow earlier search can't clobber a newer one.
   int _searchToken = 0;
+
+  /// Stremio-style redesigned presentation (flag-gated). When false the screen
+  /// renders exactly as before. Resolved once in [initState].
+  bool _redesign = false;
 
   String get _imdbId => widget.selection.imdbId;
   bool get _isMovie => !widget.selection.isSeries;
@@ -7430,12 +7465,30 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     super.initState();
     _query = widget.keywordSeed ?? '';
     _kwCtrl = TextEditingController(text: _query);
+    // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
+    // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
+    _filterFocus.addListener(_onFilterFocusChanged);
+    _loadCacheConfig();
+    StorageService.getSourcesPageRedesignEnabled().then((on) {
+      if (!mounted || !on) return;
+      _redesign = true;
+      // If results already arrived before the flag resolved, re-derive the
+      // visible list so the toolbar has something to act on.
+      if (_torrents.isNotEmpty) {
+        _rebuildVisible();
+        _maybeCheckCache();
+      } else {
+        setState(() {});
+      }
+    });
     _load();
   }
 
   @override
   void dispose() {
     _kwCtrl.dispose();
+    _filterFocus.removeListener(_onFilterFocusChanged);
+    _filterFocus.dispose();
     for (final n in _nodes) {
       n.dispose();
     }
@@ -7583,21 +7636,47 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       if (!mounted || token != _searchToken) return;
       final rawTorrents = (res['torrents'] as List).cast<Torrent>();
       // Series pack/bind post-processing — ported from the old Home
-      // (torrent_search_screen) so this list matches: for a series with no
-      // specific episode, drop direct-link (single-episode) streams, season-
-      // filter when a season is requested, then float season/complete packs to
-      // the top (coverage priority).
-      final torrents = _sortSeriesPacks(
-        _filterSeriesPacks(rawTorrents, sel),
-        sel,
-      );
-      for (var i = 0; i < torrents.length; i++) {
+      // (torrent_search_screen) so this list matches. For a specific episode,
+      // scope results to that episode exactly like the Play path
+      // (curateEpisodeCandidates): keep single episodes matching the S/E token
+      // and packs covering the season, exact matches first. Otherwise (whole
+      // series/season, no episode) drop direct-link singles, season-filter, and
+      // float season/complete packs to the top by coverage priority.
+      final List<Torrent> torrents;
+      if (sel.isSeries && sel.season != null && sel.episode != null) {
+        torrents = curateEpisodeCandidates(
+          rawTorrents,
+          isSeries: true,
+          season: sel.season,
+          episode: sel.episode,
+        );
+      } else {
+        torrents = _sortSeriesPacks(
+          _filterSeriesPacks(rawTorrents, sel),
+          sel,
+        );
+      }
+      _torrents = torrents;
+      // A source-group pill selected for a previous search may not exist in a
+      // new keyword result set — drop it so the toolbar filter can't hide every
+      // row ("No matches") when results actually exist.
+      if (_sourceFilter != null &&
+          !torrents.any((t) => t.source == _sourceFilter)) {
+        _sourceFilter = null;
+      }
+      _visible = _redesign ? _applyToolbar(torrents) : torrents;
+      for (var i = 0; i < _visible.length; i++) {
         _nodes.add(FocusNode(debugLabel: 'src_$i'));
       }
+      // Invalidate any in-flight cache check and drop stale maps — these are a
+      // NEW result set — then re-check (non-blocking) for the ⚡ badges.
+      _cacheToken++;
+      _tbCache = null;
+      _pmCache = null;
       setState(() {
-        _torrents = torrents;
         _loading = false;
       });
+      _maybeCheckCache();
       // On TV the list is the only content — give the D-pad an anchor to move
       // from, otherwise the remote has nothing focused and can't select a row.
       if (widget.isTelevision && _nodes.isNotEmpty) {
@@ -7636,7 +7715,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         context,
         t,
         meta: widget.meta,
-        sources: _torrents,
+        // The rendered list — [_visible] equals [_torrents] with the redesign
+        // off, but is the source-filtered/sorted list when on, so the index and
+        // the in-player Sources switcher stay in sync with what the user sees.
+        sources: _visible,
         sourceIndex: i,
         searchKeyword: widget.selection.title,
       ),
@@ -7877,18 +7959,27 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 ? _centered(scheme, 'Search failed.\n$_error')
                 : Column(
                     children: [
+                      if (_redesign && !_keywordMode) _redesignHero(scheme),
+                      if (_redesign && _torrents.isNotEmpty) _redesignToolbar(scheme),
                       if (_bound.isNotEmpty) _pinnedBanner(),
                       Expanded(
-                        child: _torrents.isEmpty
-                            ? _centered(scheme, 'No sources found.')
+                        child: _visible.isEmpty
+                            ? _centered(
+                                scheme,
+                                _torrents.isEmpty
+                                    ? 'No sources found.'
+                                    : 'No matches for your filters.',
+                              )
                             : ListView.builder(
-                                padding: const EdgeInsets.symmetric(
+                                padding: EdgeInsets.symmetric(
                                   vertical: 8,
+                                  horizontal: _redesign ? 10 : 0,
                                 ),
                                 cacheExtent: 1200,
-                                itemCount: _torrents.length,
+                                itemCount: _visible.length,
                                 itemBuilder: (context, i) {
-                                  final t = _torrents[i];
+                                  final t = _visible[i];
+                                  if (_redesign) return _redesignRow(t, i);
                                   return TorrentResultRow(
                                     torrent: t,
                                     index: i,
@@ -7917,6 +8008,569 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                       ),
                     ],
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Derives the rendered list from [_torrents]: source-group filter →
+  /// quality/rip/language filter → sort. Order is preserved as the incoming
+  /// relevance sort unless the user picked an explicit sort mode.
+  List<Torrent> _applyToolbar(List<Torrent> src) {
+    var list = src;
+    if (_sourceFilter != null) {
+      list = list.where((t) => t.source == _sourceFilter).toList();
+    }
+    list = TorrentFilterMatcher.apply(list, _filters);
+    if (_sortBy != 'relevance') {
+      list = List<Torrent>.from(list);
+      int cmp(Torrent a, Torrent b) {
+        switch (_sortBy) {
+          case 'name':
+            return a.displayTitle.toLowerCase().compareTo(b.displayTitle.toLowerCase());
+          case 'size':
+            return a.sizeBytes.compareTo(b.sizeBytes);
+          case 'seeders':
+            return a.seeders.compareTo(b.seeders);
+          case 'date':
+            return a.createdUnix.compareTo(b.createdUnix);
+          default:
+            return 0;
+        }
+      }
+      list.sort((a, b) => _sortAsc ? cmp(a, b) : cmp(b, a));
+    }
+    return list;
+  }
+
+  /// Recompute [_visible] and rebuild [_nodes] in lock-step after a toolbar
+  /// change (source pill, sort, or filter). The ListView stays mounted (no
+  /// loading flip), so the old nodes are disposed AFTER the rebuild frame —
+  /// letting each reused row State and its Focus widget migrate onto the new
+  /// node first (disposing mid-frame would assert / drop the listener). Re-
+  /// anchors D-pad focus on TV, which `_rebuildVisible` would otherwise lose.
+  void _rebuildVisible() {
+    final old = List<FocusNode>.from(_nodes);
+    _nodes.clear();
+    _visible = _applyToolbar(_torrents);
+    for (var i = 0; i < _visible.length; i++) {
+      _nodes.add(FocusNode(debugLabel: 'src_$i'));
+    }
+    if (mounted) setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final n in old) {
+        n.dispose();
+      }
+      if (mounted && widget.isTelevision && _nodes.isNotEmpty) {
+        _nodes.first.requestFocus();
+      }
+    });
+  }
+
+  /// The redesigned toolbar: source-group pills + sort + filter funnel, then the
+  /// active-filter pills row when filters are applied.
+  Widget _redesignToolbar(ColorScheme scheme) {
+    const accent = Color(0xFF7B5CFF);
+    final line = Colors.white.withValues(alpha: 0.08);
+    final dim = Colors.white.withValues(alpha: 0.55);
+
+    final sources = <String>{for (final t in _torrents) if (t.source.isNotEmpty) t.source};
+    final sorted = sources.toList()..sort();
+
+    Widget pill(String label, bool on, VoidCallback onTap) => Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Material(
+        color: on ? accent : Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: on ? Colors.white : dim,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (sorted.length > 1)
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              children: [
+                pill('All', _sourceFilter == null, () {
+                  _sourceFilter = null;
+                  _rebuildVisible();
+                }),
+                for (final s in sorted)
+                  pill(_prettySource(s), _sourceFilter == s, () {
+                    _sourceFilter = s;
+                    _rebuildVisible();
+                  }),
+              ],
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+          child: Row(
+            children: [
+              const Spacer(),
+              PopupMenuButton<String>(
+                initialValue: _sortBy,
+                tooltip: 'Sort',
+                color: const Color(0xFF1E1B2C),
+                onSelected: (v) {
+                  _sortBy = v;
+                  _rebuildVisible();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'relevance', child: Text('Relevance')),
+                  PopupMenuItem(value: 'name', child: Text('Name')),
+                  PopupMenuItem(value: 'size', child: Text('Size')),
+                  PopupMenuItem(value: 'seeders', child: Text('Seeders')),
+                  PopupMenuItem(value: 'date', child: Text('Date')),
+                ],
+                child: _tbChip(
+                  line,
+                  dim,
+                  Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: 'Sort  ', style: TextStyle(color: dim)),
+                      TextSpan(
+                        text: _sortLabel(_sortBy),
+                        style: const TextStyle(color: Color(0xFFF1F1F6)),
+                      ),
+                    ]),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (_sortBy != 'relevance')
+                InkWell(
+                  borderRadius: BorderRadius.circular(9),
+                  onTap: () {
+                    _sortAsc = !_sortAsc;
+                    _rebuildVisible();
+                  },
+                  child: _tbChip(
+                    line,
+                    dim,
+                    Icon(_sortAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 16, color: dim),
+                  ),
+                ),
+              const SizedBox(width: 6),
+              Focus(
+                focusNode: _filterFocus,
+                onKeyEvent: (node, event) {
+                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                  if (isActivateKey(event.logicalKey)) {
+                    unawaited(_openFilters());
+                    return KeyEventResult.handled;
+                  }
+                  // DOWN returns to the list; the funnel is the toolbar anchor.
+                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                    if (_nodes.isNotEmpty) _nodes.first.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (_) {
+                    final focused = _filterFocus.hasFocus;
+                    final tint = (!_filters.isEmpty || focused) ? accent : dim;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(9),
+                      // The outer Focus is the sole focus target; don't let the
+                      // InkWell add a competing node that breaks D-pad traversal.
+                      canRequestFocus: false,
+                      onTap: _openFilters,
+                      child: _tbChip(
+                        focused || !_filters.isEmpty ? accent : line,
+                        dim,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.filter_list_rounded, size: 16, color: tint),
+                            const SizedBox(width: 5),
+                            Text('Filter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tint)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!_filters.isEmpty) _activeFilterPills(accent, dim),
+      ],
+    );
+  }
+
+  Widget _tbChip(Color border, Color fg, Widget child) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.05),
+      border: Border.all(color: border),
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: child,
+  );
+
+  Widget _activeFilterPills(Color accent, Color dim) {
+    final labels = <String>[
+      for (final q in _filters.qualities) 'Quality · ${_qualityFilterLabel(q)}',
+      for (final r in _filters.ripSources) 'Source · ${_ripFilterLabel(r)}',
+      for (final l in _filters.languages) 'Lang · ${_langFilterLabel(l)}',
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Wrap(
+        spacing: 7,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final l in labels)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(l, style: TextStyle(color: dim, fontSize: 10.5, fontWeight: FontWeight.w600)),
+            ),
+          InkWell(
+            onTap: () {
+              _filters = const TorrentFilterState.empty();
+              _rebuildVisible();
+            },
+            child: Text('Clear', style: TextStyle(color: accent, fontSize: 10.5, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _onFilterFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Resolve which providers to cache-check: the pref is on, the integration is
+  /// enabled, and a key is present. Only TorBox and Premiumize expose a
+  /// pre-check API (RD/AllDebrid discover cachedness only by adding).
+  Future<void> _loadCacheConfig() async {
+    final r = await Future.wait([
+      StorageService.getTorboxCacheCheckEnabled(),
+      StorageService.getTorboxIntegrationEnabled(),
+      StorageService.getTorboxApiKey(),
+      StorageService.getPremiumizeCacheCheckEnabled(),
+      StorageService.getPremiumizeIntegrationEnabled(),
+      StorageService.getPremiumizeApiKey(),
+    ]);
+    final tbKey = r[2] as String?;
+    final pmKey = r[5] as String?;
+    if (!mounted) return;
+    _tbCacheOn = (r[0] as bool) && (r[1] as bool) && (tbKey?.isNotEmpty ?? false);
+    _pmCacheOn = (r[3] as bool) && (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
+    _tbKey = tbKey;
+    _pmKey = pmKey;
+    _maybeCheckCache();
+  }
+
+  /// Kick a cache check iff the redesign is on, a provider is checkable, and
+  /// results are present. Called from every path that could complete last
+  /// (config load, flag load, search) — self-guarded, so it runs exactly once
+  /// the prerequisites are met.
+  void _maybeCheckCache() {
+    if (!_redesign || (!_tbCacheOn && !_pmCacheOn) || _torrents.isEmpty) return;
+    unawaited(_runCacheCheck());
+  }
+
+  /// Non-blocking: results are already rendered; this fills the cache maps and
+  /// setStates to add the ⚡ badges. A token guards against a stale search's
+  /// check applying to newer results.
+  Future<void> _runCacheCheck() async {
+    final token = _cacheToken;
+    final hashes = <String>{
+      for (final t in _torrents)
+        if (t.hasRealInfoHash) t.infohash.trim().toLowerCase(),
+    }..remove('');
+    if (hashes.isEmpty) return;
+    final list = hashes.toList();
+
+    if (_tbCacheOn && _tbKey != null) {
+      try {
+        final cached = await TorboxService.checkCachedTorrents(
+          apiKey: _tbKey!,
+          infoHashes: list,
+        );
+        if (!mounted || token != _cacheToken) return;
+        _tbCache = {for (final h in list) h: cached.contains(h)};
+      } catch (_) {}
+    }
+    if (_pmCacheOn && _pmKey != null) {
+      try {
+        final res = await PremiumizeService.checkCache(_pmKey!, list);
+        if (!mounted || token != _cacheToken) return;
+        _pmCache = {
+          for (var i = 0; i < list.length; i++)
+            list[i]: i < res.length && res[i],
+        };
+      } catch (_) {}
+    }
+    if (mounted && token == _cacheToken) setState(() {});
+  }
+
+  /// `TB`, `PM`, or `TB | PM` for a cached torrent; null when not cached / not
+  /// yet checked / no real infohash.
+  String? _cacheLabel(Torrent t) {
+    if (!t.hasRealInfoHash) return null;
+    final h = t.infohash.trim().toLowerCase();
+    if (h.isEmpty) return null;
+    final labels = <String>[
+      if (_tbCacheOn && (_tbCache?[h] ?? false)) 'TB',
+      if (_pmCacheOn && (_pmCache?[h] ?? false)) 'PM',
+    ];
+    return labels.isEmpty ? null : labels.join(' | ');
+  }
+
+  Future<void> _openFilters() async {
+    final result = await showDialog<TorrentFilterState>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TorrentFiltersSheet(initialState: _filters),
+      ),
+    );
+    if (!mounted || result == null || result == _filters) return;
+    _filters = result;
+    _rebuildVisible();
+  }
+
+  static String _prettySource(String s) {
+    final v = s.startsWith('stremio:') ? s.substring(8) : s;
+    return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
+  }
+
+  static String _sortLabel(String v) => switch (v) {
+    'name' => 'Name',
+    'size' => 'Size',
+    'seeders' => 'Seeders',
+    'date' => 'Date',
+    _ => 'Relevance',
+  };
+
+  static String _qualityFilterLabel(QualityTier q) => switch (q) {
+    QualityTier.ultraHd => '4K',
+    QualityTier.fullHd => '1080p',
+    QualityTier.hd => '720p',
+    QualityTier.sd => '480p',
+  };
+
+  static String _ripFilterLabel(RipSourceCategory r) => switch (r) {
+    RipSourceCategory.web => 'WEB',
+    RipSourceCategory.bluRay => 'BluRay',
+    RipSourceCategory.hdrip => 'HDRip',
+    RipSourceCategory.dvdrip => 'DVDRip',
+    RipSourceCategory.cam => 'CAM',
+    RipSourceCategory.other => 'Other',
+  };
+
+  static String _langFilterLabel(AudioLanguage l) =>
+      l.name[0].toUpperCase() + l.name.substring(1);
+
+  /// Redesigned result row (flag-gated) — a [SourceRow] with format-logo badges
+  /// for detail-screen Sources, or a compact quality-tag row for keyword search
+  /// and addon direct/external streams. Reuses the exact tap/pin/menu wiring of
+  /// the classic row so behaviour is identical; only the presentation differs.
+  Widget _redesignRow(Torrent t, int i) {
+    final isStream = t.isDirectStream || t.isExternalStream;
+    final tags = (_keywordMode || isStream)
+        ? const <FormatTag>[]
+        : FormatTagDetector.detect(t.name);
+    return SourceRow(
+      title: t.displayTitle,
+      subtitle: _rowSubtitle(t),
+      focusNode: _nodes[i],
+      isTelevision: widget.isTelevision,
+      showPlayPill: !widget.bindMode && widget.isTelevision,
+      formatTags: tags,
+      qualityTag: (tags.isEmpty && !isStream) ? _qualityLabel(t) : null,
+      cacheLabel: _cacheLabel(t),
+      coverageBadge: _keywordMode ? null : _coverageLabel(t),
+      streamBadge: t.isExternalStream
+          ? 'External'
+          : t.isDirectStream
+          ? 'Direct'
+          : null,
+      onTap: () {
+        if (widget.bindMode) {
+          unawaited(_pin(t));
+        } else {
+          _play(t, i);
+        }
+      },
+      onLongPress: () => _showRowMenu(t, i),
+      onNavigateUp: () {
+        if (i > 0) {
+          _nodes[i - 1].requestFocus();
+        } else if (widget.isTelevision) {
+          // From the first row, UP reaches the toolbar (otherwise unreachable
+          // by remote — the list consumes UP).
+          _filterFocus.requestFocus();
+        }
+      },
+      onNavigateDown: () {
+        if (i < _nodes.length - 1) _nodes[i + 1].requestFocus();
+      },
+    );
+  }
+
+  /// `size · ↑seeders · ↓leechers · SOURCE` meta line for a redesigned row.
+  String _rowSubtitle(Torrent t) {
+    final parts = <String>[];
+    if (t.isDirectStream || t.isExternalStream) {
+      if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+      return parts.join(' · ');
+    }
+    if (t.sizeBytes > 0) parts.add(_fmtSize(t.sizeBytes));
+    if (t.seeders > 0) parts.add('↑ ${t.seeders}');
+    if (t.leechers > 0) parts.add('↓ ${t.leechers}');
+    if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+    final date = _fmtDate(t.createdUnix);
+    if (date != null) parts.add(date);
+    return parts.join(' · ');
+  }
+
+  /// Relative upload date ("2d ago"), matching the classic row. Null when the
+  /// torrent carries no date.
+  static String? _fmtDate(int createdUnix) {
+    if (createdUnix <= 0) return null;
+    final then = DateTime.fromMillisecondsSinceEpoch(createdUnix * 1000);
+    final d = DateTime.now().difference(then);
+    if (d.inDays >= 365) return '${(d.inDays / 365).floor()}y ago';
+    if (d.inDays >= 30) return '${(d.inDays / 30).floor()}mo ago';
+    if (d.inDays >= 7) return '${(d.inDays / 7).floor()}w ago';
+    if (d.inDays >= 1) return '${d.inDays}d ago';
+    if (d.inHours >= 1) return '${d.inHours}h ago';
+    return 'Today';
+  }
+
+  String? _qualityLabel(Torrent t) {
+    // Use the same resolution logic as the F badges (pixel tokens win over the
+    // loose UHD/4K keyword) so the compact/keyword quality pill stays consistent
+    // with them — the `qualityTier` extension mislabels "UHD BluRay 1080p".
+    final tags = FormatTagDetector.detect(t.name);
+    if (tags.contains(FormatTag.uhd4k)) return '4K';
+    if (tags.contains(FormatTag.fullHd)) return '1080p';
+    if (tags.contains(FormatTag.hd720)) return '720p';
+    return null; // SD / unknown — no pill
+  }
+
+  String? _coverageLabel(Torrent t) {
+    switch (t.coverageType) {
+      case 'completeSeries':
+        return 'Complete Series';
+      case 'multiSeasonPack':
+        return 'Multi-Season';
+      case 'seasonPack':
+        return t.seasonNumber != null ? 'Season ${t.seasonNumber}' : 'Season Pack';
+      case 'singleEpisode':
+        return t.episodeIdentifier;
+      default:
+        return null;
+    }
+  }
+
+  static String _fmtSize(int bytes) {
+    if (bytes <= 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var size = bytes.toDouble();
+    var u = 0;
+    while (size >= 1024 && u < units.length - 1) {
+      size /= 1024;
+      u++;
+    }
+    return '${size.toStringAsFixed(size >= 100 || u == 0 ? 0 : 1)} ${units[u]}';
+  }
+
+  /// Backdrop hero for the redesigned Sources screen — the title over a dimmed
+  /// poster, matching the Stremio look. Non-keyword only (keyword search has no
+  /// single title to feature).
+  Widget _redesignHero(ColorScheme scheme) {
+    const bg = Color(0xFF0D0B1A);
+    final poster = widget.meta.posterUrl;
+    return SizedBox(
+      height: 128,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (poster != null && poster.isNotEmpty)
+            Image.network(
+              poster,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0x590D0B1A), Color(0x8C0D0B1A), bg],
+                stops: [0.0, 0.55, 1.0],
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.bottomLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.selection.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.selection.formattedLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.62),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

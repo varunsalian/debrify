@@ -21,6 +21,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
   bool _trailerAutoplayEnabled = false;
+  bool _sourcesRedesignEnabled = false;
   List<StremioAddon> _addons = [];
 
   @override
@@ -40,6 +41,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
       final continueWatchingEnabled = await StorageService.getHomeContinueWatchingEnabled();
       final trailerAutoplayEnabled = await StorageService.getDetailTrailerAutoplayEnabled();
+      final sourcesRedesignEnabled = await StorageService.getSourcesPageRedesignEnabled();
       final traktListType = await StorageService.getHomeDefaultTraktListType();
       final traktContentType = await StorageService.getHomeDefaultTraktContentType();
 
@@ -68,6 +70,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _hideProviderCards = hideProviderCards;
         _continueWatchingEnabled = continueWatchingEnabled;
         _trailerAutoplayEnabled = trailerAutoplayEnabled;
+        _sourcesRedesignEnabled = sourcesRedesignEnabled;
         _loading = false;
       });
     } catch (e) {
@@ -496,6 +499,36 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     await StorageService.setDetailTrailerAutoplayEnabled(value);
                     if (!mounted) return;
                     setState(() => _trailerAutoplayEnabled = value);
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save setting: $e')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Redesigned Sources page (experimental)
+            Card(
+              child: SwitchListTile(
+                secondary: Icon(
+                  Icons.view_agenda_rounded,
+                  color: theme.colorScheme.primary,
+                ),
+                title: const Text('New Sources Page'),
+                subtitle: const Text(
+                  'Stremio-style source list with format badges (4K, HDR, '
+                  'Dolby Vision, HEVC…) and a backdrop hero. Experimental.',
+                ),
+                value: _sourcesRedesignEnabled,
+                onChanged: (value) async {
+                  try {
+                    await StorageService.setSourcesPageRedesignEnabled(value);
+                    if (!mounted) return;
+                    setState(() => _sourcesRedesignEnabled = value);
                   } catch (e) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
