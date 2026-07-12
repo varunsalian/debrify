@@ -482,7 +482,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
                                     ? _buildTwoPane(backdropUrl)
                                     : Column(
                                         children: [
-                                          _buildHero(backdropUrl),
+                                          _buildHero(),
                                           Expanded(child: _buildStackedBody()),
                                         ],
                                       )),
@@ -660,100 +660,75 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   }
 
   // Mobile-only compact hero (wide/TV uses the left info pane instead).
-  Widget _buildHero(String? backdropUrl) {
+  Widget _buildHero() {
     final item = _item;
     final extra = _imdbExtra;
-    const heroH = 220.0;
     final rating = extra?.rating ?? item.imdbRating;
     final year = item.year ?? extra?.year;
     final genres = (item.genres?.isNotEmpty ?? false)
         ? item.genres!
         : (extra?.genres ?? const []);
 
-    return SizedBox(
-      height: heroH,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
+    // No boxed hero image: the page already paints one continuous full-bleed
+    // backdrop (HeroTrailerBackdrop + dark tint) behind everything — exactly
+    // like the movie layout — so a second inset image here read as an ugly
+    // floating card. The hero is now pure content over that shared surface,
+    // sized to what it holds (the old fixed 220px box overflowed upward when
+    // the action row wrapped, shoving the title under the floating back
+    // button). Bonus: with autoplay on, the ambient trailer now owns the whole
+    // screen behind the page instead of stopping at a card edge. Top padding
+    // clears the 46px floating back button.
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        widget.isTelevision ? 40 : 24,
+        widget.isTelevision ? 20 : 64,
+        24,
+        14,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (backdropUrl != null)
-            CachedNetworkImage(
-              imageUrl: backdropUrl,
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-              errorWidget: (_, __, ___) => const SizedBox.shrink(),
-            ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  _bg.withValues(alpha: 0.10),
-                  _bg.withValues(alpha: 0.55),
-                  _bg,
-                ],
-                stops: const [0.0, 0.55, 1.0],
+              Text(
+                'SERIES',
+                style: TextStyle(
+                  color: _gold,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2.2,
+                ),
               ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.bottomLeft,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                widget.isTelevision ? 40 : 24,
-                0,
-                24,
-                14,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SERIES',
-                    style: TextStyle(
-                      color: _gold,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2.2,
-                    ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: _wide ? 34 : 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    height: 1.02,
+                    shadows: const [
+                      Shadow(color: Colors.black54, blurRadius: 18),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 720),
-                    child: Text(
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: _wide ? 34 : 28,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                        height: 1.02,
-                        shadows: const [
-                          Shadow(color: Colors.black54, blurRadius: 18),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _buildMetaBar(year, extra, rating),
-                  if (genres.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 7,
-                      runSpacing: 7,
-                      children: [for (final g in genres.take(4)) _pill(g)],
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  _buildActionRow(),
-                ],
+                ),
               ),
-            ),
-          ),
+              const SizedBox(height: 10),
+              _buildMetaBar(year, extra, rating),
+              if (genres.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: [for (final g in genres.take(4)) _pill(g)],
+                ),
+              ],
+          const SizedBox(height: 14),
+          _buildActionRow(),
         ],
       ),
     );
