@@ -2632,35 +2632,43 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   final tvSelected = tvIndices.indexOf(_selectedIndex);
                   return Scaffold(
                     backgroundColor: Colors.transparent,
-                    body: Row(
+                    // Sidebar is OVERLAID (Stack), not a Row sibling. The content
+                    // is inset by the collapsed rail width, so when the sidebar
+                    // expands it slides OVER the content instead of reflowing the
+                    // whole board every frame — that reflow was the TV sluggishness.
+                    body: Stack(
                       children: [
-                        // TV Sidebar Navigation
-                        TvSidebarNav(
-                          key: _tvSidebarKey,
-                          currentIndex: tvSelected == -1 ? 0 : tvSelected,
-                          items: [
-                            for (final index in tvIndices)
-                              TvNavItem(
-                                _icons[index],
-                                _titles[index],
-                                section: _navSectionForIndex(index),
-                              ),
-                          ],
-                          onTap: (relativeIndex) {
-                            final actualIndex = tvIndices[relativeIndex];
-                            _onItemTapped(actualIndex);
-                            // Focus is handled by sidebar via MainPageBridge
-                          },
-                          onFocusContent: () {
-                            // Fallback for screens without registered handler
-                            FocusScope.of(context).nextFocus();
-                          },
-                        ),
-                        // Content area
-                        Expanded(
+                        Positioned.fill(
+                          left: TvSidebarNav.collapsedWidth,
                           child: SafeArea(
                             left: false,
                             child: _buildAnimatedPage(),
+                          ),
+                        ),
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: TvSidebarNav(
+                            key: _tvSidebarKey,
+                            currentIndex: tvSelected == -1 ? 0 : tvSelected,
+                            items: [
+                              for (final index in tvIndices)
+                                TvNavItem(
+                                  _icons[index],
+                                  _titles[index],
+                                  section: _navSectionForIndex(index),
+                                ),
+                            ],
+                            onTap: (relativeIndex) {
+                              final actualIndex = tvIndices[relativeIndex];
+                              _onItemTapped(actualIndex);
+                              // Focus is handled by sidebar via MainPageBridge
+                            },
+                            onFocusContent: () {
+                              // Fallback for screens without registered handler
+                              FocusScope.of(context).nextFocus();
+                            },
                           ),
                         ),
                       ],
