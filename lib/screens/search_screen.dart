@@ -322,6 +322,10 @@ class _SearchScreenState extends State<SearchScreen> {
   List<CatalogSection> _homeSections = [];
   List<CatalogSection> _sections = [];
   final List<List<FocusNode>> _rowNodes = [];
+  // Per-row remembered focus column (leanback-style). DPAD up/down into a row
+  // returns to where you left THAT row — the cell it points at is guaranteed
+  // mounted, so requestFocus never no-ops on a scrolled-away lazy cell.
+  final Map<int, int> _rowCol = {};
   bool _catalogSearching = false;
   int _catalogSearchToken = 0;
 
@@ -774,6 +778,8 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     }
     _rowNodes.clear();
+    // Row indices now remap to different content — drop stale column memory.
+    _rowCol.clear();
   }
 
   Future<void> _load() async {
@@ -1199,7 +1205,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (cwIndex < 0 || cwIndex >= rows.length) return;
     final nodes = rows[cwIndex].nodes;
     if (nodes.isEmpty) return;
-    nodes[column.clamp(0, nodes.length - 1)].requestFocus();
+    _requestRowFocus(nodes, column.clamp(0, nodes.length - 1));
   }
 
   // The leading favourites rows (between Continue Watching and the catalog) are
@@ -1251,7 +1257,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (favIndex < 0 || favIndex >= kinds.length) return;
     final nodes = _favNodesFor(kinds[favIndex]);
     if (nodes.isEmpty) return;
-    nodes[column.clamp(0, nodes.length - 1)].requestFocus();
+    _requestRowFocus(nodes, column.clamp(0, nodes.length - 1));
   }
 
   /// DPAD-up target for a favourites row: the previous favourites row, else the
@@ -2239,7 +2245,40 @@ class _SearchScreenState extends State<SearchScreen> {
     if (row < 0) return;
     final nodes = _rowNodes[row];
     if (nodes.isEmpty) return;
-    nodes[column.clamp(0, nodes.length - 1)].requestFocus();
+    // Land on the row's own remembered column, not the source column, so
+    // returning to a row you'd scrolled right goes back where you left it (that
+    // cell is still mounted). First visit falls back to the incoming column.
+    final desired = (_rowCol[row] ?? column).clamp(0, nodes.length - 1);
+    _requestRowFocus(nodes, desired);
+  }
+
+  /// Focus [desired] in [nodes] if its cell is mounted; otherwise the nearest
+  /// mounted cell. A horizontal ListView.builder unmounts off-screen cells, and
+  /// requestFocus() on an unmounted FocusNode is a silent no-op — so a naive
+  /// nodes[desired].requestFocus() leaves focus stranded on the previous row.
+  void _requestRowFocus(List<FocusNode> nodes, int desired) {
+    // NB: FocusNode.context stays non-null after the owning Focus unmounts
+    // (detach() doesn't clear it), so the element's own `mounted` flag — which
+    // flips false on unmount — is the reliable "can this node take focus" test.
+    bool isMounted(FocusNode n) => n.context?.mounted ?? false;
+    if (isMounted(nodes[desired])) {
+      nodes[desired].requestFocus();
+      return;
+    }
+    for (var d = 1; d < nodes.length; d++) {
+      final lo = desired - d;
+      final hi = desired + d;
+      if (lo >= 0 && isMounted(nodes[lo])) {
+        nodes[lo].requestFocus();
+        return;
+      }
+      if (hi < nodes.length && isMounted(nodes[hi])) {
+        nodes[hi].requestFocus();
+        return;
+      }
+    }
+    // Nothing mounted (shouldn't happen while the row is on-screen) — try anyway.
+    nodes[desired].requestFocus();
   }
 
   // ── Hero ─────────────────────────────────────────────────────────────────
@@ -5594,7 +5633,10 @@ class _SearchScreenState extends State<SearchScreen> {
                             onQuickPlay: _pikpakOnly
                                 ? null
                                 : () => _onCatalogPlay(item, section.addon),
-                            onFocused: () => _setHero(item),
+                            onFocused: () {
+                              _setHero(item);
+                              _rowCol[rowIndex] = col;
+                            },
                             onUp: up(col),
                             onDown: down(col),
                             onOpen: () => _openItem(item, section.addon),
@@ -6413,7 +6455,10 @@ class _BoardCell extends StatelessWidget {
   });
 
   KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
-    if (!isTelevision || event is! KeyDownEvent) {
+    // Act on key-down AND key-repeat (held DPAD). If we let a repeat fall
+    // through as `ignored`, Flutter's default geometric traversal fires and
+    // jumps focus into an adjacent row — so only key-ups are passed on.
+    if (!isTelevision || event is KeyUpEvent) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
@@ -6795,7 +6840,10 @@ class _FavArtCell extends StatelessWidget {
   });
 
   KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
-    if (!isTelevision || event is! KeyDownEvent) {
+    // Act on key-down AND key-repeat (held DPAD). If we let a repeat fall
+    // through as `ignored`, Flutter's default geometric traversal fires and
+    // jumps focus into an adjacent row — so only key-ups are passed on.
+    if (!isTelevision || event is KeyUpEvent) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
