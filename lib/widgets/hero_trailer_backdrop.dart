@@ -67,6 +67,12 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// thrash the decoder and the poster is seen first. Also masks resolve latency.
   final Duration startDelay;
 
+  /// Shared-element tag: when set, the static image layer is the destination
+  /// Hero for the board poster that opened this page (the poster grows into
+  /// this full-bleed backdrop). Only the still image participates — the video
+  /// layers never re-parent, so trailer state is untouched by the flight.
+  final String? heroTag;
+
   const HeroTrailerBackdrop({
     super.key,
     required this.imageUrl,
@@ -79,6 +85,7 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.imageBlurSigma = 42,
     this.videoBlurSigma = 8,
     this.startDelay = const Duration(milliseconds: 1400),
+    this.heroTag,
   });
 
   @override
@@ -505,6 +512,15 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     super.dispose();
   }
 
+  /// Wraps the static image layer in the destination [Hero] when a tag is set.
+  /// No flightShuttleBuilder here — the source (poster card) defines one, and
+  /// leaving this side null lets the card's builder drive both directions.
+  Widget _withHero(Widget child) {
+    final tag = widget.heroTag;
+    if (tag == null) return child;
+    return Hero(tag: tag, child: child);
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
@@ -515,17 +531,22 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       fit: StackFit.expand,
       children: [
         // Static backdrop — always present, so the crossfade has a floor and a
-        // missing/late trailer simply shows the poster.
+        // missing/late trailer simply shows the poster. When a heroTag is set
+        // this layer doubles as the shared-element destination: the tapped
+        // board poster flies into this rect (the flight shuttle shows the
+        // poster; see the card-side flightShuttleBuilder).
         if (widget.imageUrl != null)
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(
-              sigmaX: widget.imageBlurSigma,
-              sigmaY: widget.imageBlurSigma,
-            ),
-            child: CachedNetworkImage(
-              imageUrl: widget.imageUrl!,
-              fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => const SizedBox.shrink(),
+          _withHero(
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(
+                sigmaX: widget.imageBlurSigma,
+                sigmaY: widget.imageBlurSigma,
+              ),
+              child: CachedNetworkImage(
+                imageUrl: widget.imageUrl!,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => const SizedBox.shrink(),
+              ),
             ),
           ),
         // Trailer, crossfaded in once it produces frames.

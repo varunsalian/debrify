@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -33,6 +34,7 @@ import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/video_player_launcher.dart';
 import '../utils/dialog_tap_guard.dart';
+import '../utils/dominant_color.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/torrent_curation.dart';
 import '../utils/torrent_filter_matcher.dart';
@@ -326,6 +328,11 @@ class _SearchScreenState extends State<SearchScreen> {
   // returns to where you left THAT row — the cell it points at is guaranteed
   // mounted, so requestFocus never no-ops on a scrolled-away lazy cell.
   final Map<int, int> _rowCol = {};
+  // Board entrance: bumped each time the displayed sections are swapped
+  // (initial load, search results in/out), so the first rows replay their
+  // one-shot fade/rise entrance. Appends don't bump it.
+  int _boardGen = 0;
+  DateTime _boardAppliedAt = DateTime.fromMillisecondsSinceEpoch(0);
   bool _catalogSearching = false;
   int _catalogSearchToken = 0;
 
@@ -736,8 +743,10 @@ class _SearchScreenState extends State<SearchScreen> {
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
+    _tintTimer?.cancel();
     _heroItem.dispose();
     _heroEnriched.dispose();
+    _heroTint.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _modeCatalogNode.dispose();
@@ -1945,6 +1954,8 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Swap the displayed sections (homepage or search results): rebuild the
   /// per-row focus nodes and reset the hero to the first item.
   void _applySections(List<CatalogSection> sections) {
+    _boardGen++;
+    _boardAppliedAt = DateTime.now();
     _disposeNodes();
     for (final section in sections) {
       _rowNodes.add(
@@ -1964,7 +1975,10 @@ class _SearchScreenState extends State<SearchScreen> {
           : null;
       _heroItem.value = first;
       _heroEnriched.value = null;
-      if (first != null) _enrichHero(first);
+      if (first != null) {
+        _enrichHero(first);
+        _updateHeroTint(first);
+      }
     }
   }
 
@@ -2299,6 +2313,41 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroItem.value = item;
     _heroEnriched.value = null;
     _enrichHero(item);
+    _updateHeroTint(item);
+  }
+
+  // ── Dynamic per-title tint ────────────────────────────────────────────────
+  // The hero scrim takes on the focused title's dominant poster color, so the
+  // screen shifts mood as you browse. Extraction is debounced (only after
+  // focus SETTLES — never per card while flying across a row), cached per
+  // title, and decodes a 32px thumbnail — negligible on the TV chip.
+  final ValueNotifier<Color?> _heroTint = ValueNotifier<Color?>(null);
+  final Map<String, Color?> _tintCache = {};
+  Timer? _tintTimer;
+  int _tintReq = 0;
+
+  void _updateHeroTint(StremioMeta item) {
+    _tintTimer?.cancel();
+    final poster = item.poster;
+    if (poster == null || poster.isEmpty) {
+      _heroTint.value = null;
+      return;
+    }
+    if (_tintCache.containsKey(item.id)) {
+      _heroTint.value = _tintCache[item.id];
+      return;
+    }
+    final req = ++_tintReq;
+    _tintTimer = Timer(const Duration(milliseconds: 350), () async {
+      final color = await extractDominantColor(
+        CachedNetworkImageProvider(poster),
+      );
+      if (!mounted || req != _tintReq) return; // focus moved on — stale
+      // Unbounded growth guard; a full clear is fine, extraction is cheap.
+      if (_tintCache.length > 300) _tintCache.clear();
+      _tintCache[item.id] = color;
+      _heroTint.value = color;
+    });
   }
 
   /// Debounced backdrop/description enrichment. Catalog list items usually
@@ -3147,6 +3196,9 @@ class _SearchScreenState extends State<SearchScreen> {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    // Shared-element tag from the tapped board cell: the poster flies into the
+    // detail page's backdrop. Null (non-board callers) = regular transition.
+    String? heroTag,
   }) {
     _activeAddonId = addon.id;
     final imdb = _imdbOf(item);
@@ -3190,6 +3242,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 isTelevision: widget.isTelevision,
                 showQuickPlay: !_pikpakOnly,
                 isTraktSource: isTraktSource,
+                heroTag: heroTag,
                 onResume: () => _onCatalogPlay(
                   item,
                   addon,
@@ -5281,6 +5334,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         compact: widget.searchMode,
                         isTelevision: tv,
                         height: heroH,
+                        tint: _heroTint,
                       );
                     },
                   );
@@ -5316,28 +5370,39 @@ class _SearchScreenState extends State<SearchScreen> {
                     itemCount:
                         _sections.length + leadingCount + (showFooter ? 1 : 0),
                     itemBuilder: (context, i) {
+                      Widget row;
                       if (i < cwCount) {
-                        return _buildContinueWatchingRow(
+                        row = _buildContinueWatchingRow(
                           cwRows[i],
                           i,
                           cwCount,
                           favCount,
                         );
-                      }
-                      if (i < cwCount + skelCount) {
-                        return _buildTraktSkeletonRow(i - cwCount);
-                      }
-                      if (i < leadingCount) {
+                      } else if (i < cwCount + skelCount) {
+                        row = _buildTraktSkeletonRow(i - cwCount);
+                      } else if (i < leadingCount) {
                         final favIndex = i - cwCount - skelCount;
-                        return _buildFavRow(
-                          favKinds[favIndex],
-                          favIndex,
-                          cwCount,
-                        );
+                        row = _buildFavRow(favKinds[favIndex], favIndex, cwCount);
+                      } else {
+                        final s = i - leadingCount;
+                        if (s >= _sections.length) return _buildBoardFooter();
+                        row = _buildRow(s);
                       }
-                      final s = i - leadingCount;
-                      if (s >= _sections.length) return _buildBoardFooter();
-                      return _buildRow(s);
+                      // Staggered entrance for the first screenful of rows when a
+                      // fresh board lands (initial load / search swap): each row
+                      // fades in and rises a touch, offset per index, so the
+                      // board composes itself instead of popping. Rows built
+                      // later (scroll, appends) skip it — the key gates replay to
+                      // section swaps and the time window skips stale mounts.
+                      final fresh =
+                          DateTime.now().difference(_boardAppliedAt) <
+                          const Duration(milliseconds: 1800);
+                      return _EntranceReveal(
+                        key: ValueKey('board-reveal-$_boardGen-$i'),
+                        play: fresh && i < 6,
+                        delayMs: 60 * i,
+                        child: row,
+                      );
                     },
                   );
                 },
@@ -5632,6 +5697,11 @@ class _SearchScreenState extends State<SearchScreen> {
                       );
                     }
                     final item = section.items[col];
+                    // Unique per cell AND per SearchScreen instance (Home,
+                    // Discover and Search coexist in the tab stack — a shared
+                    // tag across them would trip Hero's duplicate-tag assert).
+                    final heroTag =
+                        'poster-${identityHashCode(this)}-$rowIndex-$col';
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 11),
                       child: Center(
@@ -5654,8 +5724,13 @@ class _SearchScreenState extends State<SearchScreen> {
                             },
                             onUp: up(col),
                             onDown: down(col),
-                            onOpen: () => _openItem(item, section.addon),
+                            onOpen: () => _openItem(
+                              item,
+                              section.addon,
+                              heroTag: heroTag,
+                            ),
                             onNearEnd: () => _loadMoreRow(rowIndex),
+                            heroTag: heroTag,
                           ),
                         ),
                       ),
@@ -6065,6 +6140,11 @@ class _HeroSpotlight extends StatefulWidget {
   /// the results off-screen.
   final bool compact;
 
+  /// Dominant color of the focused title's poster (host-extracted, debounced).
+  /// Blended softly into the scrim + an ambient glow so the whole hero takes
+  /// on the title's mood. Null = neutral (no tint yet / colorless art).
+  final ValueListenable<Color?>? tint;
+
   const _HeroSpotlight({
     required this.item,
     required this.background,
@@ -6073,6 +6153,7 @@ class _HeroSpotlight extends StatefulWidget {
     required this.height,
     this.rating,
     this.compact = false,
+    this.tint,
   });
 
   @override
@@ -6080,7 +6161,7 @@ class _HeroSpotlight extends StatefulWidget {
 }
 
 class _HeroSpotlightState extends State<_HeroSpotlight>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   // Slow, endless Ken Burns breathe on the backdrop — a pure bottom-anchored
   // zoom so a static poster reads as cinematic. It's a Transform on an
   // already-rasterised image (one saveLayer under the existing ShaderMask
@@ -6091,21 +6172,64 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     duration: const Duration(seconds: 22),
   );
 
+  // Short cascade for the text block when the spotlighted TITLE changes: badge,
+  // title, meta and plot slide-fade in with tiny staggers instead of hard-
+  // swapping. One controller, small text region, ~260ms one-shot — cheap even
+  // while DPAD focus is flying across a row.
+  late final AnimationController _textFx = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+    value: 1.0, // first build shows settled text; cascades start on change
+  );
+
+  bool _motionOk = true;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Respect reduced-motion: hold the backdrop still.
-    if (MediaQuery.of(context).disableAnimations) {
+    // Respect reduced-motion: hold the backdrop still, skip text cascades.
+    _motionOk = !MediaQuery.of(context).disableAnimations;
+    if (!_motionOk) {
       _ken.stop();
+      _textFx.value = 1.0;
     } else if (!_ken.isAnimating) {
       _ken.repeat(reverse: true);
     }
   }
 
   @override
+  void didUpdateWidget(_HeroSpotlight old) {
+    super.didUpdateWidget(old);
+    if (old.item.id != widget.item.id && _motionOk) {
+      _textFx.forward(from: 0);
+    }
+  }
+
+  @override
   void dispose() {
     _ken.dispose();
+    _textFx.dispose();
     super.dispose();
+  }
+
+  /// Wraps one text-block line in its slice of the cascade: a quick fade plus
+  /// a slight upward drift, offset by [from]..[to] of the controller.
+  Widget _cascade(Widget child, double from, double to) {
+    final curved = CurvedAnimation(
+      parent: _textFx,
+      curve: Interval(from, to, curve: Curves.easeOutCubic),
+    );
+    return FadeTransition(
+      opacity: curved,
+      child: AnimatedBuilder(
+        animation: curved,
+        builder: (context, inner) => Transform.translate(
+          offset: Offset(0, 10 * (1 - curved.value)),
+          child: inner,
+        ),
+        child: child,
+      ),
+    );
   }
 
   @override
@@ -6190,21 +6314,44 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           ),
           // Left scrim for title/description legibility (vertical bands, so it
           // adds no horizontal seam). The bottom is handled by the image fade
-          // above, letting the page background show through.
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  scheme.surface.withValues(alpha: 0.92),
-                  scheme.surface.withValues(alpha: 0.66),
-                  scheme.surface.withValues(alpha: 0.10),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.34, 0.66, 1.0],
-              ),
-            ),
+          // above, letting the page background show through. The scrim leans
+          // toward the focused title's dominant poster color (see [tint]) and
+          // eases between titles, so the hero takes on each title's mood —
+          // repaints only when the settled tint changes, never per frame.
+          ValueListenableBuilder<Color?>(
+            valueListenable:
+                widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
+            builder: (context, tintColor, _) {
+              return TweenAnimationBuilder<Color?>(
+                tween: ColorTween(end: tintColor ?? scheme.surface),
+                duration: const Duration(milliseconds: 450),
+                curve: Curves.easeOut,
+                builder: (context, eased, __) {
+                  // Blend gently — mood, not a paint job. Falls back to the
+                  // neutral surface while no tint is known.
+                  final base = Color.lerp(
+                    scheme.surface,
+                    eased ?? scheme.surface,
+                    0.22,
+                  )!;
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          base.withValues(alpha: 0.92),
+                          base.withValues(alpha: 0.66),
+                          base.withValues(alpha: 0.10),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.34, 0.66, 1.0],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
           ),
           Align(
             alignment: Alignment.bottomLeft,
@@ -6216,91 +6363,107 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.14),
+                    _cascade(
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.14),
+                          ),
+                        ),
+                        child: Text(
+                          item.type == 'series' ? 'SERIES' : 'MOVIE',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                      child: Text(
-                        item.type == 'series' ? 'SERIES' : 'MOVIE',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
+                      0.0,
+                      0.6,
+                    ),
+                    SizedBox(height: compact ? 7 : 10),
+                    _cascade(
+                      Text(
+                        item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        // Poppins (rounded geometric) for the display title, airier
+                        // and lighter than Inter-w800/-1 tracking — closer to
+                        // Stremio's hero. Body/metadata stay on the Inter theme.
+                        style: GoogleFonts.poppins(
+                          fontSize: compact
+                              ? (isTelevision ? 24 : 20)
+                              : (isTelevision ? 38 : 26),
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
+                          height: 1.06,
                           color: Colors.white,
                         ),
                       ),
-                    ),
-                    SizedBox(height: compact ? 7 : 10),
-                    Text(
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      // Poppins (rounded geometric) for the display title, airier
-                      // and lighter than Inter-w800/-1 tracking — closer to
-                      // Stremio's hero. Body/metadata stay on the Inter theme.
-                      style: GoogleFonts.poppins(
-                        fontSize: compact
-                            ? (isTelevision ? 24 : 20)
-                            : (isTelevision ? 38 : 26),
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
-                        height: 1.06,
-                        color: Colors.white,
-                      ),
+                      0.08,
+                      0.72,
                     ),
                     SizedBox(height: compact ? 6 : 8),
-                    Row(
-                      children: [
-                        if (rating != null) ...[
-                          const Icon(
-                            Icons.star_rounded,
-                            size: 16,
-                            color: HomeTheme.focusGold,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            rating.toStringAsFixed(1),
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                    _cascade(
+                      Row(
+                        children: [
+                          if (rating != null) ...[
+                            const Icon(
+                              Icons.star_rounded,
+                              size: 16,
+                              color: HomeTheme.focusGold,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              rating.toStringAsFixed(1),
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (metaParts.isNotEmpty) _dot(),
+                          ],
+                          Flexible(
+                            child: Text(
+                              metaParts.join('   ·   '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withValues(alpha: 0.82),
+                              ),
                             ),
                           ),
-                          if (metaParts.isNotEmpty) _dot(),
                         ],
-                        Flexible(
-                          child: Text(
-                            metaParts.join('   ·   '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white.withValues(alpha: 0.82),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
+                      0.2,
+                      0.85,
                     ),
                     if (description != null && description.isNotEmpty) ...[
                       SizedBox(height: compact ? 6 : 10),
-                      Text(
-                        description,
-                        maxLines: compact ? 1 : (isTelevision ? 3 : 2),
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: compact ? 12.5 : (isTelevision ? 14.5 : 13),
-                          height: compact ? 1.3 : 1.45,
-                          color: Colors.white.withValues(alpha: 0.72),
+                      _cascade(
+                        Text(
+                          description,
+                          maxLines: compact ? 1 : (isTelevision ? 3 : 2),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: compact ? 12.5 : (isTelevision ? 14.5 : 13),
+                            height: compact ? 1.3 : 1.45,
+                            color: Colors.white.withValues(alpha: 0.72),
+                          ),
                         ),
+                        0.32,
+                        1.0,
                       ),
                     ],
                   ],
@@ -6324,6 +6487,86 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
       ),
     ),
   );
+}
+
+/// One-shot entrance for a board row: fade in + rise ~10px, started after
+/// [delayMs] so consecutive rows stagger. When [play] is false (row mounted
+/// long after the board landed, reduced motion, or beyond the first screenful)
+/// it renders the child directly with zero overhead. The controller runs once
+/// and stays idle after — no sustained per-frame cost.
+class _EntranceReveal extends StatefulWidget {
+  final Widget child;
+  final bool play;
+  final int delayMs;
+
+  const _EntranceReveal({
+    super.key,
+    required this.child,
+    required this.play,
+    this.delayMs = 0,
+  });
+
+  @override
+  State<_EntranceReveal> createState() => _EntranceRevealState();
+}
+
+class _EntranceRevealState extends State<_EntranceReveal>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _fx;
+  Timer? _delay;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.play) {
+      _fx = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 300),
+      );
+      if (widget.delayMs == 0) {
+        _fx!.forward();
+      } else {
+        _delay = Timer(Duration(milliseconds: widget.delayMs), () {
+          if (mounted) _fx?.forward();
+        });
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reduced motion: land settled immediately.
+    if (_fx != null && MediaQuery.of(context).disableAnimations) {
+      _delay?.cancel();
+      _fx!.value = 1.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _delay?.cancel();
+    _fx?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fx = _fx;
+    if (fx == null) return widget.child;
+    final curved = CurvedAnimation(parent: fx, curve: Curves.easeOutCubic);
+    return FadeTransition(
+      opacity: curved,
+      child: AnimatedBuilder(
+        animation: curved,
+        builder: (context, inner) => Transform.translate(
+          offset: Offset(0, 12 * (1 - curved.value)),
+          child: inner,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 /// Small pill next to a catalog-row header marking it as Movies / Series / etc.
@@ -6488,6 +6731,9 @@ class _BoardCell extends StatelessWidget {
   /// don't paginate (e.g. Continue Watching).
   final VoidCallback? onNearEnd;
 
+  /// Shared-element tag forwarded to the card (see [_StremioCard.heroTag]).
+  final String? heroTag;
+
   const _BoardCell({
     required this.item,
     required this.isTelevision,
@@ -6503,6 +6749,7 @@ class _BoardCell extends StatelessWidget {
     required this.onDown,
     required this.onOpen,
     this.onNearEnd,
+    this.heroTag,
   });
 
   KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
@@ -6560,9 +6807,31 @@ class _BoardCell extends StatelessWidget {
         episodeLabel: episodeLabel,
         onQuickPlay: onQuickPlay,
         onOpen: onOpen,
+        heroTag: heroTag,
       ),
     );
   }
+}
+
+/// Hero flight for poster→detail-backdrop: always show the POSTER side of the
+/// pair (the `from` hero on push, the `to` hero on pop), so the artwork the
+/// user tapped is what grows into / shrinks out of the detail page — never a
+/// half-loaded backdrop.
+Widget _posterFlightShuttle(
+  BuildContext flightContext,
+  Animation<double> animation,
+  HeroFlightDirection direction,
+  BuildContext fromHeroContext,
+  BuildContext toHeroContext,
+) {
+  final Hero posterHero =
+      (direction == HeroFlightDirection.push
+              ? fromHeroContext.widget
+              : toHeroContext.widget)
+          as Hero;
+  // The shuttle renders in the root overlay, outside any Material — wrap so a
+  // text placeholder (missing poster art) can't render unstyled mid-flight.
+  return Material(type: MaterialType.transparency, child: posterHero.child);
 }
 
 /// Stremio-style poster card: clean rounded poster with a soft shadow that
@@ -6584,6 +6853,11 @@ class _StremioCard extends StatefulWidget {
   final VoidCallback? onQuickPlay;
   final VoidCallback onOpen;
 
+  /// Shared-element tag: when set, the poster flies into the detail page's
+  /// backdrop on open (and back on pop). Unique per CELL, so a title showing
+  /// on two rows never trips Hero's duplicate-tag assert.
+  final String? heroTag;
+
   const _StremioCard({
     required this.item,
     required this.isTelevision,
@@ -6593,6 +6867,7 @@ class _StremioCard extends StatefulWidget {
     this.episodeLabel,
     this.onQuickPlay,
     required this.onOpen,
+    this.heroTag,
   });
 
   @override
@@ -6791,7 +7066,16 @@ class _StremioCardState extends State<_StremioCard> {
           behavior: HitTestBehavior.opaque,
           // No title beneath the poster — Stremio lets the artwork carry the
           // rail; the title lives on the hero (focused) and the detail page.
-          child: posterCard,
+          child: widget.heroTag == null
+              ? posterCard
+              : Hero(
+                  tag: widget.heroTag!,
+                  // Card-side shuttle covers BOTH directions (the backdrop hero
+                  // defines none): the flight always shows the poster, growing
+                  // into the detail backdrop on push and shrinking home on pop.
+                  flightShuttleBuilder: _posterFlightShuttle,
+                  child: posterCard,
+                ),
         ),
       ),
     );

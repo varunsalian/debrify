@@ -60,6 +60,10 @@ class MergedDetailScreen extends StatefulWidget {
   final void Function(StremioMeta recommendation)? onRecommendationTap;
   final Future<StremioMeta?> Function(String imdbId, String type)? metaEnricher;
 
+  /// Shared-element tag from the board cell that opened this page: the tapped
+  /// poster flies into (and back out of) this page's full-bleed backdrop.
+  final String? heroTag;
+
   const MergedDetailScreen({
     super.key,
     required this.item,
@@ -78,6 +82,7 @@ class MergedDetailScreen extends StatefulWidget {
     this.recommendationsLoader,
     this.onRecommendationTap,
     this.metaEnricher,
+    this.heroTag,
   });
 
   @override
@@ -410,6 +415,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
             Positioned.fill(
               child: HeroTrailerBackdrop(
                 key: _backdropKey,
+                heroTag: widget.heroTag,
                 imageUrl: backdropUrl,
                 videoUrl: _trailerAutoplayEnabled
                     ? _trailerStreams?.playUrl
