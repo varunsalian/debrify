@@ -588,6 +588,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // TV sidebar navigation
   final GlobalKey<TvSidebarNavState> _tvSidebarKey =
       GlobalKey<TvSidebarNavState>();
+  // Whether the TV sidebar overlay is expanded — drives the dim scrim over the
+  // content behind it (depth, and pulls the eye to the open menu).
+  bool _tvSidebarExpanded = false;
 
   // Remote control state
   bool _remoteControlEnabled = true;
@@ -2645,6 +2648,19 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                             child: _buildAnimatedPage(),
                           ),
                         ),
+                        // Dim the content while the sidebar overlay is open —
+                        // depth cue that pulls the eye to the menu. IgnorePointer
+                        // always (it's purely visual); one fade, no blur, cheap.
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: AnimatedOpacity(
+                              opacity: _tvSidebarExpanded ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOut,
+                              child: const ColoredBox(color: Color(0x8A05060E)),
+                            ),
+                          ),
+                        ),
                         Positioned(
                           left: 0,
                           top: 0,
@@ -2668,6 +2684,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                             onFocusContent: () {
                               // Fallback for screens without registered handler
                               FocusScope.of(context).nextFocus();
+                            },
+                            onExpandedChanged: (expanded) {
+                              if (mounted &&
+                                  expanded != _tvSidebarExpanded) {
+                                setState(
+                                  () => _tvSidebarExpanded = expanded,
+                                );
+                              }
                             },
                           ),
                         ),

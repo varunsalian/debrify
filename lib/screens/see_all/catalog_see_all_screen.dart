@@ -77,6 +77,14 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   late StremioAddonCatalog _catalog;
   String? _genre; // null = All genres
 
+  // Client-side sort over the loaded items. 'default' preserves the addon's
+  // own order (Popular/Trending etc.); the IMDb options re-order what's been
+  // fetched so far (unrated items sink to the end either way).
+  static const String _sortDefault = 'default';
+  static const String _sortImdbDesc = 'imdbDesc';
+  static const String _sortImdbAsc = 'imdbAsc';
+  String _sort = _sortDefault;
+
   final List<StremioMeta> _items = [];
   int _nextSkip = 0;
   bool _loadingInitial = true;
@@ -93,6 +101,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   final FocusNode _typeNode = FocusNode(debugLabel: 'seeall_type');
   final FocusNode _catalogNode = FocusNode(debugLabel: 'seeall_catalog');
   final FocusNode _genreNode = FocusNode(debugLabel: 'seeall_genre');
+  final FocusNode _sortNode = FocusNode(debugLabel: 'seeall_sort');
   // The empty-state Retry button — the only recovery affordance when a filter
   // yields nothing, so it must be DPAD-reachable.
   final FocusNode _retryNode = FocusNode(debugLabel: 'seeall_retry');
@@ -123,6 +132,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     _typeNode.dispose();
     _catalogNode.dispose();
     _genreNode.dispose();
+    _sortNode.dispose();
     _retryNode.dispose();
     super.dispose();
   }
@@ -271,6 +281,30 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     _reload();
   }
 
+  void _onSortChanged(String sort) {
+    if (sort == _sort) return;
+    // Pure view change — re-orders what's loaded, no refetch. Persists across
+    // type/catalog/genre edits (it's a preference, not a filter).
+    setState(() => _sort = sort);
+  }
+
+  /// The grid's items in the selected order. Default = addon order (the list
+  /// itself); IMDb sorts are computed on demand over the loaded pages, with
+  /// unrated items always sinking to the end so they never bury rated ones.
+  List<StremioMeta> get _sortedItems {
+    if (_sort == _sortDefault) return _items;
+    final sorted = List<StremioMeta>.of(_items);
+    final asc = _sort == _sortImdbAsc;
+    sorted.sort((a, b) {
+      final ra = a.imdbRating, rb = b.imdbRating;
+      if (ra == null && rb == null) return 0;
+      if (ra == null) return 1; // unrated last, both directions
+      if (rb == null) return -1;
+      return asc ? ra.compareTo(rb) : rb.compareTo(ra);
+    });
+    return sorted;
+  }
+
   // ── TV filter-bar focus wiring ─────────────────────────────────────────────
 
   List<FocusNode> get _filterNodes => [
@@ -278,6 +312,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
         _typeNode,
         _catalogNode,
         if (_catalog.supportsGenre) _genreNode,
+        _sortNode,
       ];
 
   /// Whether the empty-state (with the Retry button) is currently shown instead
@@ -351,7 +386,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
         child: SeeAllFilterBar(
           isTelevision: widget.isTelevision,
           leading: widget.leading,
-          activeCount: _genre != null ? 1 : 0,
+          activeCount: (_genre != null ? 1 : 0) + (_sort != _sortDefault ? 1 : 0),
           buildChips: () => [
             StremioDropdown<String>(
               label: 'Type',
@@ -388,6 +423,18 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                 ],
                 onSelected: (g) => _onGenreChanged(g.isEmpty ? null : g),
               ),
+            StremioDropdown<String>(
+              label: 'Sort',
+              value: _sort,
+              isTelevision: widget.isTelevision,
+              focusNode: _sortNode,
+              options: const [
+                StremioDropdownOption(_sortDefault, 'Default'),
+                StremioDropdownOption(_sortImdbDesc, 'IMDb Rating · High → Low'),
+                StremioDropdownOption(_sortImdbAsc, 'IMDb Rating · Low → High'),
+              ],
+              onSelected: _onSortChanged,
+            ),
           ],
         ),
       ),
@@ -464,7 +511,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     }
     return SeeAllPosterGrid(
       key: _gridKey,
-      items: _items,
+      items: _sortedItems,
       isTelevision: widget.isTelevision,
       loadingMore: _loadingMore,
       exhausted: _exhausted,

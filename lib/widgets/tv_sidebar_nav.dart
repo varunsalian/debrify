@@ -21,12 +21,17 @@ class TvSidebarNav extends StatefulWidget {
   final ValueChanged<int> onTap;
   final VoidCallback? onFocusContent;
 
+  /// Fired when the rail opens (true) / closes (false), so the host can dim
+  /// the content behind the expanded overlay for depth.
+  final ValueChanged<bool>? onExpandedChanged;
+
   const TvSidebarNav({
     super.key,
     required this.currentIndex,
     required this.items,
     required this.onTap,
     this.onFocusContent,
+    this.onExpandedChanged,
   });
 
   /// The width the collapsed rail occupies. The content should be inset by this
@@ -85,10 +90,12 @@ class TvSidebarNavState extends State<TvSidebarNav>
   void _handleFocusChange(int index, bool hasFocus) {
     if (!mounted) return;
     if (hasFocus) {
+      final wasFocused = _hasSidebarFocus;
       setState(() {
         _focusedIndex = index;
         _hasSidebarFocus = true;
       });
+      if (!wasFocused) widget.onExpandedChanged?.call(true);
       _expandController.forward();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (index >= _focusNodes.length) return;
@@ -103,6 +110,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
       // Only collapse once NO sidebar item holds focus.
       if (!_focusNodes.any((n) => n.hasFocus)) {
         setState(() => _hasSidebarFocus = false);
+        widget.onExpandedChanged?.call(false);
         _expandController.reverse();
         _scrollToCurrent();
       }
@@ -112,6 +120,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
   void _collapse() {
     if (!mounted) return;
     setState(() => _hasSidebarFocus = false);
+    widget.onExpandedChanged?.call(false);
     _expandController.reverse();
     _scrollToCurrent();
   }
@@ -334,6 +343,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
           padding: const EdgeInsets.only(bottom: 6),
           child: _TvNavItemWidget(
             item: item,
+            index: index,
             isSelected: index == widget.currentIndex,
             isFocused: index == _focusedIndex && _hasSidebarFocus,
             expand: _expand,
@@ -399,6 +409,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
 /// fades via the shared expand animation. No per-item AnimationController.
 class _TvNavItemWidget extends StatelessWidget {
   final TvNavItem item;
+
+  /// Position in the menu — drives the label's slide-in stagger on expand.
+  final int index;
   final bool isSelected;
   final bool isFocused;
   final Animation<double> expand;
@@ -410,6 +423,7 @@ class _TvNavItemWidget extends StatelessWidget {
 
   const _TvNavItemWidget({
     required this.item,
+    required this.index,
     required this.isSelected,
     required this.isFocused,
     required this.expand,
@@ -495,8 +509,9 @@ class _TvNavItemWidget extends StatelessWidget {
                   ),
                   Expanded(
                     child: ClipRect(
-                      child: FadeTransition(
-                        opacity: expand,
+                      child: _StaggeredLabel(
+                        expand: expand,
+                        index: index,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -569,6 +584,49 @@ class _TvNavItemWidget extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A nav label that rides the shared expand animation with a per-item stagger:
+/// each row's text fades in while settling ~12px leftward into place (it
+/// trails the expanding rail edge), offset a touch later the further down the
+/// menu it sits — the open reads as a choreographed cascade instead of one
+/// flat fade. Still zero per-item controllers; every label derives from the
+/// single expand CurvedAnimation.
+class _StaggeredLabel extends StatelessWidget {
+  final Animation<double> expand;
+  final int index;
+  final Widget child;
+
+  const _StaggeredLabel({
+    required this.expand,
+    required this.index,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final curved = CurvedAnimation(
+      parent: expand,
+      // Later rows start later; cap the offset so a long menu's tail doesn't
+      // lag the 200ms expand.
+      curve: Interval(
+        (index * 0.055).clamp(0.0, 0.45),
+        1.0,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    return FadeTransition(
+      opacity: curved,
+      child: AnimatedBuilder(
+        animation: curved,
+        builder: (context, inner) => Transform.translate(
+          offset: Offset(12 * (1 - curved.value), 0),
+          child: inner,
+        ),
+        child: child,
       ),
     );
   }

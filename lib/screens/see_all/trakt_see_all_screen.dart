@@ -13,7 +13,7 @@ import '../../widgets/see_all/stremio_dropdown.dart';
 
 /// Sort orders for the grid. [natural] keeps the list's incoming order —
 /// last-watched for Continue Watching, the API's own rank for fetched lists.
-enum _Sort { natural, az, za }
+enum _Sort { natural, az, za, imdbDesc, imdbAsc }
 
 /// Full-screen "See All" for the Trakt source. Opens on Continue Watching (the
 /// row the user came from, handed in already-loaded via [cwItems]) and lets them
@@ -240,6 +240,23 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       case _Sort.za:
         list.sort(
             (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+        break;
+      case _Sort.imdbDesc:
+      case _Sort.imdbAsc:
+        // Unrated items sink to the end in BOTH directions so they never bury
+        // rated ones; rating ties fall back to A–Z so the order is stable.
+        final asc = _sort == _Sort.imdbAsc;
+        list.sort((a, b) {
+          final ra = a.imdbRating, rb = b.imdbRating;
+          if (ra == null && rb == null) {
+            return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          }
+          if (ra == null) return 1;
+          if (rb == null) return -1;
+          final byRating = asc ? ra.compareTo(rb) : rb.compareTo(ra);
+          if (byRating != 0) return byRating;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
         break;
     }
     _visible = list;
@@ -476,6 +493,10 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
                     _Sort.natural, _isCw ? 'Last Watched' : 'Default'),
                 const StremioDropdownOption(_Sort.az, 'A–Z'),
                 const StremioDropdownOption(_Sort.za, 'Z–A'),
+                const StremioDropdownOption(
+                    _Sort.imdbDesc, 'IMDb Rating · High → Low'),
+                const StremioDropdownOption(
+                    _Sort.imdbAsc, 'IMDb Rating · Low → High'),
               ],
               onSelected: (v) => _setFilter(() => _sort = v),
             ),
