@@ -5178,11 +5178,26 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildBoard() {
     if (_loading) {
-      // Shimmer rails while the first batch loads, instead of a bare spinner —
-      // so rows shimmer in rather than popping out of nowhere (all platforms).
-      return SkeletonRailList(
-        posterWidth: _railPosterW(context),
-        isTelevision: widget.isTelevision,
+      // A restrained loading stand-in that mirrors the real board: a hero block
+      // on top (TV) plus a couple of rails — not a screenful of dense shimmer —
+      // so it looks premium and the swap into content doesn't reflow.
+      final tv = widget.isTelevision;
+      final width = MediaQuery.of(context).size.width;
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          // Same hero sizing the real board uses (see the LayoutBuilder below),
+          // so the placeholder hero lands exactly where the real one will.
+          final heroH = tv
+              ? (constraints.maxHeight - _railRowH(context) - _railHeaderH * 2)
+                    .clamp(150.0, widget.searchMode ? 180.0 : 380.0)
+              : (width >= 900 ? 300.0 : 196.0);
+          return SkeletonRailList(
+            posterWidth: _railPosterW(context),
+            isTelevision: tv,
+            showHero: _heroActive,
+            heroHeight: heroH,
+          );
+        },
       );
     }
     if (_error != null) {
@@ -6351,33 +6366,37 @@ class _TraktSkeletonRowState extends State<_TraktSkeletonRow>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        widget.header,
-        SizedBox(
-          height: widget.rowH,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.hardEdge,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            itemCount: 6,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                child: Center(
-                  child: _SkeletonPoster(
-                    width: widget.posterW,
-                    height: widget.cellH,
-                    animation: _controller,
+    // Isolate the shimmer's per-frame repaint from the real board rows it sits
+    // among, so its sweep doesn't re-rasterise them each frame.
+    return RepaintBoundary(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          widget.header,
+          SizedBox(
+            height: widget.rowH,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.hardEdge,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 13),
+              itemCount: 6,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 11),
+                  child: Center(
+                    child: _SkeletonPoster(
+                      width: widget.posterW,
+                      height: widget.cellH,
+                      animation: _controller,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -6597,6 +6616,16 @@ class _StremioCardState extends State<_StremioCard> {
                     // Decode board posters at a capped width — tiles are small,
                     // full-res posters are the main memory churn while scrolling.
                     memCacheWidth: widget.isTelevision ? 320 : 480,
+                    // On TV, skip the per-image fade: when the board swaps in from
+                    // the skeleton, dozens of posters would run a 500ms opacity
+                    // crossfade at once — a saveLayer each — which janks the weak
+                    // GPU. Snapping them in reads as a clean, smooth reveal.
+                    fadeInDuration: widget.isTelevision
+                        ? Duration.zero
+                        : const Duration(milliseconds: 500),
+                    fadeOutDuration: widget.isTelevision
+                        ? Duration.zero
+                        : const Duration(milliseconds: 1000),
                     placeholder: (_, __) => _placeholder(item.name),
                     errorWidget: (_, __, ___) => _placeholder(item.name),
                   )
@@ -7001,6 +7030,14 @@ class _ArtPosterState extends State<_ArtPoster> {
                       imageUrl: url,
                       fit: widget.imageFit,
                       memCacheWidth: widget.isTelevision ? 320 : 480,
+                      // TV: no per-image crossfade (saveLayer per poster janks
+                      // the weak GPU when a grid fills in at once).
+                      fadeInDuration: widget.isTelevision
+                          ? Duration.zero
+                          : const Duration(milliseconds: 500),
+                      fadeOutDuration: widget.isTelevision
+                          ? Duration.zero
+                          : const Duration(milliseconds: 1000),
                       placeholder: (_, __) => _glyph(),
                       errorWidget: (_, __, ___) => _glyph(),
                     ),
