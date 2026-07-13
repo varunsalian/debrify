@@ -7,13 +7,21 @@ Future<void> showSupportDonationChooserDialog(
   BuildContext context, {
   required SupportDonationConfig donation,
   String title = 'Support Debrify',
+  ThemeData? theme,
 }) async {
   if (!donation.hasProviders) return;
 
   await showDialog<void>(
     context: context,
-    builder: (dialogContext) =>
-        _SupportDonationChooserDialog(donation: donation, title: title),
+    builder: (dialogContext) {
+      final dialog = _SupportDonationChooserDialog(
+        donation: donation,
+        title: title,
+      );
+      // Callers (e.g. Settings) can pass a scoped theme so the dialog matches
+      // their palette; without it the ambient app theme applies as before.
+      return theme == null ? dialog : Theme(data: theme, child: dialog);
+    },
   );
 }
 

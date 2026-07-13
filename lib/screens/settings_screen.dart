@@ -347,6 +347,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context,
       donation: _supportDonation,
       title: _supportSettingsLabel,
+      // Match the settings palette (the dialog is shown from the State's
+      // context, which sits above the scoped theme in build()).
+      theme: settingsPageTheme(context),
     );
   }
 
@@ -1713,22 +1716,16 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsSection(
                   title: 'General',
                   children: [
-                    SettingsTile(
-                      icon: Icons.home_rounded,
-                      title: 'Home Page',
-                      subtitle: 'Default view when app opens',
+                    SettingsTile.spec(
+                      SettingsRows.homePage,
                       onTap: onOpenHomePageSettings,
                     ),
-                    SettingsTile(
-                      icon: Icons.open_in_new_rounded,
-                      title: 'Player Settings',
-                      subtitle: 'Configure preferred video player',
+                    SettingsTile.spec(
+                      SettingsRows.player,
                       onTap: onOpenExternalPlayerSettings,
                     ),
-                    SettingsTile(
-                      icon: Icons.rocket_launch_rounded,
-                      title: 'Startup',
-                      subtitle: 'Decide what happens on app launch',
+                    SettingsTile.spec(
+                      SettingsRows.startup,
                       onTap: onOpenStartupSettings,
                     ),
                     // Remote: shown on TV and desktop. Mobile keeps its
@@ -1738,10 +1735,8 @@ class _SettingsLayout extends StatelessWidget {
                             Platform.isWindows ||
                             Platform.isMacOS ||
                             Platform.isLinux))
-                      SettingsTile(
-                        icon: Icons.phonelink_rounded,
-                        title: 'Remote',
-                        subtitle: 'Send setup or receive from another device',
+                      SettingsTile.spec(
+                        SettingsRows.remote,
                         onTap: () async => onOpenRemoteControl(),
                       ),
                   ],
@@ -1751,28 +1746,20 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsSection(
                   title: 'Search',
                   children: [
-                    SettingsTile(
-                      icon: Icons.search_rounded,
-                      title: 'Search Settings',
-                      subtitle: 'Engines, filters, and sorting',
+                    SettingsTile.spec(
+                      SettingsRows.searchSettings,
                       onTap: onOpenTorrentSettings,
                     ),
-                    SettingsTile(
-                      icon: Icons.filter_list_rounded,
-                      title: 'Filter Settings',
-                      subtitle: 'Default quality, source, and language filters',
+                    SettingsTile.spec(
+                      SettingsRows.filterSettings,
                       onTap: onOpenFilterSettings,
                     ),
-                    SettingsTile(
-                      icon: Icons.cloud_sync_rounded,
-                      title: 'Provider Settings',
-                      subtitle: 'Default provider for adding torrents',
+                    SettingsTile.spec(
+                      SettingsRows.providerSettings,
                       onTap: onOpenProviderSettings,
                     ),
-                    SettingsTile(
-                      icon: Icons.bolt_rounded,
-                      title: 'Quick Play Settings',
-                      subtitle: 'Configure quick play for torrent search',
+                    SettingsTile.spec(
+                      SettingsRows.quickPlay,
                       onTap: onOpenQuickPlaySettings,
                     ),
                   ],
@@ -1782,10 +1769,8 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsSection(
                   title: 'TV Mode',
                   children: [
-                    SettingsTile(
-                      icon: Icons.live_tv_rounded,
-                      title: 'Debrify TV Settings',
-                      subtitle: 'Limits, channels, and playback configuration',
+                    SettingsTile.spec(
+                      SettingsRows.debrifyTv,
                       onTap: onOpenDebrifyTvSettings,
                     ),
                   ],
@@ -1795,16 +1780,12 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsSection(
                   title: 'Maintenance',
                   children: [
-                    SettingsTile(
-                      icon: Icons.download_rounded,
-                      title: 'Clear Download Data',
-                      subtitle: 'Remove queue history and in-progress entries',
+                    SettingsTile.spec(
+                      SettingsRows.clearDownloads,
                       onTap: onClearDownloads,
                     ),
-                    SettingsTile(
-                      icon: Icons.play_circle_rounded,
-                      title: 'Clear Playback Data',
-                      subtitle: 'Reset resume points and playback sessions',
+                    SettingsTile.spec(
+                      SettingsRows.clearPlayback,
                       onTap: onClearPlayback,
                     ),
                   ],
@@ -1814,17 +1795,12 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsSection(
                   title: 'Backup & Restore',
                   children: [
-                    SettingsTile(
-                      icon: Icons.save_alt_rounded,
-                      title: 'Create Backup',
-                      subtitle:
-                          'Save services, addons, and search engines to a file',
+                    SettingsTile.spec(
+                      SettingsRows.createBackup,
                       onTap: onCreateBackup,
                     ),
-                    SettingsTile(
-                      icon: Icons.restore_rounded,
-                      title: 'Restore from Backup',
-                      subtitle: 'Import services and addons from a backup file',
+                    SettingsTile.spec(
+                      SettingsRows.restoreBackup,
                       onTap: onRestoreBackup,
                     ),
                   ],
@@ -1835,10 +1811,8 @@ class _SettingsLayout extends StatelessWidget {
                   title: 'Danger Zone',
                   accentColor: kSettingsRed.withValues(alpha: 0.85),
                   children: [
-                    SettingsTile(
-                      icon: Icons.warning_rounded,
-                      title: 'Reset Debrify',
-                      subtitle: 'Remove connections, preferences, and caches',
+                    SettingsTile.spec(
+                      SettingsRows.resetDebrify,
                       onTap: onDangerAction,
                       destructive: true,
                     ),
@@ -1849,16 +1823,13 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsSection(
                   title: 'About',
                   children: [
-                    SettingsToggleTile(
-                      icon: Icons.notifications_active_rounded,
-                      title: 'Auto Check for Updates',
-                      subtitle: 'Notify about new releases on startup',
+                    SettingsToggleTile.spec(
+                      SettingsRows.autoUpdate,
                       value: autoUpdateChecksEnabled,
                       onChanged: onToggleAutoUpdateChecks,
                     ),
-                    SettingsTile(
-                      icon: Icons.system_update_rounded,
-                      title: 'Check for Updates',
+                    SettingsTile.spec(
+                      SettingsRows.checkUpdates,
                       subtitle: updateSubtitle,
                       onTap: onCheckForUpdates,
                       tag: 'New',
@@ -1874,37 +1845,25 @@ class _SettingsLayout extends StatelessWidget {
                     ),
                     if (showSupportDonation)
                       SettingsTile(
-                        icon: Icons.favorite_rounded,
+                        icon: SettingsRows.supportDebrify.icon,
                         title: supportDonationLabel,
                         subtitle: supportDonationSubtitle,
                         onTap: onOpenSupportDonation,
                       ),
-                    SettingsTile(
-                      icon: Icons.forum_rounded,
-                      title: 'Reddit Community',
-                      subtitle: 'r/debrify - Questions, tips, and discussion',
-                      onTap: () => launchUrl(
-                        Uri.parse('https://www.reddit.com/r/debrify/'),
-                      ),
+                    SettingsTile.spec(
+                      SettingsRows.reddit,
+                      onTap: () => launchSettingsUrl(SettingsRows.reddit.url!),
                     ),
-                    SettingsTile(
-                      icon: Icons.chat_rounded,
-                      title: 'Discord',
-                      subtitle: 'Join for help, updates, and discussion',
-                      onTap: () =>
-                          launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
+                    SettingsTile.spec(
+                      SettingsRows.discord,
+                      onTap: () => launchSettingsUrl(SettingsRows.discord.url!),
                     ),
-                    SettingsTile(
-                      icon: Icons.code_rounded,
-                      title: 'GitHub',
-                      subtitle: 'Source code and contributions',
-                      onTap: () => launchUrl(
-                        Uri.parse('https://github.com/varunsalian/debrify'),
-                      ),
+                    SettingsTile.spec(
+                      SettingsRows.github,
+                      onTap: () => launchSettingsUrl(SettingsRows.github.url!),
                     ),
-                    SettingsInfoTile(
-                      icon: Icons.info_outline_rounded,
-                      title: 'Version',
+                    SettingsInfoTile.spec(
+                      SettingsRows.version,
                       value: appVersion,
                     ),
                   ],

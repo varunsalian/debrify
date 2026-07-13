@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/main_page_bridge.dart';
 import '../../../widgets/shimmer.dart';
@@ -44,6 +45,144 @@ String settingsInitialsFor(String title) {
   return words[0].length >= 2
       ? words[0].substring(0, 2).toUpperCase()
       : words[0].toUpperCase();
+}
+
+/// Icon + copy for one settings row. Defined once in [SettingsRows] and
+/// consumed by BOTH the phone single-column layout and the TV two-pane layout
+/// (via `SettingsTile.spec` / `SettingsToggleTile.spec`) so the two can't
+/// drift — change a title/icon here and both surfaces update.
+class SettingsRowContent {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  /// External link for community rows (Reddit/Discord/GitHub).
+  final String? url;
+
+  const SettingsRowContent({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.url,
+  });
+}
+
+/// Single source of truth for every settings row's icon + copy.
+abstract final class SettingsRows {
+  static const homePage = SettingsRowContent(
+    icon: Icons.home_rounded,
+    title: 'Home Page',
+    subtitle: 'Default view when app opens',
+  );
+  static const player = SettingsRowContent(
+    icon: Icons.open_in_new_rounded,
+    title: 'Player Settings',
+    subtitle: 'Configure preferred video player',
+  );
+  static const startup = SettingsRowContent(
+    icon: Icons.rocket_launch_rounded,
+    title: 'Startup',
+    subtitle: 'Decide what happens on app launch',
+  );
+  static const remote = SettingsRowContent(
+    icon: Icons.phonelink_rounded,
+    title: 'Remote',
+    subtitle: 'Send setup or receive from another device',
+  );
+  static const searchSettings = SettingsRowContent(
+    icon: Icons.search_rounded,
+    title: 'Search Settings',
+    subtitle: 'Engines, filters, and sorting',
+  );
+  static const filterSettings = SettingsRowContent(
+    icon: Icons.filter_list_rounded,
+    title: 'Filter Settings',
+    subtitle: 'Default quality, source, and language filters',
+  );
+  static const providerSettings = SettingsRowContent(
+    icon: Icons.cloud_sync_rounded,
+    title: 'Provider Settings',
+    subtitle: 'Default provider for adding torrents',
+  );
+  static const quickPlay = SettingsRowContent(
+    icon: Icons.bolt_rounded,
+    title: 'Quick Play Settings',
+    subtitle: 'Configure quick play for torrent search',
+  );
+  static const debrifyTv = SettingsRowContent(
+    icon: Icons.live_tv_rounded,
+    title: 'Debrify TV Settings',
+    subtitle: 'Limits, channels, and playback configuration',
+  );
+  static const clearDownloads = SettingsRowContent(
+    icon: Icons.download_rounded,
+    title: 'Clear Download Data',
+    subtitle: 'Remove queue history and in-progress entries',
+  );
+  static const clearPlayback = SettingsRowContent(
+    icon: Icons.play_circle_rounded,
+    title: 'Clear Playback Data',
+    subtitle: 'Reset resume points and playback sessions',
+  );
+  static const createBackup = SettingsRowContent(
+    icon: Icons.save_alt_rounded,
+    title: 'Create Backup',
+    subtitle: 'Save services, addons, and search engines to a file',
+  );
+  static const restoreBackup = SettingsRowContent(
+    icon: Icons.restore_rounded,
+    title: 'Restore from Backup',
+    subtitle: 'Import services and addons from a backup file',
+  );
+  static const resetDebrify = SettingsRowContent(
+    icon: Icons.warning_rounded,
+    title: 'Reset Debrify',
+    subtitle: 'Remove connections, preferences, and caches',
+  );
+  static const autoUpdate = SettingsRowContent(
+    icon: Icons.notifications_active_rounded,
+    title: 'Auto Check for Updates',
+    subtitle: 'Notify about new releases on startup',
+  );
+  // Subtitle is dynamic (update status) — passed per call site.
+  static const checkUpdates = SettingsRowContent(
+    icon: Icons.system_update_rounded,
+    title: 'Check for Updates',
+    subtitle: '',
+  );
+  static const supportDebrify = SettingsRowContent(
+    icon: Icons.favorite_rounded,
+    title: 'Support Debrify',
+    subtitle: '',
+  );
+  static const reddit = SettingsRowContent(
+    icon: Icons.forum_rounded,
+    title: 'Reddit Community',
+    subtitle: 'r/debrify - Questions, tips, and discussion',
+    url: 'https://www.reddit.com/r/debrify/',
+  );
+  static const discord = SettingsRowContent(
+    icon: Icons.chat_rounded,
+    title: 'Discord',
+    subtitle: 'Join for help, updates, and discussion',
+    url: 'https://discord.gg/xuAc4Q2c9G',
+  );
+  static const github = SettingsRowContent(
+    icon: Icons.code_rounded,
+    title: 'GitHub',
+    subtitle: 'Source code and contributions',
+    url: 'https://github.com/varunsalian/debrify',
+  );
+  static const version = SettingsRowContent(
+    icon: Icons.info_outline_rounded,
+    title: 'Version',
+    subtitle: '',
+  );
+}
+
+/// Opens a settings community link. Shared so both layouts launch the same URL.
+Future<void> launchSettingsUrl(String url) async {
+  await launchUrl(Uri.parse(url));
 }
 
 /// Scoped theme for the settings subpages: re-tints every Material widget
@@ -1131,6 +1270,32 @@ class SettingsTile extends StatefulWidget {
     this.focusNode,
   });
 
+  /// Build from a shared [SettingsRowContent] so the TV and phone layouts
+  /// stay in lockstep. [subtitle] overrides the content's (for dynamic rows
+  /// like "Check for Updates").
+  factory SettingsTile.spec(
+    SettingsRowContent content, {
+    Key? key,
+    required Future<void> Function() onTap,
+    String? subtitle,
+    String? tag,
+    Widget? trailing,
+    bool destructive = false,
+    FocusNode? focusNode,
+  }) {
+    return SettingsTile(
+      key: key,
+      icon: content.icon,
+      title: content.title,
+      subtitle: subtitle ?? content.subtitle,
+      onTap: onTap,
+      tag: tag,
+      trailing: trailing,
+      destructive: destructive,
+      focusNode: focusNode,
+    );
+  }
+
   @override
   State<SettingsTile> createState() => _SettingsTileState();
 }
@@ -1260,6 +1425,24 @@ class SettingsToggleTile extends StatefulWidget {
     this.focusNode,
   });
 
+  factory SettingsToggleTile.spec(
+    SettingsRowContent content, {
+    Key? key,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    FocusNode? focusNode,
+  }) {
+    return SettingsToggleTile(
+      key: key,
+      icon: content.icon,
+      title: content.title,
+      subtitle: content.subtitle,
+      value: value,
+      onChanged: onChanged,
+      focusNode: focusNode,
+    );
+  }
+
   @override
   State<SettingsToggleTile> createState() => _SettingsToggleTileState();
 }
@@ -1343,6 +1526,19 @@ class SettingsInfoTile extends StatelessWidget {
     required this.title,
     required this.value,
   });
+
+  factory SettingsInfoTile.spec(
+    SettingsRowContent content, {
+    Key? key,
+    required String value,
+  }) {
+    return SettingsInfoTile(
+      key: key,
+      icon: content.icon,
+      title: content.title,
+      value: value,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

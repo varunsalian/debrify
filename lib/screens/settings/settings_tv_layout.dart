@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/main_page_bridge.dart';
 import 'widgets/settings_widgets.dart';
@@ -401,31 +400,23 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              SettingsTile(
-                icon: Icons.home_rounded,
-                title: 'Home Page',
-                subtitle: 'Default view when app opens',
+              SettingsTile.spec(
+                SettingsRows.homePage,
                 onTap: widget.onOpenHomePageSettings,
                 focusNode: _paneNodes[0],
               ),
-              SettingsTile(
-                icon: Icons.open_in_new_rounded,
-                title: 'Player Settings',
-                subtitle: 'Configure preferred video player',
+              SettingsTile.spec(
+                SettingsRows.player,
                 onTap: widget.onOpenExternalPlayerSettings,
                 focusNode: _paneNodes[1],
               ),
-              SettingsTile(
-                icon: Icons.rocket_launch_rounded,
-                title: 'Startup',
-                subtitle: 'Decide what happens on app launch',
+              SettingsTile.spec(
+                SettingsRows.startup,
                 onTap: widget.onOpenStartupSettings,
                 focusNode: _paneNodes[2],
               ),
-              SettingsTile(
-                icon: Icons.phonelink_rounded,
-                title: 'Remote',
-                subtitle: 'Send setup or receive from another device',
+              SettingsTile.spec(
+                SettingsRows.remote,
                 onTap: () async => widget.onOpenRemoteControl(),
                 focusNode: _paneNodes[3],
               ),
@@ -437,31 +428,23 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              SettingsTile(
-                icon: Icons.search_rounded,
-                title: 'Search Settings',
-                subtitle: 'Engines, filters, and sorting',
+              SettingsTile.spec(
+                SettingsRows.searchSettings,
                 onTap: widget.onOpenTorrentSettings,
                 focusNode: _paneNodes[0],
               ),
-              SettingsTile(
-                icon: Icons.filter_list_rounded,
-                title: 'Filter Settings',
-                subtitle: 'Default quality, source, and language filters',
+              SettingsTile.spec(
+                SettingsRows.filterSettings,
                 onTap: widget.onOpenFilterSettings,
                 focusNode: _paneNodes[1],
               ),
-              SettingsTile(
-                icon: Icons.cloud_sync_rounded,
-                title: 'Provider Settings',
-                subtitle: 'Default provider for adding torrents',
+              SettingsTile.spec(
+                SettingsRows.providerSettings,
                 onTap: widget.onOpenProviderSettings,
                 focusNode: _paneNodes[2],
               ),
-              SettingsTile(
-                icon: Icons.bolt_rounded,
-                title: 'Quick Play Settings',
-                subtitle: 'Configure quick play for torrent search',
+              SettingsTile.spec(
+                SettingsRows.quickPlay,
                 onTap: widget.onOpenQuickPlaySettings,
                 focusNode: _paneNodes[3],
               ),
@@ -473,10 +456,8 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              SettingsTile(
-                icon: Icons.live_tv_rounded,
-                title: 'Debrify TV Settings',
-                subtitle: 'Limits, channels, and playback configuration',
+              SettingsTile.spec(
+                SettingsRows.debrifyTv,
                 onTap: widget.onOpenDebrifyTvSettings,
                 focusNode: _paneNodes[0],
               ),
@@ -489,17 +470,13 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              SettingsTile(
-                icon: Icons.download_rounded,
-                title: 'Clear Download Data',
-                subtitle: 'Remove queue history and in-progress entries',
+              SettingsTile.spec(
+                SettingsRows.clearDownloads,
                 onTap: widget.onClearDownloads,
                 focusNode: _paneNodes[0],
               ),
-              SettingsTile(
-                icon: Icons.play_circle_rounded,
-                title: 'Clear Playback Data',
-                subtitle: 'Reset resume points and playback sessions',
+              SettingsTile.spec(
+                SettingsRows.clearPlayback,
                 onTap: widget.onClearPlayback,
                 focusNode: _paneNodes[1],
               ),
@@ -510,17 +487,13 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              SettingsTile(
-                icon: Icons.save_alt_rounded,
-                title: 'Create Backup',
-                subtitle: 'Save services, addons, and search engines to a file',
+              SettingsTile.spec(
+                SettingsRows.createBackup,
                 onTap: widget.onCreateBackup,
                 focusNode: _paneNodes[2],
               ),
-              SettingsTile(
-                icon: Icons.restore_rounded,
-                title: 'Restore from Backup',
-                subtitle: 'Import services and addons from a backup file',
+              SettingsTile.spec(
+                SettingsRows.restoreBackup,
                 onTap: widget.onRestoreBackup,
                 focusNode: _paneNodes[3],
               ),
@@ -532,17 +505,14 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              SettingsToggleTile(
-                icon: Icons.notifications_active_rounded,
-                title: 'Auto Check for Updates',
-                subtitle: 'Notify about new releases on startup',
+              SettingsToggleTile.spec(
+                SettingsRows.autoUpdate,
                 value: widget.autoUpdateChecksEnabled,
                 onChanged: widget.onToggleAutoUpdateChecks,
                 focusNode: _paneNodes[0],
               ),
-              SettingsTile(
-                icon: Icons.system_update_rounded,
-                title: 'Check for Updates',
+              SettingsTile.spec(
+                SettingsRows.checkUpdates,
                 subtitle: widget.updateSubtitle,
                 onTap: widget.onCheckForUpdates,
                 tag: 'New',
@@ -555,9 +525,8 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                       )
                     : null,
               ),
-              SettingsInfoTile(
-                icon: Icons.info_outline_rounded,
-                title: 'Version',
+              SettingsInfoTile.spec(
+                SettingsRows.version,
                 value: widget.appVersion,
               ),
             ],
@@ -573,35 +542,25 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             children: [
               if (widget.showSupportDonation)
                 SettingsTile(
-                  icon: Icons.favorite_rounded,
+                  icon: SettingsRows.supportDebrify.icon,
                   title: widget.supportDonationLabel,
                   subtitle: widget.supportDonationSubtitle,
                   onTap: widget.onOpenSupportDonation,
                   focusNode: _paneNodes[p++],
                 ),
-              SettingsTile(
-                icon: Icons.forum_rounded,
-                title: 'Reddit Community',
-                subtitle: 'r/debrify - Questions, tips, and discussion',
-                onTap: () =>
-                    launchUrl(Uri.parse('https://www.reddit.com/r/debrify/')),
+              SettingsTile.spec(
+                SettingsRows.reddit,
+                onTap: () => launchSettingsUrl(SettingsRows.reddit.url!),
                 focusNode: _paneNodes[p++],
               ),
-              SettingsTile(
-                icon: Icons.chat_rounded,
-                title: 'Discord',
-                subtitle: 'Join for help, updates, and discussion',
-                onTap: () =>
-                    launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
+              SettingsTile.spec(
+                SettingsRows.discord,
+                onTap: () => launchSettingsUrl(SettingsRows.discord.url!),
                 focusNode: _paneNodes[p++],
               ),
-              SettingsTile(
-                icon: Icons.code_rounded,
-                title: 'GitHub',
-                subtitle: 'Source code and contributions',
-                onTap: () => launchUrl(
-                  Uri.parse('https://github.com/varunsalian/debrify'),
-                ),
+              SettingsTile.spec(
+                SettingsRows.github,
+                onTap: () => launchSettingsUrl(SettingsRows.github.url!),
                 focusNode: _paneNodes[p++],
               ),
             ],
@@ -613,10 +572,8 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              SettingsTile(
-                icon: Icons.warning_rounded,
-                title: 'Reset Debrify',
-                subtitle: 'Remove connections, preferences, and caches',
+              SettingsTile.spec(
+                SettingsRows.resetDebrify,
                 onTap: widget.onDangerAction,
                 destructive: true,
                 focusNode: _paneNodes[0],
