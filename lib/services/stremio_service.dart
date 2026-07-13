@@ -782,19 +782,26 @@ class StremioService {
   /// Removes individual episode torrents
   List<Torrent> _filterToPacksOnly(List<Torrent> torrents) {
     return torrents.where((torrent) {
-      final name = torrent.name.toLowerCase();
+      // Scene names are dot/underscore-separated more often than not —
+      // normalize once so the patterns below see "S03.E05" / "Season.3" the
+      // same as their spaced forms (mirrors TorrentCoverageDetector).
+      final name = torrent.name.toLowerCase().replaceAll(
+        RegExp(r'[._]+'),
+        ' ',
+      );
 
       // Check for individual episode patterns (filter these OUT)
-      // Matches: S01E01, S1E1, 1x01, etc.
+      // Matches: S01E01, S1E1, S01 E01 (formerly dotted), 1x01, etc.
       final episodePattern = RegExp(
-        r's\d{1,2}e\d{1,3}|\d{1,2}x\d{1,3}',
+        r's\d{1,2}\s*e\d{1,3}|\d{1,2}x\d{1,3}',
         caseSensitive: false,
       );
 
       // Check for season pack patterns (keep these)
-      // Matches: S01, Season 1, S01-S03, Complete, etc.
+      // Matches: S01 (not followed by an episode), Season 1, S01-S03,
+      // Complete, etc.
       final seasonPackPattern = RegExp(
-        r'\.s\d{1,2}\.|season\s*\d+|s\d{1,2}-s\d{1,2}|complete|full.series',
+        r'\bs\d{1,2}\b(?!\s*e\d)|season\s*\d+|s\d{1,2}-s\d{1,2}|complete|full.series',
         caseSensitive: false,
       );
 
@@ -821,18 +828,8 @@ class StremioService {
         return false;
       }
 
-      // No episode pattern, check if it has season pack indicators
-      if (seasonPackPattern.hasMatch(name)) {
-        return true;
-      }
-
-      // Fallback: check for S01 without E pattern
-      final seasonOnlyPattern = RegExp(r'\.s\d{1,2}\.', caseSensitive: false);
-      if (seasonOnlyPattern.hasMatch(name)) {
-        return true;
-      }
-
-      // When in doubt, keep it (might be a pack with unusual naming)
+      // No episode pattern — keep it: either it has pack indicators, or the
+      // naming is unusual and we keep it rather than over-filter.
       return true;
     }).toList();
   }

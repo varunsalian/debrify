@@ -47,7 +47,14 @@ class TorrentCoverageDetector {
     final releaseName = parts.isNotEmpty ? parts[0].trim() : title;
     final filename = parts.length > 1 ? parts[1].trim() : '';
 
-    final lowerRelease = releaseName.toLowerCase();
+    // Scene release names are dot/underscore-separated more often than not
+    // ("Show.Season.3.Complete.1080p"), but the season patterns below are
+    // written with \s and silently miss dotted forms — which misclassified
+    // single-season packs as Complete Series. Normalize separators ONCE for
+    // matching; the original releaseName is kept for title generation.
+    final matchRelease = releaseName.replaceAll(RegExp(r'[._]+'), ' ');
+
+    final lowerRelease = matchRelease.toLowerCase();
     final lowerFilename = filename.toLowerCase();
 
     // Detect coverage type from release name patterns
@@ -57,7 +64,7 @@ class TorrentCoverageDetector {
     int? seasonNumber;
 
     // Extract season range ONCE upfront to avoid redundant parsing
-    final seasonRange = _extractSeasonRange(releaseName);
+    final seasonRange = _extractSeasonRange(matchRelease);
 
     // 1. Check for complete series patterns
     if (_isCompleteSeries(lowerRelease, preExtractedRange: seasonRange)) {
@@ -78,7 +85,7 @@ class TorrentCoverageDetector {
     // 3. Check for single season pack
     else if (_isSeasonPack(lowerRelease, lowerFilename)) {
       detectedType = CoverageType.seasonPack;
-      seasonNumber = _extractSingleSeason(releaseName);
+      seasonNumber = _extractSingleSeason(matchRelease);
     }
     // 4. Otherwise, it's a single episode (default)
 
@@ -182,21 +189,21 @@ class TorrentCoverageDetector {
     // e.g., "Game of Thrones S01 Complete" = season pack (NOT complete series)
     // e.g., "Game of Thrones S01-S08 Complete" = complete series (has range)
     if (RegExp(r'\bcomplete\b', caseSensitive: false).hasMatch(lowerName)) {
-      // First check if there's a season RANGE - if so, it's complete series
+      // First check if there's a season RANGE - if so, it's complete series.
+      // Use the shared extractor (rather than narrower inline regexes) so
+      // "Seasons 1 & 2", ordinals, and non-English forms count as ranges too.
       final hasSeasonRange =
-          RegExp(r's\d{1,2}\s*-\s*s?\d{1,2}', caseSensitive: false).hasMatch(lowerName) ||
-          RegExp(r'seasons?\s*\d{1,2}\s*-\s*\d{1,2}', caseSensitive: false).hasMatch(lowerName) ||
-          RegExp(r'seasons?\s*\d{1,2}\s*(?:to|thru|through)\s*\d{1,2}', caseSensitive: false).hasMatch(lowerName);
+          (preExtractedRange ?? _extractSeasonRange(lowerName)) != null;
 
       if (hasSeasonRange) {
         return true; // Has season range + complete = complete series
       }
 
       // Check if this is actually a single season pack (has single season indicator, no range)
-      // Patterns like "S01 Complete", "Season 1 Complete"
+      // Patterns like "S01 Complete", "Season 1 Complete", "Seasons 3"
       final hasSingleSeasonIndicator =
           RegExp(r'\bs\d{1,2}\b', caseSensitive: false).hasMatch(lowerName) ||
-          RegExp(r'\bseason\s*\d{1,2}\b', caseSensitive: false).hasMatch(lowerName);
+          RegExp(r'\bseasons?\s*\d{1,2}\b', caseSensitive: false).hasMatch(lowerName);
 
       // Only return true if NO single season indicator (pure "complete" like "Show (2011) Complete")
       if (!hasSingleSeasonIndicator) {
@@ -286,6 +293,15 @@ class TorrentCoverageDetector {
       // "S01 [1080p]" without episode number often indicates pack
       // But exclude if it's part of a range like "S01-S03" or "S01-03"
       RegExp(r'\bs\d{1,2}\b(?!\s*-\s*s?\d)(?!\s*e\d)', caseSensitive: false),
+      // Bare "Season 3" without a "complete"/"pack" keyword is still pack
+      // naming — but not a range ("Season 1-3", handled earlier; a 1-2 digit
+      // number only, so "Season 3 - 2019" with a year still counts as a pack)
+      // and not followed by an episode marker, with or without a separator
+      // ("Season 3 Episode 5", "Season 3 - Ep. 5", "Season 3, Episode 5").
+      RegExp(
+        r'\bseasons?\s*\d{1,2}\b(?!\s*[-–&]\s*\d{1,2}(?!\d))(?!\s*(?:to|thru|through|and)\s+\d{1,2}(?!\d))(?!\s*[-–,:]?\s*(?:e|ep|episode)\.?\s*\d)',
+        caseSensitive: false,
+      ),
     ];
 
     for (final pattern in regexPatterns) {
@@ -305,37 +321,40 @@ class TorrentCoverageDetector {
   static Map<String, int>? _extractSeasonRange(String text) {
     final lowerText = text.toLowerCase();
 
-    // List of patterns to try in order of specificity
+    // List of patterns to try in order of specificity.
+    // Every pattern ends its second number with (?!\d) so the first two
+    // digits of a trailing YEAR can't be read as the range end —
+    // "Season 3 - 2017" must NOT become {start: 3, end: 20}.
     final patterns = [
       // S01-S12, S1-S9, S01 - S12 (MUST have S before both numbers)
-      RegExp(r's(\d{1,2})\s*-\s*s(\d{1,2})', caseSensitive: false),
+      RegExp(r's(\d{1,2})\s*-\s*s(\d{1,2})(?!\d)', caseSensitive: false),
       // [S01-S08] or [S01-08] with brackets
       RegExp(r'\[s(\d{1,2})\s*-\s*s?(\d{1,2})\]', caseSensitive: false),
       // S01-08 format (second S optional) - but NOT followed by more digits (avoid 720p)
       // Must be followed by word boundary, space, or end
       RegExp(r's(\d{1,2})\s*-\s*(\d{1,2})(?:\s|$|\.|\]|\))', caseSensitive: false),
       // S01 to S12, S1 to S9 (with "to" keyword)
-      RegExp(r's(\d{1,2})\s+to\s+s(\d{1,2})', caseSensitive: false),
+      RegExp(r's(\d{1,2})\s+to\s+s(\d{1,2})(?!\d)', caseSensitive: false),
       // Seasons 1-8, Season 1-8
-      RegExp(r'seasons?\s*(\d{1,2})\s*-\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'seasons?\s*(\d{1,2})\s*-\s*(\d{1,2})(?!\d)', caseSensitive: false),
       // Season.1-8 (dot separated)
-      RegExp(r'season\.(\d{1,2})\s*-\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'season\.(\d{1,2})\s*-\s*(\d{1,2})(?!\d)', caseSensitive: false),
       // Seasons 1 to 8, Seasons 1 thru 8, Seasons 1 through 8
-      RegExp(r'seasons?\s*(\d{1,2})\s*(?:to|thru|through)\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'seasons?\s*(\d{1,2})\s*(?:to|thru|through)\s*(\d{1,2})(?!\d)', caseSensitive: false),
       // Seasons 1 & 2, Seasons 1 and 2 (for 2-season packs)
-      RegExp(r'seasons?\s*(\d{1,2})\s*(?:&|and)\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'seasons?\s*(\d{1,2})\s*(?:&|and)\s*(\d{1,2})(?!\d)', caseSensitive: false),
       // Series 1-8
-      RegExp(r'series\s*(\d{1,2})\s*-\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'series\s*(\d{1,2})\s*-\s*(\d{1,2})(?!\d)', caseSensitive: false),
       // 1ª a 8ª Temporada (ordinal format - Portuguese/Spanish)
       RegExp(r'(\d{1,2})ª?\s*a\s*(\d{1,2})ª?\s*temporada', caseSensitive: false),
       // Non-English - Spanish: Temporadas 1-8, Temporada 1 a 8
-      RegExp(r'temporadas?\s*(\d{1,2})\s*(?:-|a)\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'temporadas?\s*(\d{1,2})\s*(?:-|a)\s*(\d{1,2})(?!\d)', caseSensitive: false),
       // Non-English - German: Staffeln 1-8, Staffel 1 bis 8
-      RegExp(r'staffeln?\s*(\d{1,2})\s*(?:-|bis)\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'staffeln?\s*(\d{1,2})\s*(?:-|bis)\s*(\d{1,2})(?!\d)', caseSensitive: false),
       // Non-English - French: Saisons 1-8, Saison 1 à 8
-      RegExp(r'saisons?\s*(\d{1,2})\s*(?:-|[àa])\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'saisons?\s*(\d{1,2})\s*(?:-|[àa])\s*(\d{1,2})(?!\d)', caseSensitive: false),
       // Non-English - Italian: Stagioni 1-8, Stagione 1 a 8
-      RegExp(r'stagion[ei]\s*(\d{1,2})\s*(?:-|a)\s*(\d{1,2})', caseSensitive: false),
+      RegExp(r'stagion[ei]\s*(\d{1,2})\s*(?:-|a)\s*(\d{1,2})(?!\d)', caseSensitive: false),
     ];
 
     for (final pattern in patterns) {
