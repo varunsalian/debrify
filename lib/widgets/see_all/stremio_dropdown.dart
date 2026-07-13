@@ -141,11 +141,15 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
             decoration: BoxDecoration(
               color: kSeeAllPanel,
               borderRadius: BorderRadius.circular(11),
+              // Constant width: Container feeds the border's thickness into its
+              // layout padding, so a 1→2px focus ring RESIZES the pill and
+              // reflows the whole filter row (reads as the screen shaking on
+              // DPAD moves). Only the color may change on focus.
               border: Border.all(
+                width: 2,
                 color: _focused
                     ? kSeeAllAccent
                     : (active ? kSeeAllAccentBorder : kSeeAllLine),
-                width: _focused ? 2 : 1,
               ),
             ),
             child: Row(

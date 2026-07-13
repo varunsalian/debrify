@@ -357,6 +357,20 @@ class StorageService {
     await prefs.setBool('merged_series_page_enabled', enabled);
   }
 
+  /// Show the new Stremio-styled Addons hub (single list + source/type filters,
+  /// purple Discover theme, 1-click marketplace) instead of the classic two-tab
+  /// Addons screen. On by default; can be turned off per-device via
+  /// [setStremioAddonHubEnabled].
+  static Future<bool> getStremioAddonHubEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('stremio_addon_hub_enabled') ?? true;
+  }
+
+  static Future<void> setStremioAddonHubEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('stremio_addon_hub_enabled', enabled);
+  }
+
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
   /// metadata addon provides one. Default: ON everywhere EXCEPT Android TV,
   /// where autoplay + audio is heavy on weak boxes and intrusive on a shared

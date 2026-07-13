@@ -2,22 +2,63 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
+import '../services/storage_service.dart';
+import '../widgets/see_all/see_all_theme.dart';
+import 'addons/addon_hub_screen.dart';
 import 'settings/stremio_addons_page.dart';
 import 'settings/engine_import_page.dart';
 
-/// Screen for managing addons (Stremio and Torrent engines)
-/// Contains two tabs: Stremio Addons and Torrent Addons
+/// Top-level Addons entry point. Picks between the new Stremio-themed hub (single
+/// list + source/type filters + 1-click Discover) and the classic two-tab screen,
+/// based on a per-device flag ([StorageService.getStremioAddonHubEnabled]).
 class AddonsScreen extends StatefulWidget {
   const AddonsScreen({super.key});
 
-  /// Static callback to focus the current tab (for DPAD navigation from content)
+  /// Static callback to focus the current tab (for DPAD navigation from content).
+  /// Set by [ClassicAddonsScreen]; referenced by the Stremio addons page's
+  /// URL-field "Up" intent.
   static VoidCallback? focusCurrentTab;
 
   @override
-  State<AddonsScreen> createState() => _AddonsScreenState();
+  State<AddonsScreen> createState() => _AddonsSwitcherState();
 }
 
-class _AddonsScreenState extends State<AddonsScreen>
+class _AddonsSwitcherState extends State<AddonsScreen> {
+  bool? _useHub;
+
+  @override
+  void initState() {
+    super.initState();
+    StorageService.getStremioAddonHubEnabled().then((on) {
+      if (mounted) setState(() => _useHub = on);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final useHub = _useHub;
+    if (useHub == null) {
+      return const Scaffold(
+        backgroundColor: kSeeAllBg,
+        body: Center(
+          child:
+              CircularProgressIndicator(color: kSeeAllAccent, strokeWidth: 2),
+        ),
+      );
+    }
+    return useHub ? const AddonHubScreen() : const ClassicAddonsScreen();
+  }
+}
+
+/// The classic two-tab Addons screen (Stremio Addons | Torrent Engines).
+class ClassicAddonsScreen extends StatefulWidget {
+  const ClassicAddonsScreen({super.key});
+
+  @override
+  State<ClassicAddonsScreen> createState() => _AddonsScreenState();
+}
+
+class _AddonsScreenState extends State<ClassicAddonsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
