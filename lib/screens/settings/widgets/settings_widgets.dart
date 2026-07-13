@@ -1116,6 +1116,9 @@ class SettingsTile extends StatefulWidget {
   /// Renders the icon and title in the destructive red (Danger Zone).
   final bool destructive;
 
+  /// Lets a parent (e.g. the TV two-pane rail) drive focus onto this row.
+  final FocusNode? focusNode;
+
   const SettingsTile({
     super.key,
     required this.icon,
@@ -1125,6 +1128,7 @@ class SettingsTile extends StatefulWidget {
     this.tag,
     this.trailing,
     this.destructive = false,
+    this.focusNode,
   });
 
   @override
@@ -1152,6 +1156,7 @@ class _SettingsTileState extends State<SettingsTile> {
         ),
       ),
       child: InkWell(
+        focusNode: widget.focusNode,
         onFocusChange: (f) => setState(() => _focused = f),
         onHover: (h) => setState(() => _hovered = h),
         onTap: () async {
@@ -1243,6 +1248,7 @@ class SettingsToggleTile extends StatefulWidget {
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
+  final FocusNode? focusNode;
 
   const SettingsToggleTile({
     super.key,
@@ -1251,6 +1257,7 @@ class SettingsToggleTile extends StatefulWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.focusNode,
   });
 
   @override
@@ -1275,6 +1282,7 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
         ),
       ),
       child: InkWell(
+        focusNode: widget.focusNode,
         onFocusChange: (f) => setState(() => _focused = f),
         onHover: (h) => setState(() => _hovered = h),
         onTap: () => widget.onChanged(!widget.value),

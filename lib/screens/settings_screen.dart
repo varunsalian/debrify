@@ -31,6 +31,7 @@ import '../services/android_native_downloader.dart';
 import '../services/update_service.dart';
 import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
+import 'settings/settings_tv_layout.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
@@ -426,83 +427,137 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Theme(
       data: settingsPageTheme(context),
-      child: _buildLayout(context),
+      child: _isAndroidTv ? _buildTvLayout() : _buildLayout(context),
+    );
+  }
+
+  // Connection cards in canonical order (matches the phone grid rows).
+  ConnectionInfo get _rdInfo => ConnectionInfo(
+    title: 'Real Debrid',
+    connected: _realDebridConnected,
+    status: _realDebridStatus,
+    caption: _realDebridCaption,
+    onTap: _openRealDebridSettings,
+  );
+  ConnectionInfo get _torboxInfo => ConnectionInfo(
+    title: 'Torbox',
+    connected: _torboxConnected,
+    status: _torboxStatus,
+    caption: _torboxCaption,
+    onTap: _openTorboxSettings,
+  );
+  ConnectionInfo get _premiumizeInfo => ConnectionInfo(
+    title: 'Premiumize',
+    connected: _premiumizeConnected,
+    status: _premiumizeStatus,
+    caption: _premiumizeCaption,
+    onTap: _openPremiumizeSettings,
+  );
+  ConnectionInfo get _allDebridInfo => ConnectionInfo(
+    title: 'AllDebrid',
+    connected: _allDebridConnected,
+    status: _allDebridStatus,
+    caption: _allDebridCaption,
+    onTap: _openAllDebridSettings,
+  );
+  ConnectionInfo get _pikpakInfo => ConnectionInfo(
+    title: 'PikPak',
+    connected: _pikpakConnected,
+    status: _pikpakStatus,
+    caption: _pikpakCaption,
+    onTap: _openPikPakSettings,
+  );
+  ConnectionInfo get _webDavInfo => ConnectionInfo(
+    title: 'WebDAV',
+    connected: _webDavConnected,
+    status: _webDavStatus,
+    caption: _webDavCaption,
+    onTap: _openWebDavSettings,
+  );
+  ConnectionInfo get _redditInfo => ConnectionInfo(
+    title: 'Reddit',
+    connected: true,
+    status: 'Active',
+    caption: 'Browse video subreddits',
+    onTap: _openRedditSettings,
+  );
+  ConnectionInfo get _iptvInfo => ConnectionInfo(
+    title: 'IPTV',
+    connected: true,
+    status: 'Active',
+    caption: 'M3U playlist channels',
+    onTap: _openIptvSettings,
+  );
+  ConnectionInfo get _traktInfo => ConnectionInfo(
+    title: 'Trakt',
+    connected: _traktConnected,
+    status: _traktStatus,
+    caption: _traktCaption,
+    onTap: _openTraktSettings,
+  );
+  ConnectionInfo get _indexerManagersInfo => ConnectionInfo(
+    title: 'Jackett & Prowlarr',
+    connected: _indexerManagersConfigured,
+    status: _indexerManagersStatus,
+    caption: _indexerManagersCaption,
+    onTap: _openIndexerManagersSettings,
+  );
+
+  Widget _buildTvLayout() {
+    return SettingsTvLayout(
+      connections: [
+        _rdInfo,
+        _torboxInfo,
+        _premiumizeInfo,
+        _allDebridInfo,
+        _pikpakInfo,
+        _webDavInfo,
+        _redditInfo,
+        _iptvInfo,
+        _traktInfo,
+        _indexerManagersInfo,
+      ],
+      firstFocusNode: _firstCardFocusNode,
+      onOpenHomePageSettings: _openHomePageSettings,
+      onOpenExternalPlayerSettings: _openExternalPlayerSettings,
+      onOpenStartupSettings: _openStartupSettings,
+      onOpenRemoteControl: _openRemoteControl,
+      onOpenTorrentSettings: _openTorrentSettings,
+      onOpenFilterSettings: _openFilterSettings,
+      onOpenProviderSettings: _openProviderSettings,
+      onOpenQuickPlaySettings: _openQuickPlaySettings,
+      onOpenDebrifyTvSettings: _openDebrifyTvSettings,
+      onClearDownloads: _clearDownloadData,
+      onClearPlayback: _clearPlaybackData,
+      onCreateBackup: _createBackup,
+      onRestoreBackup: _restoreBackup,
+      onDangerAction: _resetAppData,
+      appVersion: _appVersion,
+      onCheckForUpdates: _checkForAppUpdates,
+      updateSubtitle: _updateSubtitle,
+      checkingUpdates: _checkingUpdates,
+      autoUpdateChecksEnabled: _autoUpdateChecksEnabled,
+      onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
+      showSupportDonation: _supportDonation.hasProviders,
+      supportDonationLabel: _supportSettingsLabel,
+      supportDonationSubtitle: _supportSettingsSubtitle,
+      onOpenSupportDonation: _openSupportDonation,
     );
   }
 
   Widget _buildLayout(BuildContext context) {
     return _SettingsLayout(
       connections: ConnectionsSummary(
-        realDebrid: ConnectionInfo(
-          title: 'Real Debrid',
-          connected: _realDebridConnected,
-          status: _realDebridStatus,
-          caption: _realDebridCaption,
-          onTap: _openRealDebridSettings,
-        ),
-        torbox: ConnectionInfo(
-          title: 'Torbox',
-          connected: _torboxConnected,
-          status: _torboxStatus,
-          caption: _torboxCaption,
-          onTap: _openTorboxSettings,
-        ),
-        premiumize: ConnectionInfo(
-          title: 'Premiumize',
-          connected: _premiumizeConnected,
-          status: _premiumizeStatus,
-          caption: _premiumizeCaption,
-          onTap: _openPremiumizeSettings,
-        ),
-        allDebrid: ConnectionInfo(
-          title: 'AllDebrid',
-          connected: _allDebridConnected,
-          status: _allDebridStatus,
-          caption: _allDebridCaption,
-          onTap: _openAllDebridSettings,
-        ),
-        pikpak: ConnectionInfo(
-          title: 'PikPak',
-          connected: _pikpakConnected,
-          status: _pikpakStatus,
-          caption: _pikpakCaption,
-          onTap: _openPikPakSettings,
-        ),
-        webDav: ConnectionInfo(
-          title: 'WebDAV',
-          connected: _webDavConnected,
-          status: _webDavStatus,
-          caption: _webDavCaption,
-          onTap: _openWebDavSettings,
-        ),
-        reddit: ConnectionInfo(
-          title: 'Reddit',
-          connected: true,
-          status: 'Active',
-          caption: 'Browse video subreddits',
-          onTap: _openRedditSettings,
-        ),
-        iptv: ConnectionInfo(
-          title: 'IPTV',
-          connected: true,
-          status: 'Active',
-          caption: 'M3U playlist channels',
-          onTap: _openIptvSettings,
-        ),
-        trakt: ConnectionInfo(
-          title: 'Trakt',
-          connected: _traktConnected,
-          status: _traktStatus,
-          caption: _traktCaption,
-          onTap: _openTraktSettings,
-        ),
-        indexerManagers: ConnectionInfo(
-          title: 'Jackett & Prowlarr',
-          connected: _indexerManagersConfigured,
-          status: _indexerManagersStatus,
-          caption: _indexerManagersCaption,
-          onTap: _openIndexerManagersSettings,
-        ),
+        realDebrid: _rdInfo,
+        torbox: _torboxInfo,
+        premiumize: _premiumizeInfo,
+        allDebrid: _allDebridInfo,
+        pikpak: _pikpakInfo,
+        webDav: _webDavInfo,
+        reddit: _redditInfo,
+        iptv: _iptvInfo,
+        trakt: _traktInfo,
+        indexerManagers: _indexerManagersInfo,
         firstCardFocusNode: _firstCardFocusNode,
       ),
       onOpenTorrentSettings: _openTorrentSettings,
