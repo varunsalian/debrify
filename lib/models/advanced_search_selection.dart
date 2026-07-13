@@ -46,6 +46,25 @@ class AdvancedSearchSelection {
   /// Whether this is a non-IMDB content type (TV channel, etc.)
   bool get isNonImdb => contentType != null && contentType != 'movie' && contentType != 'series';
 
+  /// A copy of this selection scoped to [season] (null = whole series) with
+  /// the episode cleared — a season-pack search scope (the Sources screen's
+  /// Season chip). Kept in the model so a newly added field is carried here
+  /// too instead of being silently dropped by an out-of-date inline copy.
+  AdvancedSearchSelection scopedToSeason(int? season) => AdvancedSearchSelection(
+    imdbId: imdbId,
+    isSeries: isSeries,
+    title: title,
+    year: year,
+    season: season,
+    episode: null,
+    contentType: contentType,
+    posterUrl: posterUrl,
+    traktProgressPercent: traktProgressPercent,
+    traktSource: traktSource,
+    fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
+    fromCatalogItemDetail: fromCatalogItemDetail,
+  );
+
   String get displayQuery {
     if (!isSeries || season == null || episode == null) {
       return title;

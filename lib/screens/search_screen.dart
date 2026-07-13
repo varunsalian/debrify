@@ -7945,6 +7945,28 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   late final TextEditingController _kwCtrl;
   String _query = '';
 
+  // --- season scoping (pack-search mode: series, no specific episode) ---
+  /// Currently selected season override; null = All Seasons (the selection's
+  /// original whole-series/season scope).
+  int? _selectedSeason;
+
+  /// Seasons from the meta addon (authoritative). Empty until fetched; the
+  /// chip menu falls back to [_derivedSeasons].
+  List<int> _availableSeasons = [];
+
+  /// Seasons derived from the last UNSCOPED (All Seasons) result set's
+  /// coverage info — the chip-menu fallback when the meta fetch fails. Only
+  /// snapshotted on unscoped searches: a season-scoped result set is already
+  /// filtered and would collapse the menu to the selected season.
+  List<int> _derivedSeasons = [];
+
+  /// Whether the "Season" scope chip applies: only for a series pack search
+  /// (no specific episode), never in keyword mode.
+  bool get _seasonChipVisible =>
+      !_keywordMode &&
+      widget.selection.isSeries &&
+      widget.selection.episode == null;
+
   /// Monotonic guard so a slow earlier search can't clobber a newer one.
   int _searchToken = 0;
 
@@ -7961,11 +7983,75 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     super.initState();
     _query = widget.keywordSeed ?? '';
     _kwCtrl = TextEditingController(text: _query);
+    _selectedSeason = widget.selection.season;
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
     _loadCacheConfig();
     _load();
+    if (_seasonChipVisible) unawaited(_loadSeasons());
+  }
+
+  /// Fetch the show's season numbers from the first meta-capable addon for the
+  /// Season chip menu. Best-effort: on failure the chip menu falls back to
+  /// seasons derived from the current results' coverage info.
+  Future<void> _loadSeasons() async {
+    if (_imdbId.isEmpty) return;
+    try {
+      final stremio = StremioService.instance;
+      final metaAddon = await stremio.firstMetaCapableAddon();
+      if (metaAddon == null) return;
+      final videos = await stremio.fetchSeriesMeta(metaAddon, _imdbId);
+      if (videos == null || !mounted) return;
+      final seasons = <int>{};
+      for (final v in videos) {
+        final s = (v['season'] as num?)?.toInt();
+        if (s != null && s > 0) seasons.add(s);
+      }
+      if (seasons.isEmpty) return;
+      setState(() => _availableSeasons = seasons.toList()..sort());
+    } catch (_) {
+      // Chip falls back to result-derived seasons.
+    }
+  }
+
+  /// Seasons offered by the Season chip: the meta addon's list when loaded,
+  /// otherwise [_derivedSeasons] (from the last unscoped results).
+  List<int> _seasonMenuNumbers() {
+    final base = _availableSeasons.isNotEmpty
+        ? _availableSeasons
+        : _derivedSeasons;
+    // Keep the currently selected season listed even if nothing covers it.
+    if (_selectedSeason != null && !base.contains(_selectedSeason)) {
+      return ([...base, _selectedSeason!])..sort();
+    }
+    return base;
+  }
+
+  /// Distinct season numbers inferable from [torrents]' coverage info (pack
+  /// season numbers and range bounds).
+  static List<int> _deriveSeasons(List<Torrent> torrents) {
+    final derived = <int>{};
+    for (final t in torrents) {
+      final n = t.seasonNumber;
+      if (n != null && n > 0) derived.add(n);
+      final start = t.startSeason;
+      final end = t.endSeason;
+      if (start != null && end != null && end >= start && end - start <= 50) {
+        for (var s = start; s <= end; s++) {
+          if (s > 0) derived.add(s);
+        }
+      }
+    }
+    return derived.toList()..sort();
+  }
+
+  /// The search scope: the incoming selection with the Season chip's override
+  /// applied (season-only, episode stays null → season-pack search).
+  AdvancedSearchSelection get _effectiveSelection {
+    final base = widget.selection;
+    if (!_seasonChipVisible || _selectedSeason == base.season) return base;
+    return base.scopedToSeason(_selectedSeason);
   }
 
   @override
@@ -8101,7 +8187,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     }
     _nodes.clear();
     try {
-      final sel = widget.selection;
+      final sel = _effectiveSelection;
       // Match Home's Sources list: the Stremio-aware search returns BOTH torrents
       // AND addon direct-link streams for movies/series, and resolves IPTV/non-IMDb
       // items straight from the addon (it skips the on-device torrent engines for
@@ -8116,6 +8202,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               season: sel.season,
               episode: sel.episode,
               contentType: sel.contentType,
+              // Known seasons (from the Season chip's meta fetch) scope the
+              // smart-fallback probing to seasons that actually exist.
+              availableSeasons:
+                  _availableSeasons.isNotEmpty ? _availableSeasons : null,
             );
       if (!mounted || token != _searchToken) return;
       final rawTorrents = (res['torrents'] as List).cast<Torrent>();
@@ -8141,6 +8231,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         );
       }
       _torrents = torrents;
+      // Snapshot the chip-menu fallback seasons from unscoped results only —
+      // a season-scoped set is already filtered and would collapse the menu.
+      if (_seasonChipVisible && sel.season == null) {
+        _derivedSeasons = _deriveSeasons(torrents);
+      }
       // A source-group pill selected for a previous search may not exist in a
       // new keyword result set — drop it so the toolbar filter can't hide every
       // row ("No matches") when results actually exist.
@@ -8163,9 +8258,16 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       _maybeCheckCache();
       // On TV the list is the only content — give the D-pad an anchor to move
       // from, otherwise the remote has nothing focused and can't select a row.
-      if (widget.isTelevision && _nodes.isNotEmpty) {
+      // With ZERO rows (e.g. a season scope with no packs) anchor the filter
+      // funnel instead so the remote can still reach the toolbar and recover.
+      if (widget.isTelevision) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _nodes.first.requestFocus();
+          if (!mounted) return;
+          if (_nodes.isNotEmpty) {
+            _nodes.first.requestFocus();
+          } else if (_seasonChipVisible) {
+            _filterFocus.requestFocus();
+          }
         });
       }
     } catch (e) {
@@ -8444,7 +8546,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 : Column(
                     children: [
                       if (_redesign && !_keywordMode) _redesignHero(scheme),
-                      if (_redesign && _torrents.isNotEmpty) _redesignToolbar(scheme),
+                      // Keep the toolbar when a season scope is available even
+                      // with zero results — otherwise a no-result season would
+                      // strand the user with no way to switch back.
+                      if (_redesign &&
+                          (_torrents.isNotEmpty || _seasonChipVisible))
+                        _redesignToolbar(scheme),
                       if (_bound.isNotEmpty) _pinnedBanner(),
                       Expanded(
                         child: _visible.isEmpty
@@ -8613,6 +8720,44 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
           child: Row(
             children: [
+              // Season scope (pack-search mode): narrows the search to one
+              // season's packs, like the old Home's season dropdown.
+              if (_seasonChipVisible)
+                PopupMenuButton<int>(
+                  initialValue: _selectedSeason ?? 0,
+                  tooltip: 'Season',
+                  color: const Color(0xFF1E1B2C),
+                  onSelected: (v) {
+                    final next = v == 0 ? null : v;
+                    if (next == _selectedSeason) return;
+                    setState(() => _selectedSeason = next);
+                    unawaited(_runSearch());
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 0, child: Text('All Seasons')),
+                    for (final s in _seasonMenuNumbers())
+                      PopupMenuItem(value: s, child: Text('Season $s')),
+                  ],
+                  child: _tbChip(
+                    _selectedSeason != null ? accent : line,
+                    dim,
+                    Text.rich(
+                      TextSpan(children: [
+                        TextSpan(text: 'Season  ', style: TextStyle(color: dim)),
+                        TextSpan(
+                          text: _selectedSeason == null
+                              ? 'All'
+                              : '$_selectedSeason',
+                          style: const TextStyle(color: Color(0xFFF1F1F6)),
+                        ),
+                      ]),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               const Spacer(),
               PopupMenuButton<String>(
                 initialValue: _sortBy,

@@ -85,6 +85,14 @@ class StremioService {
   // Cinemeta meta so their detail screen matches a normal catalog open.
   final Map<String, StremioMeta> _metaDetailsCache = {};
 
+  // Series meta videos (episode lists), keyed by '<addonId>:<contentId>'.
+  // Short TTL so newly-aired episodes still show up within a session; small
+  // cap since each entry can hold hundreds of episode maps.
+  final Map<String, ({List<Map<String, dynamic>> videos, DateTime fetchedAt})>
+  _seriesMetaCache = {};
+  static const _seriesMetaCacheTtl = Duration(minutes: 15);
+  static const _seriesMetaCacheMax = 10;
+
   // Addon ids that returned streams but zero recommendation links (e.g.
   // torrent indexers). Skipped on later recommendation queries so opening
   // a detail doesn't re-hit every stream addon. A genuine recommendation
@@ -1430,6 +1438,15 @@ class StremioService {
       return null;
     }
 
+    // Serve from the short-TTL cache: the episodes panel and the Sources
+    // screen's Season chip both fetch the same series meta back-to-back.
+    final cacheKey = '${addon.id}:$contentId';
+    final cached = _seriesMetaCache[cacheKey];
+    if (cached != null &&
+        DateTime.now().difference(cached.fetchedAt) < _seriesMetaCacheTtl) {
+      return cached.videos;
+    }
+
     final url =
         '${addon.baseUrl}/meta/series/${Uri.encodeComponent(contentId)}.json';
     debugPrint('StremioService: Fetching meta from $url');
@@ -1458,7 +1475,25 @@ class StremioService {
         final videos = meta?['videos'] as List<dynamic>?;
         if (videos == null || videos.isEmpty) return null;
 
-        return videos.whereType<Map<String, dynamic>>().toList();
+        final result = videos.whereType<Map<String, dynamic>>().toList();
+        // Evict expired entries, then the oldest beyond the cap.
+        final now = DateTime.now();
+        _seriesMetaCache.removeWhere(
+          (_, c) => now.difference(c.fetchedAt) >= _seriesMetaCacheTtl,
+        );
+        while (_seriesMetaCache.length >= _seriesMetaCacheMax) {
+          String? oldestKey;
+          DateTime? oldestAt;
+          _seriesMetaCache.forEach((key, c) {
+            if (oldestAt == null || c.fetchedAt.isBefore(oldestAt!)) {
+              oldestAt = c.fetchedAt;
+              oldestKey = key;
+            }
+          });
+          _seriesMetaCache.remove(oldestKey);
+        }
+        _seriesMetaCache[cacheKey] = (videos: result, fetchedAt: now);
+        return result;
       } finally {
         client.close();
       }
@@ -1466,6 +1501,16 @@ class StremioService {
       debugPrint('StremioService: Error fetching meta: $e');
       return null;
     }
+  }
+
+  /// First enabled addon that can serve meta (episode listings / season
+  /// numbers). Shared so the episodes panel, detail screens, and the Sources
+  /// screen's Season chip pick meta addons with one rule.
+  Future<StremioAddon?> firstMetaCapableAddon() async {
+    for (final a in await getEnabledAddons()) {
+      if (a.resources.contains('meta') && a.baseUrl.isNotEmpty) return a;
+    }
+    return null;
   }
 
   /// Fetch content from multiple catalogs at once
