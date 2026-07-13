@@ -371,7 +371,9 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
       if (result.failed > 0) parts.add('${result.failed} failed');
       messenger.showSnackBar(
         SnackBar(
-          content: Text(parts.isEmpty ? 'No addons to update' : parts.join('  ·  ')),
+          content: Text(
+            parts.isEmpty ? 'No addons to update' : parts.join('  ·  '),
+          ),
           backgroundColor: result.failed > 0 ? Colors.orange.shade800 : null,
         ),
       );
@@ -1083,9 +1085,16 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.error_outline, size: 56, color: theme.colorScheme.error),
+                Icon(
+                  Icons.error_outline,
+                  size: 56,
+                  color: theme.colorScheme.error,
+                ),
                 const SizedBox(height: 12),
-                Text('Failed to load addons', style: theme.textTheme.titleMedium),
+                Text(
+                  'Failed to load addons',
+                  style: theme.textTheme.titleMedium,
+                ),
                 const SizedBox(height: 6),
                 Text(
                   _error!,
@@ -1417,7 +1426,9 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
       if (result.failed > 0) parts.add('${result.failed} failed');
       messenger.showSnackBar(
         SnackBar(
-          content: Text(parts.isEmpty ? 'No addons to update' : parts.join('  ·  ')),
+          content: Text(
+            parts.isEmpty ? 'No addons to update' : parts.join('  ·  '),
+          ),
           backgroundColor: result.failed > 0 ? Colors.orange.shade800 : null,
         ),
       );
@@ -1657,10 +1668,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: _urlFieldFocused
-              ? Border.all(
-                  color: const Color(0xFFED1C24),
-                  width: 2,
-                )
+              ? Border.all(color: const Color(0xFFED1C24), width: 2)
               : null,
         ),
         child: Shortcuts(
@@ -1796,11 +1804,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
             padding: const EdgeInsets.only(bottom: 12),
             child: Row(
               children: [
-                Icon(
-                  Icons.extension,
-                  size: 20,
-                  color: const Color(0xFFED1C24),
-                ),
+                Icon(Icons.extension, size: 20, color: const Color(0xFFED1C24)),
                 const SizedBox(width: 8),
                 Text(
                   'Your Addons',
@@ -2051,10 +2055,7 @@ class _AddonTileState extends State<_AddonTile> {
                             ? const LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFFED1C24),
-                                  Color(0xFFB81D24),
-                                ],
+                                colors: [Color(0xFFED1C24), Color(0xFFB81D24)],
                               )
                             : LinearGradient(
                                 colors: [

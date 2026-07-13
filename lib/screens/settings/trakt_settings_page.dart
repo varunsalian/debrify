@@ -8,6 +8,7 @@ import '../../services/aptabase_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_service.dart';
+import 'widgets/settings_widgets.dart';
 
 class TraktSettingsPage extends StatefulWidget {
   const TraktSettingsPage({super.key});
@@ -205,7 +206,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? kSettingsRed : kSettingsGreen,
       ),
     );
   }
@@ -222,133 +223,125 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const SettingsPageScaffold(
+        title: 'Trakt Settings',
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Trakt Settings')),
+    return SettingsPageScaffold(
+      title: 'Trakt Settings',
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            'Trakt Integration',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Connect your Trakt account to sync watchlists and track what you watch.',
-            style: TextStyle(fontSize: 14, color: Colors.grey),
-          ),
-          const SizedBox(height: 24),
-
-          // Connection status card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        _isConnected
-                            ? Icons.check_circle
-                            : Icons.circle_outlined,
-                        color: _isConnected ? Colors.green : Colors.grey,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _isConnected ? 'Connected' : 'Not connected',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
+                  const SettingsPageHeader(
+                    icon: Icons.sync_rounded,
+                    title: 'Trakt Integration',
+                    subtitle:
+                        'Connect your Trakt account to sync watchlists and track what you watch.',
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Connection status card
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                _isConnected
+                                    ? Icons.check_circle
+                                    : Icons.circle_outlined,
+                                color: _isConnected
+                                    ? kSettingsGreen
+                                    : kSettingsDim2,
                               ),
-                            ),
-                            if (_username != null)
-                              Text(
-                                _username!,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _isConnected
+                                          ? 'Connected'
+                                          : 'Not connected',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    if (_username != null)
+                                      Text(
+                                        _username!,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: kSettingsDim,
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  if (!_isConnected)
-                    _buildLoginSection()
-                  else
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _logout,
-                        icon: const Icon(Icons.logout),
-                        label: const Text('Logout'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                        ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          if (!_isConnected)
+                            _buildLoginSection()
+                          else
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _logout,
+                                icon: const Icon(Icons.logout),
+                                label: const Text('Logout'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: kSettingsRed,
+                                  side: BorderSide(
+                                    color: kSettingsRed.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                ],
-              ),
-            ),
-          ),
-
-          // Sync Catalog Items toggle (only when connected)
-          if (_isConnected) ...[
-            const SizedBox(height: 16),
-            Card(
-              child: SwitchListTile(
-                title: const Text('Sync Catalog Items'),
-                subtitle: const Text(
-                  'Scrobble playback to Trakt for all content played from addons, not just Trakt items',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                value: _syncCatalogItems,
-                onChanged: (value) {
-                  setState(() => _syncCatalogItems = value);
-                  StorageService.setTraktSyncCatalogItems(value);
-                },
-                activeColor: const Color(0xFFED1C24),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 16),
-
-          // Info card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: Colors.blue.shade300,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'How it works',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Clicking "Login with Trakt" will show a code on screen. '
-                    'Enter this code at trakt.tv/activate on your phone or computer to authorize Debrify.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
+
+                  // Sync Catalog Items toggle (only when connected)
+                  if (_isConnected) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: SwitchListTile(
+                        title: const Text('Sync Catalog Items'),
+                        subtitle: Text(
+                          'Scrobble playback to Trakt for all content played from addons, not just Trakt items',
+                          style: TextStyle(fontSize: 12, color: kSettingsDim),
+                        ),
+                        value: _syncCatalogItems,
+                        onChanged: (value) {
+                          setState(() => _syncCatalogItems = value);
+                          StorageService.setTraktSyncCatalogItems(value);
+                        },
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 16),
+
+                  // Info banner
+                  const SettingsInfoBanner(
+                    text:
+                        'How it works: clicking "Login with Trakt" will show a code on screen. '
+                        'Enter this code at trakt.tv/activate on your phone or computer to authorize Debrify.',
                   ),
                 ],
               ),
@@ -393,14 +386,15 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            color: kSettingsPanel2,
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: kSettingsLine),
           ),
           child: Column(
             children: [
-              const Text(
+              Text(
                 'Enter this code:',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: TextStyle(fontSize: 14, color: kSettingsDim),
               ),
               const SizedBox(height: 8),
               GestureDetector(
@@ -418,10 +412,11 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                         fontWeight: FontWeight.bold,
                         letterSpacing: 4,
                         fontFamily: 'monospace',
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(Icons.copy, size: 20, color: Colors.grey),
+                    Icon(Icons.copy, size: 20, color: kSettingsDim),
                   ],
                 ),
               ),
@@ -438,26 +433,26 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
           },
           child: Text(
             'Go to ${_verificationUrl ?? 'https://trakt.tv/activate'}',
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Theme.of(context).colorScheme.primary,
+              color: kSettingsAccent2,
               decoration: TextDecoration.underline,
-              decorationColor: Theme.of(context).colorScheme.primary,
+              decorationColor: kSettingsAccent2,
             ),
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'on your phone or computer',
-          style: TextStyle(fontSize: 13, color: Colors.grey),
+          style: TextStyle(fontSize: 13, color: kSettingsDim),
         ),
         const SizedBox(height: 12),
 
         // Countdown
         Text(
           'Code expires in ${_formatCountdown()}',
-          style: const TextStyle(fontSize: 13, color: Colors.grey),
+          style: TextStyle(fontSize: 13, color: kSettingsDim),
         ),
         const SizedBox(height: 16),
 

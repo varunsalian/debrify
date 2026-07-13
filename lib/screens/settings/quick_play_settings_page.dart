@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/storage_service.dart';
+import 'widgets/settings_widgets.dart';
 
 /// Quick Play settings page for configuring torrent search quick play behavior.
 class QuickPlaySettingsPage extends StatefulWidget {
@@ -33,7 +34,8 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   Future<void> _loadSettings() async {
     final searchTimeout = await StorageService.getQuickPlaySearchTimeout();
     final sourcesTimeout = await StorageService.getStremioSourcesTimeout();
-    final tryMultipleTorrents = await StorageService.getQuickPlayTryMultipleTorrents();
+    final tryMultipleTorrents =
+        await StorageService.getQuickPlayTryMultipleTorrents();
     final maxRetries = await StorageService.getQuickPlayMaxRetries();
     final defaultProvider = await StorageService.getDefaultTorrentProvider();
 
@@ -62,92 +64,46 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Quick Play Settings'),
-          backgroundColor: Theme.of(context).colorScheme.surface,
-        ),
-        body: const Center(child: CircularProgressIndicator()),
+      return const SettingsPageScaffold(
+        title: 'Quick Play Settings',
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quick Play Settings'),
-        backgroundColor: theme.colorScheme.surface,
-        elevation: 0,
-      ),
+    return SettingsPageScaffold(
+      title: 'Quick Play Settings',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: 24),
-            _buildSearchTimeoutSection(context),
-            const SizedBox(height: 24),
-            _buildSourcesTimeoutSection(context),
-            const SizedBox(height: 24),
-            // Cache Fallback section (hide for PikPak - not supported)
-            if (_defaultProvider != 'pikpak') ...[
-              _buildCacheFallbackSection(context),
-              const SizedBox(height: 24),
-            ],
-          ],
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(context),
+                const SizedBox(height: 24),
+                _buildSearchTimeoutSection(context),
+                const SizedBox(height: 24),
+                _buildSourcesTimeoutSection(context),
+                const SizedBox(height: 24),
+                // Cache Fallback section (hide for PikPak - not supported)
+                if (_defaultProvider != 'pikpak') ...[
+                  _buildCacheFallbackSection(context),
+                  const SizedBox(height: 24),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.bolt_rounded,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Quick Play Settings',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Configure quick play behavior for torrent search',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onPrimaryContainer
-                            .withValues(alpha: 0.7),
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return const SettingsPageHeader(
+      icon: Icons.bolt_rounded,
+      title: 'Quick Play Settings',
+      subtitle: 'Configure quick play behavior for torrent search',
     );
   }
 
@@ -193,11 +149,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        color: kSettingsPanel,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: kSettingsLine),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,9 +160,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.timer_rounded,
-                  color: theme.colorScheme.primary,
+                  color: kSettingsAccent2,
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -216,19 +170,18 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                   title,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: kSettingsLine),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
               description,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
             ),
           ),
           InkWell(
@@ -237,19 +190,27 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                 context: context,
                 builder: (ctx) => SimpleDialog(
                   title: Text(title),
-                  children: options.map((s) => SimpleDialogOption(
-                    onPressed: () => Navigator.of(ctx).pop(s),
-                    child: Row(
-                      children: [
-                        if (s == value)
-                          Icon(Icons.check, size: 18, color: theme.colorScheme.primary)
-                        else
-                          const SizedBox(width: 18),
-                        const SizedBox(width: 12),
-                        Text('${s} seconds'),
-                      ],
-                    ),
-                  )).toList(),
+                  children: options
+                      .map(
+                        (s) => SimpleDialogOption(
+                          onPressed: () => Navigator.of(ctx).pop(s),
+                          child: Row(
+                            children: [
+                              if (s == value)
+                                const Icon(
+                                  Icons.check,
+                                  size: 18,
+                                  color: kSettingsAccent2,
+                                )
+                              else
+                                const SizedBox(width: 18),
+                              const SizedBox(width: 12),
+                              Text('$s seconds'),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
               );
               if (selected != null) {
@@ -265,19 +226,23 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                     'Timeout',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
+                      color: Colors.white,
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
+                      color: kSettingsAccent.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '${value}s',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onPrimaryContainer,
+                        color: kSettingsAccent2,
                       ),
                     ),
                   ),
@@ -295,11 +260,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        color: kSettingsPanel,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: kSettingsLine),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,9 +272,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.cached_rounded,
-                  color: theme.colorScheme.primary,
+                  color: kSettingsAccent2,
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -319,21 +282,20 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                   'Cache Fallback',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: kSettingsLine),
 
           // Description
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
               'Control what happens when a torrent is not cached on your debrid service.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
             ),
           ),
 
@@ -350,26 +312,34 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
 
           // Max retries (only visible when try multiple is enabled)
           if (_tryMultipleTorrents) ...[
-            const Divider(height: 1),
+            Divider(height: 1, color: kSettingsLine),
             InkWell(
               onTap: () async {
                 final selected = await showDialog<int>(
                   context: context,
                   builder: (ctx) => SimpleDialog(
                     title: const Text('Max torrents to try'),
-                    children: List.generate(9, (i) => i + 2).map((n) => SimpleDialogOption(
-                      onPressed: () => Navigator.of(ctx).pop(n),
-                      child: Row(
-                        children: [
-                          if (n == _maxRetries)
-                            Icon(Icons.check, size: 18, color: theme.colorScheme.primary)
-                          else
-                            const SizedBox(width: 18),
-                          const SizedBox(width: 12),
-                          Text('$n torrents'),
-                        ],
-                      ),
-                    )).toList(),
+                    children: List.generate(9, (i) => i + 2)
+                        .map(
+                          (n) => SimpleDialogOption(
+                            onPressed: () => Navigator.of(ctx).pop(n),
+                            child: Row(
+                              children: [
+                                if (n == _maxRetries)
+                                  const Icon(
+                                    Icons.check,
+                                    size: 18,
+                                    color: kSettingsAccent2,
+                                  )
+                                else
+                                  const SizedBox(width: 18),
+                                const SizedBox(width: 12),
+                                Text('$n torrents'),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 );
                 if (selected != null) {
@@ -388,28 +358,32 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                           'Max torrents to try',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w500,
+                            color: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Higher values increase chance of finding cached content',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                            color: kSettingsDim,
                           ),
                         ),
                       ],
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
+                        color: kSettingsAccent.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         '$_maxRetries',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onPrimaryContainer,
+                          color: kSettingsAccent2,
                         ),
                       ),
                     ),
@@ -453,12 +427,13 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                     title,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
+                      color: Colors.white,
                     ),
                   ),
                   Text(
                     subtitle,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      color: kSettingsDim,
                     ),
                   ),
                 ],

@@ -5,6 +5,7 @@ import '../../services/debrify_tv_repository.dart';
 import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_continue_watching_service.dart';
 import '../stremio_tv/stremio_tv_service.dart';
+import 'widgets/settings_widgets.dart';
 
 class StartupSettingsPage extends StatefulWidget {
   const StartupSettingsPage({super.key});
@@ -553,13 +554,12 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Startup Settings')),
-        body: const Center(child: CircularProgressIndicator()),
+      return const SettingsPageScaffold(
+        title: 'Startup Settings',
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final theme = Theme.of(context);
     final hasChannels = _channels.isNotEmpty;
     final hasStremioTvChannels = _stremioTvChannels.isNotEmpty;
     final hasPlaylistItems = _playlistItems.isNotEmpty;
@@ -576,415 +576,329 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         hasTraktContinueWatchingMovies ||
         hasTraktContinueWatchingShows;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Startup Settings')),
+    return SettingsPageScaffold(
+      title: 'Startup Settings',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.rocket_launch_rounded,
-                      size: 48,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Auto-Launch on Startup',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Automatically start playing selected content when the app launches',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                const SettingsPageHeader(
+                  icon: Icons.rocket_launch_rounded,
+                  title: 'Auto-Launch on Startup',
+                  subtitle:
+                      'Automatically start playing selected content when the app launches',
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
+                const SizedBox(height: 24),
 
-            // Main settings card
-            Card(
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    secondary: Icon(
-                      Icons.play_circle_rounded,
-                      color: hasAnyContent
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
-                    ),
-                    title: const Text('START ON LAUNCH'),
-                    subtitle: Text(
-                      hasAnyContent
-                          ? 'Auto-play when app launches'
-                          : 'Create channels, add playlist items, connect Trakt, or watch something to enable',
-                      style: TextStyle(
-                        color: hasAnyContent
-                            ? theme.colorScheme.onSurfaceVariant
-                            : theme.colorScheme.error,
+                // Main settings card
+                Card(
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        secondary: Icon(
+                          Icons.play_circle_rounded,
+                          color: hasAnyContent
+                              ? kSettingsAccent2
+                              : kSettingsDim2,
+                        ),
+                        title: const Text('START ON LAUNCH'),
+                        subtitle: Text(
+                          hasAnyContent
+                              ? 'Auto-play when app launches'
+                              : 'Create channels, add playlist items, connect Trakt, or watch something to enable',
+                          style: TextStyle(
+                            color: hasAnyContent ? kSettingsDim : kSettingsRed,
+                          ),
+                        ),
+                        value: _autoLaunchEnabled,
+                        onChanged: hasAnyContent
+                            ? (value) => _toggleAutoLaunch(value)
+                            : null,
                       ),
-                    ),
-                    value: _autoLaunchEnabled,
-                    onChanged: hasAnyContent
-                        ? (value) => _toggleAutoLaunch(value)
-                        : null,
+
+                      // Mode and content selection (shown when toggle is ON)
+                      if (_autoLaunchEnabled && hasAnyContent) ...[
+                        const Divider(height: 1),
+
+                        // Mode selector (Channel vs Playlist)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: _startupMode,
+                            decoration: InputDecoration(
+                              labelText: 'Launch mode',
+                              prefixIcon: Icon(
+                                _startupMode == 'channel'
+                                    ? Icons.tv_rounded
+                                    : _startupMode == 'stremio_tv'
+                                    ? Icons.live_tv_rounded
+                                    : _startupMode == 'continue_watching'
+                                    ? Icons.play_circle_fill_rounded
+                                    : _startupMode.startsWith(
+                                        'trakt_continue_watching',
+                                      )
+                                    ? Icons.history_rounded
+                                    : Icons.playlist_play_rounded,
+                                color: kSettingsAccent2,
+                              ),
+                            ),
+                            items: [
+                              if (hasChannels)
+                                const DropdownMenuItem<String>(
+                                  value: 'channel',
+                                  child: Text('Debrify TV Channel'),
+                                ),
+                              if (hasStremioTvChannels)
+                                const DropdownMenuItem<String>(
+                                  value: 'stremio_tv',
+                                  child: Text('Stremio TV Channel'),
+                                ),
+                              if (hasPlaylistItems)
+                                const DropdownMenuItem<String>(
+                                  value: 'playlist',
+                                  child: Text('Playlist Item'),
+                                ),
+                              if (hasContinueWatchingItems)
+                                const DropdownMenuItem<String>(
+                                  value: 'continue_watching',
+                                  child: Text('Continue Watching Item'),
+                                ),
+                              if (hasTraktContinueWatchingMovies)
+                                const DropdownMenuItem<String>(
+                                  value: 'trakt_continue_watching_movies',
+                                  child: Text('Trakt Continue Watching Movie'),
+                                ),
+                              if (hasTraktContinueWatchingShows)
+                                const DropdownMenuItem<String>(
+                                  value: 'trakt_continue_watching_shows',
+                                  child: Text('Trakt Continue Watching Show'),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) _selectMode(value);
+                            },
+                          ),
+                        ),
+
+                        // Channel selection (shown when mode is 'channel')
+                        if (_startupMode == 'channel' && hasChannels)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _selectedChannelId,
+                              decoration: InputDecoration(
+                                labelText: 'Select channel',
+                                prefixIcon: Icon(
+                                  _selectedChannelId == 'random'
+                                      ? Icons.shuffle_rounded
+                                      : Icons.tv_rounded,
+                                  color: kSettingsAccent2,
+                                ),
+                              ),
+                              items: [
+                                // Random option first
+                                const DropdownMenuItem<String>(
+                                  value: 'random',
+                                  child: Text('Random Channel'),
+                                ),
+                                // Then all channels
+                                ..._channels.map((channel) {
+                                  return DropdownMenuItem<String>(
+                                    value: channel.channelId,
+                                    child: Text(
+                                      channel.name,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }),
+                              ],
+                              onChanged: (value) => _selectChannel(value),
+                            ),
+                          ),
+
+                        if (_startupMode == 'stremio_tv' &&
+                            hasStremioTvChannels)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _selectedStremioTvChannelId,
+                              decoration: InputDecoration(
+                                labelText: 'Select Stremio TV channel',
+                                prefixIcon: Icon(
+                                  _selectedStremioTvChannelId == 'random'
+                                      ? Icons.shuffle_rounded
+                                      : Icons.live_tv_rounded,
+                                  color: kSettingsAccent2,
+                                ),
+                              ),
+                              items: [
+                                const DropdownMenuItem<String>(
+                                  value: 'random',
+                                  child: Text('Random Stremio TV Channel'),
+                                ),
+                                ..._stremioTvChannels.map((channel) {
+                                  return DropdownMenuItem<String>(
+                                    value: channel.id,
+                                    child: Text(
+                                      channel.displayName,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }),
+                              ],
+                              onChanged: (value) =>
+                                  _selectStremioTvChannel(value),
+                            ),
+                          ),
+
+                        // Playlist item selection (shown when mode is 'playlist')
+                        if (_startupMode == 'playlist' && hasPlaylistItems)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _selectedPlaylistItemId,
+                              decoration: InputDecoration(
+                                labelText: 'Select playlist item',
+                                prefixIcon: Icon(
+                                  Icons.playlist_play_rounded,
+                                  color: kSettingsAccent2,
+                                ),
+                              ),
+                              items: _playlistItems.map((item) {
+                                final dedupeKey =
+                                    StorageService.computePlaylistDedupeKey(
+                                      item,
+                                    );
+                                final title =
+                                    (item['title'] as String?) ?? 'Unknown';
+                                return DropdownMenuItem<String>(
+                                  value: dedupeKey,
+                                  child: Text(
+                                    title,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) => _selectPlaylistItem(value),
+                            ),
+                          ),
+
+                        if (_startupMode == 'continue_watching' &&
+                            hasContinueWatchingItems)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _selectedContinueWatchingItemId,
+                              decoration: InputDecoration(
+                                labelText: 'Select Continue Watching item',
+                                prefixIcon: Icon(
+                                  Icons.play_circle_fill_rounded,
+                                  color: kSettingsAccent2,
+                                ),
+                              ),
+                              items: _continueWatchingItems.map((item) {
+                                final imdbId = item['imdbId'] as String;
+                                final title =
+                                    (item['title'] as String?) ?? 'Unknown';
+                                return DropdownMenuItem<String>(
+                                  value: imdbId,
+                                  child: Text(
+                                    title,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) =>
+                                  _selectContinueWatchingItem(value),
+                            ),
+                          ),
+
+                        if (_startupMode == 'trakt_continue_watching_movies' &&
+                            _traktContinueWatchingMovies.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _selectedTraktContinueWatchingMovieId,
+                              decoration: InputDecoration(
+                                labelText: 'Select Trakt movie',
+                                prefixIcon: Icon(
+                                  Icons.movie_rounded,
+                                  color: kSettingsAccent2,
+                                ),
+                              ),
+                              items: _traktContinueWatchingMovies.map((item) {
+                                return DropdownMenuItem<String>(
+                                  value: item.id,
+                                  child: Text(
+                                    item.title,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) =>
+                                  _selectTraktContinueWatchingMovie(value),
+                            ),
+                          ),
+
+                        if (_startupMode == 'trakt_continue_watching_shows' &&
+                            _traktContinueWatchingShows.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _selectedTraktContinueWatchingShowId,
+                              decoration: InputDecoration(
+                                labelText: 'Select Trakt show',
+                                prefixIcon: Icon(
+                                  Icons.tv_rounded,
+                                  color: kSettingsAccent2,
+                                ),
+                              ),
+                              items: _traktContinueWatchingShows.map((item) {
+                                return DropdownMenuItem<String>(
+                                  value: item.id,
+                                  child: Text(
+                                    item.title,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) =>
+                                  _selectTraktContinueWatchingShow(value),
+                            ),
+                          ),
+                      ],
+                    ],
                   ),
-
-                  // Mode and content selection (shown when toggle is ON)
-                  if (_autoLaunchEnabled && hasAnyContent) ...[
-                    const Divider(height: 1),
-
-                    // Mode selector (Channel vs Playlist)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _startupMode,
-                        decoration: InputDecoration(
-                          labelText: 'Launch mode',
-                          prefixIcon: Icon(
-                            _startupMode == 'channel'
-                                ? Icons.tv_rounded
-                                : _startupMode == 'stremio_tv'
-                                ? Icons.live_tv_rounded
-                                : _startupMode == 'continue_watching'
-                                ? Icons.play_circle_fill_rounded
-                                : _startupMode.startsWith(
-                                    'trakt_continue_watching',
-                                  )
-                                ? Icons.history_rounded
-                                : Icons.playlist_play_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: theme.colorScheme.surfaceVariant
-                              .withOpacity(0.3),
-                        ),
-                        items: [
-                          if (hasChannels)
-                            const DropdownMenuItem<String>(
-                              value: 'channel',
-                              child: Text('Debrify TV Channel'),
-                            ),
-                          if (hasStremioTvChannels)
-                            const DropdownMenuItem<String>(
-                              value: 'stremio_tv',
-                              child: Text('Stremio TV Channel'),
-                            ),
-                          if (hasPlaylistItems)
-                            const DropdownMenuItem<String>(
-                              value: 'playlist',
-                              child: Text('Playlist Item'),
-                            ),
-                          if (hasContinueWatchingItems)
-                            const DropdownMenuItem<String>(
-                              value: 'continue_watching',
-                              child: Text('Continue Watching Item'),
-                            ),
-                          if (hasTraktContinueWatchingMovies)
-                            const DropdownMenuItem<String>(
-                              value: 'trakt_continue_watching_movies',
-                              child: Text('Trakt Continue Watching Movie'),
-                            ),
-                          if (hasTraktContinueWatchingShows)
-                            const DropdownMenuItem<String>(
-                              value: 'trakt_continue_watching_shows',
-                              child: Text('Trakt Continue Watching Show'),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) _selectMode(value);
-                        },
-                      ),
-                    ),
-
-                    // Channel selection (shown when mode is 'channel')
-                    if (_startupMode == 'channel' && hasChannels)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: _selectedChannelId,
-                          decoration: InputDecoration(
-                            labelText: 'Select channel',
-                            prefixIcon: Icon(
-                              _selectedChannelId == 'random'
-                                  ? Icons.shuffle_rounded
-                                  : Icons.tv_rounded,
-                              color: theme.colorScheme.primary,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceVariant
-                                .withOpacity(0.3),
-                          ),
-                          items: [
-                            // Random option first
-                            const DropdownMenuItem<String>(
-                              value: 'random',
-                              child: Text('Random Channel'),
-                            ),
-                            // Then all channels
-                            ..._channels.map((channel) {
-                              return DropdownMenuItem<String>(
-                                value: channel.channelId,
-                                child: Text(
-                                  channel.name,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            }).toList(),
-                          ],
-                          onChanged: (value) => _selectChannel(value),
-                        ),
-                      ),
-
-                    if (_startupMode == 'stremio_tv' && hasStremioTvChannels)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: _selectedStremioTvChannelId,
-                          decoration: InputDecoration(
-                            labelText: 'Select Stremio TV channel',
-                            prefixIcon: Icon(
-                              _selectedStremioTvChannelId == 'random'
-                                  ? Icons.shuffle_rounded
-                                  : Icons.live_tv_rounded,
-                              color: theme.colorScheme.primary,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceVariant
-                                .withOpacity(0.3),
-                          ),
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: 'random',
-                              child: Text('Random Stremio TV Channel'),
-                            ),
-                            ..._stremioTvChannels.map((channel) {
-                              return DropdownMenuItem<String>(
-                                value: channel.id,
-                                child: Text(
-                                  channel.displayName,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            }).toList(),
-                          ],
-                          onChanged: (value) => _selectStremioTvChannel(value),
-                        ),
-                      ),
-
-                    // Playlist item selection (shown when mode is 'playlist')
-                    if (_startupMode == 'playlist' && hasPlaylistItems)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: _selectedPlaylistItemId,
-                          decoration: InputDecoration(
-                            labelText: 'Select playlist item',
-                            prefixIcon: Icon(
-                              Icons.playlist_play_rounded,
-                              color: theme.colorScheme.primary,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceVariant
-                                .withOpacity(0.3),
-                          ),
-                          items: _playlistItems.map((item) {
-                            final dedupeKey =
-                                StorageService.computePlaylistDedupeKey(item);
-                            final title =
-                                (item['title'] as String?) ?? 'Unknown';
-                            return DropdownMenuItem<String>(
-                              value: dedupeKey,
-                              child: Text(
-                                title,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) => _selectPlaylistItem(value),
-                        ),
-                      ),
-
-                    if (_startupMode == 'continue_watching' &&
-                        hasContinueWatchingItems)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: _selectedContinueWatchingItemId,
-                          decoration: InputDecoration(
-                            labelText: 'Select Continue Watching item',
-                            prefixIcon: Icon(
-                              Icons.play_circle_fill_rounded,
-                              color: theme.colorScheme.primary,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceVariant
-                                .withOpacity(0.3),
-                          ),
-                          items: _continueWatchingItems.map((item) {
-                            final imdbId = item['imdbId'] as String;
-                            final title =
-                                (item['title'] as String?) ?? 'Unknown';
-                            return DropdownMenuItem<String>(
-                              value: imdbId,
-                              child: Text(
-                                title,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) =>
-                              _selectContinueWatchingItem(value),
-                        ),
-                      ),
-
-                    if (_startupMode == 'trakt_continue_watching_movies' &&
-                        _traktContinueWatchingMovies.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: _selectedTraktContinueWatchingMovieId,
-                          decoration: InputDecoration(
-                            labelText: 'Select Trakt movie',
-                            prefixIcon: Icon(
-                              Icons.movie_rounded,
-                              color: theme.colorScheme.primary,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceVariant
-                                .withOpacity(0.3),
-                          ),
-                          items: _traktContinueWatchingMovies.map((item) {
-                            return DropdownMenuItem<String>(
-                              value: item.id,
-                              child: Text(
-                                item.title,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) =>
-                              _selectTraktContinueWatchingMovie(value),
-                        ),
-                      ),
-
-                    if (_startupMode == 'trakt_continue_watching_shows' &&
-                        _traktContinueWatchingShows.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: _selectedTraktContinueWatchingShowId,
-                          decoration: InputDecoration(
-                            labelText: 'Select Trakt show',
-                            prefixIcon: Icon(
-                              Icons.tv_rounded,
-                              color: theme.colorScheme.primary,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceVariant
-                                .withOpacity(0.3),
-                          ),
-                          items: _traktContinueWatchingShows.map((item) {
-                            return DropdownMenuItem<String>(
-                              value: item.id,
-                              child: Text(
-                                item.title,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) =>
-                              _selectTraktContinueWatchingShow(value),
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Info card
-            Card(
-              color: theme.colorScheme.primaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: theme.colorScheme.onPrimaryContainer,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _startupMode == 'channel'
-                            ? 'When enabled, the app will automatically navigate to Debrify TV and start playing your selected channel on startup. This skips the normal home screen.'
-                            : _startupMode == 'stremio_tv'
-                            ? 'When enabled, the app will automatically navigate to Stremio TV and start playing your selected channel on startup. This skips the normal home screen.'
-                            : _startupMode == 'continue_watching'
-                            ? 'When enabled, the app will automatically quick play your selected Continue Watching item on startup. This skips the normal home screen.'
-                            : _startupMode.startsWith('trakt_continue_watching')
-                            ? 'When enabled, the app will automatically quick play your selected Trakt Continue Watching item on startup. This skips the normal home screen.'
-                            : 'When enabled, the app will automatically start playing your selected playlist item on startup. This skips the normal home screen.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
-              ),
+                const SizedBox(height: 16),
+
+                // Info banner
+                SettingsInfoBanner(
+                  text: _startupMode == 'channel'
+                      ? 'When enabled, the app will automatically navigate to Debrify TV and start playing your selected channel on startup. This skips the normal home screen.'
+                      : _startupMode == 'stremio_tv'
+                      ? 'When enabled, the app will automatically navigate to Stremio TV and start playing your selected channel on startup. This skips the normal home screen.'
+                      : _startupMode == 'continue_watching'
+                      ? 'When enabled, the app will automatically quick play your selected Continue Watching item on startup. This skips the normal home screen.'
+                      : _startupMode.startsWith('trakt_continue_watching')
+                      ? 'When enabled, the app will automatically quick play your selected Trakt Continue Watching item on startup. This skips the normal home screen.'
+                      : 'When enabled, the app will automatically start playing your selected playlist item on startup. This skips the normal home screen.',
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

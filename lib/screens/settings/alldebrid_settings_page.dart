@@ -5,6 +5,7 @@ import '../../services/alldebrid_account_service.dart';
 import '../../services/aptabase_service.dart';
 import '../../widgets/alldebrid_account_status_widget.dart';
 import '../../services/main_page_bridge.dart';
+import 'widgets/settings_widgets.dart';
 
 class AllDebridSettingsPage extends StatefulWidget {
   const AllDebridSettingsPage({super.key});
@@ -80,7 +81,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: err ? Colors.red : null,
+        backgroundColor: err ? kSettingsRed : null,
       ),
     );
   }
@@ -185,484 +186,478 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const SettingsPageScaffold(
+        title: 'AllDebrid Settings',
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     final user = AllDebridAccountService.currentUser;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('AllDebrid Settings')),
-      body: ListView(
+    return SettingsPageScaffold(
+      title: 'AllDebrid Settings',
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: SwitchListTile.adaptive(
-              value: _integrationEnabled,
-              onChanged: (value) => _updateIntegrationEnabled(value),
-              title: const Text('Enable AllDebrid'),
-              subtitle: const Text(
-                'Turn this off to hide AllDebrid options across the app.',
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 4,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          IgnorePointer(
-            ignoring: !_integrationEnabled,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: _integrationEnabled ? 1.0 : 0.5,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Card(
+                  child: SwitchListTile.adaptive(
+                    value: _integrationEnabled,
+                    onChanged: (value) => _updateIntegrationEnabled(value),
+                    title: const Text('Enable AllDebrid'),
+                    subtitle: const Text(
+                      'Turn this off to hide AllDebrid options across the app.',
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.key,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'API Key',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              const Spacer(),
-                              if (_savedApiKey != null && !_isEditing)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.green.withValues(
-                                        alpha: 0.3,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                IgnorePointer(
+                  ignoring: !_integrationEnabled,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: _integrationEnabled ? 1.0 : 0.5,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.key,
+                                      color: kSettingsAccent2,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'API Key',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    const Spacer(),
+                                    if (_savedApiKey != null && !_isEditing)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: kSettingsGreen.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: kSettingsGreen.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                          ),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.check_circle,
+                                              color: kSettingsGreen,
+                                              size: 14,
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Connected',
+                                              style: TextStyle(
+                                                color: kSettingsGreen,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                if (_isEditing) ...[
+                                  Shortcuts(
+                                    shortcuts: _dpadShortcuts,
+                                    child: Actions(
+                                      actions: <Type, Action<Intent>>{
+                                        NextFocusIntent:
+                                            CallbackAction<NextFocusIntent>(
+                                              onInvoke: (intent) {
+                                                FocusScope.of(
+                                                  context,
+                                                ).nextFocus();
+                                                return null;
+                                              },
+                                            ),
+                                        PreviousFocusIntent:
+                                            CallbackAction<PreviousFocusIntent>(
+                                              onInvoke: (intent) {
+                                                FocusScope.of(
+                                                  context,
+                                                ).previousFocus();
+                                                return null;
+                                              },
+                                            ),
+                                      },
+                                      child: TextField(
+                                        focusNode: _apiKeyFocusNode,
+                                        controller: _apiKeyController,
+                                        obscureText: _obscure,
+                                        enabled: !_saving,
+                                        textInputAction: TextInputAction.done,
+                                        decoration: InputDecoration(
+                                          labelText: 'AllDebrid API Key',
+                                          prefixIcon: const Icon(
+                                            Icons.security,
+                                          ),
+                                          suffixIcon: IconButton(
+                                            icon: Icon(
+                                              _obscure
+                                                  ? Icons.visibility
+                                                  : Icons.visibility_off,
+                                            ),
+                                            onPressed: () => setState(
+                                              () => _obscure = !_obscure,
+                                            ),
+                                          ),
+                                        ),
+                                        onSubmitted: (_) =>
+                                            _saving ? null : _saveKey(),
                                       ),
                                     ),
                                   ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                  const SizedBox(height: 12),
+                                  Row(
                                     children: [
-                                      Icon(
-                                        Icons.check_circle,
-                                        color: Colors.green,
-                                        size: 14,
+                                      Expanded(
+                                        child: FilledButton(
+                                          onPressed: _saving ? null : _saveKey,
+                                          child: _saving
+                                              ? const SizedBox(
+                                                  height: 18,
+                                                  width: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : const Text('Save'),
+                                        ),
                                       ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Connected',
-                                        style: TextStyle(
-                                          color: Colors.green,
-                                          fontSize: 12,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: _saving
+                                              ? null
+                                              : () => setState(() {
+                                                  _isEditing = false;
+                                                  _apiKeyController.clear();
+                                                }),
+                                          child: const Text('Cancel'),
                                         ),
                                       ),
                                     ],
                                   ),
+                                ] else ...[
+                                  if (_savedApiKey != null) ...[
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: kSettingsPanel2,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: kSettingsLine,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              '••••••••••••••••••••••••••••••••',
+                                              style: TextStyle(
+                                                color: kSettingsDim,
+                                              ),
+                                            ),
+                                          ),
+                                          Icon(
+                                            Icons.visibility_off,
+                                            color: kSettingsDim2,
+                                            size: 16,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        focusNode: _logoutButtonFocusNode,
+                                        onPressed: _deleteKey,
+                                        icon: const Icon(Icons.logout),
+                                        label: const Text('Logout'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: kSettingsRed,
+                                          side: BorderSide(
+                                            color: kSettingsRed.withValues(
+                                              alpha: 0.45,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    FilledButton.icon(
+                                      focusNode: _addApiKeyButtonFocusNode,
+                                      onPressed: () {
+                                        setState(() {
+                                          _isEditing = true;
+                                          _apiKeyController.clear();
+                                        });
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                              if (mounted) {
+                                                _apiKeyFocusNode.requestFocus();
+                                              }
+                                            });
+                                      },
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Add API Key'),
+                                    ),
+                                  ],
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Card(
+                          child: Column(
+                            children: [
+                              SwitchListTile(
+                                value: _hiddenFromNav,
+                                onChanged: _savedApiKey != null
+                                    ? _toggleHideFromNav
+                                    : null,
+                                title: const Text(
+                                  'Hide from Navigation',
+                                  style: TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                                subtitle: Text(
+                                  _savedApiKey == null
+                                      ? 'Login to enable this option'
+                                      : _hiddenFromNav
+                                      ? 'AllDebrid is hidden from navigation'
+                                      : 'Show/hide the AllDebrid tab in the navigation bar',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                secondary: Icon(
+                                  _hiddenFromNav
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: _hiddenFromNav ? kSettingsAmber : null,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 4,
+                                ),
+                              ),
+                              if (_hiddenFromNav)
+                                const Padding(
+                                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                  child: SettingsInfoBanner(
+                                    text:
+                                        'To show AllDebrid in navigation again, please logout and login',
+                                    tone: SettingsBannerTone.warning,
+                                  ),
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          if (_isEditing) ...[
-                            Shortcuts(
-                              shortcuts: _dpadShortcuts,
-                              child: Actions(
-                                actions: <Type, Action<Intent>>{
-                                  NextFocusIntent:
-                                      CallbackAction<NextFocusIntent>(
-                                        onInvoke: (intent) {
-                                          FocusScope.of(context).nextFocus();
-                                          return null;
-                                        },
-                                      ),
-                                  PreviousFocusIntent:
-                                      CallbackAction<PreviousFocusIntent>(
-                                        onInvoke: (intent) {
-                                          FocusScope.of(
-                                            context,
-                                          ).previousFocus();
-                                          return null;
-                                        },
-                                      ),
-                                },
-                                child: TextField(
-                                  focusNode: _apiKeyFocusNode,
-                                  controller: _apiKeyController,
-                                  obscureText: _obscure,
-                                  enabled: !_saving,
-                                  textInputAction: TextInputAction.done,
-                                  decoration: InputDecoration(
-                                    labelText: 'AllDebrid API Key',
-                                    prefixIcon: const Icon(Icons.security),
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _obscure
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                      ),
-                                      onPressed: () =>
-                                          setState(() => _obscure = !_obscure),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onSubmitted: (_) =>
-                                      _saving ? null : _saveKey(),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
+                        ),
+                        const SizedBox(height: 16),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: FilledButton(
-                                    onPressed: _saving ? null : _saveKey,
-                                    child: _saving
-                                        ? const SizedBox(
-                                            height: 18,
-                                            width: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : const Text('Save'),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: _saving
-                                        ? null
-                                        : () => setState(() {
-                                            _isEditing = false;
-                                            _apiKeyController.clear();
-                                          }),
-                                    child: const Text('Cancel'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ] else ...[
-                            if (_savedApiKey != null) ...[
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.grey[300]!),
-                                ),
-                                child: Row(
+                                Row(
                                   children: [
-                                    const Expanded(
-                                      child: Text(
-                                        '••••••••••••••••••••••••••••••••',
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
+                                    const Icon(
+                                      Icons.play_circle_outline,
+                                      color: kSettingsAccent2,
+                                      size: 20,
                                     ),
-                                    Icon(
-                                      Icons.visibility_off,
-                                      color: Colors.grey[500],
-                                      size: 16,
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Post-Torrent Action',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  focusNode: _logoutButtonFocusNode,
-                                  onPressed: _deleteKey,
-                                  icon: const Icon(Icons.logout),
-                                  label: const Text('Logout'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.red,
-                                  ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Choose what happens after adding a torrent to AllDebrid',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: kSettingsDim),
                                 ),
-                              ),
-                            ] else ...[
-                              FilledButton.icon(
-                                focusNode: _addApiKeyButtonFocusNode,
-                                onPressed: () {
-                                  setState(() {
-                                    _isEditing = true;
-                                    _apiKeyController.clear();
-                                  });
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (mounted) {
-                                      _apiKeyFocusNode.requestFocus();
-                                    }
-                                  });
-                                },
-                                icon: const Icon(Icons.add),
-                                label: const Text('Add API Key'),
-                              ),
-                            ],
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        SwitchListTile(
-                          value: _hiddenFromNav,
-                          onChanged: _savedApiKey != null
-                              ? _toggleHideFromNav
-                              : null,
-                          title: const Text(
-                            'Hide from Navigation',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: Text(
-                            _savedApiKey == null
-                                ? 'Login to enable this option'
-                                : _hiddenFromNav
-                                    ? 'AllDebrid is hidden from navigation'
-                                    : 'Show/hide the AllDebrid tab in the navigation bar',
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                          secondary: Icon(
-                            _hiddenFromNav
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                            color: _hiddenFromNav ? Colors.amber : null,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 4,
+                                const SizedBox(height: 12),
+                                RadioListTile<String>(
+                                  title: const Text('None'),
+                                  subtitle: const Text(
+                                    'Do nothing - just add the torrent to AllDebrid',
+                                  ),
+                                  value: 'none',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Let me choose'),
+                                  subtitle: const Text(
+                                    'Show a quick Play/Download picker after adding',
+                                  ),
+                                  value: 'choose',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Play video'),
+                                  subtitle: const Text(
+                                    'Automatically open the video player',
+                                  ),
+                                  value: 'play',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Download to device'),
+                                  subtitle: const Text(
+                                    'If the torrent contains only video files, all '
+                                    'videos will download immediately',
+                                  ),
+                                  value: 'download',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        if (_hiddenFromNav)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.amber.withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Row(
+                        const SizedBox(height: 16),
+                        if (user != null) ...[
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    size: 16,
-                                    color: Colors.amber.shade700,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'To show AllDebrid in navigation again, please logout and login',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.amber.shade700,
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.account_circle,
+                                        color: kSettingsAccent2,
+                                        size: 20,
                                       ),
-                                    ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Account Information',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ],
                                   ),
+                                  const SizedBox(height: 16),
+                                  AllDebridAccountStatusWidget(user: user),
                                 ],
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.play_circle_outline,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Post-Torrent Action',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Choose what happens after adding a torrent to AllDebrid',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.grey[600]),
-                          ),
-                          const SizedBox(height: 12),
-                          RadioListTile<String>(
-                            title: const Text('None'),
-                            subtitle: const Text(
-                              'Do nothing - just add the torrent to AllDebrid',
-                            ),
-                            value: 'none',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('Let me choose'),
-                            subtitle: const Text(
-                              'Show a quick Play/Download picker after adding',
-                            ),
-                            value: 'choose',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('Play video'),
-                            subtitle: const Text(
-                              'Automatically open the video player',
-                            ),
-                            value: 'play',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('Download to device'),
-                            subtitle: const Text(
-                              'If the torrent contains only video files, all '
-                              'videos will download immediately',
-                            ),
-                            value: 'download',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
+                          const SizedBox(height: 16),
                         ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (user != null) ...[
-                    Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  Icons.account_circle,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  size: 20,
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.help_outline,
+                                      color: kSettingsAccent2,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'How to get your AllDebrid API key',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(height: 12),
                                 Text(
-                                  'Account Information',
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                  '1. Visit: alldebrid.com/apikeys\n'
+                                  '2. Log in if prompted\n'
+                                  '3. Create a new API key (give it any name)\n'
+                                  '4. Copy the key and paste it above',
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: kSettingsDim,
+                                        height: 1.5,
+                                      ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            AllDebridAccountStatusWidget(user: user),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  Card(
-                    elevation: 1,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.help_outline,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'How to get your AllDebrid API key',
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            '1. Visit: alldebrid.com/apikeys\n'
-                            '2. Log in if prompted\n'
-                            '3. Create a new API key (give it any name)\n'
-                            '4. Copy the key and paste it above',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Colors.grey[600],
-                                  height: 1.5,
-                                ),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

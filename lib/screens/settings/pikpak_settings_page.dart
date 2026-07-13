@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +7,7 @@ import '../../services/pikpak_api_service.dart';
 import '../../services/aptabase_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/pikpak_folder_picker_dialog.dart';
+import 'widgets/settings_widgets.dart';
 
 class PikPakSettingsPage extends StatefulWidget {
   const PikPakSettingsPage({super.key});
@@ -140,7 +140,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
             return AlertDialog(
               title: Row(
                 children: [
-                  Icon(Icons.folder_special, color: Colors.amber),
+                  const Icon(Icons.folder_special, color: kSettingsAmber),
                   const SizedBox(width: 12),
                   const Expanded(child: Text('Folder Restriction (Optional)')),
                 ],
@@ -351,27 +351,20 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
+                    color: kSettingsAmber.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Colors.amber.withValues(alpha: 0.3),
+                      color: kSettingsAmber.withValues(alpha: 0.3),
                     ),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: Colors.amber.shade700,
-                      ),
-                      const SizedBox(width: 8),
+                      Icon(Icons.info_outline, size: 18, color: kSettingsAmber),
+                      SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'To show PikPak again, you must logout and login. This is a security measure.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.amber.shade700,
-                          ),
+                          style: TextStyle(fontSize: 13, color: kSettingsAmber),
                         ),
                       ),
                     ],
@@ -432,7 +425,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? kSettingsRed : kSettingsGreen,
       ),
     );
   }
@@ -440,24 +433,24 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const SettingsPageScaffold(
+        title: 'PikPak Settings',
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('PikPak Settings')),
+    return SettingsPageScaffold(
+      title: 'PikPak Settings',
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text(
-              'PikPak Integration',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Send magnet links directly to your PikPak cloud storage.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+            const SettingsPageHeader(
+              icon: Icons.cloud_rounded,
+              title: 'PikPak Integration',
+              subtitle:
+                  'Send magnet links directly to your PikPak cloud storage.',
             ),
             const SizedBox(height: 24),
 
@@ -526,40 +519,16 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               _hiddenFromNav
                                   ? Icons.visibility_off
                                   : Icons.visibility,
-                              color: _hiddenFromNav ? Colors.amber : null,
+                              color: _hiddenFromNav ? kSettingsAmber : null,
                             ),
                           ),
                           if (_hiddenFromNav)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.amber.withValues(alpha: 0.3),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.info_outline,
-                                      size: 16,
-                                      color: Colors.amber.shade700,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'To show PikPak in navigation again, please logout and login',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.amber.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: SettingsInfoBanner(
+                                text:
+                                    'To show PikPak in navigation again, please logout and login',
+                                tone: SettingsBannerTone.warning,
                               ),
                             ),
                         ],
@@ -638,9 +607,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           children: [
                             Row(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.play_circle_outline,
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: kSettingsAccent2,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
@@ -655,7 +624,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                             Text(
                               'Choose what happens after adding a torrent to PikPak',
                               style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: Colors.grey[600]),
+                                  ?.copyWith(color: kSettingsDim),
                             ),
                             const SizedBox(height: 12),
                             RadioListTile<String>(
@@ -749,7 +718,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                             leading: Icon(
                               Icons.folder_special,
                               color: _restrictedFolderId != null
-                                  ? Colors.amber
+                                  ? kSettingsAmber
                                   : null,
                             ),
                             title: const Text(
@@ -769,38 +738,10 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.withValues(
-                                        alpha: 0.1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.amber.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.info_outline,
-                                          size: 16,
-                                          color: Colors.amber.shade700,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'To change or remove this restriction, please logout and login again',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.amber.shade700,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  const SettingsInfoBanner(
+                                    text:
+                                        'To change or remove this restriction, please logout and login again',
+                                    tone: SettingsBannerTone.warning,
                                   ),
                                   const SizedBox(height: 12),
                                   Row(
@@ -821,7 +762,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                                         icon: const Icon(Icons.clear, size: 18),
                                         label: const Text('Remove'),
                                         style: OutlinedButton.styleFrom(
-                                          foregroundColor: Colors.red,
+                                          foregroundColor: kSettingsRed,
                                         ),
                                       ),
                                     ],
@@ -851,25 +792,19 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                     // Connection status
                     Card(
                       color: _isConnected
-                          ? Colors.green.withValues(alpha: 0.15)
-                          : Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
+                          ? kSettingsGreen.withValues(alpha: 0.15)
+                          : kSettingsPanel,
                       child: ListTile(
                         leading: Icon(
                           _isConnected
                               ? Icons.check_circle
                               : Icons.circle_outlined,
-                          color: _isConnected
-                              ? Colors.green
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                          color: _isConnected ? kSettingsGreen : kSettingsDim,
                         ),
                         title: Text(
                           _isConnected ? 'Connected' : 'Not Connected',
                           style: TextStyle(
-                            color: _isConnected
-                                ? Colors.green.shade700
-                                : Theme.of(context).colorScheme.onSurface,
+                            color: _isConnected ? kSettingsGreen : Colors.white,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -877,11 +812,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           _isConnected
                               ? 'Connected as: ${_emailController.text}'
                               : 'Login with your PikPak account below',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
+                          style: TextStyle(color: kSettingsDim),
                         ),
                       ),
                     ),
@@ -965,6 +896,12 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                         onPressed: _logout,
                         icon: const Icon(Icons.logout),
                         label: const Text('Logout'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: kSettingsRed,
+                          side: BorderSide(
+                            color: kSettingsRed.withValues(alpha: 0.5),
+                          ),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 32),
@@ -1123,7 +1060,6 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Focus(
       onKeyEvent: _handleKeyEvent,
       skipTraversal: true,
@@ -1132,12 +1068,12 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
-              ? Border.all(color: theme.colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                    color: kSettingsAccent.withValues(alpha: 0.2),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -1154,7 +1090,6 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
             labelText: widget.labelText,
             hintText: widget.hintText,
             prefixIcon: widget.prefixIcon,
-            border: const OutlineInputBorder(),
           ),
           onSubmitted: widget.onSubmitted,
         ),

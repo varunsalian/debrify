@@ -5,6 +5,7 @@ import '../../services/premiumize_account_service.dart';
 import '../../services/aptabase_service.dart';
 import '../../widgets/premiumize_account_status_widget.dart';
 import '../../services/main_page_bridge.dart';
+import 'widgets/settings_widgets.dart';
 
 class PremiumizeSettingsPage extends StatefulWidget {
   const PremiumizeSettingsPage({super.key});
@@ -88,7 +89,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: err ? Colors.red : null,
+        backgroundColor: err ? kSettingsRed : null,
       ),
     );
   }
@@ -152,40 +153,16 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
+              children: const [
+                Text(
                   'This will hide the Premiumize tab from navigation.',
                   style: TextStyle(fontWeight: FontWeight.w500),
                 ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.amber.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: Colors.amber.shade700,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'To show Premiumize again, you must logout and login. This is a security measure.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.amber.shade700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                SizedBox(height: 12),
+                SettingsInfoBanner(
+                  text:
+                      'To show Premiumize again, you must logout and login. This is a security measure.',
+                  tone: SettingsBannerTone.warning,
                 ),
               ],
             ),
@@ -251,530 +228,536 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const SettingsPageScaffold(
+        title: 'Premiumize Settings',
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     final user = PremiumizeAccountService.currentUser;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Premiumize Settings')),
+    return SettingsPageScaffold(
+      title: 'Premiumize Settings',
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: SwitchListTile.adaptive(
-              value: _integrationEnabled,
-              onChanged: (value) => _updateIntegrationEnabled(value),
-              title: const Text('Enable Premiumize'),
-              subtitle: const Text(
-                'Turn this off to hide Premiumize options across the app.',
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 4,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          IgnorePointer(
-            ignoring: !_integrationEnabled,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: _integrationEnabled ? 1.0 : 0.5,
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.key,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'API Key',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              const Spacer(),
-                              if (_savedApiKey != null && !_isEditing)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.green.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.check_circle,
-                                        color: Colors.green,
-                                        size: 14,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Connected',
-                                        style: TextStyle(
-                                          color: Colors.green,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          if (_isEditing) ...[
-                            Shortcuts(
-                              shortcuts: _dpadShortcuts,
-                              child: Actions(
-                                actions: <Type, Action<Intent>>{
-                                  NextFocusIntent:
-                                      CallbackAction<NextFocusIntent>(
-                                        onInvoke: (intent) {
-                                          FocusScope.of(context).nextFocus();
-                                          return null;
-                                        },
-                                      ),
-                                  PreviousFocusIntent:
-                                      CallbackAction<PreviousFocusIntent>(
-                                        onInvoke: (intent) {
-                                          FocusScope.of(
-                                            context,
-                                          ).previousFocus();
-                                          return null;
-                                        },
-                                      ),
-                                },
-                                child: TextField(
-                                  focusNode: _apiKeyFocusNode,
-                                  controller: _apiKeyController,
-                                  obscureText: _obscure,
-                                  enabled: !_saving,
-                                  textInputAction: TextInputAction.done,
-                                  decoration: InputDecoration(
-                                    labelText: 'Premiumize API Key',
-                                    prefixIcon: const Icon(Icons.security),
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _obscure
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                      ),
-                                      onPressed: () =>
-                                          setState(() => _obscure = !_obscure),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onSubmitted: (_) =>
-                                      _saving ? null : _saveKey(),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: FilledButton(
-                                    onPressed: _saving ? null : _saveKey,
-                                    child: _saving
-                                        ? const SizedBox(
-                                            height: 18,
-                                            width: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : const Text('Save'),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: _saving
-                                        ? null
-                                        : () => setState(() {
-                                            _isEditing = false;
-                                            _apiKeyController.clear();
-                                          }),
-                                    child: const Text('Cancel'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ] else ...[
-                            if (_savedApiKey != null) ...[
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.grey[300]!),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Expanded(
-                                      child: Text(
-                                        '••••••••••••••••••••••••••••••••',
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
-                                    ),
-                                    Icon(
-                                      Icons.visibility_off,
-                                      color: Colors.grey[500],
-                                      size: 16,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  focusNode: _logoutButtonFocusNode,
-                                  onPressed: _deleteKey,
-                                  icon: const Icon(Icons.logout),
-                                  label: const Text('Logout'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.red,
-                                  ),
-                                ),
-                              ),
-                            ] else ...[
-                              FilledButton.icon(
-                                focusNode: _addApiKeyButtonFocusNode,
-                                onPressed: () {
-                                  setState(() {
-                                    _isEditing = true;
-                                    _apiKeyController.clear();
-                                  });
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (mounted) {
-                                      _apiKeyFocusNode.requestFocus();
-                                    }
-                                  });
-                                },
-                                icon: const Icon(Icons.add),
-                                label: const Text('Add API Key'),
-                              ),
-                            ],
-                          ],
-                        ],
+                    child: SwitchListTile.adaptive(
+                      value: _integrationEnabled,
+                      onChanged: (value) => _updateIntegrationEnabled(value),
+                      title: const Text('Enable Premiumize'),
+                      subtitle: const Text(
+                        'Turn this off to hide Premiumize options across the app.',
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Hide from Navigation Toggle
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        SwitchListTile(
-                          value: _hiddenFromNav,
-                          onChanged:
-                              _savedApiKey != null ? _toggleHideFromNav : null,
-                          title: const Text(
-                            'Hide from Navigation',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: Text(
-                            _savedApiKey == null
-                                ? 'Login to enable this option'
-                                : _hiddenFromNav
-                                ? 'Premiumize is hidden from navigation'
-                                : 'Show/hide Premiumize tab from navigation bar',
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                          secondary: Icon(
-                            _hiddenFromNav
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                            color: _hiddenFromNav ? Colors.amber : null,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 4,
-                          ),
-                        ),
-                        if (_hiddenFromNav)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.amber.withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Row(
+                  IgnorePointer(
+                    ignoring: !_integrationEnabled,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: _integrationEnabled ? 1.0 : 0.5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    size: 16,
-                                    color: Colors.amber.shade700,
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.key,
+                                        color: kSettingsAccent2,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'API Key',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                      const Spacer(),
+                                      if (_savedApiKey != null && !_isEditing)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: kSettingsGreen.withValues(
+                                              alpha: 0.1,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: kSettingsGreen.withValues(
+                                                alpha: 0.3,
+                                              ),
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.check_circle,
+                                                color: kSettingsGreen,
+                                                size: 14,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'Connected',
+                                                style: TextStyle(
+                                                  color: kSettingsGreen,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'To show Premiumize in navigation again, please logout and login',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.amber.shade700,
+                                  const SizedBox(height: 16),
+                                  if (_isEditing) ...[
+                                    Shortcuts(
+                                      shortcuts: _dpadShortcuts,
+                                      child: Actions(
+                                        actions: <Type, Action<Intent>>{
+                                          NextFocusIntent:
+                                              CallbackAction<NextFocusIntent>(
+                                                onInvoke: (intent) {
+                                                  FocusScope.of(
+                                                    context,
+                                                  ).nextFocus();
+                                                  return null;
+                                                },
+                                              ),
+                                          PreviousFocusIntent:
+                                              CallbackAction<
+                                                PreviousFocusIntent
+                                              >(
+                                                onInvoke: (intent) {
+                                                  FocusScope.of(
+                                                    context,
+                                                  ).previousFocus();
+                                                  return null;
+                                                },
+                                              ),
+                                        },
+                                        child: TextField(
+                                          focusNode: _apiKeyFocusNode,
+                                          controller: _apiKeyController,
+                                          obscureText: _obscure,
+                                          enabled: !_saving,
+                                          textInputAction: TextInputAction.done,
+                                          decoration: InputDecoration(
+                                            labelText: 'Premiumize API Key',
+                                            prefixIcon: const Icon(
+                                              Icons.security,
+                                            ),
+                                            suffixIcon: IconButton(
+                                              icon: Icon(
+                                                _obscure
+                                                    ? Icons.visibility
+                                                    : Icons.visibility_off,
+                                              ),
+                                              onPressed: () => setState(
+                                                () => _obscure = !_obscure,
+                                              ),
+                                            ),
+                                          ),
+                                          onSubmitted: (_) =>
+                                              _saving ? null : _saveKey(),
+                                        ),
                                       ),
                                     ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: FilledButton(
+                                            onPressed: _saving
+                                                ? null
+                                                : _saveKey,
+                                            child: _saving
+                                                ? const SizedBox(
+                                                    height: 18,
+                                                    width: 18,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                        ),
+                                                  )
+                                                : const Text('Save'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: _saving
+                                                ? null
+                                                : () => setState(() {
+                                                    _isEditing = false;
+                                                    _apiKeyController.clear();
+                                                  }),
+                                            child: const Text('Cancel'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ] else ...[
+                                    if (_savedApiKey != null) ...[
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: kSettingsPanel2,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: kSettingsLine,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                '••••••••••••••••••••••••••••••••',
+                                                style: TextStyle(
+                                                  color: kSettingsDim,
+                                                ),
+                                              ),
+                                            ),
+                                            Icon(
+                                              Icons.visibility_off,
+                                              color: kSettingsDim2,
+                                              size: 16,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: OutlinedButton.icon(
+                                          focusNode: _logoutButtonFocusNode,
+                                          onPressed: _deleteKey,
+                                          icon: const Icon(Icons.logout),
+                                          label: const Text('Logout'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: kSettingsRed,
+                                            side: BorderSide(
+                                              color: kSettingsRed.withValues(
+                                                alpha: 0.45,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      FilledButton.icon(
+                                        focusNode: _addApiKeyButtonFocusNode,
+                                        onPressed: () {
+                                          setState(() {
+                                            _isEditing = true;
+                                            _apiKeyController.clear();
+                                          });
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback((_) {
+                                                if (mounted) {
+                                                  _apiKeyFocusNode
+                                                      .requestFocus();
+                                                }
+                                              });
+                                        },
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Add API Key'),
+                                      ),
+                                    ],
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Hide from Navigation Toggle
+                          Card(
+                            child: Column(
+                              children: [
+                                SwitchListTile(
+                                  value: _hiddenFromNav,
+                                  onChanged: _savedApiKey != null
+                                      ? _toggleHideFromNav
+                                      : null,
+                                  title: const Text(
+                                    'Hide from Navigation',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    _savedApiKey == null
+                                        ? 'Login to enable this option'
+                                        : _hiddenFromNav
+                                        ? 'Premiumize is hidden from navigation'
+                                        : 'Show/hide Premiumize tab from navigation bar',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  secondary: Icon(
+                                    _hiddenFromNav
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                    color: _hiddenFromNav
+                                        ? kSettingsAmber
+                                        : null,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 4,
+                                  ),
+                                ),
+                                if (_hiddenFromNav)
+                                  const Padding(
+                                    padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                    child: SettingsInfoBanner(
+                                      text:
+                                          'To show Premiumize in navigation again, please logout and login',
+                                      tone: SettingsBannerTone.warning,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Card(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SwitchListTile.adaptive(
+                                  value: _checkCacheBeforeSearch,
+                                  onChanged: _updateCacheCheck,
+                                  title: const Text(
+                                    'Check Premiumize cache during searches',
+                                  ),
+                                  subtitle: const Text(
+                                    'Show a "PM" badge on torrent search results that are '
+                                    'already cached on Premiumize, so you know which ones '
+                                    'play instantly.',
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 4,
+                                  ),
+                                  child: Text(
+                                    'Cache checks are free (no fair-use cost). If a check '
+                                    'fails, results stay usable.',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(color: kSettingsDim),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.play_circle_outline,
+                                        color: kSettingsAccent2,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Post-Torrent Action',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Choose what happens after adding a torrent to Premiumize',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(color: kSettingsDim),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  RadioListTile<String>(
+                                    title: const Text('None'),
+                                    subtitle: const Text(
+                                      'Do nothing - just add the torrent to Premiumize',
+                                    ),
+                                    value: 'none',
+                                    groupValue: _postTorrentAction,
+                                    onChanged: (v) =>
+                                        v == null ? null : _savePostAction(v),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  RadioListTile<String>(
+                                    title: const Text('Let me choose'),
+                                    subtitle: const Text(
+                                      'Show a quick Play/Download picker after adding',
+                                    ),
+                                    value: 'choose',
+                                    groupValue: _postTorrentAction,
+                                    onChanged: (v) =>
+                                        v == null ? null : _savePostAction(v),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  RadioListTile<String>(
+                                    title: const Text('Open in Premiumize'),
+                                    subtitle: const Text(
+                                      'Navigate to your Premiumize cloud library',
+                                    ),
+                                    value: 'open',
+                                    groupValue: _postTorrentAction,
+                                    onChanged: (v) =>
+                                        v == null ? null : _savePostAction(v),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  RadioListTile<String>(
+                                    title: const Text('Play video'),
+                                    subtitle: const Text(
+                                      'Automatically open the video player',
+                                    ),
+                                    value: 'play',
+                                    groupValue: _postTorrentAction,
+                                    onChanged: (v) =>
+                                        v == null ? null : _savePostAction(v),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  RadioListTile<String>(
+                                    title: const Text('Download to device'),
+                                    subtitle: const Text(
+                                      'If the torrent contains only video files, all '
+                                      'videos will download immediately',
+                                    ),
+                                    value: 'download',
+                                    groupValue: _postTorrentAction,
+                                    onChanged: (v) =>
+                                        v == null ? null : _savePostAction(v),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  RadioListTile<String>(
+                                    title: const Text('Add to channel'),
+                                    subtitle: const Text(
+                                      'Cache this torrent in a Debrify TV channel',
+                                    ),
+                                    value: 'channel',
+                                    groupValue: _postTorrentAction,
+                                    onChanged: (v) =>
+                                        v == null ? null : _savePostAction(v),
+                                    contentPadding: EdgeInsets.zero,
                                   ),
                                 ],
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SwitchListTile.adaptive(
-                          value: _checkCacheBeforeSearch,
-                          onChanged: _updateCacheCheck,
-                          title: const Text(
-                            'Check Premiumize cache during searches',
-                          ),
-                          subtitle: const Text(
-                            'Show a "PM" badge on torrent search results that are '
-                            'already cached on Premiumize, so you know which ones '
-                            'play instantly.',
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            'Cache checks are free (no fair-use cost). If a check '
-                            'fails, results stay usable.',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.grey[600]),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.play_circle_outline,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Post-Torrent Action',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Choose what happens after adding a torrent to Premiumize',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: Colors.grey[600]),
-                          ),
-                          const SizedBox(height: 12),
-                          RadioListTile<String>(
-                            title: const Text('None'),
-                            subtitle: const Text(
-                              'Do nothing - just add the torrent to Premiumize',
-                            ),
-                            value: 'none',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('Let me choose'),
-                            subtitle: const Text(
-                              'Show a quick Play/Download picker after adding',
-                            ),
-                            value: 'choose',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('Open in Premiumize'),
-                            subtitle: const Text(
-                              'Navigate to your Premiumize cloud library',
-                            ),
-                            value: 'open',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('Play video'),
-                            subtitle: const Text(
-                              'Automatically open the video player',
-                            ),
-                            value: 'play',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('Download to device'),
-                            subtitle: const Text(
-                              'If the torrent contains only video files, all '
-                              'videos will download immediately',
-                            ),
-                            value: 'download',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('Add to channel'),
-                            subtitle: const Text(
-                              'Cache this torrent in a Debrify TV channel',
-                            ),
-                            value: 'channel',
-                            groupValue: _postTorrentAction,
-                            onChanged: (v) =>
-                                v == null ? null : _savePostAction(v),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (user != null) ...[
-                    Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.account_circle,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  size: 20,
+                          const SizedBox(height: 16),
+                          if (user != null) ...[
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.account_circle,
+                                          color: kSettingsAccent2,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Account Information',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    PremiumizeAccountStatusWidget(user: user),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Account Information',
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                              ],
+                              ),
                             ),
                             const SizedBox(height: 16),
-                            PremiumizeAccountStatusWidget(user: user),
                           ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  Card(
-                    elevation: 1,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.help_outline,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: 20,
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.help_outline,
+                                        color: kSettingsAccent2,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'How to get your Premiumize API key',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    '1. Visit: premiumize.me/account\n'
+                                    '2. Log in if prompted\n'
+                                    '3. Find the "API" section\n'
+                                    '4. Copy your API key and paste it above',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: kSettingsDim,
+                                          height: 1.5,
+                                        ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'How to get your Premiumize API key',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            '1. Visit: premiumize.me/account\n'
-                            '2. Log in if prompted\n'
-                            '3. Find the "API" section\n'
-                            '4. Copy your API key and paste it above',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Colors.grey[600],
-                                  height: 1.5,
-                                ),
+                            ),
                           ),
                         ],
                       ),

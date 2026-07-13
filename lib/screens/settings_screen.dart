@@ -29,9 +29,9 @@ import '../services/debrify_tv_repository.dart';
 import '../services/stremio_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/update_service.dart';
-import '../widgets/shimmer.dart';
 import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
+import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
 import 'settings/reddit_settings_page.dart';
@@ -413,90 +413,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The whole tab renders under the scoped settings theme so inline
+    // Material widgets (progress spinners, switches) match the subpages.
+    // Dialogs shown from this State's context sit ABOVE this Theme, so they
+    // go through showSettingsDialog instead.
     if (_loading) {
-      return const _SettingsSkeleton();
+      return Theme(
+        data: settingsPageTheme(context),
+        child: const SettingsSkeleton(),
+      );
     }
 
+    return Theme(
+      data: settingsPageTheme(context),
+      child: _buildLayout(context),
+    );
+  }
+
+  Widget _buildLayout(BuildContext context) {
     return _SettingsLayout(
-      connections: _ConnectionsSummary(
-        realDebrid: _ConnectionInfo(
+      connections: ConnectionsSummary(
+        realDebrid: ConnectionInfo(
           title: 'Real Debrid',
           connected: _realDebridConnected,
           status: _realDebridStatus,
           caption: _realDebridCaption,
-          icon: Icons.cloud_download_rounded,
           onTap: _openRealDebridSettings,
         ),
-        torbox: _ConnectionInfo(
+        torbox: ConnectionInfo(
           title: 'Torbox',
           connected: _torboxConnected,
           status: _torboxStatus,
           caption: _torboxCaption,
-          icon: Icons.flash_on_rounded,
           onTap: _openTorboxSettings,
         ),
-        premiumize: _ConnectionInfo(
+        premiumize: ConnectionInfo(
           title: 'Premiumize',
           connected: _premiumizeConnected,
           status: _premiumizeStatus,
           caption: _premiumizeCaption,
-          icon: Icons.workspace_premium_rounded,
           onTap: _openPremiumizeSettings,
         ),
-        allDebrid: _ConnectionInfo(
+        allDebrid: ConnectionInfo(
           title: 'AllDebrid',
           connected: _allDebridConnected,
           status: _allDebridStatus,
           caption: _allDebridCaption,
-          icon: Icons.all_inclusive_rounded,
           onTap: _openAllDebridSettings,
         ),
-        pikpak: _ConnectionInfo(
+        pikpak: ConnectionInfo(
           title: 'PikPak',
           connected: _pikpakConnected,
           status: _pikpakStatus,
           caption: _pikpakCaption,
-          icon: Icons.cloud_circle_rounded,
           onTap: _openPikPakSettings,
         ),
-        webDav: _ConnectionInfo(
+        webDav: ConnectionInfo(
           title: 'WebDAV',
           connected: _webDavConnected,
           status: _webDavStatus,
           caption: _webDavCaption,
-          icon: Icons.cloud_sync_rounded,
           onTap: _openWebDavSettings,
         ),
-        reddit: _ConnectionInfo(
+        reddit: ConnectionInfo(
           title: 'Reddit',
           connected: true,
           status: 'Active',
           caption: 'Browse video subreddits',
-          icon: Icons.reddit,
           onTap: _openRedditSettings,
         ),
-        iptv: _ConnectionInfo(
+        iptv: ConnectionInfo(
           title: 'IPTV',
           connected: true,
           status: 'Active',
           caption: 'M3U playlist channels',
-          icon: Icons.live_tv,
           onTap: _openIptvSettings,
         ),
-        trakt: _ConnectionInfo(
+        trakt: ConnectionInfo(
           title: 'Trakt',
           connected: _traktConnected,
           status: _traktStatus,
           caption: _traktCaption,
-          icon: Icons.movie_filter_rounded,
           onTap: _openTraktSettings,
         ),
-        indexerManagers: _ConnectionInfo(
+        indexerManagers: ConnectionInfo(
           title: 'Jackett & Prowlarr',
           connected: _indexerManagersConfigured,
           status: _indexerManagersStatus,
           caption: _indexerManagersCaption,
-          icon: Icons.manage_search_rounded,
           onTap: _openIndexerManagersSettings,
         ),
         firstCardFocusNode: _firstCardFocusNode,
@@ -531,17 +535,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTorrentSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const TorrentSettingsPage()));
+    await pushSettingsPage(context, const TorrentSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openIndexerManagersSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const IndexerManagersSettingsPage()),
-    );
+    await pushSettingsPage(context, const IndexerManagersSettingsPage());
     if (!mounted) return;
 
     final configs = await StorageService.getIndexerManagerConfigs();
@@ -556,17 +556,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openDebrifyTvSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const DebrifyTvSettingsPage()));
+    await pushSettingsPage(context, const DebrifyTvSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openPikPakSettings() async {
-    final loggedOut = await Navigator.of(
+    final loggedOut = await pushSettingsPage<bool>(
       context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const PikPakSettingsPage()));
+      const PikPakSettingsPage(),
+    );
     if (!mounted) return;
     await _loadSummaries();
     if (loggedOut == true) {
@@ -575,57 +574,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openWebDavSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const WebDavSettingsPage()));
+    await pushSettingsPage(context, const WebDavSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
 
   Future<void> _openRedditSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const RedditSettingsPage()));
+    await pushSettingsPage(context, const RedditSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openTraktSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const TraktSettingsPage()));
+    await pushSettingsPage(context, const TraktSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
 
   Future<void> _openIptvSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const IptvSettingsPage()));
+    await pushSettingsPage(context, const IptvSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openHomePageSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const HomePageSettingsPage()));
+    await pushSettingsPage(context, const HomePageSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openStartupSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const StartupSettingsPage()));
+    await pushSettingsPage(context, const StartupSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openExternalPlayerSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ExternalPlayerSettingsPage()),
-    );
+    await pushSettingsPage(context, const ExternalPlayerSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
@@ -639,32 +624,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openFilterSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const FilterSettingsPage()));
+    await pushSettingsPage(context, const FilterSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openProviderSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ProviderSettingsPage()));
+    await pushSettingsPage(context, const ProviderSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openQuickPlaySettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const QuickPlaySettingsPage()));
+    await pushSettingsPage(context, const QuickPlaySettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openRealDebridSettings() async {
-    final loggedOut = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const RealDebridSettingsPage()),
+    final loggedOut = await pushSettingsPage<bool>(
+      context,
+      const RealDebridSettingsPage(),
     );
     if (!mounted) return;
     await _loadSummaries();
@@ -674,9 +654,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTorboxSettings() async {
-    final loggedOut = await Navigator.of(
+    final loggedOut = await pushSettingsPage<bool>(
       context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const TorboxSettingsPage()));
+      const TorboxSettingsPage(),
+    );
     if (!mounted) return;
     await _loadSummaries();
     if (loggedOut == true) {
@@ -685,8 +666,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPremiumizeSettings() async {
-    final loggedOut = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const PremiumizeSettingsPage()),
+    final loggedOut = await pushSettingsPage<bool>(
+      context,
+      const PremiumizeSettingsPage(),
     );
     if (!mounted) return;
     await _loadSummaries();
@@ -696,8 +678,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openAllDebridSettings() async {
-    final loggedOut = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AllDebridSettingsPage()),
+    final loggedOut = await pushSettingsPage<bool>(
+      context,
+      const AllDebridSettingsPage(),
     );
     if (!mounted) return;
     await _loadSummaries();
@@ -721,9 +704,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       payload = await BackupRestoreService.buildBackup();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to build backup: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to build backup: $e')));
       return;
     }
 
@@ -739,7 +722,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Create backup'),
@@ -749,8 +732,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             const Text('The backup will include:'),
             const SizedBox(height: 8),
-            ..._backupSummaryLines(summary)
-                .map((line) => Text('• $line')),
+            ..._backupSummaryLines(summary).map((line) => Text('• $line')),
             const SizedBox(height: 12),
             const Text(
               'Credentials are stored in plain text. Keep this file private '
@@ -834,9 +816,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       } catch (e2) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save backup: $e2')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save backup: $e2')));
       }
     }
   }
@@ -852,9 +834,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open file picker: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not open file picker: $e')));
       return;
     }
 
@@ -872,9 +854,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to read backup file: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to read backup file: $e')));
       return;
     }
 
@@ -883,9 +865,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       payload = BackupRestoreService.parse(content);
     } on FormatException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Invalid backup: ${e.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Invalid backup: ${e.message}')));
       return;
     }
 
@@ -899,7 +881,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Restore backup'),
@@ -917,8 +899,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             const Text('This backup contains:'),
             const SizedBox(height: 8),
-            ..._backupSummaryLines(summary)
-                .map((line) => Text('• $line')),
+            ..._backupSummaryLines(summary).map((line) => Text('• $line')),
             const SizedBox(height: 12),
             const Text(
               'Saved credentials (Real-Debrid, Torbox, Premiumize, AllDebrid, PikPak, Trakt) will '
@@ -965,7 +946,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // Run the restore. Show a non-dismissible progress dialog while it runs
     // — search engines and addons require network and can take a while.
-    showDialog<void>(
+    showSettingsDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => const AlertDialog(
@@ -992,9 +973,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Restore failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Restore failed: $e')));
       return;
     }
 
@@ -1005,8 +986,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor:
-            report.hasAnyFailure ? const Color(0xFFF59E0B) : null,
+        backgroundColor: report.hasAnyFailure ? kSettingsAmber : null,
         duration: const Duration(seconds: 5),
       ),
     );
@@ -1074,7 +1054,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (parts.isEmpty && !r.hasAnyFailure) {
       return 'Nothing new to restore — everything was already present';
     }
-    final base = parts.isEmpty ? 'Restore finished' : 'Restored: ${parts.join(', ')}';
+    final base = parts.isEmpty
+        ? 'Restore finished'
+        : 'Restored: ${parts.join(', ')}';
     final notes = <String>[];
     if (r.searchEnginesAlreadyPresent > 0) {
       notes.add('${r.searchEnginesAlreadyPresent} engine(s) already present');
@@ -1097,7 +1079,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!r.hasAnyFailure) return withNotes;
     final failed = <String>[];
     if (r.pikpakLoginFailed) {
-      failed.add('PikPak login (credentials saved — retry from PikPak settings)');
+      failed.add(
+        'PikPak login (credentials saved — retry from PikPak settings)',
+      );
     }
     if (r.searchEnginesFailed > 0) {
       failed.add('${r.searchEnginesFailed} engine(s)');
@@ -1114,7 +1098,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _clearDownloadData() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear download data?'),
@@ -1144,7 +1128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _clearPlaybackData() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear playback data?'),
@@ -1174,7 +1158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _resetAppData() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Reset Debrify?'),
@@ -1596,7 +1580,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 class _SettingsLayout extends StatelessWidget {
-  final _ConnectionsSummary connections;
+  final ConnectionsSummary connections;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenFilterSettings;
   final Future<void> Function() onOpenProviderSettings;
@@ -1656,1159 +1640,224 @@ class _SettingsLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SettingsHeader(theme: theme),
-          const SizedBox(height: 24),
-          // Connections section with cards
-          connections,
-          const SizedBox(height: 24),
-          // General section
-          _SettingsSection(
-            title: 'General',
-            children: [
-              _SettingsTile(
-                icon: Icons.home_rounded,
-                title: 'Home Page',
-                subtitle: 'Default view when app opens',
-                onTap: onOpenHomePageSettings,
-                iconColor: const Color(0xFF6366F1),
-              ),
-              _SettingsTile(
-                icon: Icons.open_in_new_rounded,
-                title: 'Player Settings',
-                subtitle: 'Configure preferred video player',
-                onTap: onOpenExternalPlayerSettings,
-                iconColor: const Color(0xFF8B5CF6),
-              ),
-              _SettingsTile(
-                icon: Icons.rocket_launch_rounded,
-                title: 'Startup',
-                subtitle: 'Decide what happens on app launch',
-                onTap: onOpenStartupSettings,
-                iconColor: const Color(0xFFF59E0B),
-              ),
-              // Remote: shown on TV and desktop. Mobile keeps its
-              // entry in the floating menu, so it's hidden here.
-              if (!kIsWeb &&
-                  (isAndroidTv ||
-                      Platform.isWindows ||
-                      Platform.isMacOS ||
-                      Platform.isLinux))
-                _SettingsTile(
-                  icon: Icons.phonelink_rounded,
-                  title: 'Remote',
-                  subtitle: 'Send setup or receive from another device',
-                  onTap: () async => onOpenRemoteControl(),
-                  iconColor: const Color(0xFFED1C24),
-                ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Search section
-          _SettingsSection(
-            title: 'Search',
-            children: [
-              _SettingsTile(
-                icon: Icons.search_rounded,
-                title: 'Search Settings',
-                subtitle: 'Engines, filters, and sorting',
-                onTap: onOpenTorrentSettings,
-                iconColor: const Color(0xFF3B82F6),
-              ),
-              _SettingsTile(
-                icon: Icons.filter_list_rounded,
-                title: 'Filter Settings',
-                subtitle: 'Default quality, source, and language filters',
-                onTap: onOpenFilterSettings,
-                iconColor: const Color(0xFF10B981),
-              ),
-              _SettingsTile(
-                icon: Icons.cloud_sync_rounded,
-                title: 'Provider Settings',
-                subtitle: 'Default provider for adding torrents',
-                onTap: onOpenProviderSettings,
-                iconColor: const Color(0xFF8B5CF6),
-              ),
-              _SettingsTile(
-                icon: Icons.bolt_rounded,
-                title: 'Quick Play Settings',
-                subtitle: 'Configure quick play for torrent search',
-                onTap: onOpenQuickPlaySettings,
-                iconColor: const Color(0xFFF59E0B),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // TV Mode section
-          _SettingsSection(
-            title: 'TV Mode',
-            children: [
-              _SettingsTile(
-                icon: Icons.live_tv_rounded,
-                title: 'Debrify TV Settings',
-                subtitle: 'Limits, channels, and playback configuration',
-                onTap: onOpenDebrifyTvSettings,
-                iconColor: const Color(0xFFE11D48),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Maintenance section
-          _SettingsSection(
-            title: 'Maintenance',
-            children: [
-              _SettingsTile(
-                icon: Icons.download_rounded,
-                title: 'Clear Download Data',
-                subtitle: 'Remove queue history and in-progress entries',
-                onTap: onClearDownloads,
-                iconColor: const Color(0xFFF59E0B),
-              ),
-              _SettingsTile(
-                icon: Icons.play_circle_rounded,
-                title: 'Clear Playback Data',
-                subtitle: 'Reset resume points and playback sessions',
-                onTap: onClearPlayback,
-                iconColor: const Color(0xFF8B5CF6),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Backup & Restore section
-          _SettingsSection(
-            title: 'Backup & Restore',
-            children: [
-              _SettingsTile(
-                icon: Icons.save_alt_rounded,
-                title: 'Create Backup',
-                subtitle:
-                    'Save services, addons, and search engines to a file',
-                onTap: onCreateBackup,
-                iconColor: const Color(0xFF10B981),
-              ),
-              _SettingsTile(
-                icon: Icons.restore_rounded,
-                title: 'Restore from Backup',
-                subtitle: 'Import services and addons from a backup file',
-                onTap: onRestoreBackup,
-                iconColor: const Color(0xFF3B82F6),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Danger Zone section
-          _SettingsSection(
-            title: 'Danger Zone',
-            accentColor: theme.colorScheme.error,
-            children: [
-              _SettingsTile(
-                icon: Icons.warning_rounded,
-                title: 'Reset Debrify',
-                subtitle: 'Remove connections, preferences, and caches',
-                onTap: onDangerAction,
-                iconColor: const Color(0xFFEF4444),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // About section
-          _SettingsSection(
-            title: 'About',
-            children: [
-              _SettingsToggleTile(
-                icon: Icons.notifications_active_rounded,
-                title: 'Auto Check for Updates',
-                subtitle: 'Notify about new releases on startup',
-                value: autoUpdateChecksEnabled,
-                onChanged: onToggleAutoUpdateChecks,
-                iconColor: const Color(0xFF0EA5E9),
-              ),
-              _SettingsTile(
-                icon: Icons.system_update_rounded,
-                title: 'Check for Updates',
-                subtitle: updateSubtitle,
-                onTap: onCheckForUpdates,
-                iconColor: const Color(0xFF22C55E),
-                tag: 'New',
-                trailing: checkingUpdates
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.5),
-                      )
-                    : null,
-              ),
-              if (showSupportDonation)
-                _SettingsTile(
-                  icon: Icons.favorite_rounded,
-                  title: supportDonationLabel,
-                  subtitle: supportDonationSubtitle,
-                  onTap: onOpenSupportDonation,
-                  iconColor: const Color(0xFFEC4899),
-                ),
-              _SettingsTile(
-                icon: Icons.forum_rounded,
-                title: 'Reddit Community',
-                subtitle: 'r/debrify - Questions, tips, and discussion',
-                onTap: () =>
-                    launchUrl(Uri.parse('https://www.reddit.com/r/debrify/')),
-                iconColor: const Color(0xFFFF4500),
-              ),
-              _SettingsTile(
-                icon: Icons.chat_rounded,
-                title: 'Discord',
-                subtitle: 'Join for help, updates, and discussion',
-                onTap: () =>
-                    launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
-                iconColor: const Color(0xFF5865F2),
-              ),
-              _SettingsTile(
-                icon: Icons.code_rounded,
-                title: 'GitHub',
-                subtitle: 'Source code and contributions',
-                onTap: () => launchUrl(
-                  Uri.parse('https://github.com/varunsalian/debrify'),
-                ),
-                iconColor: const Color(0xFF10B981),
-              ),
-              _InfoTile(
-                icon: Icons.info_outline_rounded,
-                title: 'Version',
-                value: appVersion,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsHeader extends StatelessWidget {
-  final ThemeData theme;
-  const _SettingsHeader({required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF3730A3), Color(0xFF1E1B4B)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.settings_rounded,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
+    return SettingsBackground(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Settings',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Manage connections and clean up your library.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ConnectionsSummary extends StatefulWidget {
-  final _ConnectionInfo realDebrid;
-  final _ConnectionInfo torbox;
-  final _ConnectionInfo premiumize;
-  final _ConnectionInfo allDebrid;
-  final _ConnectionInfo pikpak;
-  final _ConnectionInfo webDav;
-  final _ConnectionInfo indexerManagers;
-  final _ConnectionInfo reddit;
-  final _ConnectionInfo iptv;
-  final _ConnectionInfo trakt;
-  final FocusNode? firstCardFocusNode;
-
-  const _ConnectionsSummary({
-    required this.realDebrid,
-    required this.torbox,
-    required this.premiumize,
-    required this.allDebrid,
-    required this.pikpak,
-    required this.webDav,
-    required this.indexerManagers,
-    required this.reddit,
-    required this.iptv,
-    required this.trakt,
-    this.firstCardFocusNode,
-  });
-
-  @override
-  State<_ConnectionsSummary> createState() => _ConnectionsSummaryState();
-}
-
-class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
-  // Focus nodes for grid navigation
-  // Layout (wide):
-  // [realDebrid,  torbox]
-  // [premiumize,  allDebrid]
-  // [pikpak,      webDav]
-  // [indexerManagers, reddit]
-  // [iptv,        trakt]
-  late final FocusNode _torboxFocusNode;
-  late final FocusNode _premiumizeFocusNode;
-  late final FocusNode _allDebridFocusNode;
-  late final FocusNode _pikpakFocusNode;
-  late final FocusNode _webDavFocusNode;
-  late final FocusNode _indexerManagersFocusNode;
-  late final FocusNode _redditFocusNode;
-  late final FocusNode _iptvFocusNode;
-  late final FocusNode _traktFocusNode;
-
-  @override
-  void initState() {
-    super.initState();
-    _torboxFocusNode = FocusNode(debugLabel: 'settings-torbox');
-    _premiumizeFocusNode = FocusNode(debugLabel: 'settings-premiumize');
-    _allDebridFocusNode = FocusNode(debugLabel: 'settings-alldebrid');
-    _pikpakFocusNode = FocusNode(debugLabel: 'settings-pikpak');
-    _webDavFocusNode = FocusNode(debugLabel: 'settings-webdav');
-    _indexerManagersFocusNode = FocusNode(
-      debugLabel: 'settings-indexer-managers',
-    );
-    _redditFocusNode = FocusNode(debugLabel: 'settings-reddit');
-    _iptvFocusNode = FocusNode(debugLabel: 'settings-iptv');
-    _traktFocusNode = FocusNode(debugLabel: 'settings-trakt');
-  }
-
-  @override
-  void dispose() {
-    _torboxFocusNode.dispose();
-    _premiumizeFocusNode.dispose();
-    _allDebridFocusNode.dispose();
-    _pikpakFocusNode.dispose();
-    _webDavFocusNode.dispose();
-    _indexerManagersFocusNode.dispose();
-    _redditFocusNode.dispose();
-    _iptvFocusNode.dispose();
-    _traktFocusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Connections',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.2,
-          ),
-        ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final bool wide = constraints.maxWidth > 520;
-            final double itemWidth = wide
-                ? (constraints.maxWidth - 12) / 2
-                : constraints.maxWidth;
-            // Grid layout (wide):
-            // [RD]         [Torbox]
-            // [Premiumize] [AllDebrid]
-            // [PikPak]     [WebDAV]
-            // [Indexers]   [Reddit]
-            // [IPTV]       [Trakt]
-            return Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                // Row 1: Real Debrid (left), Torbox (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.realDebrid,
-                    focusNode: widget.firstCardFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _torboxFocusNode : null,
-                    downNeighbor: wide ? _premiumizeFocusNode : _torboxFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.torbox,
-                    focusNode: _torboxFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? widget.firstCardFocusNode : null,
-                    upNeighbor: wide ? null : widget.firstCardFocusNode,
-                    downNeighbor: wide ? _allDebridFocusNode : _premiumizeFocusNode,
-                  ),
-                ),
-                // Row 2: Premiumize (left), AllDebrid (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.premiumize,
-                    focusNode: _premiumizeFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _allDebridFocusNode : null,
-                    upNeighbor: wide
-                        ? widget.firstCardFocusNode
-                        : _torboxFocusNode,
-                    downNeighbor: wide ? _pikpakFocusNode : _allDebridFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.allDebrid,
-                    focusNode: _allDebridFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _premiumizeFocusNode : null,
-                    upNeighbor: wide ? _torboxFocusNode : _premiumizeFocusNode,
-                    downNeighbor: wide ? _webDavFocusNode : _pikpakFocusNode,
-                  ),
-                ),
-                // Row 3: PikPak (left), WebDAV (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.pikpak,
-                    focusNode: _pikpakFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _webDavFocusNode : null,
-                    upNeighbor: wide ? _premiumizeFocusNode : _allDebridFocusNode,
-                    downNeighbor: wide
-                        ? _indexerManagersFocusNode
-                        : _webDavFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.webDav,
-                    focusNode: _webDavFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _pikpakFocusNode : null,
-                    upNeighbor: wide ? _allDebridFocusNode : _pikpakFocusNode,
-                    downNeighbor: wide
-                        ? _redditFocusNode
-                        : _indexerManagersFocusNode,
-                  ),
-                ),
-                // Row 4: Indexer managers (left), Reddit (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.indexerManagers,
-                    focusNode: _indexerManagersFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _redditFocusNode : null,
-                    upNeighbor: wide ? _pikpakFocusNode : _webDavFocusNode,
-                    downNeighbor: wide ? _iptvFocusNode : _redditFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.reddit,
-                    focusNode: _redditFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _indexerManagersFocusNode : null,
-                    upNeighbor: wide
-                        ? _webDavFocusNode
-                        : _indexerManagersFocusNode,
-                    downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
-                  ),
-                ),
-                // Row 5: IPTV (left), Trakt (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.iptv,
-                    focusNode: _iptvFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _traktFocusNode : null,
-                    upNeighbor: wide
-                        ? _indexerManagersFocusNode
-                        : _redditFocusNode,
-                    downNeighbor: wide ? null : _traktFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(
-                    info: widget.trakt,
-                    focusNode: _traktFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _iptvFocusNode : null,
-                    upNeighbor: wide ? _redditFocusNode : _iptvFocusNode,
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _ConnectionInfo {
-  final String title;
-  final bool connected;
-  final String status;
-  final String caption;
-  final IconData icon;
-  final Future<void> Function() onTap;
-
-  const _ConnectionInfo({
-    required this.title,
-    required this.connected,
-    required this.status,
-    required this.caption,
-    required this.icon,
-    required this.onTap,
-  });
-}
-
-class _ConnectionCard extends StatelessWidget {
-  final _ConnectionInfo info;
-  final FocusNode? focusNode;
-  final bool isLeftColumn;
-  final FocusNode? leftNeighbor;
-  final FocusNode? rightNeighbor;
-  final FocusNode? upNeighbor;
-  final FocusNode? downNeighbor;
-
-  const _ConnectionCard({
-    required this.info,
-    this.focusNode,
-    this.isLeftColumn = true,
-    this.leftNeighbor,
-    this.rightNeighbor,
-    this.upNeighbor,
-    this.downNeighbor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final String statusLower = info.status.toLowerCase();
-    final bool active = info.connected && statusLower == 'active';
-    final Color indicatorColor = info.connected
-        ? (active ? Colors.green : Colors.red)
-        : theme.colorScheme.outline;
-
-    // Helper to focus and scroll into view
-    void focusAndScroll(FocusNode target) {
-      target.requestFocus();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (target.context != null) {
-          Scrollable.ensureVisible(
-            target.context!,
-            alignment: 0.3,
-            duration: const Duration(milliseconds: 200),
-          );
-        }
-      });
-    }
-
-    return Focus(
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          if (leftNeighbor != null) {
-            focusAndScroll(leftNeighbor!);
-            return KeyEventResult.handled;
-          } else if (isLeftColumn && MainPageBridge.focusTvSidebar != null) {
-            // Left column with no left neighbor: open sidebar
-            MainPageBridge.focusTvSidebar!();
-            return KeyEventResult.handled;
-          }
-        } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          if (rightNeighbor != null) {
-            focusAndScroll(rightNeighbor!);
-            return KeyEventResult.handled;
-          }
-        } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          if (upNeighbor != null) {
-            focusAndScroll(upNeighbor!);
-            return KeyEventResult.handled;
-          }
-        } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          if (downNeighbor != null) {
-            focusAndScroll(downNeighbor!);
-            return KeyEventResult.handled;
-          }
-        }
-
-        return KeyEventResult.ignored;
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
-          ),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 1,
-          ),
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            focusNode: focusNode,
-            borderRadius: BorderRadius.circular(18),
-            onTap: () async {
-              await info.onTap();
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: info.connected && active
-                            ? [const Color(0xFF059669), const Color(0xFF10B981)]
-                            : [
-                                const Color(0xFF6366F1),
-                                const Color(0xFF8B5CF6),
-                              ],
+                const SettingsHeader(),
+                const SizedBox(height: 24),
+                // Connections section with cards
+                connections,
+                const SizedBox(height: 24),
+                // General section
+                SettingsSection(
+                  title: 'General',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.home_rounded,
+                      title: 'Home Page',
+                      subtitle: 'Default view when app opens',
+                      onTap: onOpenHomePageSettings,
+                    ),
+                    SettingsTile(
+                      icon: Icons.open_in_new_rounded,
+                      title: 'Player Settings',
+                      subtitle: 'Configure preferred video player',
+                      onTap: onOpenExternalPlayerSettings,
+                    ),
+                    SettingsTile(
+                      icon: Icons.rocket_launch_rounded,
+                      title: 'Startup',
+                      subtitle: 'Decide what happens on app launch',
+                      onTap: onOpenStartupSettings,
+                    ),
+                    // Remote: shown on TV and desktop. Mobile keeps its
+                    // entry in the floating menu, so it's hidden here.
+                    if (!kIsWeb &&
+                        (isAndroidTv ||
+                            Platform.isWindows ||
+                            Platform.isMacOS ||
+                            Platform.isLinux))
+                      SettingsTile(
+                        icon: Icons.phonelink_rounded,
+                        title: 'Remote',
+                        subtitle: 'Send setup or receive from another device',
+                        onTap: () async => onOpenRemoteControl(),
                       ),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color:
-                              (info.connected && active
-                                      ? const Color(0xFF10B981)
-                                      : const Color(0xFF6366F1))
-                                  .withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Search section
+                SettingsSection(
+                  title: 'Search',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.search_rounded,
+                      title: 'Search Settings',
+                      subtitle: 'Engines, filters, and sorting',
+                      onTap: onOpenTorrentSettings,
                     ),
-                    child: Icon(info.icon, color: Colors.white, size: 24),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                info.title,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                    SettingsTile(
+                      icon: Icons.filter_list_rounded,
+                      title: 'Filter Settings',
+                      subtitle: 'Default quality, source, and language filters',
+                      onTap: onOpenFilterSettings,
+                    ),
+                    SettingsTile(
+                      icon: Icons.cloud_sync_rounded,
+                      title: 'Provider Settings',
+                      subtitle: 'Default provider for adding torrents',
+                      onTap: onOpenProviderSettings,
+                    ),
+                    SettingsTile(
+                      icon: Icons.bolt_rounded,
+                      title: 'Quick Play Settings',
+                      subtitle: 'Configure quick play for torrent search',
+                      onTap: onOpenQuickPlaySettings,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // TV Mode section
+                SettingsSection(
+                  title: 'TV Mode',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.live_tv_rounded,
+                      title: 'Debrify TV Settings',
+                      subtitle: 'Limits, channels, and playback configuration',
+                      onTap: onOpenDebrifyTvSettings,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Maintenance section
+                SettingsSection(
+                  title: 'Maintenance',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.download_rounded,
+                      title: 'Clear Download Data',
+                      subtitle: 'Remove queue history and in-progress entries',
+                      onTap: onClearDownloads,
+                    ),
+                    SettingsTile(
+                      icon: Icons.play_circle_rounded,
+                      title: 'Clear Playback Data',
+                      subtitle: 'Reset resume points and playback sessions',
+                      onTap: onClearPlayback,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Backup & Restore section
+                SettingsSection(
+                  title: 'Backup & Restore',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.save_alt_rounded,
+                      title: 'Create Backup',
+                      subtitle:
+                          'Save services, addons, and search engines to a file',
+                      onTap: onCreateBackup,
+                    ),
+                    SettingsTile(
+                      icon: Icons.restore_rounded,
+                      title: 'Restore from Backup',
+                      subtitle: 'Import services and addons from a backup file',
+                      onTap: onRestoreBackup,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Danger Zone section
+                SettingsSection(
+                  title: 'Danger Zone',
+                  accentColor: kSettingsRed.withValues(alpha: 0.85),
+                  children: [
+                    SettingsTile(
+                      icon: Icons.warning_rounded,
+                      title: 'Reset Debrify',
+                      subtitle: 'Remove connections, preferences, and caches',
+                      onTap: onDangerAction,
+                      destructive: true,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // About section
+                SettingsSection(
+                  title: 'About',
+                  children: [
+                    SettingsToggleTile(
+                      icon: Icons.notifications_active_rounded,
+                      title: 'Auto Check for Updates',
+                      subtitle: 'Notify about new releases on startup',
+                      value: autoUpdateChecksEnabled,
+                      onChanged: onToggleAutoUpdateChecks,
+                    ),
+                    SettingsTile(
+                      icon: Icons.system_update_rounded,
+                      title: 'Check for Updates',
+                      subtitle: updateSubtitle,
+                      onTap: onCheckForUpdates,
+                      tag: 'New',
+                      trailing: checkingUpdates
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
                               ),
-                            ),
-                            Container(
-                              height: 8,
-                              width: 8,
-                              decoration: BoxDecoration(
-                                color: indicatorColor,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: indicatorColor.withValues(
-                                      alpha: 0.5,
-                                    ),
-                                    blurRadius: 6,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          info.status,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: info.connected
-                                ? (active
-                                      ? const Color(0xFF34D399)
-                                      : Colors.red)
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          info.caption,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.45),
-                          ),
-                        ),
-                      ],
+                            )
+                          : null,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsSection extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-  final Color? accentColor;
-
-  const _SettingsSection({
-    required this.title,
-    required this.children,
-    this.accentColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (title.isNotEmpty) ...[
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
-              color: accentColor ?? Colors.white.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-              width: 1,
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
-            child: Column(
-              children: [
-                for (int i = 0; i < children.length; i++) ...[
-                  if (i != 0)
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      indent: 56,
-                      color: Colors.white.withValues(alpha: 0.06),
+                    if (showSupportDonation)
+                      SettingsTile(
+                        icon: Icons.favorite_rounded,
+                        title: supportDonationLabel,
+                        subtitle: supportDonationSubtitle,
+                        onTap: onOpenSupportDonation,
+                      ),
+                    SettingsTile(
+                      icon: Icons.forum_rounded,
+                      title: 'Reddit Community',
+                      subtitle: 'r/debrify - Questions, tips, and discussion',
+                      onTap: () => launchUrl(
+                        Uri.parse('https://www.reddit.com/r/debrify/'),
+                      ),
                     ),
-                  children[i],
-                ],
+                    SettingsTile(
+                      icon: Icons.chat_rounded,
+                      title: 'Discord',
+                      subtitle: 'Join for help, updates, and discussion',
+                      onTap: () =>
+                          launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
+                    ),
+                    SettingsTile(
+                      icon: Icons.code_rounded,
+                      title: 'GitHub',
+                      subtitle: 'Source code and contributions',
+                      onTap: () => launchUrl(
+                        Uri.parse('https://github.com/varunsalian/debrify'),
+                      ),
+                    ),
+                    SettingsInfoTile(
+                      icon: Icons.info_outline_rounded,
+                      title: 'Version',
+                      value: appVersion,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _SettingsTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Future<void> Function() onTap;
-  final String? tag;
-  final Color iconColor;
-  final Widget? trailing;
-
-  const _SettingsTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    this.tag,
-    this.iconColor = const Color(0xFF6366F1),
-    this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: () async {
-        await onTap();
-      },
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: iconColor, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (tag != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.tertiary.withValues(
-                              alpha: 0.15,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            tag!,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.tertiary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.45),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            trailing ??
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.white.withValues(alpha: 0.3),
-                ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsToggleTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final Color iconColor;
-
-  const _SettingsToggleTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-    this.iconColor = const Color(0xFF06B6D4),
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: () => onChanged(!value),
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: iconColor, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.45),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Switch.adaptive(value: value, onChanged: onChanged),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-
-  const _InfoTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: const Color(0xFF818CF8), size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              value,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsSkeleton extends StatelessWidget {
-  const _SettingsSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          _SkeletonHeader(),
-          SizedBox(height: 24),
-          _SkeletonSection(),
-          SizedBox(height: 24),
-          _SkeletonSection(),
-          SizedBox(height: 24),
-          _SkeletonSection(),
-        ],
-      ),
-    );
-  }
-}
-
-class _SkeletonHeader extends StatelessWidget {
-  const _SkeletonHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF3730A3), Color(0xFF1E1B4B)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Shimmer(width: 140, height: 20),
-          SizedBox(height: 10),
-          Shimmer(width: 220, height: 14),
-        ],
-      ),
-    );
-  }
-}
-
-class _SkeletonSection extends StatelessWidget {
-  const _SkeletonSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Shimmer(width: 160, height: 16),
-        const SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: Column(
-            children: const [
-              _SkeletonTile(),
-              Divider(height: 1),
-              _SkeletonTile(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SkeletonTile extends StatelessWidget {
-  const _SkeletonTile();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: const [
-          Shimmer(
-            width: 40,
-            height: 40,
-            borderRadius: BorderRadius.all(Radius.circular(14)),
-          ),
-          SizedBox(width: 12),
-          Expanded(child: Shimmer(height: 14)),
-        ],
       ),
     );
   }

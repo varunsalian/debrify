@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../utils/tv_keys.dart';
+import 'widgets/settings_widgets.dart';
 
 /// Provider settings page for configuring default torrent provider.
 class ProviderSettingsPage extends StatefulWidget {
@@ -91,7 +92,8 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     // Initialize focus nodes for available providers
     _providerFocusNodes.clear();
     // +1 for "Ask every time" option
-    final providerCount = 1 +
+    final providerCount =
+        1 +
         (torboxAvailable ? 1 : 0) +
         (rdAvailable ? 1 : 0) +
         (premiumizeAvailable ? 1 : 0) +
@@ -119,8 +121,9 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
   void _onFocusChange(int index) {
     if (mounted) {
       setState(() {
-        _focusedIndex =
-            _providerFocusNodes[index].hasFocus ? index : _focusedIndex;
+        _focusedIndex = _providerFocusNodes[index].hasFocus
+            ? index
+            : _focusedIndex;
       });
     }
   }
@@ -135,103 +138,58 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Provider Settings'),
-          backgroundColor: Theme.of(context).colorScheme.surface,
-        ),
-        body: const Center(child: CircularProgressIndicator()),
+      return const SettingsPageScaffold(
+        title: 'Provider Settings',
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final theme = Theme.of(context);
-    final hasAnyProvider = _torboxAvailable ||
+    final hasAnyProvider =
+        _torboxAvailable ||
         _realDebridAvailable ||
         _premiumizeAvailable ||
         _allDebridAvailable ||
         _pikpakAvailable;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Provider Settings'),
-        backgroundColor: theme.colorScheme.surface,
-        elevation: 0,
-      ),
+    return SettingsPageScaffold(
+      title: 'Provider Settings',
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(context),
-              const SizedBox(height: 24),
-              if (!hasAnyProvider) ...[
-                _buildNoProvidersMessage(context),
-              ] else ...[
-                _buildSection(
-                  context,
-                  title: 'Default Torrent Provider',
-                  subtitle:
-                      'Choose which service to use when adding torrents',
-                  children: _buildProviderOptions(),
-                ),
-                const SizedBox(height: 16),
-                _buildInfoMessage(context),
-              ],
-            ],
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SettingsPageHeader(
+                    icon: Icons.cloud_sync_rounded,
+                    title: 'Provider Settings',
+                    subtitle: 'Configure default provider for adding torrents',
+                  ),
+                  const SizedBox(height: 24),
+                  if (!hasAnyProvider) ...[
+                    _buildNoProvidersMessage(context),
+                  ] else ...[
+                    _buildSection(
+                      context,
+                      title: 'Default Torrent Provider',
+                      subtitle:
+                          'Choose which service to use when adding torrents',
+                      children: _buildProviderOptions(),
+                    ),
+                    const SizedBox(height: 16),
+                    const SettingsInfoBanner(
+                      text:
+                          'You can also set this when adding a torrent by checking "Always use this provider".',
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.cloud_sync_rounded,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Provider Settings',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Configure default provider for adding torrents',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onPrimaryContainer
-                            .withValues(alpha: 0.7),
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -245,25 +203,23 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        color: kSettingsPanel,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kSettingsLine),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
+          Text(subtitle, style: TextStyle(fontSize: 12, color: kSettingsDim)),
           const SizedBox(height: 16),
           ...children,
         ],
@@ -276,95 +232,101 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     int nodeIndex = 0;
 
     // Always show "Ask every time" option
-    options.add(_ProviderOption(
-      focusNode: _providerFocusNodes[nodeIndex],
-      isFocused: _focusedIndex == nodeIndex,
-      icon: Icons.help_outline_rounded,
-      iconColor: Colors.grey,
-      title: 'Ask every time',
-      subtitle: 'Show provider selection dialog',
-      selected: _selectedProvider == 'none',
-      onSelected: () => _selectProvider('none'),
-    ));
+    options.add(
+      _ProviderOption(
+        focusNode: _providerFocusNodes[nodeIndex],
+        isFocused: _focusedIndex == nodeIndex,
+        icon: Icons.help_outline_rounded,
+        title: 'Ask every time',
+        subtitle: 'Show provider selection dialog',
+        selected: _selectedProvider == 'none',
+        onSelected: () => _selectProvider('none'),
+      ),
+    );
     nodeIndex++;
 
     // Torbox option
     if (_torboxAvailable) {
       options.add(const SizedBox(height: 8));
-      options.add(_ProviderOption(
-        focusNode: _providerFocusNodes[nodeIndex],
-        isFocused: _focusedIndex == nodeIndex,
-        icon: Icons.flash_on_rounded,
-        iconColor: const Color(0xFF7C3AED),
-        title: 'Torbox',
-        subtitle: 'Fast cloud torrent service',
-        selected: _selectedProvider == 'torbox',
-        onSelected: () => _selectProvider('torbox'),
-      ));
+      options.add(
+        _ProviderOption(
+          focusNode: _providerFocusNodes[nodeIndex],
+          isFocused: _focusedIndex == nodeIndex,
+          icon: Icons.flash_on_rounded,
+          title: 'Torbox',
+          subtitle: 'Fast cloud torrent service',
+          selected: _selectedProvider == 'torbox',
+          onSelected: () => _selectProvider('torbox'),
+        ),
+      );
       nodeIndex++;
     }
 
     // Real-Debrid option
     if (_realDebridAvailable) {
       options.add(const SizedBox(height: 8));
-      options.add(_ProviderOption(
-        focusNode: _providerFocusNodes[nodeIndex],
-        isFocused: _focusedIndex == nodeIndex,
-        icon: Icons.cloud_rounded,
-        iconColor: const Color(0xFFE50914),
-        title: 'Real-Debrid',
-        subtitle: 'Premium link generator',
-        selected: _selectedProvider == 'debrid',
-        onSelected: () => _selectProvider('debrid'),
-      ));
+      options.add(
+        _ProviderOption(
+          focusNode: _providerFocusNodes[nodeIndex],
+          isFocused: _focusedIndex == nodeIndex,
+          icon: Icons.cloud_rounded,
+          title: 'Real-Debrid',
+          subtitle: 'Premium link generator',
+          selected: _selectedProvider == 'debrid',
+          onSelected: () => _selectProvider('debrid'),
+        ),
+      );
       nodeIndex++;
     }
 
     // Premiumize option
     if (_premiumizeAvailable) {
       options.add(const SizedBox(height: 8));
-      options.add(_ProviderOption(
-        focusNode: _providerFocusNodes[nodeIndex],
-        isFocused: _focusedIndex == nodeIndex,
-        icon: Icons.workspace_premium_rounded,
-        iconColor: const Color(0xFFF59E0B),
-        title: 'Premiumize',
-        subtitle: 'Premium cloud downloader',
-        selected: _selectedProvider == 'premiumize',
-        onSelected: () => _selectProvider('premiumize'),
-      ));
+      options.add(
+        _ProviderOption(
+          focusNode: _providerFocusNodes[nodeIndex],
+          isFocused: _focusedIndex == nodeIndex,
+          icon: Icons.workspace_premium_rounded,
+          title: 'Premiumize',
+          subtitle: 'Premium cloud downloader',
+          selected: _selectedProvider == 'premiumize',
+          onSelected: () => _selectProvider('premiumize'),
+        ),
+      );
       nodeIndex++;
     }
 
     // AllDebrid option
     if (_allDebridAvailable) {
       options.add(const SizedBox(height: 8));
-      options.add(_ProviderOption(
-        focusNode: _providerFocusNodes[nodeIndex],
-        isFocused: _focusedIndex == nodeIndex,
-        icon: Icons.all_inclusive_rounded,
-        iconColor: const Color(0xFF26A69A),
-        title: 'AllDebrid',
-        subtitle: 'Premium link generator',
-        selected: _selectedProvider == 'alldebrid',
-        onSelected: () => _selectProvider('alldebrid'),
-      ));
+      options.add(
+        _ProviderOption(
+          focusNode: _providerFocusNodes[nodeIndex],
+          isFocused: _focusedIndex == nodeIndex,
+          icon: Icons.all_inclusive_rounded,
+          title: 'AllDebrid',
+          subtitle: 'Premium link generator',
+          selected: _selectedProvider == 'alldebrid',
+          onSelected: () => _selectProvider('alldebrid'),
+        ),
+      );
       nodeIndex++;
     }
 
     // PikPak option
     if (_pikpakAvailable) {
       options.add(const SizedBox(height: 8));
-      options.add(_ProviderOption(
-        focusNode: _providerFocusNodes[nodeIndex],
-        isFocused: _focusedIndex == nodeIndex,
-        icon: Icons.folder_rounded,
-        iconColor: const Color(0xFF0088CC),
-        title: 'PikPak',
-        subtitle: 'Cloud storage service',
-        selected: _selectedProvider == 'pikpak',
-        onSelected: () => _selectProvider('pikpak'),
-      ));
+      options.add(
+        _ProviderOption(
+          focusNode: _providerFocusNodes[nodeIndex],
+          isFocused: _focusedIndex == nodeIndex,
+          icon: Icons.folder_rounded,
+          title: 'PikPak',
+          subtitle: 'Cloud storage service',
+          selected: _selectedProvider == 'pikpak',
+          onSelected: () => _selectProvider('pikpak'),
+        ),
+      );
     }
 
     return options;
@@ -374,20 +336,15 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .errorContainer
-            .withValues(alpha: 0.3),
+        color: kSettingsRed.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: kSettingsRed.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          Icon(
+          const Icon(
             Icons.warning_amber_rounded,
-            color: Theme.of(context).colorScheme.error,
+            color: kSettingsRed,
             size: 32,
           ),
           const SizedBox(width: 16),
@@ -395,55 +352,24 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'No providers connected',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: kSettingsRed,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Connect Real-Debrid, Torbox, Premiumize, AllDebrid, or PikPak in Settings to use this feature.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: Colors.white.withValues(alpha: 0.72),
+                  ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoMessage(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .secondaryContainer
-            .withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.info_outline_rounded,
-            color: Theme.of(context).colorScheme.secondary,
-            size: 18,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'You can also set this when adding a torrent by checking "Always use this provider".',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
             ),
           ),
         ],
@@ -457,7 +383,6 @@ class _ProviderOption extends StatelessWidget {
   final FocusNode focusNode;
   final bool isFocused;
   final IconData icon;
-  final Color iconColor;
   final String title;
   final String subtitle;
   final bool selected;
@@ -467,7 +392,6 @@ class _ProviderOption extends StatelessWidget {
     required this.focusNode,
     required this.isFocused,
     required this.icon,
-    required this.iconColor,
     required this.title,
     required this.subtitle,
     required this.selected,
@@ -476,8 +400,6 @@ class _ProviderOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Focus(
       focusNode: focusNode,
       onKeyEvent: (node, event) {
@@ -493,15 +415,15 @@ class _ProviderOption extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
           color: selected
-              ? theme.colorScheme.primary.withValues(alpha: 0.15)
+              ? kSettingsAccent.withValues(alpha: 0.15)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isFocused
-                ? const Color(0xFF3B82F6)
+                ? kSettingsAccent
                 : selected
-                    ? theme.colorScheme.primary.withValues(alpha: 0.5)
-                    : theme.colorScheme.outline.withValues(alpha: 0.2),
+                ? kSettingsAccent.withValues(alpha: 0.5)
+                : kSettingsLine,
             width: isFocused ? 2 : 1,
           ),
         ),
@@ -517,10 +439,17 @@ class _ProviderOption extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: iconColor.withValues(alpha: 0.15),
+                      color: Colors.white.withValues(alpha: 0.055),
                       borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: kSettingsLine),
                     ),
-                    child: Icon(icon, color: iconColor, size: 22),
+                    child: Icon(
+                      icon,
+                      color: selected || isFocused
+                          ? kSettingsAccent2
+                          : kSettingsDim,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -529,16 +458,16 @@ class _ProviderOption extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           subtitle,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                          style: TextStyle(fontSize: 12, color: kSettingsDim),
                         ),
                       ],
                     ),
@@ -546,8 +475,8 @@ class _ProviderOption extends StatelessWidget {
                   if (selected)
                     Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
+                      decoration: const BoxDecoration(
+                        color: kSettingsAccent,
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -562,10 +491,7 @@ class _ProviderOption extends StatelessWidget {
                       height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.3),
-                          width: 2,
-                        ),
+                        border: Border.all(color: kSettingsDim2, width: 2),
                       ),
                     ),
                 ],

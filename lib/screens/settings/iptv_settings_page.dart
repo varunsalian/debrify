@@ -7,6 +7,7 @@ import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/m3u_parser.dart';
 import '../../utils/tv_keys.dart';
+import 'widgets/settings_widgets.dart';
 
 class IptvSettingsPage extends StatefulWidget {
   const IptvSettingsPage({super.key});
@@ -15,23 +16,38 @@ class IptvSettingsPage extends StatefulWidget {
   State<IptvSettingsPage> createState() => _IptvSettingsPageState();
 }
 
-class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerProviderStateMixin {
+class _IptvSettingsPageState extends State<IptvSettingsPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
-  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'iptv-back-button');
-  final FocusNode _nameInputFocusNode = FocusNode(debugLabel: 'iptv-name-input');
+  final FocusNode _backButtonFocusNode = FocusNode(
+    debugLabel: 'iptv-back-button',
+  );
+  final FocusNode _nameInputFocusNode = FocusNode(
+    debugLabel: 'iptv-name-input',
+  );
   final FocusNode _urlInputFocusNode = FocusNode(debugLabel: 'iptv-url-input');
-  final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'iptv-add-button');
-  final FocusNode _importFileButtonFocusNode = FocusNode(debugLabel: 'iptv-import-file-button');
+  final FocusNode _addButtonFocusNode = FocusNode(
+    debugLabel: 'iptv-add-button',
+  );
+  final FocusNode _importFileButtonFocusNode = FocusNode(
+    debugLabel: 'iptv-import-file-button',
+  );
 
   // Xtream Codes controllers and focus nodes
   final TextEditingController _xcServerController = TextEditingController();
   final TextEditingController _xcUsernameController = TextEditingController();
   final TextEditingController _xcPasswordController = TextEditingController();
   final FocusNode _xcServerFocusNode = FocusNode(debugLabel: 'iptv-xc-server');
-  final FocusNode _xcUsernameFocusNode = FocusNode(debugLabel: 'iptv-xc-username');
-  final FocusNode _xcPasswordFocusNode = FocusNode(debugLabel: 'iptv-xc-password');
-  final FocusNode _xcLoginButtonFocusNode = FocusNode(debugLabel: 'iptv-xc-login-button');
+  final FocusNode _xcUsernameFocusNode = FocusNode(
+    debugLabel: 'iptv-xc-username',
+  );
+  final FocusNode _xcPasswordFocusNode = FocusNode(
+    debugLabel: 'iptv-xc-password',
+  );
+  final FocusNode _xcLoginButtonFocusNode = FocusNode(
+    debugLabel: 'iptv-xc-login-button',
+  );
   bool _isXcAdding = false;
 
   // Tab focus nodes
@@ -175,7 +191,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     });
     _ensureFocusNodes();
 
-    _showSnackBar('Added "$name" (${result.channels.length} channels)', isError: false);
+    _showSnackBar(
+      'Added "$name" (${result.channels.length} channels)',
+      isError: false,
+    );
   }
 
   Future<void> _importFromFile() async {
@@ -204,7 +223,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
 
       // Read file content
       final Uint8List? fileBytes =
-          file.bytes ?? (file.path != null ? await file.xFile.readAsBytes() : null);
+          file.bytes ??
+          (file.path != null ? await file.xFile.readAsBytes() : null);
       if (fileBytes == null) {
         _showSnackBar('Could not read file content');
         return;
@@ -216,7 +236,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
 
       // Validate file size (warn for >5MB)
       if (content.length > 5 * 1024 * 1024) {
-        _showSnackBar('File is very large (>${(content.length / 1024 / 1024).toStringAsFixed(1)}MB). This may cause issues.');
+        _showSnackBar(
+          'File is very large (>${(content.length / 1024 / 1024).toStringAsFixed(1)}MB). This may cause issues.',
+        );
       }
 
       // Parse to validate content (off the UI isolate for large files)
@@ -245,10 +267,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
       final playlistName = await showDialog<String>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => _PlaylistNameDialog(
-          defaultName: defaultName,
-          channelCount: parseResult.channels.length,
-          existingNames: _playlists.map((p) => p.name).toSet(),
+        builder: (context) => Theme(
+          data: settingsPageTheme(context),
+          child: _PlaylistNameDialog(
+            defaultName: defaultName,
+            channelCount: parseResult.channels.length,
+            existingNames: _playlists.map((p) => p.name).toSet(),
+          ),
         ),
       );
 
@@ -274,7 +299,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
       });
       _ensureFocusNodes();
 
-      _showSnackBar('Imported "$playlistName" (${parseResult.channels.length} channels)', isError: false);
+      _showSnackBar(
+        'Imported "$playlistName" (${parseResult.channels.length} channels)',
+        isError: false,
+      );
     } catch (e) {
       _showSnackBar('Failed to import file: $e');
     }
@@ -330,14 +358,21 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     }
 
     // Check for duplicate
-    if (_playlists.any((p) => p.isXtreamCodes && p.serverUrl == serverUrl && p.username == username)) {
+    if (_playlists.any(
+      (p) =>
+          p.isXtreamCodes && p.serverUrl == serverUrl && p.username == username,
+    )) {
       _showSnackBar('This Xtream Codes login already exists');
       return;
     }
 
     setState(() => _isXcAdding = true);
 
-    final result = await XtreamCodesService.instance.authenticate(serverUrl, username, password);
+    final result = await XtreamCodesService.instance.authenticate(
+      serverUrl,
+      username,
+      password,
+    );
 
     if (!mounted) return;
 
@@ -374,7 +409,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     String statusMsg = 'Added Xtream Codes login';
     if (result.status != null) statusMsg += ' (${result.status}';
     if (result.expDate != null) {
-      statusMsg += ', expires ${result.expDate!.year}-${result.expDate!.month.toString().padLeft(2, '0')}-${result.expDate!.day.toString().padLeft(2, '0')}';
+      statusMsg +=
+          ', expires ${result.expDate!.year}-${result.expDate!.month.toString().padLeft(2, '0')}-${result.expDate!.day.toString().padLeft(2, '0')}';
     }
     if (result.status != null) statusMsg += ')';
     _showSnackBar(statusMsg, isError: false);
@@ -409,7 +445,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     await StorageService.setIptvDefaultPlaylist(playlist?.id);
     setState(() => _defaultPlaylistId = playlist?.id);
     _showSnackBar(
-      playlist != null ? 'Default set to "${playlist.name}"' : 'Default cleared',
+      playlist != null
+          ? 'Default set to "${playlist.name}"'
+          : 'Default cleared',
       isError: false,
     );
   }
@@ -434,8 +472,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
       );
     } else {
       IptvService.instance.clearCache(playlist.url);
-      result = await IptvService.instance
-          .fetchPlaylist(playlist.url, forceRefresh: true);
+      result = await IptvService.instance.fetchPlaylist(
+        playlist.url,
+        forceRefresh: true,
+      );
     }
 
     if (!mounted) return;
@@ -457,7 +497,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? kSettingsRed : kSettingsGreen,
       ),
     );
   }
@@ -490,7 +530,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
             deleteFocusNode: deleteFocusIndex < _playlistFocusNodes.length
                 ? _playlistFocusNodes[deleteFocusIndex]
                 : null,
-            onSetDefault: () => _setDefaultPlaylist(isDefault ? null : playlist),
+            onSetDefault: () =>
+                _setDefaultPlaylist(isDefault ? null : playlist),
             onRefresh: canRefresh ? () => _refreshPlaylist(playlist) : null,
             onDelete: () => _removePlaylist(playlist),
           ),
@@ -542,7 +583,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
               label: _isAdding ? 'Adding...' : 'Add Playlist',
               onPressed: _isAdding ? () {} : _addPlaylist,
               onUpArrow: () => _urlInputFocusNode.requestFocus(),
-              onDownArrow: _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
+              onDownArrow:
+                  _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
                   ? () => _playlistFocusNodes[0].requestFocus()
                   : null,
             ),
@@ -553,23 +595,18 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
   }
 
   Widget _buildFileTabContent() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
           Icons.folder_open,
           size: 48,
-          color: colorScheme.primary.withValues(alpha: 0.7),
+          color: kSettingsAccent2.withValues(alpha: 0.7),
         ),
         const SizedBox(height: 16),
         Text(
           'Select an M3U or M3U8 file from your device',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
+          style: TextStyle(fontSize: 14, color: kSettingsDim),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),
@@ -644,7 +681,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
               label: _isXcAdding ? 'Logging in...' : 'Login & Add',
               onPressed: _isXcAdding ? () {} : _addXtreamCodes,
               onUpArrow: () => _xcPasswordFocusNode.requestFocus(),
-              onDownArrow: _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
+              onDownArrow:
+                  _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
                   ? () => _playlistFocusNodes[0].requestFocus()
                   : null,
             ),
@@ -657,44 +695,34 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return SettingsPageScaffold(
+        title: 'IPTV Playlists',
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('IPTV Playlists'),
-        leading: _TvFocusableBackButton(
-          focusNode: _backButtonFocusNode,
-          onDownArrow: () => _urlTabFocusNode.requestFocus(),
-        ),
+    return SettingsPageScaffold(
+      title: 'IPTV Playlists',
+      leading: _TvFocusableBackButton(
+        focusNode: _backButtonFocusNode,
+        onDownArrow: () => _urlTabFocusNode.requestFocus(),
       ),
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text(
-              'IPTV Playlists',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add M3U playlists from a URL, import from a file, or login with Xtream Codes.',
-              style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
+            const SettingsPageHeader(
+              icon: Icons.live_tv_rounded,
+              title: 'IPTV Playlists',
+              subtitle:
+                  'Add M3U playlists from a URL, import from a file, or login with Xtream Codes.',
             ),
             const SizedBox(height: 24),
 
             // Add Playlist section with Tabs
-            Text(
-              'Add Playlist',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SettingsSectionLabel('Add Playlist'),
+            const SizedBox(height: 6),
 
             // Tab bar
             _TvFocusableTabBar(
@@ -704,7 +732,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
               xcTabFocusNode: _xcTabFocusNode,
               onUpArrow: () => _backButtonFocusNode.requestFocus(),
               onDownArrowFromUrlTab: () => _nameInputFocusNode.requestFocus(),
-              onDownArrowFromFileTab: () => _importFileButtonFocusNode.requestFocus(),
+              onDownArrowFromFileTab: () =>
+                  _importFileButtonFocusNode.requestFocus(),
               onDownArrowFromXcTab: () => _xcServerFocusNode.requestFocus(),
             ),
             const SizedBox(height: 16),
@@ -728,18 +757,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
             const SizedBox(height: 24),
 
             // Playlists list
-            Text(
-              'Your Playlists',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SettingsSectionLabel('Your Playlists'),
             Text(
               'Tap the star to set a default playlist.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 12, color: kSettingsDim),
             ),
             const SizedBox(height: 16),
 
@@ -749,59 +770,30 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
-                      Icon(
-                        Icons.playlist_add,
-                        size: 48,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                      Icon(Icons.playlist_add, size: 48, color: kSettingsDim2),
                       const SizedBox(height: 12),
                       Text(
                         'No playlists yet',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                        style: TextStyle(fontSize: 14, color: kSettingsDim),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Add an M3U playlist URL above',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                        style: TextStyle(fontSize: 12, color: kSettingsDim2),
                       ),
                     ],
                   ),
                 ),
               )
             else
-              Card(
-                child: Column(
-                  children: _buildPlaylistsList(),
-                ),
-              ),
+              Card(child: Column(children: _buildPlaylistsList())),
             const SizedBox(height: 24),
 
             // Default Playlist Info
             if (_defaultPlaylistId != null)
-              Card(
-                color: Colors.amber.withOpacity(0.1),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline, color: Colors.amber),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Your default playlist will load automatically when you select IPTV.',
-                          style: TextStyle(
-                            color: Colors.amber.shade700,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              const SettingsInfoBanner(
+                text:
+                    'Your default playlist will load automatically when you select IPTV.',
               ),
           ],
         ),
@@ -920,7 +912,6 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Focus(
       onKeyEvent: _handleKeyEvent,
       skipTraversal: true,
@@ -929,12 +920,12 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
-              ? Border.all(color: theme.colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.2),
+                    color: kSettingsAccent.withValues(alpha: 0.2),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -948,7 +939,6 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
             labelText: widget.labelText,
             hintText: widget.hintText,
             prefixIcon: widget.prefixIcon,
-            border: const OutlineInputBorder(),
           ),
           onSubmitted: widget.onSubmitted,
         ),
@@ -1015,8 +1005,6 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -1027,22 +1015,26 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftArrow != null) {
           widget.onLeftArrow!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.onRightArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+            widget.onRightArrow != null) {
           widget.onRightArrow!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.onUpArrow != null) {
           widget.onUpArrow!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+            widget.onDownArrow != null) {
           widget.onDownArrow!();
           return KeyEventResult.handled;
         }
@@ -1054,12 +1046,12 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
-              ? Border.all(color: colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent2, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: colorScheme.primary.withOpacity(0.3),
+                    color: kSettingsAccent.withValues(alpha: 0.3),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -1071,7 +1063,7 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
           icon: Icon(widget.icon),
           label: Text(widget.label),
           style: FilledButton.styleFrom(
-            backgroundColor: _isFocused ? colorScheme.primary : null,
+            backgroundColor: _isFocused ? kSettingsAccent2 : null,
           ),
         ),
       ),
@@ -1147,12 +1139,12 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Container(
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
+        color: kSettingsPanel,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kSettingsLine),
       ),
       padding: const EdgeInsets.all(4),
       child: Row(
@@ -1176,12 +1168,14 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                     return KeyEventResult.handled;
                   }
 
-                  if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrow != null) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+                      widget.onUpArrow != null) {
                     widget.onUpArrow!();
                     return KeyEventResult.handled;
                   }
 
-                  if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrowFromUrlTab != null) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+                      widget.onDownArrowFromUrlTab != null) {
                     widget.tabController.animateTo(0);
                     widget.onDownArrowFromUrlTab!();
                     return KeyEventResult.handled;
@@ -1199,15 +1193,19 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                         duration: const Duration(milliseconds: 150),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: isSelected ? colorScheme.primary : Colors.transparent,
+                          color: isSelected
+                              ? kSettingsAccent.withValues(alpha: 0.22)
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                           border: _urlTabFocused
-                              ? Border.all(color: colorScheme.primary, width: 2)
+                              ? Border.all(color: kSettingsAccent, width: 2)
                               : null,
                           boxShadow: _urlTabFocused
                               ? [
                                   BoxShadow(
-                                    color: colorScheme.primary.withValues(alpha: 0.3),
+                                    color: kSettingsAccent.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     blurRadius: 4,
                                   ),
                                 ]
@@ -1220,17 +1218,17 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                               Icons.link,
                               size: 18,
                               color: isSelected
-                                  ? colorScheme.onPrimary
-                                  : colorScheme.onSurfaceVariant,
+                                  ? kSettingsAccent2
+                                  : kSettingsDim,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               'From URL',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isSelected
-                                    ? colorScheme.onPrimary
-                                    : colorScheme.onSurfaceVariant,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? Colors.white : kSettingsDim,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                               ),
                             ),
                           ],
@@ -1262,17 +1260,20 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                     return KeyEventResult.handled;
                   }
 
-                  if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.xcTabFocusNode != null) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+                      widget.xcTabFocusNode != null) {
                     widget.xcTabFocusNode!.requestFocus();
                     return KeyEventResult.handled;
                   }
 
-                  if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrow != null) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+                      widget.onUpArrow != null) {
                     widget.onUpArrow!();
                     return KeyEventResult.handled;
                   }
 
-                  if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrowFromFileTab != null) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+                      widget.onDownArrowFromFileTab != null) {
                     widget.tabController.animateTo(1);
                     widget.onDownArrowFromFileTab!();
                     return KeyEventResult.handled;
@@ -1290,15 +1291,19 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                         duration: const Duration(milliseconds: 150),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: isSelected ? colorScheme.primary : Colors.transparent,
+                          color: isSelected
+                              ? kSettingsAccent.withValues(alpha: 0.22)
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                           border: _fileTabFocused
-                              ? Border.all(color: colorScheme.primary, width: 2)
+                              ? Border.all(color: kSettingsAccent, width: 2)
                               : null,
                           boxShadow: _fileTabFocused
                               ? [
                                   BoxShadow(
-                                    color: colorScheme.primary.withValues(alpha: 0.3),
+                                    color: kSettingsAccent.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     blurRadius: 4,
                                   ),
                                 ]
@@ -1311,17 +1316,17 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                               Icons.folder_open,
                               size: 18,
                               color: isSelected
-                                  ? colorScheme.onPrimary
-                                  : colorScheme.onSurfaceVariant,
+                                  ? kSettingsAccent2
+                                  : kSettingsDim,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               'From File',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isSelected
-                                    ? colorScheme.onPrimary
-                                    : colorScheme.onSurfaceVariant,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? Colors.white : kSettingsDim,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                               ),
                             ),
                           ],
@@ -1354,12 +1359,14 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                       return KeyEventResult.handled;
                     }
 
-                    if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrow != null) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+                        widget.onUpArrow != null) {
                       widget.onUpArrow!();
                       return KeyEventResult.handled;
                     }
 
-                    if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrowFromXcTab != null) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+                        widget.onDownArrowFromXcTab != null) {
                       widget.tabController.animateTo(2);
                       widget.onDownArrowFromXcTab!();
                       return KeyEventResult.handled;
@@ -1377,15 +1384,19 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                           duration: const Duration(milliseconds: 150),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
-                            color: isSelected ? colorScheme.primary : Colors.transparent,
+                            color: isSelected
+                                ? kSettingsAccent.withValues(alpha: 0.22)
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(8),
                             border: _xcTabFocused
-                                ? Border.all(color: colorScheme.primary, width: 2)
+                                ? Border.all(color: kSettingsAccent, width: 2)
                                 : null,
                             boxShadow: _xcTabFocused
                                 ? [
                                     BoxShadow(
-                                      color: colorScheme.primary.withValues(alpha: 0.3),
+                                      color: kSettingsAccent.withValues(
+                                        alpha: 0.3,
+                                      ),
                                       blurRadius: 4,
                                     ),
                                   ]
@@ -1398,8 +1409,8 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                                 Icons.login,
                                 size: 18,
                                 color: isSelected
-                                    ? colorScheme.onPrimary
-                                    : colorScheme.onSurfaceVariant,
+                                    ? kSettingsAccent2
+                                    : kSettingsDim,
                               ),
                               const SizedBox(width: 8),
                               Flexible(
@@ -1407,9 +1418,11 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                                   'Xtream Login',
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: isSelected
-                                        ? colorScheme.onPrimary
-                                        : colorScheme.onSurfaceVariant,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                        ? Colors.white
+                                        : kSettingsDim,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -1453,10 +1466,12 @@ class _TvFocusableOutlinedButton extends StatefulWidget {
   final VoidCallback? onDownArrow;
 
   @override
-  State<_TvFocusableOutlinedButton> createState() => _TvFocusableOutlinedButtonState();
+  State<_TvFocusableOutlinedButton> createState() =>
+      _TvFocusableOutlinedButtonState();
 }
 
-class _TvFocusableOutlinedButtonState extends State<_TvFocusableOutlinedButton> {
+class _TvFocusableOutlinedButtonState
+    extends State<_TvFocusableOutlinedButton> {
   bool _isFocused = false;
 
   @override
@@ -1488,8 +1503,6 @@ class _TvFocusableOutlinedButtonState extends State<_TvFocusableOutlinedButton> 
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -1500,22 +1513,26 @@ class _TvFocusableOutlinedButtonState extends State<_TvFocusableOutlinedButton> 
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftArrow != null) {
           widget.onLeftArrow!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.onRightArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+            widget.onRightArrow != null) {
           widget.onRightArrow!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.onUpArrow != null) {
           widget.onUpArrow!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+            widget.onDownArrow != null) {
           widget.onDownArrow!();
           return KeyEventResult.handled;
         }
@@ -1527,12 +1544,12 @@ class _TvFocusableOutlinedButtonState extends State<_TvFocusableOutlinedButton> 
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
-              ? Border.all(color: colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: colorScheme.primary.withValues(alpha: 0.3),
+                    color: kSettingsAccent.withValues(alpha: 0.3),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -1544,9 +1561,9 @@ class _TvFocusableOutlinedButtonState extends State<_TvFocusableOutlinedButton> 
           icon: Icon(widget.icon),
           label: Text(widget.label),
           style: OutlinedButton.styleFrom(
-            foregroundColor: _isFocused ? colorScheme.primary : null,
+            foregroundColor: _isFocused ? kSettingsAccent2 : null,
             side: BorderSide(
-              color: _isFocused ? colorScheme.primary : colorScheme.outline,
+              color: _isFocused ? kSettingsAccent : kSettingsLine,
               width: _isFocused ? 2 : 1,
             ),
           ),
@@ -1661,14 +1678,13 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final isAnyFocused = _starFocused || _refreshFocused || _deleteFocused;
     final canRefresh = widget.onRefresh != null;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       decoration: BoxDecoration(
-        color: isAnyFocused ? colorScheme.primaryContainer.withOpacity(0.3) : null,
+        color: isAnyFocused ? kSettingsPanel2 : null,
         borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(
@@ -1676,9 +1692,11 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
           widget.isDefault
               ? Icons.star
               : widget.playlist.isXtreamCodes
-                  ? Icons.login
-                  : (widget.playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
-          color: widget.isDefault ? Colors.amber : null,
+              ? Icons.login
+              : (widget.playlist.isLocalFile
+                    ? Icons.folder
+                    : Icons.playlist_play),
+          color: widget.isDefault ? kSettingsAmber : null,
         ),
         title: Text(widget.playlist.name),
         subtitle: Column(
@@ -1687,36 +1705,22 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
             Row(
               children: [
                 if (widget.playlist.isXtreamCodes) ...[
-                  Icon(
-                    Icons.login,
-                    size: 12,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  Icon(Icons.login, size: 12, color: kSettingsDim),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       'Xtream Codes - ${widget.playlist.serverUrl}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                      style: TextStyle(fontSize: 12, color: kSettingsDim),
                     ),
                   ),
                 ] else if (widget.playlist.isLocalFile) ...[
-                  Icon(
-                    Icons.sd_card,
-                    size: 12,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  Icon(Icons.sd_card, size: 12, color: kSettingsDim),
                   const SizedBox(width: 4),
                   Text(
                     'Local file',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 12, color: kSettingsDim),
                   ),
                 ] else
                   Expanded(
@@ -1724,10 +1728,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
                       widget.playlist.url,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                      style: TextStyle(fontSize: 12, color: kSettingsDim),
                     ),
                   ),
               ],
@@ -1735,7 +1736,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
             if (widget.isDefault)
               const Text(
                 'Default playlist',
-                style: TextStyle(color: Colors.amber, fontSize: 12),
+                style: TextStyle(color: kSettingsAmber, fontSize: 12),
               ),
           ],
         ),
@@ -1745,13 +1746,14 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
             _FocusableIconButton(
               focusNode: widget.starFocusNode,
               icon: widget.isDefault ? Icons.star : Icons.star_border,
-              color: widget.isDefault ? Colors.amber : null,
+              color: widget.isDefault ? kSettingsAmber : null,
               tooltip: widget.isDefault ? 'Remove default' : 'Set as default',
               onPressed: widget.onSetDefault,
-              onRightArrow: () => (canRefresh
-                      ? widget.refreshFocusNode
-                      : widget.deleteFocusNode)
-                  ?.requestFocus(),
+              onRightArrow: () =>
+                  (canRefresh
+                          ? widget.refreshFocusNode
+                          : widget.deleteFocusNode)
+                      ?.requestFocus(),
             ),
             if (canRefresh)
               _FocusableIconButton(
@@ -1768,10 +1770,9 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
               icon: Icons.delete_outline,
               tooltip: 'Remove playlist',
               onPressed: widget.onDelete,
-              onLeftArrow: () => (canRefresh
-                      ? widget.refreshFocusNode
-                      : widget.starFocusNode)
-                  ?.requestFocus(),
+              onLeftArrow: () =>
+                  (canRefresh ? widget.refreshFocusNode : widget.starFocusNode)
+                      ?.requestFocus(),
             ),
           ],
         ),
@@ -1838,8 +1839,6 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -1850,12 +1849,14 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftArrow != null) {
           widget.onLeftArrow!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.onRightArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+            widget.onRightArrow != null) {
           widget.onRightArrow!();
           return KeyEventResult.handled;
         }
@@ -1867,12 +1868,12 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: _isFocused
-              ? Border.all(color: colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: colorScheme.primary.withOpacity(0.3),
+                    color: kSettingsAccent.withValues(alpha: 0.3),
                     blurRadius: 6,
                     spreadRadius: 1,
                   ),
@@ -1886,17 +1887,19 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: _isFocused ? colorScheme.primary : widget.color,
+                    color: _isFocused ? kSettingsAccent2 : widget.color,
                   ),
                 )
               : Icon(
                   widget.icon,
-                  color: _isFocused ? colorScheme.primary : widget.color,
+                  color: _isFocused ? kSettingsAccent2 : widget.color,
                 ),
           tooltip: widget.tooltip,
           onPressed: widget.isBusy ? null : widget.onPressed,
           style: IconButton.styleFrom(
-            backgroundColor: _isFocused ? colorScheme.primaryContainer : null,
+            backgroundColor: _isFocused
+                ? kSettingsAccent.withValues(alpha: 0.16)
+                : null,
           ),
         ),
       ),
@@ -1906,10 +1909,7 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
 
 /// TV-focusable back button for AppBar
 class _TvFocusableBackButton extends StatefulWidget {
-  const _TvFocusableBackButton({
-    required this.focusNode,
-    this.onDownArrow,
-  });
+  const _TvFocusableBackButton({required this.focusNode, this.onDownArrow});
 
   final FocusNode focusNode;
   final VoidCallback? onDownArrow;
@@ -1956,8 +1956,6 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -1978,7 +1976,8 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
         }
 
         // Down arrow to go to name field
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+            widget.onDownArrow != null) {
           widget.onDownArrow!();
           return KeyEventResult.handled;
         }
@@ -1991,12 +1990,12 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: _isFocused
-              ? Border.all(color: colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: colorScheme.primary.withOpacity(0.3),
+                    color: kSettingsAccent.withValues(alpha: 0.3),
                     blurRadius: 6,
                     spreadRadius: 1,
                   ),
@@ -2006,12 +2005,14 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
         child: IconButton(
           icon: Icon(
             Icons.arrow_back,
-            color: _isFocused ? colorScheme.primary : null,
+            color: _isFocused ? kSettingsAccent2 : null,
           ),
           tooltip: 'Go back',
           onPressed: _goBack,
           style: IconButton.styleFrom(
-            backgroundColor: _isFocused ? colorScheme.primaryContainer : null,
+            backgroundColor: _isFocused
+                ? kSettingsAccent.withValues(alpha: 0.16)
+                : null,
           ),
         ),
       ),
@@ -2078,9 +2079,6 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return AlertDialog(
       title: const Text('Name Your Playlist'),
       content: Column(
@@ -2090,22 +2088,17 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.3),
+              color: kSettingsGreen.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: kSettingsGreen.withValues(alpha: 0.22)),
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.check_circle,
-                  color: Colors.green,
-                  size: 20,
-                ),
+                const Icon(Icons.check_circle, color: kSettingsGreen, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   '${widget.channelCount} channels found',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
+                  style: const TextStyle(fontSize: 14, color: Colors.white),
                 ),
               ],
             ),
@@ -2118,7 +2111,6 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
               labelText: 'Playlist Name',
               hintText: 'Enter a name for this playlist',
               errorText: _errorText,
-              border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.label_outline),
             ),
             onSubmitted: (_) => _submit(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../utils/tv_keys.dart';
+import 'widgets/settings_widgets.dart';
 
 class RedditSettingsPage extends StatefulWidget {
   const RedditSettingsPage({super.key});
@@ -12,9 +13,15 @@ class RedditSettingsPage extends StatefulWidget {
 
 class _RedditSettingsPageState extends State<RedditSettingsPage> {
   final TextEditingController _subredditController = TextEditingController();
-  final FocusNode _subredditInputFocusNode = FocusNode(debugLabel: 'reddit-subreddit-input');
-  final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'reddit-add-button');
-  final FocusNode _nsfwToggleFocusNode = FocusNode(debugLabel: 'reddit-nsfw-toggle');
+  final FocusNode _subredditInputFocusNode = FocusNode(
+    debugLabel: 'reddit-subreddit-input',
+  );
+  final FocusNode _addButtonFocusNode = FocusNode(
+    debugLabel: 'reddit-add-button',
+  );
+  final FocusNode _nsfwToggleFocusNode = FocusNode(
+    debugLabel: 'reddit-nsfw-toggle',
+  );
 
   // Focus nodes for favorite subreddit items (2 per item: star + delete)
   final List<FocusNode> _favoriteFocusNodes = [];
@@ -89,7 +96,10 @@ class _RedditSettingsPageState extends State<RedditSettingsPage> {
     }
 
     // Remove r/ prefix if present
-    final cleanName = subreddit.replaceFirst(RegExp(r'^r/', caseSensitive: false), '');
+    final cleanName = subreddit.replaceFirst(
+      RegExp(r'^r/', caseSensitive: false),
+      '',
+    );
 
     if (_favoriteSubreddits.contains(cleanName)) {
       _showSnackBar('Subreddit already in favorites');
@@ -109,7 +119,9 @@ class _RedditSettingsPageState extends State<RedditSettingsPage> {
   }
 
   Future<void> _removeFavoriteSubreddit(String subreddit) async {
-    final newFavorites = _favoriteSubreddits.where((s) => s != subreddit).toList();
+    final newFavorites = _favoriteSubreddits
+        .where((s) => s != subreddit)
+        .toList();
     await StorageService.setRedditFavoriteSubreddits(newFavorites);
 
     // If removed subreddit was the default, clear default
@@ -137,7 +149,7 @@ class _RedditSettingsPageState extends State<RedditSettingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? kSettingsRed : kSettingsGreen,
       ),
     );
   }
@@ -163,7 +175,8 @@ class _RedditSettingsPageState extends State<RedditSettingsPage> {
             deleteFocusNode: deleteFocusIndex < _favoriteFocusNodes.length
                 ? _favoriteFocusNodes[deleteFocusIndex]
                 : null,
-            onSetDefault: () => _setDefaultSubreddit(isDefault ? null : subreddit),
+            onSetDefault: () =>
+                _setDefaultSubreddit(isDefault ? null : subreddit),
             onDelete: () => _removeFavoriteSubreddit(subreddit),
           ),
         ),
@@ -176,147 +189,131 @@ class _RedditSettingsPageState extends State<RedditSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const SettingsPageScaffold(
+        title: 'Reddit Settings',
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reddit Settings')),
+    return SettingsPageScaffold(
+      title: 'Reddit Settings',
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text(
-              'Reddit Integration',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Browse and play videos from Reddit subreddits.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            const SizedBox(height: 24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const SettingsPageHeader(
+                  icon: Icons.forum_rounded,
+                  title: 'Reddit Integration',
+                  subtitle: 'Browse and play videos from Reddit subreddits.',
+                ),
+                const SizedBox(height: 24),
 
-            // NSFW Toggle
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(1),
-              child: _FocusableSwitchCard(
-                focusNode: _nsfwToggleFocusNode,
-                title: 'Allow NSFW Content',
-                subtitle: _allowNsfw
-                    ? 'NSFW subreddits and content are visible'
-                    : 'NSFW content is hidden',
-                icon: _allowNsfw ? Icons.visibility : Icons.visibility_off,
-                iconColor: _allowNsfw ? Colors.red : null,
-                value: _allowNsfw,
-                onChanged: _toggleNsfw,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Favorite Subreddits
-            Text(
-              'Favorite Subreddits',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add subreddits for quick access in the filter dropdown.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Add subreddit input
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _TvFriendlyTextField(
-                      controller: _subredditController,
-                      focusNode: _subredditInputFocusNode,
-                      labelText: 'Subreddit name',
-                      hintText: 'e.g., videos',
-                      prefixIcon: const Icon(Icons.tag),
-                      onSubmitted: (_) => _addFavoriteSubreddit(),
-                      onRightArrow: () => _addButtonFocusNode.requestFocus(),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _TvFocusableButton(
-                    focusNode: _addButtonFocusNode,
-                    icon: Icons.add,
-                    label: 'Add',
-                    onPressed: _addFavoriteSubreddit,
-                    onLeftArrow: () => _subredditInputFocusNode.requestFocus(),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Favorites list
-            if (_favoriteSubreddits.isEmpty)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.star_border,
-                        size: 48,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No favorite subreddits yet',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                // NSFW Toggle
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(1),
+                  child: _FocusableSwitchCard(
+                    focusNode: _nsfwToggleFocusNode,
+                    title: 'Allow NSFW Content',
+                    subtitle: _allowNsfw
+                        ? 'NSFW subreddits and content are visible'
+                        : 'NSFW content is hidden',
+                    icon: _allowNsfw ? Icons.visibility : Icons.visibility_off,
+                    iconColor: _allowNsfw ? kSettingsRed : null,
+                    value: _allowNsfw,
+                    onChanged: _toggleNsfw,
                   ),
                 ),
-              )
-            else
-              Card(
-                child: Column(
-                  children: _buildFavoritesList(),
-                ),
-              ),
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // Default Subreddit Info
-            if (_defaultSubreddit != null)
-              Card(
-                color: Colors.amber.withValues(alpha: 0.1),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
+                // Favorite Subreddits
+                const Text(
+                  'Favorite Subreddits',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Add subreddits for quick access in the filter dropdown.',
+                  style: TextStyle(fontSize: 12.5, color: kSettingsDim),
+                ),
+                const SizedBox(height: 16),
+
+                // Add subreddit input
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(2),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: Colors.amber),
-                      const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          'r/$_defaultSubreddit will load automatically when you select Reddit.',
-                          style: TextStyle(
-                            color: Colors.amber.shade700,
-                            fontSize: 13,
-                          ),
+                        child: _TvFriendlyTextField(
+                          controller: _subredditController,
+                          focusNode: _subredditInputFocusNode,
+                          labelText: 'Subreddit name',
+                          hintText: 'e.g., videos',
+                          prefixIcon: const Icon(Icons.tag),
+                          onSubmitted: (_) => _addFavoriteSubreddit(),
+                          onRightArrow: () =>
+                              _addButtonFocusNode.requestFocus(),
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      _TvFocusableButton(
+                        focusNode: _addButtonFocusNode,
+                        icon: Icons.add,
+                        label: 'Add',
+                        onPressed: _addFavoriteSubreddit,
+                        onLeftArrow: () =>
+                            _subredditInputFocusNode.requestFocus(),
                       ),
                     ],
                   ),
                 ),
-              ),
-          ],
+                const SizedBox(height: 16),
+
+                // Favorites list
+                if (_favoriteSubreddits.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.star_border,
+                            size: 48,
+                            color: kSettingsDim2,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No favorite subreddits yet',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              color: kSettingsDim,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Card(child: Column(children: _buildFavoritesList())),
+                const SizedBox(height: 24),
+
+                // Default Subreddit Info
+                if (_defaultSubreddit != null)
+                  SettingsInfoBanner(
+                    text:
+                        'r/$_defaultSubreddit will load automatically when you select Reddit.',
+                    tone: SettingsBannerTone.warning,
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -453,7 +450,6 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Focus(
       onKeyEvent: _handleKeyEvent,
       skipTraversal: true,
@@ -462,12 +458,12 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
-              ? Border.all(color: theme.colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                    color: kSettingsAccent.withValues(alpha: 0.2),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -481,7 +477,6 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
             labelText: widget.labelText,
             hintText: widget.hintText,
             prefixIcon: widget.prefixIcon,
-            border: const OutlineInputBorder(),
           ),
           onSubmitted: widget.onSubmitted,
         ),
@@ -546,9 +541,6 @@ class _FocusableSwitchCardState extends State<_FocusableSwitchCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -566,12 +558,12 @@ class _FocusableSwitchCardState extends State<_FocusableSwitchCard> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
-              ? Border.all(color: colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: colorScheme.primary.withValues(alpha: 0.2),
+                    color: kSettingsAccent.withValues(alpha: 0.2),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -580,25 +572,24 @@ class _FocusableSwitchCardState extends State<_FocusableSwitchCard> {
         ),
         child: Card(
           margin: EdgeInsets.zero,
-          color: _isFocused ? colorScheme.primaryContainer : null,
+          color: _isFocused ? kSettingsPanel2 : null,
           child: SwitchListTile(
             title: Text(
               widget.title,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: _isFocused ? colorScheme.onPrimaryContainer : null,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
               ),
             ),
             subtitle: Text(
               widget.subtitle,
-              style: TextStyle(
-                fontSize: 13,
-                color: _isFocused ? colorScheme.onPrimaryContainer.withValues(alpha: 0.8) : null,
-              ),
+              style: TextStyle(fontSize: 13, color: kSettingsDim),
             ),
             secondary: Icon(
               widget.icon,
-              color: _isFocused ? colorScheme.onPrimaryContainer : widget.iconColor,
+              color:
+                  widget.iconColor ??
+                  (_isFocused ? kSettingsAccent2 : kSettingsDim),
             ),
             value: widget.value,
             onChanged: widget.onChanged,
@@ -661,8 +652,6 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -673,7 +662,8 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftArrow != null) {
           widget.onLeftArrow!();
           return KeyEventResult.handled;
         }
@@ -685,12 +675,12 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
-              ? Border.all(color: colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent2, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: colorScheme.primary.withValues(alpha: 0.3),
+                    color: kSettingsAccent.withValues(alpha: 0.3),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -701,9 +691,6 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
           onPressed: widget.onPressed,
           icon: Icon(widget.icon),
           label: Text(widget.label),
-          style: FilledButton.styleFrom(
-            backgroundColor: _isFocused ? colorScheme.primary : null,
-          ),
         ),
       ),
     );
@@ -771,31 +758,32 @@ class _FocusableFavoriteTileState extends State<_FocusableFavoriteTile> {
 
   void _onDeleteFocusChange() {
     if (mounted) {
-      setState(() => _deleteFocused = widget.deleteFocusNode?.hasFocus ?? false);
+      setState(
+        () => _deleteFocused = widget.deleteFocusNode?.hasFocus ?? false,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final isAnyFocused = _starFocused || _deleteFocused;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       decoration: BoxDecoration(
-        color: isAnyFocused ? colorScheme.primaryContainer.withValues(alpha: 0.3) : null,
+        color: isAnyFocused ? kSettingsPanel2 : null,
         borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(
         leading: Icon(
           widget.isDefault ? Icons.star : Icons.tag,
-          color: widget.isDefault ? Colors.amber : null,
+          color: widget.isDefault ? kSettingsAmber : null,
         ),
         title: Text('r/${widget.subreddit}'),
         subtitle: widget.isDefault
             ? const Text(
                 'Default subreddit',
-                style: TextStyle(color: Colors.amber),
+                style: TextStyle(color: kSettingsAmber),
               )
             : null,
         trailing: Row(
@@ -804,7 +792,7 @@ class _FocusableFavoriteTileState extends State<_FocusableFavoriteTile> {
             _FocusableIconButton(
               focusNode: widget.starFocusNode,
               icon: widget.isDefault ? Icons.star : Icons.star_border,
-              color: widget.isDefault ? Colors.amber : null,
+              color: widget.isDefault ? kSettingsAmber : null,
               tooltip: widget.isDefault ? 'Remove default' : 'Set as default',
               onPressed: widget.onSetDefault,
               onRightArrow: () => widget.deleteFocusNode?.requestFocus(),
@@ -879,8 +867,6 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -891,12 +877,14 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftArrow != null) {
           widget.onLeftArrow!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.onRightArrow != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+            widget.onRightArrow != null) {
           widget.onRightArrow!();
           return KeyEventResult.handled;
         }
@@ -908,12 +896,12 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: _isFocused
-              ? Border.all(color: colorScheme.primary, width: 2)
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: colorScheme.primary.withValues(alpha: 0.3),
+                    color: kSettingsAccent.withValues(alpha: 0.3),
                     blurRadius: 6,
                     spreadRadius: 1,
                   ),
@@ -923,12 +911,12 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
         child: IconButton(
           icon: Icon(
             widget.icon,
-            color: _isFocused ? colorScheme.primary : widget.color,
+            color: _isFocused ? kSettingsAccent2 : widget.color,
           ),
           tooltip: widget.tooltip,
           onPressed: widget.onPressed,
           style: IconButton.styleFrom(
-            backgroundColor: _isFocused ? colorScheme.primaryContainer : null,
+            backgroundColor: _isFocused ? kSettingsPanel2 : null,
           ),
         ),
       ),

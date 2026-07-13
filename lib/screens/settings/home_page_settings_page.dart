@@ -3,6 +3,7 @@ import '../../models/stremio_addon.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import 'widgets/settings_widgets.dart';
 
 class HomePageSettingsPage extends StatefulWidget {
   const HomePageSettingsPage({super.key});
@@ -38,18 +39,22 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final addonUrl = await StorageService.getHomeDefaultAddonUrl();
       final catalogId = await StorageService.getHomeDefaultCatalogId();
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
-      final continueWatchingEnabled = await StorageService.getHomeContinueWatchingEnabled();
-      final trailerAutoplayEnabled = await StorageService.getDetailTrailerAutoplayEnabled();
+      final continueWatchingEnabled =
+          await StorageService.getHomeContinueWatchingEnabled();
+      final trailerAutoplayEnabled =
+          await StorageService.getDetailTrailerAutoplayEnabled();
       final traktListType = await StorageService.getHomeDefaultTraktListType();
-      final traktContentType = await StorageService.getHomeDefaultTraktContentType();
+      final traktContentType =
+          await StorageService.getHomeDefaultTraktContentType();
 
       // Coerce any stale/unsupported saved value to a valid option so the
       // dropdown can't crash. IPTV and YouTube are no longer default-view
       // options (they moved to their own "Browse" tabs), so a previously-saved
       // 'iptv'/'youtube' — like the long-hidden 'reddit' — normalizes to 'all'.
       const validSourceTypes = {'all', 'keyword', 'addon', 'trakt'};
-      final normalizedSourceType =
-          validSourceTypes.contains(sourceType) ? sourceType! : 'all';
+      final normalizedSourceType = validSourceTypes.contains(sourceType)
+          ? sourceType!
+          : 'all';
       // Persist the coercion so a dropped preference doesn't silently linger.
       // Only when there was an actual stale value — not for a fresh install
       // (null), which already defaults to 'all' without needing a write.
@@ -74,9 +79,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       if (!mounted) return;
       setState(() => _loading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load settings: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load settings: $e')));
       }
     }
   }
@@ -107,9 +112,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -120,7 +125,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       // Auto-select first catalog of the chosen addon
       String? firstCatalogKey;
       if (addonUrl != null) {
-        final addon = _addons.where((a) => a.manifestUrl == addonUrl).firstOrNull;
+        final addon = _addons
+            .where((a) => a.manifestUrl == addonUrl)
+            .firstOrNull;
         if (addon != null && addon.catalogs.isNotEmpty) {
           firstCatalogKey = _catalogKey(addon.catalogs.first);
         }
@@ -164,9 +171,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       MainPageBridge.notifyHomeSettingsChanged();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -177,364 +184,329 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   }
 
   /// Composite key for a catalog, unique within an addon (handles duplicate IDs across types)
-  String _catalogKey(StremioAddonCatalog catalog) => '${catalog.type}:${catalog.id}';
+  String _catalogKey(StremioAddonCatalog catalog) =>
+      '${catalog.type}:${catalog.id}';
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Home Page Settings'),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+      return const SettingsPageScaffold(
+        title: 'Home Page Settings',
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home Page Settings'),
-      ),
+    return SettingsPageScaffold(
+      title: 'Home Page Settings',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.home_rounded,
-                      size: 48,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Home Page Defaults',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SettingsPageHeader(
+                  icon: Icons.home_rounded,
+                  title: 'Home Page Defaults',
+                  subtitle: 'Choose what shows first when the app opens',
+                ),
+                const SizedBox(height: 24),
+
+                // Main settings card
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        // Source type dropdown
+                        DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedSourceType,
+                          decoration: InputDecoration(
+                            labelText: 'Default view',
+                            prefixIcon: Icon(
+                              _iconForSourceType(_selectedSourceType),
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Choose what shows first when the app opens',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                          items: const [
+                            DropdownMenuItem(value: 'all', child: Text('All')),
+                            DropdownMenuItem(
+                              value: 'keyword',
+                              child: Text('Keyword'),
                             ),
+                            DropdownMenuItem(
+                              value: 'addon',
+                              child: Text('Addon'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'trakt',
+                              child: Text('Trakt'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) _selectSourceType(value);
+                          },
+                        ),
+
+                        // Addon dropdown (shown when source type is 'addon')
+                        if (_selectedSourceType == 'addon' &&
+                            _addons.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value:
+                                _addons.any(
+                                  (a) => a.manifestUrl == _selectedAddonUrl,
+                                )
+                                ? _selectedAddonUrl
+                                : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Addon',
+                              prefixIcon: Icon(Icons.extension),
+                            ),
+                            items: _addons.map((addon) {
+                              return DropdownMenuItem<String>(
+                                value: addon.manifestUrl,
+                                child: Text(
+                                  addon.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) => _selectAddon(value),
                           ),
                         ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
 
-            // Main settings card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // Source type dropdown
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _selectedSourceType,
-                      decoration: InputDecoration(
-                        labelText: 'Default view',
-                        prefixIcon: Icon(
-                          _iconForSourceType(_selectedSourceType),
-                          color: theme.colorScheme.primary,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All')),
-                        DropdownMenuItem(value: 'keyword', child: Text('Keyword')),
-                        DropdownMenuItem(value: 'addon', child: Text('Addon')),
-                        DropdownMenuItem(value: 'trakt', child: Text('Trakt')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) _selectSourceType(value);
-                      },
-                    ),
-
-                    // Addon dropdown (shown when source type is 'addon')
-                    if (_selectedSourceType == 'addon' && _addons.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _addons.any((a) => a.manifestUrl == _selectedAddonUrl)
-                            ? _selectedAddonUrl
-                            : null,
-                        decoration: InputDecoration(
-                          labelText: 'Addon',
-                          prefixIcon: Icon(
-                            Icons.extension,
-                            color: theme.colorScheme.primary,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                        ),
-                        items: _addons.map((addon) {
-                          return DropdownMenuItem<String>(
-                            value: addon.manifestUrl,
-                            child: Text(
-                              addon.name,
-                              overflow: TextOverflow.ellipsis,
+                        // Catalog dropdown (shown when addon is selected and has catalogs)
+                        if (_selectedSourceType == 'addon' &&
+                            _selectedAddon != null &&
+                            _selectedAddon!.catalogs.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value:
+                                _selectedAddon!.catalogs.any(
+                                  (c) => _catalogKey(c) == _selectedCatalogId,
+                                )
+                                ? _selectedCatalogId
+                                : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Catalog',
+                              prefixIcon: Icon(Icons.view_list_rounded),
                             ),
-                          );
-                        }).toList(),
-                        onChanged: (value) => _selectAddon(value),
-                      ),
-                    ],
-
-                    // Catalog dropdown (shown when addon is selected and has catalogs)
-                    if (_selectedSourceType == 'addon' &&
-                        _selectedAddon != null &&
-                        _selectedAddon!.catalogs.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _selectedAddon!.catalogs.any((c) => _catalogKey(c) == _selectedCatalogId)
-                            ? _selectedCatalogId
-                            : null,
-                        decoration: InputDecoration(
-                          labelText: 'Catalog',
-                          prefixIcon: Icon(
-                            Icons.view_list_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                        ),
-                        items: _selectedAddon!.catalogs.map((catalog) {
-                          final typeLabel = catalog.type == 'movie'
-                              ? 'Movie'
-                              : catalog.type == 'series'
+                            items: _selectedAddon!.catalogs.map((catalog) {
+                              final typeLabel = catalog.type == 'movie'
+                                  ? 'Movie'
+                                  : catalog.type == 'series'
                                   ? 'Series'
                                   : catalog.type;
-                          return DropdownMenuItem<String>(
-                            value: _catalogKey(catalog),
+                              return DropdownMenuItem<String>(
+                                value: _catalogKey(catalog),
+                                child: Text(
+                                  '${catalog.name} ($typeLabel)',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) => _selectCatalog(value),
+                          ),
+                        ],
+
+                        // Trakt list type dropdown (shown when source type is 'trakt')
+                        if (_selectedSourceType == 'trakt') ...[
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: _selectedTraktListType,
+                            decoration: const InputDecoration(
+                              labelText: 'List',
+                              prefixIcon: Icon(Icons.list_rounded),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'progress',
+                                child: Text('Continue Watching'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'watchlist',
+                                child: Text('Watchlist'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'history',
+                                child: Text('History'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'collection',
+                                child: Text('Collection'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'ratings',
+                                child: Text('Ratings'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'trending',
+                                child: Text('Trending'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'popular',
+                                child: Text('Popular'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'anticipated',
+                                child: Text('Anticipated'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'recommendations',
+                                child: Text('Recommendations'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'likedLists',
+                                child: Text('Liked Lists'),
+                              ),
+                            ],
+                            onChanged: (value) async {
+                              if (value == null) return;
+                              await StorageService.setHomeDefaultTraktListType(
+                                value,
+                              );
+                              setState(() => _selectedTraktListType = value);
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: _selectedTraktContentType,
+                            decoration: InputDecoration(
+                              labelText: 'Content type',
+                              prefixIcon: Icon(
+                                _selectedTraktContentType == 'movies'
+                                    ? Icons.movie_outlined
+                                    : Icons.tv_rounded,
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'movies',
+                                child: Text('Movies'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'shows',
+                                child: Text('Shows'),
+                              ),
+                            ],
+                            onChanged: (value) async {
+                              if (value == null) return;
+                              await StorageService.setHomeDefaultTraktContentType(
+                                value,
+                              );
+                              setState(() => _selectedTraktContentType = value);
+                            },
+                          ),
+                        ],
+
+                        // No addons message
+                        if (_selectedSourceType == 'addon' && _addons.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 16),
                             child: Text(
-                              '${catalog.name} ($typeLabel)',
-                              overflow: TextOverflow.ellipsis,
+                              'No catalog addons installed. Install addons from the Stremio Addons page first.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: kSettingsRed,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Provider cards toggle
+                Card(
+                  child: SwitchListTile(
+                    secondary: const Icon(Icons.credit_card_off_rounded),
+                    title: const Text('Hide Provider Cards'),
+                    subtitle: const Text(
+                      'Hide debrid service status cards on the home screen',
+                    ),
+                    value: _hideProviderCards,
+                    onChanged: (value) => _toggleHideProviderCards(value),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Continue Watching toggle
+                Card(
+                  child: SwitchListTile(
+                    secondary: const Icon(Icons.history_rounded),
+                    title: const Text('Continue Watching'),
+                    subtitle: const Text(
+                      'Show and track recently watched items on the home screen',
+                    ),
+                    value: _continueWatchingEnabled,
+                    onChanged: (value) async {
+                      try {
+                        await StorageService.setHomeContinueWatchingEnabled(
+                          value,
+                        );
+                        if (!mounted) return;
+                        setState(() => _continueWatchingEnabled = value);
+                        MainPageBridge.notifyHomeSettingsChanged();
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to save setting: $e'),
                             ),
                           );
-                        }).toList(),
-                        onChanged: (value) => _selectCatalog(value),
-                      ),
-                    ],
+                        }
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
 
-                    // Trakt list type dropdown (shown when source type is 'trakt')
-                    if (_selectedSourceType == 'trakt') ...[
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _selectedTraktListType,
-                        decoration: InputDecoration(
-                          labelText: 'List',
-                          prefixIcon: Icon(
-                            Icons.list_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'progress', child: Text('Continue Watching')),
-                          DropdownMenuItem(value: 'watchlist', child: Text('Watchlist')),
-                          DropdownMenuItem(value: 'history', child: Text('History')),
-                          DropdownMenuItem(value: 'collection', child: Text('Collection')),
-                          DropdownMenuItem(value: 'ratings', child: Text('Ratings')),
-                          DropdownMenuItem(value: 'trending', child: Text('Trending')),
-                          DropdownMenuItem(value: 'popular', child: Text('Popular')),
-                          DropdownMenuItem(value: 'anticipated', child: Text('Anticipated')),
-                          DropdownMenuItem(value: 'recommendations', child: Text('Recommendations')),
-                          DropdownMenuItem(value: 'likedLists', child: Text('Liked Lists')),
-                        ],
-                        onChanged: (value) async {
-                          if (value == null) return;
-                          await StorageService.setHomeDefaultTraktListType(value);
-                          setState(() => _selectedTraktListType = value);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _selectedTraktContentType,
-                        decoration: InputDecoration(
-                          labelText: 'Content type',
-                          prefixIcon: Icon(
-                            _selectedTraktContentType == 'movies'
-                                ? Icons.movie_outlined
-                                : Icons.tv_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'movies', child: Text('Movies')),
-                          DropdownMenuItem(value: 'shows', child: Text('Shows')),
-                        ],
-                        onChanged: (value) async {
-                          if (value == null) return;
-                          await StorageService.setHomeDefaultTraktContentType(value);
-                          setState(() => _selectedTraktContentType = value);
-                        },
-                      ),
-                    ],
-
-                    // No addons message
-                    if (_selectedSourceType == 'addon' && _addons.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(
-                          'No catalog addons installed. Install addons from the Stremio Addons page first.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.error,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Provider cards toggle
-            Card(
-              child: SwitchListTile(
-                secondary: Icon(
-                  Icons.credit_card_off_rounded,
-                  color: theme.colorScheme.primary,
-                ),
-                title: const Text('Hide Provider Cards'),
-                subtitle: const Text(
-                  'Hide debrid service status cards on the home screen',
-                ),
-                value: _hideProviderCards,
-                onChanged: (value) => _toggleHideProviderCards(value),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Continue Watching toggle
-            Card(
-              child: SwitchListTile(
-                secondary: Icon(
-                  Icons.history_rounded,
-                  color: theme.colorScheme.primary,
-                ),
-                title: const Text('Continue Watching'),
-                subtitle: const Text(
-                  'Show and track recently watched items on the home screen',
-                ),
-                value: _continueWatchingEnabled,
-                onChanged: (value) async {
-                  try {
-                    await StorageService.setHomeContinueWatchingEnabled(value);
-                    if (!mounted) return;
-                    setState(() => _continueWatchingEnabled = value);
-                    MainPageBridge.notifyHomeSettingsChanged();
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to save setting: $e')),
-                      );
-                    }
-                  }
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Trailer autoplay toggle
-            Card(
-              child: SwitchListTile(
-                secondary: Icon(
-                  Icons.movie_filter_rounded,
-                  color: theme.colorScheme.primary,
-                ),
-                title: const Text('Autoplay Trailers'),
-                subtitle: const Text(
-                  'Play a trailer (with sound) behind the movie/series detail '
-                  'page. '
-                  'Falls back to the poster when off or unavailable.',
-                ),
-                value: _trailerAutoplayEnabled,
-                onChanged: (value) async {
-                  try {
-                    await StorageService.setDetailTrailerAutoplayEnabled(value);
-                    if (!mounted) return;
-                    setState(() => _trailerAutoplayEnabled = value);
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to save setting: $e')),
-                      );
-                    }
-                  }
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Info card
-            Card(
-              color: theme.colorScheme.primaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: theme.colorScheme.onPrimaryContainer,
-                      size: 24,
+                // Trailer autoplay toggle
+                Card(
+                  child: SwitchListTile(
+                    secondary: const Icon(Icons.movie_filter_rounded),
+                    title: const Text('Autoplay Trailers'),
+                    subtitle: const Text(
+                      'Play a trailer (with sound) behind the movie/series detail '
+                      'page. '
+                      'Falls back to the poster when off or unavailable.',
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _infoTextForSourceType(_selectedSourceType),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ),
-                  ],
+                    value: _trailerAutoplayEnabled,
+                    onChanged: (value) async {
+                      try {
+                        await StorageService.setDetailTrailerAutoplayEnabled(
+                          value,
+                        );
+                        if (!mounted) return;
+                        setState(() => _trailerAutoplayEnabled = value);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to save setting: $e'),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+
+                // Info banner
+                SettingsInfoBanner(
+                  text: _infoTextForSourceType(_selectedSourceType),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

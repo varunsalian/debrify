@@ -9,6 +9,7 @@ import '../../services/subtitle_font_service.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
 import '../../utils/tv_keys.dart';
+import 'widgets/settings_widgets.dart';
 
 class ExternalPlayerSettingsPage extends StatefulWidget {
   const ExternalPlayerSettingsPage({super.key});
@@ -55,10 +56,12 @@ class _ExternalPlayerSettingsPageState
   String? _linuxCommandError;
 
   // Windows external player settings
-  WindowsExternalPlayer _selectedWindowsPlayer = WindowsExternalPlayer.systemDefault;
+  WindowsExternalPlayer _selectedWindowsPlayer =
+      WindowsExternalPlayer.systemDefault;
   Map<WindowsExternalPlayer, bool> _installedWindowsPlayers = {};
   String? _windowsCustomCommand;
-  final TextEditingController _windowsCommandController = TextEditingController();
+  final TextEditingController _windowsCommandController =
+      TextEditingController();
   final FocusNode _windowsCommandFocusNode = FocusNode();
   bool _windowsCommandFocused = false;
   String? _windowsCommandError;
@@ -73,14 +76,17 @@ class _ExternalPlayerSettingsPageState
   bool _isAndroidTv = false;
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
   int _nightModeIndex = 0; // Off
-  String? _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
-  String? _defaultAudioLanguage; // null = no preference, 'en'/'es'/etc = language
+  String?
+  _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
+  String?
+  _defaultAudioLanguage; // null = no preference, 'en'/'es'/etc = language
   int _subtitleSizeIndex = 2; // Medium
   int _subtitleStyleIndex = 1; // Outline
   int _subtitleColorIndex = 0; // White
   int _subtitleBgIndex = 0; // None
   int _subtitleFontIndex = 0; // Default
-  List<SubtitleFont> _allFonts = SubtitleFont.builtInOptions; // Built-in + custom fonts
+  List<SubtitleFont> _allFonts =
+      SubtitleFont.builtInOptions; // Built-in + custom fonts
 
   // Debrify Player FocusNodes for DPAD navigation
   final FocusNode _aspectFocusNode = FocusNode();
@@ -282,8 +288,10 @@ class _ExternalPlayerSettingsPageState
       String? linuxCustomCommand;
 
       if (Platform.isLinux) {
-        installedLinux = await LinuxExternalPlayerServiceExtension.detectInstalledLinuxPlayers();
-        linuxPreferredKey = await StorageService.getPreferredLinuxExternalPlayer();
+        installedLinux =
+            await LinuxExternalPlayerServiceExtension.detectInstalledLinuxPlayers();
+        linuxPreferredKey =
+            await StorageService.getPreferredLinuxExternalPlayer();
         linuxCustomCommand = await StorageService.getLinuxCustomCommand();
         _linuxCommandController.text = linuxCustomCommand ?? '';
       }
@@ -294,8 +302,10 @@ class _ExternalPlayerSettingsPageState
       String? windowsCustomCommand;
 
       if (Platform.isWindows) {
-        installedWindows = await WindowsExternalPlayerServiceExtension.detectInstalledWindowsPlayers();
-        windowsPreferredKey = await StorageService.getPreferredWindowsExternalPlayer();
+        installedWindows =
+            await WindowsExternalPlayerServiceExtension.detectInstalledWindowsPlayers();
+        windowsPreferredKey =
+            await StorageService.getPreferredWindowsExternalPlayer();
         windowsCustomCommand = await StorageService.getWindowsCustomCommand();
         _windowsCommandController.text = windowsCustomCommand ?? '';
       }
@@ -328,8 +338,10 @@ class _ExternalPlayerSettingsPageState
           ? await StorageService.getPlayerDefaultAspectIndexTv()
           : await StorageService.getPlayerDefaultAspectIndex();
       final nightModeIndex = await StorageService.getPlayerNightModeIndex();
-      final defaultSubtitleLanguage = await StorageService.getDefaultSubtitleLanguage();
-      final defaultAudioLanguage = await StorageService.getDefaultAudioLanguage();
+      final defaultSubtitleLanguage =
+          await StorageService.getDefaultSubtitleLanguage();
+      final defaultAudioLanguage =
+          await StorageService.getDefaultAudioLanguage();
 
       // Load subtitle settings
       final subtitleSettings = await SubtitleSettingsService.instance.loadAll();
@@ -343,15 +355,21 @@ class _ExternalPlayerSettingsPageState
         _customCommand = customCommand;
         // iOS settings
         _installedIOSPlayers = installedIOS;
-        _selectedIOSPlayer = iOSExternalPlayerExtension.fromStorageKey(iosPreferredKey);
+        _selectedIOSPlayer = iOSExternalPlayerExtension.fromStorageKey(
+          iosPreferredKey,
+        );
         _iosCustomScheme = iosCustomScheme;
         // Linux settings
         _installedLinuxPlayers = installedLinux;
-        _selectedLinuxPlayer = LinuxExternalPlayerExtension.fromStorageKey(linuxPreferredKey);
+        _selectedLinuxPlayer = LinuxExternalPlayerExtension.fromStorageKey(
+          linuxPreferredKey,
+        );
         _linuxCustomCommand = linuxCustomCommand;
         // Windows settings
         _installedWindowsPlayers = installedWindows;
-        _selectedWindowsPlayer = WindowsExternalPlayerExtension.fromStorageKey(windowsPreferredKey);
+        _selectedWindowsPlayer = WindowsExternalPlayerExtension.fromStorageKey(
+          windowsPreferredKey,
+        );
         _windowsCustomCommand = windowsCustomCommand;
         // Other settings
         _vrDefaultScreenType = vrScreenType;
@@ -377,9 +395,9 @@ class _ExternalPlayerSettingsPageState
         _loading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load settings: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load settings: $e')));
       }
     }
   }
@@ -392,9 +410,9 @@ class _ExternalPlayerSettingsPageState
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -407,9 +425,9 @@ class _ExternalPlayerSettingsPageState
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -494,15 +512,15 @@ class _ExternalPlayerSettingsPageState
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Custom command saved')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Custom command saved')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save command: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save command: $e')));
       }
     }
   }
@@ -525,9 +543,9 @@ class _ExternalPlayerSettingsPageState
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to clear command: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to clear command: $e')));
       }
     }
   }
@@ -541,9 +559,9 @@ class _ExternalPlayerSettingsPageState
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -617,9 +635,9 @@ class _ExternalPlayerSettingsPageState
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -646,15 +664,15 @@ class _ExternalPlayerSettingsPageState
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Custom command saved')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Custom command saved')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save command: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save command: $e')));
       }
     }
   }
@@ -677,9 +695,9 @@ class _ExternalPlayerSettingsPageState
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to clear command: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to clear command: $e')));
       }
     }
   }
@@ -693,9 +711,9 @@ class _ExternalPlayerSettingsPageState
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -722,15 +740,15 @@ class _ExternalPlayerSettingsPageState
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Custom command saved')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Custom command saved')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save command: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save command: $e')));
       }
     }
   }
@@ -740,7 +758,9 @@ class _ExternalPlayerSettingsPageState
       await StorageService.setWindowsCustomCommand(null);
 
       if (_selectedWindowsPlayer == WindowsExternalPlayer.customCommand) {
-        await StorageService.setPreferredWindowsExternalPlayer('system_default');
+        await StorageService.setPreferredWindowsExternalPlayer(
+          'system_default',
+        );
         setState(() {
           _selectedWindowsPlayer = WindowsExternalPlayer.systemDefault;
         });
@@ -753,9 +773,9 @@ class _ExternalPlayerSettingsPageState
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to clear command: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to clear command: $e')));
       }
     }
   }
@@ -834,7 +854,8 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _loadFonts() async {
     final allFonts = await SubtitleFontService.instance.getAllFonts();
-    final selectedIndex = await SubtitleFontService.instance.getSelectedFontIndex();
+    final selectedIndex = await SubtitleFontService.instance
+        .getSelectedFontIndex();
     if (mounted) {
       setState(() {
         _allFonts = allFonts;
@@ -872,7 +893,9 @@ class _ExternalPlayerSettingsPageState
         await _loadFonts();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Font "${newFont.label}" imported successfully')),
+            SnackBar(
+              content: Text('Font "${newFont.label}" imported successfully'),
+            ),
           );
         }
       } else {
@@ -884,9 +907,9 @@ class _ExternalPlayerSettingsPageState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error importing font: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error importing font: $e')));
       }
     }
   }
@@ -895,19 +918,37 @@ class _ExternalPlayerSettingsPageState
     await SubtitleFontService.instance.removeCustomFont(font.id);
     await _loadFonts();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Font "${font.label}" removed')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Font "${font.label}" removed')));
     }
   }
 
   // Aspect labels
   List<String> get _aspectLabels => _isAndroidTv
       ? ['Fit', 'Fill', 'Zoom']
-      : ['Contain', 'Cover', 'Fit Width', 'Fit Height', '16:9', '4:3', '21:9', '1:1', '3:2', '5:4'];
+      : [
+          'Contain',
+          'Cover',
+          'Fit Width',
+          'Fit Height',
+          '16:9',
+          '4:3',
+          '21:9',
+          '1:1',
+          '3:2',
+          '5:4',
+        ];
 
   static const List<String> _nightModeLabels = [
-    'Off', 'Low', 'Medium', 'High', 'Higher', 'Extreme', 'Max', 'Sleeping Baby'
+    'Off',
+    'Low',
+    'Medium',
+    'High',
+    'Higher',
+    'Extreme',
+    'Max',
+    'Sleeping Baby',
   ];
 
   // Subtitle language options: (code, label)
@@ -937,7 +978,9 @@ class _ExternalPlayerSettingsPageState
   ];
 
   int get _subtitleLanguageIndex {
-    final idx = _subtitleLanguageOptions.indexWhere((opt) => opt.$1 == _defaultSubtitleLanguage);
+    final idx = _subtitleLanguageOptions.indexWhere(
+      (opt) => opt.$1 == _defaultSubtitleLanguage,
+    );
     return idx >= 0 ? idx : 0;
   }
 
@@ -967,12 +1010,13 @@ class _ExternalPlayerSettingsPageState
   ];
 
   int get _audioLanguageIndex {
-    final idx = _audioLanguageOptions.indexWhere((opt) => opt.$1 == _defaultAudioLanguage);
+    final idx = _audioLanguageOptions.indexWhere(
+      (opt) => opt.$1 == _defaultAudioLanguage,
+    );
     return idx >= 0 ? idx : 0;
   }
 
   Widget _buildPlayerTile(ExternalPlayer player) {
-    final theme = Theme.of(context);
     final isInstalled = _installedPlayers[player] ?? false;
     final isCustomApp = player == ExternalPlayer.customApp;
     final isCustomCommand = player == ExternalPlayer.customCommand;
@@ -999,7 +1043,7 @@ class _ExternalPlayerSettingsPageState
         subtitle = _customAppName ?? _customAppPath!;
       } else {
         subtitle = 'No application selected';
-        subtitleColor = theme.colorScheme.onSurfaceVariant;
+        subtitleColor = kSettingsDim;
       }
     } else if (isCustomCommand) {
       if (_customCommand != null && _customCommand!.isNotEmpty) {
@@ -1009,14 +1053,14 @@ class _ExternalPlayerSettingsPageState
         subtitle = displayCmd;
       } else {
         subtitle = 'No command configured';
-        subtitleColor = theme.colorScheme.onSurfaceVariant;
+        subtitleColor = kSettingsDim;
       }
     } else if (isInstalled) {
       subtitle = 'Installed';
-      subtitleColor = Colors.green;
+      subtitleColor = kSettingsGreen;
     } else {
       subtitle = 'Not found';
-      subtitleColor = theme.colorScheme.error;
+      subtitleColor = kSettingsRed;
     }
 
     return RadioListTile<ExternalPlayer>(
@@ -1032,31 +1076,24 @@ class _ExternalPlayerSettingsPageState
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+          color: kSettingsAccent.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(
           player.icon,
-          color: canSelect
-              ? theme.colorScheme.primary
-              : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+          color: canSelect ? kSettingsAccent : kSettingsDim2,
         ),
       ),
       title: Text(
         player.displayName,
         style: TextStyle(
           fontWeight: FontWeight.w500,
-          color: canSelect
-              ? theme.colorScheme.onSurface
-              : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+          color: canSelect ? Colors.white : kSettingsDim2,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
-          fontSize: 12,
-          color: subtitleColor ?? theme.colorScheme.onSurfaceVariant,
-        ),
+        style: TextStyle(fontSize: 12, color: subtitleColor ?? kSettingsDim),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1064,7 +1101,6 @@ class _ExternalPlayerSettingsPageState
   }
 
   Widget _buildIOSPlayerTile(iOSExternalPlayer player) {
-    final theme = Theme.of(context);
     final isInstalled = _installedIOSPlayers[player] ?? false;
     final isCustom = player == iOSExternalPlayer.customScheme;
 
@@ -1079,12 +1115,12 @@ class _ExternalPlayerSettingsPageState
         subtitle = displayScheme;
       } else {
         subtitle = 'No URL scheme configured';
-        subtitleColor = theme.colorScheme.onSurfaceVariant;
+        subtitleColor = kSettingsDim;
       }
     } else {
       subtitle = player.description;
       if (isInstalled) {
-        subtitleColor = Colors.green;
+        subtitleColor = kSettingsGreen;
         subtitle = 'Likely installed • ${player.description}';
       }
     }
@@ -1100,27 +1136,18 @@ class _ExternalPlayerSettingsPageState
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+          color: kSettingsAccent.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          player.icon,
-          color: theme.colorScheme.primary,
-        ),
+        child: Icon(player.icon, color: kSettingsAccent),
       ),
       title: Text(
         player.displayName,
-        style: TextStyle(
-          fontWeight: FontWeight.w500,
-          color: theme.colorScheme.onSurface,
-        ),
+        style: TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
-          fontSize: 12,
-          color: subtitleColor ?? theme.colorScheme.onSurfaceVariant,
-        ),
+        style: TextStyle(fontSize: 12, color: subtitleColor ?? kSettingsDim),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1128,7 +1155,6 @@ class _ExternalPlayerSettingsPageState
   }
 
   Widget _buildLinuxPlayerTile(LinuxExternalPlayer player) {
-    final theme = Theme.of(context);
     final isInstalled = _installedLinuxPlayers[player] ?? false;
     final isCustom = player == LinuxExternalPlayer.customCommand;
 
@@ -1143,12 +1169,12 @@ class _ExternalPlayerSettingsPageState
         subtitle = displayCommand;
       } else {
         subtitle = 'No command configured';
-        subtitleColor = theme.colorScheme.onSurfaceVariant;
+        subtitleColor = kSettingsDim;
       }
     } else {
       subtitle = player.description;
       if (isInstalled) {
-        subtitleColor = Colors.green;
+        subtitleColor = kSettingsGreen;
         subtitle = 'Installed • ${player.description}';
       }
     }
@@ -1164,27 +1190,18 @@ class _ExternalPlayerSettingsPageState
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+          color: kSettingsAccent.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          player.icon,
-          color: theme.colorScheme.primary,
-        ),
+        child: Icon(player.icon, color: kSettingsAccent),
       ),
       title: Text(
         player.displayName,
-        style: TextStyle(
-          fontWeight: FontWeight.w500,
-          color: theme.colorScheme.onSurface,
-        ),
+        style: TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
-          fontSize: 12,
-          color: subtitleColor ?? theme.colorScheme.onSurfaceVariant,
-        ),
+        style: TextStyle(fontSize: 12, color: subtitleColor ?? kSettingsDim),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1192,7 +1209,6 @@ class _ExternalPlayerSettingsPageState
   }
 
   Widget _buildWindowsPlayerTile(WindowsExternalPlayer player) {
-    final theme = Theme.of(context);
     final isInstalled = _installedWindowsPlayers[player] ?? false;
     final isCustom = player == WindowsExternalPlayer.customCommand;
 
@@ -1207,12 +1223,12 @@ class _ExternalPlayerSettingsPageState
         subtitle = displayCommand;
       } else {
         subtitle = 'No command configured';
-        subtitleColor = theme.colorScheme.onSurfaceVariant;
+        subtitleColor = kSettingsDim;
       }
     } else {
       subtitle = player.description;
       if (isInstalled) {
-        subtitleColor = Colors.green;
+        subtitleColor = kSettingsGreen;
         subtitle = 'Installed • ${player.description}';
       }
     }
@@ -1228,27 +1244,18 @@ class _ExternalPlayerSettingsPageState
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+          color: kSettingsAccent.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          player.icon,
-          color: theme.colorScheme.primary,
-        ),
+        child: Icon(player.icon, color: kSettingsAccent),
       ),
       title: Text(
         player.displayName,
-        style: TextStyle(
-          fontWeight: FontWeight.w500,
-          color: theme.colorScheme.onSurface,
-        ),
+        style: TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
-          fontSize: 12,
-          color: subtitleColor ?? theme.colorScheme.onSurfaceVariant,
-        ),
+        style: TextStyle(fontSize: 12, color: subtitleColor ?? kSettingsDim),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1275,14 +1282,10 @@ class _ExternalPlayerSettingsPageState
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected
-                ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
-                : Colors.transparent,
+            color: isSelected ? kSettingsPanel2 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outline.withValues(alpha: 0.3),
+              color: isSelected ? kSettingsAccent : kSettingsLine,
               width: isSelected ? 2 : 1,
             ),
           ),
@@ -1300,10 +1303,10 @@ class _ExternalPlayerSettingsPageState
                 icon,
                 size: 20,
                 color: isSelected
-                    ? theme.colorScheme.primary
+                    ? kSettingsAccent
                     : disabled
-                        ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ? kSettingsDim2
+                    : kSettingsDim,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1315,24 +1318,27 @@ class _ExternalPlayerSettingsPageState
                         Text(
                           title,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                            color: disabled
-                                ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                                : null,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: disabled ? kSettingsDim2 : null,
                           ),
                         ),
                         if (recommended) ...[
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                              color: kSettingsAccent.withValues(alpha: 0.16),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               'Default',
                               style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.primary,
+                                color: kSettingsAccent,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1343,9 +1349,7 @@ class _ExternalPlayerSettingsPageState
                     Text(
                       subtitle,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: disabled
-                            ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
-                            : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: disabled ? kSettingsDim2 : kSettingsDim,
                       ),
                     ),
                   ],
@@ -1393,10 +1397,7 @@ class _ExternalPlayerSettingsPageState
           children: [
             Expanded(
               flex: 2,
-              child: Text(
-                label,
-                style: theme.textTheme.bodyMedium,
-              ),
+              child: Text(label, style: theme.textTheme.bodyMedium),
             ),
             Expanded(
               flex: 3,
@@ -1405,18 +1406,16 @@ class _ExternalPlayerSettingsPageState
                 curve: Curves.easeOutCubic,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
+                  color: kSettingsPanel2,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isFocused
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.outline.withValues(alpha: 0.3),
+                    color: isFocused ? kSettingsAccent : kSettingsLine,
                     width: isFocused ? 2 : 1,
                   ),
                   boxShadow: isFocused
                       ? [
                           BoxShadow(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                            color: kSettingsAccent.withValues(alpha: 0.25),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -1428,18 +1427,17 @@ class _ExternalPlayerSettingsPageState
                     value: value,
                     focusNode: focusNode,
                     isExpanded: true,
-                    icon: Icon(
-                      Icons.keyboard_arrow_down,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                    icon: Icon(Icons.keyboard_arrow_down, color: kSettingsDim),
                     items: items.entries
-                        .map((e) => DropdownMenuItem(
-                              value: e.key,
-                              child: Text(
-                                e.value,
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ))
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(
+                              e.value,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (v) {
                       if (v != null) onChanged(v);
@@ -1491,15 +1489,12 @@ class _ExternalPlayerSettingsPageState
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: isFocused
-                ? Border.all(
-                    color: theme.colorScheme.primary,
-                    width: 2,
-                  )
+                ? Border.all(color: kSettingsAccent, width: 2)
                 : null,
             boxShadow: isFocused
                 ? [
                     BoxShadow(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                      color: kSettingsAccent.withValues(alpha: 0.25),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -1534,7 +1529,7 @@ class _ExternalPlayerSettingsPageState
                         Text(
                           subtitle,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: kSettingsDim,
                           ),
                         ),
                       ],
@@ -1584,10 +1579,7 @@ class _ExternalPlayerSettingsPageState
           children: [
             Expanded(
               flex: 2,
-              child: Text(
-                label,
-                style: theme.textTheme.bodyMedium,
-              ),
+              child: Text(label, style: theme.textTheme.bodyMedium),
             ),
             Expanded(
               flex: 3,
@@ -1596,18 +1588,16 @@ class _ExternalPlayerSettingsPageState
                 curve: Curves.easeOutCubic,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
+                  color: kSettingsPanel2,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isFocused
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.outline.withValues(alpha: 0.3),
+                    color: isFocused ? kSettingsAccent : kSettingsLine,
                     width: isFocused ? 2 : 1,
                   ),
                   boxShadow: isFocused
                       ? [
                           BoxShadow(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                            color: kSettingsAccent.withValues(alpha: 0.25),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -1619,10 +1609,7 @@ class _ExternalPlayerSettingsPageState
                     value: value.clamp(0, items.length - 1),
                     focusNode: focusNode,
                     isExpanded: true,
-                    icon: Icon(
-                      Icons.keyboard_arrow_down,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                    icon: Icon(Icons.keyboard_arrow_down, color: kSettingsDim),
                     items: List.generate(items.length, (index) {
                       return DropdownMenuItem<int>(
                         value: index,
@@ -1644,31 +1631,30 @@ class _ExternalPlayerSettingsPageState
 
   @override
   Widget build(BuildContext context) {
-    final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid || Platform.isIOS || Platform.isLinux || Platform.isWindows;
+    final isSupportedPlatform =
+        Platform.isMacOS ||
+        Platform.isAndroid ||
+        Platform.isIOS ||
+        Platform.isLinux ||
+        Platform.isWindows;
 
     if (!isSupportedPlatform) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Player Settings'),
-        ),
+      return SettingsPageScaffold(
+        title: 'Player Settings',
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.block_rounded,
-                  size: 64,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                Icon(Icons.block_rounded, size: 64, color: kSettingsDim),
                 const SizedBox(height: 16),
                 Text(
                   'Player settings are not available on this platform',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: kSettingsDim),
                 ),
               ],
             ),
@@ -1678,1303 +1664,642 @@ class _ExternalPlayerSettingsPageState
     }
 
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Player Settings'),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+      return const SettingsPageScaffold(
+        title: 'Player Settings',
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Player Settings'),
-      ),
+    return SettingsPageScaffold(
+      title: 'Player Settings',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.open_in_new_rounded,
-                      size: 48,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Player Settings',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Choose which player to use for video playback',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                const SettingsPageHeader(
+                  icon: Icons.open_in_new_rounded,
+                  title: 'Player Settings',
+                  subtitle: 'Choose which player to use for video playback',
                 ),
-              ),
-            ),
 
-            const SizedBox(height: 16),
-
-            // Default Player Mode Selection
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Default Player',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Choose which player to use when playing videos',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPlayerModeOption(
-                      context,
-                      value: 'debrify',
-                      title: 'Debrify Player',
-                      subtitle: 'Use the built-in video player',
-                      icon: Icons.play_circle_filled_rounded,
-                      recommended: true,
-                    ),
-                    _buildPlayerModeOption(
-                      context,
-                      value: 'external',
-                      title: 'External Player',
-                      subtitle: Platform.isMacOS
-                          ? 'Open videos in your preferred external player'
-                          : 'Choose which app to use when opening videos',
-                      icon: Icons.open_in_new_rounded,
-                    ),
-                    _buildPlayerModeOption(
-                      context,
-                      value: 'deovr',
-                      title: 'DeoVR',
-                      subtitle: 'Use this only on VR devices',
-                      icon: Icons.vrpano,
-                      disabled: !Platform.isAndroid,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Debrify Player settings (only when Debrify Player is selected)
-            if (_defaultPlayerMode == 'debrify') ...[
-              const SizedBox(height: 16),
-
-              // Playback Defaults
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Playback Defaults',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Default settings when video playback starts',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Default Aspect
-                      _buildSettingDropdown(
-                        context,
-                        label: 'Default Aspect',
-                        value: _defaultAspectIndex,
-                        items: _aspectLabels,
-                        onChanged: (index) => _setDefaultAspectIndex(index),
-                        focusNode: _aspectFocusNode,
-                        isFocused: _aspectFocused,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Default Audio Language
-                      _buildSettingDropdown(
-                        context,
-                        label: 'Default Audio',
-                        value: _audioLanguageIndex,
-                        items: _audioLanguageOptions.map((opt) => opt.$2).toList(),
-                        onChanged: (index) => _setDefaultAudioLanguage(_audioLanguageOptions[index].$1),
-                        focusNode: _defaultAudioLangFocusNode,
-                        isFocused: _defaultAudioLangFocused,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Default Subtitle Language
-                      _buildSettingDropdown(
-                        context,
-                        label: 'Default Subtitle',
-                        value: _subtitleLanguageIndex,
-                        items: _subtitleLanguageOptions.map((opt) => opt.$2).toList(),
-                        onChanged: (index) => _setDefaultSubtitleLanguage(_subtitleLanguageOptions[index].$1),
-                        focusNode: _defaultSubtitleLangFocusNode,
-                        isFocused: _defaultSubtitleLangFocused,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Subtitle Appearance
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Subtitle Appearance',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Customize how subtitles look',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Size
-                      _buildSettingDropdown(
-                        context,
-                        label: 'Size',
-                        value: _subtitleSizeIndex,
-                        items: SubtitleSize.options.map((o) => o.label).toList(),
-                        onChanged: (index) => _setSubtitleSizeIndex(index),
-                        focusNode: _subtitleSizeFocusNode,
-                        isFocused: _subtitleSizeFocused,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Style
-                      _buildSettingDropdown(
-                        context,
-                        label: 'Style',
-                        value: _subtitleStyleIndex,
-                        items: SubtitleStyle.options.map((o) => o.label).toList(),
-                        onChanged: (index) => _setSubtitleStyleIndex(index),
-                        focusNode: _subtitleStyleFocusNode,
-                        isFocused: _subtitleStyleFocused,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Color
-                      _buildSettingDropdown(
-                        context,
-                        label: 'Color',
-                        value: _subtitleColorIndex,
-                        items: SubtitleColor.options.map((o) => o.label).toList(),
-                        onChanged: (index) => _setSubtitleColorIndex(index),
-                        focusNode: _subtitleColorFocusNode,
-                        isFocused: _subtitleColorFocused,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Background
-                      _buildSettingDropdown(
-                        context,
-                        label: 'Background',
-                        value: _subtitleBgIndex,
-                        items: SubtitleBackground.options.map((o) => o.label).toList(),
-                        onChanged: (index) => _setSubtitleBgIndex(index),
-                        focusNode: _subtitleBgFocusNode,
-                        isFocused: _subtitleBgFocused,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Font
-                      _buildSettingDropdown(
-                        context,
-                        label: 'Font',
-                        value: _subtitleFontIndex,
-                        items: _allFonts.map((f) => f.isCustom ? '${f.label} (Custom)' : f.label).toList(),
-                        onChanged: (index) => _setSubtitleFontIndex(index),
-                        focusNode: _subtitleFontFocusNode,
-                        isFocused: _subtitleFontFocused,
-                      ),
-
-                      // Import custom font button (always visible)
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _importCustomFont,
-                          icon: const Icon(Icons.file_upload_outlined),
-                          label: const Text('Import Custom Font (TTF/OTF)'),
-                        ),
-                      ),
-
-                      // List of custom fonts with delete buttons
-                      if (_allFonts.any((f) => f.isCustom)) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          'Custom Fonts',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        ..._allFonts.where((f) => f.isCustom).map((font) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.text_fields,
-                                size: 16,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  font.label,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: _allFonts[_subtitleFontIndex].id == font.id
-                                        ? theme.colorScheme.primary
-                                        : theme.colorScheme.onSurfaceVariant,
-                                    fontWeight: _allFonts[_subtitleFontIndex].id == font.id
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () => _removeCustomFont(font),
-                                icon: const Icon(Icons.delete_outline, size: 18),
-                                color: theme.colorScheme.error,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                tooltip: 'Remove font',
-                              ),
-                            ],
-                          ),
-                        )),
-                      ],
-
-                      const SizedBox(height: 16),
-
-                      // Preview
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Sample Subtitle',
-                            style: TextStyle(
-                              fontSize: SubtitleSize.options[_subtitleSizeIndex].sizePx * 0.4,
-                              color: SubtitleColor.options[_subtitleColorIndex].color,
-                              fontWeight: FontWeight.w600,
-                              shadows: SubtitleStyle.options[_subtitleStyleIndex].shadows,
-                              backgroundColor: SubtitleBackground.options[_subtitleBgIndex].color,
-                              fontFamily: _subtitleFontIndex < _allFonts.length
-                                  ? _allFonts[_subtitleFontIndex].fontFamily
-                                  : null,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Night Mode (Android TV only)
-              if (_isAndroidTv) ...[
                 const SizedBox(height: 16),
+
+                // Default Player Mode Selection
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.nightlight_round,
-                              color: theme.colorScheme.primary,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Night Mode',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Default Player',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Boosts quiet sounds for late-night viewing without disturbing others',
+                          'Choose which player to use when playing videos',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: kSettingsDim,
                           ),
                         ),
                         const SizedBox(height: 16),
-                        ...List.generate(_nightModeLabels.length, (index) {
-                          final isSelected = _nightModeIndex == index;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Focus(
-                              onKeyEvent: (node, event) {
-                                if (event is KeyDownEvent) {
-                                  if (isActivateKey(event.logicalKey)) {
-                                    _setNightModeIndex(index);
-                                    return KeyEventResult.handled;
-                                  }
-                                }
-                                return KeyEventResult.ignored;
-                              },
-                              child: Builder(
-                                builder: (context) {
-                                  final isFocused = Focus.of(context).hasFocus;
-                                  return InkWell(
-                                    onTap: () => _setNightModeIndex(index),
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 160),
-                                      curve: Curves.easeOutCubic,
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: isFocused
-                                              ? theme.colorScheme.primary
-                                              : isSelected
-                                                  ? theme.colorScheme.primary
-                                                  : theme.colorScheme.outline.withValues(alpha: 0.3),
-                                          width: isFocused || isSelected ? 2 : 1,
-                                        ),
-                                        boxShadow: isFocused
-                                            ? [
-                                                BoxShadow(
-                                                  color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                                                  blurRadius: 12,
-                                                  offset: const Offset(0, 4),
-                                                ),
-                                              ]
-                                            : null,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Radio<int>(
-                                            value: index,
-                                            groupValue: _nightModeIndex,
-                                            onChanged: (v) => _setNightModeIndex(v!),
-                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                            visualDensity: VisualDensity.compact,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _nightModeLabels[index],
-                                            style: theme.textTheme.bodyMedium?.copyWith(
-                                              fontWeight: isSelected || isFocused ? FontWeight.w600 : FontWeight.normal,
-                                            ),
-                                          ),
-                                          if (index == 0) ...[
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                'Recommended',
-                                                style: theme.textTheme.labelSmall?.copyWith(
-                                                  color: theme.colorScheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          );
-                        }),
+                        _buildPlayerModeOption(
+                          context,
+                          value: 'debrify',
+                          title: 'Debrify Player',
+                          subtitle: 'Use the built-in video player',
+                          icon: Icons.play_circle_filled_rounded,
+                          recommended: true,
+                        ),
+                        _buildPlayerModeOption(
+                          context,
+                          value: 'external',
+                          title: 'External Player',
+                          subtitle: Platform.isMacOS
+                              ? 'Open videos in your preferred external player'
+                              : 'Choose which app to use when opening videos',
+                          icon: Icons.open_in_new_rounded,
+                        ),
+                        _buildPlayerModeOption(
+                          context,
+                          value: 'deovr',
+                          title: 'DeoVR',
+                          subtitle: 'Use this only on VR devices',
+                          icon: Icons.vrpano,
+                          disabled: !Platform.isAndroid,
+                        ),
                       ],
                     ),
                   ),
                 ),
-              ],
-            ],
 
-            // Android External Player info
-            if (Platform.isAndroid && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'When enabled, you will be able to choose which app to use when opening videos. Install VLC, MX Player, or other video player apps to see them in the chooser.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+                // Debrify Player settings (only when Debrify Player is selected)
+                if (_defaultPlayerMode == 'debrify') ...[
+                  const SizedBox(height: 16),
 
-            // iOS-specific player selection
-            if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Text(
-                        'Preferred Player',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Select the app to open videos with. Make sure the app is installed from the App Store.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildIOSPlayerTile(iOSExternalPlayer.vlc),
-                    const Divider(height: 1),
-                    _buildIOSPlayerTile(iOSExternalPlayer.infuse),
-                    const Divider(height: 1),
-                    _buildIOSPlayerTile(iOSExternalPlayer.outplayer),
-                    const Divider(height: 1),
-                    _buildIOSPlayerTile(iOSExternalPlayer.nplayer),
-                    const Divider(height: 1),
-                    _buildIOSPlayerTile(iOSExternalPlayer.playerXtreme),
-                    const Divider(height: 1),
-                    _buildIOSPlayerTile(iOSExternalPlayer.vimu),
-                    const Divider(height: 1),
-                    _buildIOSPlayerTile(iOSExternalPlayer.customScheme),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
-            ],
-
-            // iOS Custom URL Scheme configuration
-            if (Platform.isIOS && _defaultPlayerMode == 'external' && _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                  // Playback Defaults
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.code_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
                           Text(
-                            'Custom URL Scheme',
+                            'Playback Defaults',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Default settings when video playback starts',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kSettingsDim,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Default Aspect
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Default Aspect',
+                            value: _defaultAspectIndex,
+                            items: _aspectLabels,
+                            onChanged: (index) => _setDefaultAspectIndex(index),
+                            focusNode: _aspectFocusNode,
+                            isFocused: _aspectFocused,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Default Audio Language
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Default Audio',
+                            value: _audioLanguageIndex,
+                            items: _audioLanguageOptions
+                                .map((opt) => opt.$2)
+                                .toList(),
+                            onChanged: (index) => _setDefaultAudioLanguage(
+                              _audioLanguageOptions[index].$1,
+                            ),
+                            focusNode: _defaultAudioLangFocusNode,
+                            isFocused: _defaultAudioLangFocused,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Default Subtitle Language
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Default Subtitle',
+                            value: _subtitleLanguageIndex,
+                            items: _subtitleLanguageOptions
+                                .map((opt) => opt.$2)
+                                .toList(),
+                            onChanged: (index) => _setDefaultSubtitleLanguage(
+                              _subtitleLanguageOptions[index].$1,
+                            ),
+                            focusNode: _defaultSubtitleLangFocusNode,
+                            isFocused: _defaultSubtitleLangFocused,
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Define a custom URL scheme to launch videos',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _iosSchemeController,
-                        focusNode: _iosSchemeFocusNode,
-                        decoration: InputDecoration(
-                          labelText: 'URL Scheme Template',
-                          hintText: 'myplayer://play?url={url}',
-                          helperText: 'Use {url} for the video URL',
-                          helperMaxLines: 2,
-                          errorText: _iosSchemeError,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          prefixIcon: const Icon(Icons.link_rounded),
-                        ),
-                        maxLines: 1,
-                        onChanged: (_) {
-                          if (_iosSchemeError != null) {
-                            setState(() {
-                              _iosSchemeError = null;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Subtitle Appearance
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: _saveIOSCustomScheme,
-                              icon: const Icon(Icons.save_rounded),
-                              label: const Text('Save'),
+                          Text(
+                            'Subtitle Appearance',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          if (_iosCustomScheme != null && _iosCustomScheme!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: _clearIOSCustomScheme,
-                              child: const Text('Clear'),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Customize how subtitles look',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kSettingsDim,
                             ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Size
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Size',
+                            value: _subtitleSizeIndex,
+                            items: SubtitleSize.options
+                                .map((o) => o.label)
+                                .toList(),
+                            onChanged: (index) => _setSubtitleSizeIndex(index),
+                            focusNode: _subtitleSizeFocusNode,
+                            isFocused: _subtitleSizeFocused,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Style
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Style',
+                            value: _subtitleStyleIndex,
+                            items: SubtitleStyle.options
+                                .map((o) => o.label)
+                                .toList(),
+                            onChanged: (index) => _setSubtitleStyleIndex(index),
+                            focusNode: _subtitleStyleFocusNode,
+                            isFocused: _subtitleStyleFocused,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Color
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Color',
+                            value: _subtitleColorIndex,
+                            items: SubtitleColor.options
+                                .map((o) => o.label)
+                                .toList(),
+                            onChanged: (index) => _setSubtitleColorIndex(index),
+                            focusNode: _subtitleColorFocusNode,
+                            isFocused: _subtitleColorFocused,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Background
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Background',
+                            value: _subtitleBgIndex,
+                            items: SubtitleBackground.options
+                                .map((o) => o.label)
+                                .toList(),
+                            onChanged: (index) => _setSubtitleBgIndex(index),
+                            focusNode: _subtitleBgFocusNode,
+                            isFocused: _subtitleBgFocused,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Font
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Font',
+                            value: _subtitleFontIndex,
+                            items: _allFonts
+                                .map(
+                                  (f) => f.isCustom
+                                      ? '${f.label} (Custom)'
+                                      : f.label,
+                                )
+                                .toList(),
+                            onChanged: (index) => _setSubtitleFontIndex(index),
+                            focusNode: _subtitleFontFocusNode,
+                            isFocused: _subtitleFontFocused,
+                          ),
+
+                          // Import custom font button (always visible)
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _importCustomFont,
+                              icon: const Icon(Icons.file_upload_outlined),
+                              label: const Text('Import Custom Font (TTF/OTF)'),
+                            ),
+                          ),
+
+                          // List of custom fonts with delete buttons
+                          if (_allFonts.any((f) => f.isCustom)) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'Custom Fonts',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: kSettingsDim,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            ..._allFonts
+                                .where((f) => f.isCustom)
+                                .map(
+                                  (font) => Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 2,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.text_fields,
+                                          size: 16,
+                                          color: kSettingsDim,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            font.label,
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                                  color:
+                                                      _allFonts[_subtitleFontIndex]
+                                                              .id ==
+                                                          font.id
+                                                      ? kSettingsAccent
+                                                      : kSettingsDim,
+                                                  fontWeight:
+                                                      _allFonts[_subtitleFontIndex]
+                                                              .id ==
+                                                          font.id
+                                                      ? FontWeight.w600
+                                                      : FontWeight.normal,
+                                                ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          onPressed: () =>
+                                              _removeCustomFont(font),
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                            size: 18,
+                                          ),
+                                          color: kSettingsRed,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 32,
+                                            minHeight: 32,
+                                          ),
+                                          tooltip: 'Remove font',
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                           ],
+
+                          const SizedBox(height: 16),
+
+                          // Preview
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Sample Subtitle',
+                                style: TextStyle(
+                                  fontSize:
+                                      SubtitleSize
+                                          .options[_subtitleSizeIndex]
+                                          .sizePx *
+                                      0.4,
+                                  color: SubtitleColor
+                                      .options[_subtitleColorIndex]
+                                      .color,
+                                  fontWeight: FontWeight.w600,
+                                  shadows: SubtitleStyle
+                                      .options[_subtitleStyleIndex]
+                                      .shadows,
+                                  backgroundColor: SubtitleBackground
+                                      .options[_subtitleBgIndex]
+                                      .color,
+                                  fontFamily:
+                                      _subtitleFontIndex < _allFonts.length
+                                      ? _allFonts[_subtitleFontIndex].fontFamily
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                    ),
+                  ),
+
+                  // Night Mode (Android TV only)
+                  if (_isAndroidTv) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Examples',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'vlc://{url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'infuse://x-callback-url/play?url={url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.nightlight_round,
+                                  color: kSettingsAccent,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Night Mode',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'customapp://stream?video={url}',
+                              'Boosts quiet sounds for late-night viewing without disturbing others',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: kSettingsDim,
                               ),
                             ),
+                            const SizedBox(height: 16),
+                            ...List.generate(_nightModeLabels.length, (index) {
+                              final isSelected = _nightModeIndex == index;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Focus(
+                                  onKeyEvent: (node, event) {
+                                    if (event is KeyDownEvent) {
+                                      if (isActivateKey(event.logicalKey)) {
+                                        _setNightModeIndex(index);
+                                        return KeyEventResult.handled;
+                                      }
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: Builder(
+                                    builder: (context) {
+                                      final isFocused = Focus.of(
+                                        context,
+                                      ).hasFocus;
+                                      return InkWell(
+                                        onTap: () => _setNightModeIndex(index),
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 160,
+                                          ),
+                                          curve: Curves.easeOutCubic,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? kSettingsPanel2
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: isFocused
+                                                  ? kSettingsAccent
+                                                  : isSelected
+                                                  ? kSettingsAccent
+                                                  : kSettingsLine,
+                                              width: isFocused || isSelected
+                                                  ? 2
+                                                  : 1,
+                                            ),
+                                            boxShadow: isFocused
+                                                ? [
+                                                    BoxShadow(
+                                                      color: kSettingsAccent
+                                                          .withValues(
+                                                            alpha: 0.25,
+                                                          ),
+                                                      blurRadius: 12,
+                                                      offset: const Offset(
+                                                        0,
+                                                        4,
+                                                      ),
+                                                    ),
+                                                  ]
+                                                : null,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Radio<int>(
+                                                value: index,
+                                                groupValue: _nightModeIndex,
+                                                onChanged: (v) =>
+                                                    _setNightModeIndex(v!),
+                                                materialTapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                _nightModeLabels[index],
+                                                style: theme
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          isSelected ||
+                                                              isFocused
+                                                          ? FontWeight.w600
+                                                          : FontWeight.normal,
+                                                    ),
+                                              ),
+                                              if (index == 0) ...[
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: kSettingsAccent
+                                                        .withValues(
+                                                          alpha: 0.16,
+                                                        ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    'Recommended',
+                                                    style: theme
+                                                        .textTheme
+                                                        .labelSmall
+                                                        ?.copyWith(
+                                                          color:
+                                                              kSettingsAccent,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              );
+                            }),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            // iOS external player info
-            if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Videos will open in the selected app using URL schemes. Make sure the player app is installed from the App Store.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            // Linux-specific player selection
-            if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Text(
-                        'Preferred Player',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildLinuxPlayerTile(LinuxExternalPlayer.systemDefault),
-                    const Divider(height: 1),
-                    _buildLinuxPlayerTile(LinuxExternalPlayer.vlc),
-                    const Divider(height: 1),
-                    _buildLinuxPlayerTile(LinuxExternalPlayer.mpv),
-                    const Divider(height: 1),
-                    _buildLinuxPlayerTile(LinuxExternalPlayer.celluloid),
-                    const Divider(height: 1),
-                    _buildLinuxPlayerTile(LinuxExternalPlayer.smplayer),
-                    const Divider(height: 1),
-                    _buildLinuxPlayerTile(LinuxExternalPlayer.customCommand),
-                    const SizedBox(height: 8),
                   ],
-                ),
-              ),
-            ],
+                ],
 
-            // Linux Custom Command configuration
-            if (Platform.isLinux && _defaultPlayerMode == 'external' && _selectedLinuxPlayer == LinuxExternalPlayer.customCommand) ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.terminal_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Custom Command',
+                // Android External Player info
+                if (Platform.isAndroid && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  SettingsInfoBanner(
+                    text:
+                        'When enabled, you will be able to choose which app to use when opening videos. Install VLC, MX Player, or other video player apps to see them in the chooser.',
+                  ),
+                ],
+
+                // iOS-specific player selection
+                if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          child: Text(
+                            'Preferred Player',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Define a custom command to launch videos',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _linuxCommandController,
-                        focusNode: _linuxCommandFocusNode,
-                        decoration: InputDecoration(
-                          labelText: 'Command Template',
-                          hintText: 'vlc --fullscreen {url}',
-                          helperText: 'Use {url} for video URL, {title} for title',
-                          helperMaxLines: 2,
-                          errorText: _linuxCommandError,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          prefixIcon: const Icon(Icons.code_rounded),
-                        ),
-                        maxLines: 1,
-                        onChanged: (_) {
-                          if (_linuxCommandError != null) {
-                            setState(() {
-                              _linuxCommandError = null;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: _saveLinuxCustomCommand,
-                              icon: const Icon(Icons.save_rounded),
-                              label: const Text('Save'),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            'Select the app to open videos with. Make sure the app is installed from the App Store.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kSettingsDim,
                             ),
                           ),
-                          if (_linuxCustomCommand != null && _linuxCustomCommand!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: _clearLinuxCustomCommand,
-                              child: const Text('Clear'),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Examples',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'vlc --fullscreen {url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'mpv --title="{title}" {url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'celluloid {url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            // Linux external player info
-            if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Videos will open in the selected player via command line. Make sure the player is installed on your system.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            // Windows-specific player selection
-            if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Text(
-                        'Preferred Player',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                        const SizedBox(height: 8),
+                        _buildIOSPlayerTile(iOSExternalPlayer.vlc),
+                        const Divider(height: 1),
+                        _buildIOSPlayerTile(iOSExternalPlayer.infuse),
+                        const Divider(height: 1),
+                        _buildIOSPlayerTile(iOSExternalPlayer.outplayer),
+                        const Divider(height: 1),
+                        _buildIOSPlayerTile(iOSExternalPlayer.nplayer),
+                        const Divider(height: 1),
+                        _buildIOSPlayerTile(iOSExternalPlayer.playerXtreme),
+                        const Divider(height: 1),
+                        _buildIOSPlayerTile(iOSExternalPlayer.vimu),
+                        const Divider(height: 1),
+                        _buildIOSPlayerTile(iOSExternalPlayer.customScheme),
+                        const SizedBox(height: 8),
+                      ],
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildWindowsPlayerTile(WindowsExternalPlayer.systemDefault),
-                    const Divider(height: 1),
-                    _buildWindowsPlayerTile(WindowsExternalPlayer.vlc),
-                    const Divider(height: 1),
-                    _buildWindowsPlayerTile(WindowsExternalPlayer.mpv),
-                    const Divider(height: 1),
-                    _buildWindowsPlayerTile(WindowsExternalPlayer.mpcHc),
-                    const Divider(height: 1),
-                    _buildWindowsPlayerTile(WindowsExternalPlayer.potPlayer),
-                    const Divider(height: 1),
-                    _buildWindowsPlayerTile(WindowsExternalPlayer.customCommand),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
-            ],
-
-            // Windows Custom Command configuration
-            if (Platform.isWindows && _defaultPlayerMode == 'external' && _selectedWindowsPlayer == WindowsExternalPlayer.customCommand) ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.terminal_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Custom Command',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Define a custom command to launch videos',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _windowsCommandController,
-                        focusNode: _windowsCommandFocusNode,
-                        decoration: InputDecoration(
-                          labelText: 'Command Template',
-                          hintText: 'vlc --fullscreen {url}',
-                          helperText: 'Use {url} for video URL, {title} for title',
-                          helperMaxLines: 2,
-                          errorText: _windowsCommandError,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          prefixIcon: const Icon(Icons.code_rounded),
-                        ),
-                        maxLines: 1,
-                        onChanged: (_) {
-                          if (_windowsCommandError != null) {
-                            setState(() {
-                              _windowsCommandError = null;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: _saveWindowsCustomCommand,
-                              icon: const Icon(Icons.save_rounded),
-                              label: const Text('Save'),
-                            ),
-                          ),
-                          if (_windowsCustomCommand != null && _windowsCustomCommand!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: _clearWindowsCustomCommand,
-                              child: const Text('Clear'),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Examples',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'vlc --fullscreen {url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'mpv --title="{title}" {url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '"C:\\Program Files\\MPC-HC\\mpc-hc64.exe" {url} /play',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ),
-                ),
-              ),
-            ],
+                ],
 
-            // Windows external player info
-            if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Videos will open in the selected player. For MPC-HC and PotPlayer, the app checks common installation paths. Use Custom Command if the player is installed elsewhere.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            // macOS-specific player selection
-            if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Text(
-                        'Preferred Player',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    _buildPlayerTile(ExternalPlayer.systemDefault),
-                    const Divider(height: 1),
-                    _buildPlayerTile(ExternalPlayer.vlc),
-                    const Divider(height: 1),
-                    _buildPlayerTile(ExternalPlayer.iina),
-                    const Divider(height: 1),
-                    _buildPlayerTile(ExternalPlayer.mpv),
-                    const Divider(height: 1),
-                    _buildPlayerTile(ExternalPlayer.quickTime),
-                    const Divider(height: 1),
-                    _buildPlayerTile(ExternalPlayer.infuse),
-                    const Divider(height: 1),
-                    _buildPlayerTile(ExternalPlayer.customApp),
-                    const Divider(height: 1),
-                    _buildPlayerTile(ExternalPlayer.customCommand),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
-            ],
-
-            // Custom App configuration (macOS only, when selected)
-            if (Platform.isMacOS && _defaultPlayerMode == 'external' && _selectedPlayer == ExternalPlayer.customApp) ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                // iOS Custom URL Scheme configuration
+                if (Platform.isIOS &&
+                    _defaultPlayerMode == 'external' &&
+                    _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.folder_open_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Custom App',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Select a .app to use as your video player',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (_customAppPath != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
+                          Row(
                             children: [
-                              Icon(
-                                Icons.apps_rounded,
-                                color: theme.colorScheme.primary,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _customAppName ?? 'Custom App',
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    Text(
-                                      _customAppPath!,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                              Icon(Icons.code_rounded, color: kSettingsAccent),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Custom URL Scheme',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: _browseForCustomApp,
-                              icon: const Icon(Icons.folder_open_rounded),
-                              label: Text(_customAppPath == null ? 'Browse' : 'Change'),
-                            ),
-                          ),
-                          if (_customAppPath != null) ...[
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: _clearCustomApp,
-                              child: const Text('Clear'),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            // Custom Command configuration (macOS only, when selected)
-            if (Platform.isMacOS && _defaultPlayerMode == 'external' && _selectedPlayer == ExternalPlayer.customCommand) ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.code_rounded,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
+                          const SizedBox(height: 8),
                           Text(
-                            'Custom Command',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
+                            'Define a custom URL scheme to launch videos',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: kSettingsDim,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Define a custom shell command to launch videos',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Shortcuts(
-                        shortcuts: const <ShortcutActivator, Intent>{
-                          SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-                          SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-                        },
-                        child: Actions(
-                          actions: <Type, Action<Intent>>{
-                            NextFocusIntent: CallbackAction<NextFocusIntent>(
-                              onInvoke: (intent) {
-                                FocusScope.of(context).nextFocus();
-                                return null;
-                              },
-                            ),
-                            PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-                              onInvoke: (intent) {
-                                FocusScope.of(context).previousFocus();
-                                return null;
-                              },
-                            ),
-                          },
-                          child: AnimatedContainer(
+                          const SizedBox(height: 16),
+                          AnimatedContainer(
                             duration: const Duration(milliseconds: 160),
                             curve: Curves.easeOutCubic,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
-                              border: _commandFocused
-                                  ? Border.all(
-                                      color: theme.colorScheme.primary,
-                                      width: 1.8,
-                                    )
-                                  : null,
-                              boxShadow: _commandFocused
+                              boxShadow: _iosSchemeFocused
                                   ? [
                                       BoxShadow(
-                                        color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                                        color: kSettingsAccent.withValues(
+                                          alpha: 0.25,
+                                        ),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -2982,255 +2307,934 @@ class _ExternalPlayerSettingsPageState
                                   : null,
                             ),
                             child: TextField(
-                              controller: _commandController,
-                              focusNode: _commandFocusNode,
+                              controller: _iosSchemeController,
+                              focusNode: _iosSchemeFocusNode,
                               decoration: InputDecoration(
-                                labelText: 'Command',
-                                hintText: 'vlc --fullscreen {url}',
-                                helperText: 'Use {url} for video URL, {title} for title',
+                                labelText: 'URL Scheme Template',
+                                hintText: 'myplayer://play?url={url}',
+                                helperText: 'Use {url} for the video URL',
                                 helperMaxLines: 2,
-                                errorText: _commandError,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                prefixIcon: const Icon(Icons.terminal_rounded),
+                                errorText: _iosSchemeError,
+                                prefixIcon: const Icon(Icons.link_rounded),
                               ),
                               maxLines: 1,
                               onChanged: (_) {
-                                if (_commandError != null) {
+                                if (_iosSchemeError != null) {
                                   setState(() {
-                                    _commandError = null;
+                                    _iosSchemeError = null;
                                   });
                                 }
                               },
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: _saveCustomCommand,
-                              icon: const Icon(Icons.save_rounded),
-                              label: const Text('Save Command'),
-                            ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _saveIOSCustomScheme,
+                                  icon: const Icon(Icons.save_rounded),
+                                  label: const Text('Save'),
+                                ),
+                              ),
+                              if (_iosCustomScheme != null &&
+                                  _iosCustomScheme!.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: _clearIOSCustomScheme,
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ],
                           ),
-                          if (_customCommand != null && _customCommand!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: _clearCustomCommand,
-                              child: const Text('Clear'),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: kSettingsPanel2,
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Examples',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'vlc --fullscreen {url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'mpv --fs --title="{title}" {url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '/opt/homebrew/bin/mpv {url}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            // macOS external player info
-            if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
-              const SizedBox(height: 16),
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Players marked as "Not found" are not installed on your system. Install them via the App Store, Homebrew, or their official websites.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            // DeoVR settings (Android only, when selected)
-            if (Platform.isAndroid && _defaultPlayerMode == 'deovr') ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.vrpano,
-                            color: theme.colorScheme.primary,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'DeoVR Settings',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Examples',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'vlc://{url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'infuse://x-callback-url/play?url={url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'customapp://stream?video={url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1),
+                  ),
+                ],
 
-                    // VR Format Settings
-                    Padding(
+                // iOS external player info
+                if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  SettingsInfoBanner(
+                    text:
+                        'Videos will open in the selected app using URL schemes. Make sure the player app is installed from the App Store.',
+                  ),
+                ],
+
+                // Linux-specific player selection
+                if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          child: Text(
+                            'Preferred Player',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kSettingsDim,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildLinuxPlayerTile(
+                          LinuxExternalPlayer.systemDefault,
+                        ),
+                        const Divider(height: 1),
+                        _buildLinuxPlayerTile(LinuxExternalPlayer.vlc),
+                        const Divider(height: 1),
+                        _buildLinuxPlayerTile(LinuxExternalPlayer.mpv),
+                        const Divider(height: 1),
+                        _buildLinuxPlayerTile(LinuxExternalPlayer.celluloid),
+                        const Divider(height: 1),
+                        _buildLinuxPlayerTile(LinuxExternalPlayer.smplayer),
+                        const Divider(height: 1),
+                        _buildLinuxPlayerTile(
+                          LinuxExternalPlayer.customCommand,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Linux Custom Command configuration
+                if (Platform.isLinux &&
+                    _defaultPlayerMode == 'external' &&
+                    _selectedLinuxPlayer ==
+                        LinuxExternalPlayer.customCommand) ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Default VR Format',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.terminal_rounded,
+                                color: kSettingsAccent,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Custom Command',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 8),
                           Text(
-                            'Used when format cannot be detected from filename',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            'Define a custom command to launch videos',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: kSettingsDim,
                             ),
                           ),
                           const SizedBox(height: 16),
-
-                          // Screen Type dropdown
-                          _buildDropdownSetting(
-                            context,
-                            label: 'Screen Type',
-                            value: _vrDefaultScreenType,
-                            items: deovr.screenTypeLabels,
-                            onChanged: _setVrDefaultScreenType,
-                            focusNode: _screenTypeFocusNode,
-                            isFocused: _screenTypeFocused,
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOutCubic,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: _linuxCommandFocused
+                                  ? [
+                                      BoxShadow(
+                                        color: kSettingsAccent.withValues(
+                                          alpha: 0.25,
+                                        ),
+                                        blurRadius: 18,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: TextField(
+                              controller: _linuxCommandController,
+                              focusNode: _linuxCommandFocusNode,
+                              decoration: InputDecoration(
+                                labelText: 'Command Template',
+                                hintText: 'vlc --fullscreen {url}',
+                                helperText:
+                                    'Use {url} for video URL, {title} for title',
+                                helperMaxLines: 2,
+                                errorText: _linuxCommandError,
+                                prefixIcon: const Icon(Icons.code_rounded),
+                              ),
+                              maxLines: 1,
+                              onChanged: (_) {
+                                if (_linuxCommandError != null) {
+                                  setState(() {
+                                    _linuxCommandError = null;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _saveLinuxCustomCommand,
+                                  icon: const Icon(Icons.save_rounded),
+                                  label: const Text('Save'),
+                                ),
+                              ),
+                              if (_linuxCustomCommand != null &&
+                                  _linuxCustomCommand!.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: _clearLinuxCustomCommand,
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 12),
-
-                          // Stereo Mode dropdown
-                          _buildDropdownSetting(
-                            context,
-                            label: 'Stereo Mode',
-                            value: _vrDefaultStereoMode,
-                            items: deovr.stereoModeLabels,
-                            onChanged: _setVrDefaultStereoMode,
-                            focusNode: _stereoModeFocusNode,
-                            isFocused: _stereoModeFocused,
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: kSettingsPanel2,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Examples',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'vlc --fullscreen {url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'mpv --title="{title}" {url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'celluloid {url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1),
-                    // Checkboxes
-                    _buildCheckboxTile(
-                      context,
-                      title: 'Auto-detect format from filename',
-                      subtitle: 'Parse filename for VR markers (180, 360, SBS, etc.)',
-                      value: _vrAutoDetectFormat,
-                      onChanged: _setVrAutoDetectFormat,
-                      focusNode: _autoDetectFocusNode,
-                      isFocused: _autoDetectFocused,
-                    ),
-                    _buildCheckboxTile(
-                      context,
-                      title: 'Show format selection dialog',
-                      subtitle: 'Confirm VR format before launching DeoVR',
-                      value: _vrShowDialog,
-                      onChanged: _setVrShowDialog,
-                      focusNode: _showDialogFocusNode,
-                      isFocused: _showDialogFocused,
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                ],
 
-              const SizedBox(height: 16),
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'DeoVR must be installed on your device. All videos will open in DeoVR with the selected VR format settings.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
+                // Linux external player info
+                if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  SettingsInfoBanner(
+                    text:
+                        'Videos will open in the selected player via command line. Make sure the player is installed on your system.',
+                  ),
+                ],
+
+                // Windows-specific player selection
+                if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          child: Text(
+                            'Preferred Player',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kSettingsDim,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildWindowsPlayerTile(
+                          WindowsExternalPlayer.systemDefault,
+                        ),
+                        const Divider(height: 1),
+                        _buildWindowsPlayerTile(WindowsExternalPlayer.vlc),
+                        const Divider(height: 1),
+                        _buildWindowsPlayerTile(WindowsExternalPlayer.mpv),
+                        const Divider(height: 1),
+                        _buildWindowsPlayerTile(WindowsExternalPlayer.mpcHc),
+                        const Divider(height: 1),
+                        _buildWindowsPlayerTile(
+                          WindowsExternalPlayer.potPlayer,
+                        ),
+                        const Divider(height: 1),
+                        _buildWindowsPlayerTile(
+                          WindowsExternalPlayer.customCommand,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-            ],
-          ],
+                ],
+
+                // Windows Custom Command configuration
+                if (Platform.isWindows &&
+                    _defaultPlayerMode == 'external' &&
+                    _selectedWindowsPlayer ==
+                        WindowsExternalPlayer.customCommand) ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.terminal_rounded,
+                                color: kSettingsAccent,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Custom Command',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Define a custom command to launch videos',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: kSettingsDim,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOutCubic,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: _windowsCommandFocused
+                                  ? [
+                                      BoxShadow(
+                                        color: kSettingsAccent.withValues(
+                                          alpha: 0.25,
+                                        ),
+                                        blurRadius: 18,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: TextField(
+                              controller: _windowsCommandController,
+                              focusNode: _windowsCommandFocusNode,
+                              decoration: InputDecoration(
+                                labelText: 'Command Template',
+                                hintText: 'vlc --fullscreen {url}',
+                                helperText:
+                                    'Use {url} for video URL, {title} for title',
+                                helperMaxLines: 2,
+                                errorText: _windowsCommandError,
+                                prefixIcon: const Icon(Icons.code_rounded),
+                              ),
+                              maxLines: 1,
+                              onChanged: (_) {
+                                if (_windowsCommandError != null) {
+                                  setState(() {
+                                    _windowsCommandError = null;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _saveWindowsCustomCommand,
+                                  icon: const Icon(Icons.save_rounded),
+                                  label: const Text('Save'),
+                                ),
+                              ),
+                              if (_windowsCustomCommand != null &&
+                                  _windowsCustomCommand!.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: _clearWindowsCustomCommand,
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: kSettingsPanel2,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Examples',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'vlc --fullscreen {url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'mpv --title="{title}" {url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '"C:\\Program Files\\MPC-HC\\mpc-hc64.exe" {url} /play',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+
+                // Windows external player info
+                if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  SettingsInfoBanner(
+                    text:
+                        'Videos will open in the selected player. For MPC-HC and PotPlayer, the app checks common installation paths. Use Custom Command if the player is installed elsewhere.',
+                  ),
+                ],
+
+                // macOS-specific player selection
+                if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          child: Text(
+                            'Preferred Player',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        _buildPlayerTile(ExternalPlayer.systemDefault),
+                        const Divider(height: 1),
+                        _buildPlayerTile(ExternalPlayer.vlc),
+                        const Divider(height: 1),
+                        _buildPlayerTile(ExternalPlayer.iina),
+                        const Divider(height: 1),
+                        _buildPlayerTile(ExternalPlayer.mpv),
+                        const Divider(height: 1),
+                        _buildPlayerTile(ExternalPlayer.quickTime),
+                        const Divider(height: 1),
+                        _buildPlayerTile(ExternalPlayer.infuse),
+                        const Divider(height: 1),
+                        _buildPlayerTile(ExternalPlayer.customApp),
+                        const Divider(height: 1),
+                        _buildPlayerTile(ExternalPlayer.customCommand),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Custom App configuration (macOS only, when selected)
+                if (Platform.isMacOS &&
+                    _defaultPlayerMode == 'external' &&
+                    _selectedPlayer == ExternalPlayer.customApp) ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.folder_open_rounded,
+                                color: kSettingsAccent,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Custom App',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Select a .app to use as your video player',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: kSettingsDim,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (_customAppPath != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: kSettingsPanel2,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.apps_rounded,
+                                    color: kSettingsAccent,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _customAppName ?? 'Custom App',
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                        ),
+                                        Text(
+                                          _customAppPath!,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(color: kSettingsDim),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _browseForCustomApp,
+                                  icon: const Icon(Icons.folder_open_rounded),
+                                  label: Text(
+                                    _customAppPath == null
+                                        ? 'Browse'
+                                        : 'Change',
+                                  ),
+                                ),
+                              ),
+                              if (_customAppPath != null) ...[
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: _clearCustomApp,
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+
+                // Custom Command configuration (macOS only, when selected)
+                if (Platform.isMacOS &&
+                    _defaultPlayerMode == 'external' &&
+                    _selectedPlayer == ExternalPlayer.customCommand) ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.code_rounded, color: kSettingsAccent),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Custom Command',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Define a custom shell command to launch videos',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: kSettingsDim,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Shortcuts(
+                            shortcuts: const <ShortcutActivator, Intent>{
+                              SingleActivator(LogicalKeyboardKey.arrowDown):
+                                  NextFocusIntent(),
+                              SingleActivator(LogicalKeyboardKey.arrowUp):
+                                  PreviousFocusIntent(),
+                            },
+                            child: Actions(
+                              actions: <Type, Action<Intent>>{
+                                NextFocusIntent:
+                                    CallbackAction<NextFocusIntent>(
+                                      onInvoke: (intent) {
+                                        FocusScope.of(context).nextFocus();
+                                        return null;
+                                      },
+                                    ),
+                                PreviousFocusIntent:
+                                    CallbackAction<PreviousFocusIntent>(
+                                      onInvoke: (intent) {
+                                        FocusScope.of(context).previousFocus();
+                                        return null;
+                                      },
+                                    ),
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 160),
+                                curve: Curves.easeOutCubic,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: _commandFocused
+                                      ? Border.all(
+                                          color: kSettingsAccent,
+                                          width: 1.8,
+                                        )
+                                      : null,
+                                  boxShadow: _commandFocused
+                                      ? [
+                                          BoxShadow(
+                                            color: kSettingsAccent.withValues(
+                                              alpha: 0.25,
+                                            ),
+                                            blurRadius: 18,
+                                            offset: const Offset(0, 8),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: TextField(
+                                  controller: _commandController,
+                                  focusNode: _commandFocusNode,
+                                  decoration: InputDecoration(
+                                    labelText: 'Command',
+                                    hintText: 'vlc --fullscreen {url}',
+                                    helperText:
+                                        'Use {url} for video URL, {title} for title',
+                                    helperMaxLines: 2,
+                                    errorText: _commandError,
+                                    prefixIcon: const Icon(
+                                      Icons.terminal_rounded,
+                                    ),
+                                  ),
+                                  maxLines: 1,
+                                  onChanged: (_) {
+                                    if (_commandError != null) {
+                                      setState(() {
+                                        _commandError = null;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _saveCustomCommand,
+                                  icon: const Icon(Icons.save_rounded),
+                                  label: const Text('Save Command'),
+                                ),
+                              ),
+                              if (_customCommand != null &&
+                                  _customCommand!.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: _clearCustomCommand,
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: kSettingsPanel2,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Examples',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'vlc --fullscreen {url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'mpv --fs --title="{title}" {url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '/opt/homebrew/bin/mpv {url}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: kSettingsDim,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+
+                // macOS external player info
+                if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
+                  const SizedBox(height: 16),
+                  SettingsInfoBanner(
+                    text:
+                        'Players marked as "Not found" are not installed on your system. Install them via the App Store, Homebrew, or their official websites.',
+                  ),
+                ],
+
+                // DeoVR settings (Android only, when selected)
+                if (Platform.isAndroid && _defaultPlayerMode == 'deovr') ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.vrpano,
+                                color: kSettingsAccent,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'DeoVR Settings',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+
+                        // VR Format Settings
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Default VR Format',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Used when format cannot be detected from filename',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: kSettingsDim,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Screen Type dropdown
+                              _buildDropdownSetting(
+                                context,
+                                label: 'Screen Type',
+                                value: _vrDefaultScreenType,
+                                items: deovr.screenTypeLabels,
+                                onChanged: _setVrDefaultScreenType,
+                                focusNode: _screenTypeFocusNode,
+                                isFocused: _screenTypeFocused,
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Stereo Mode dropdown
+                              _buildDropdownSetting(
+                                context,
+                                label: 'Stereo Mode',
+                                value: _vrDefaultStereoMode,
+                                items: deovr.stereoModeLabels,
+                                onChanged: _setVrDefaultStereoMode,
+                                focusNode: _stereoModeFocusNode,
+                                isFocused: _stereoModeFocused,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        // Checkboxes
+                        _buildCheckboxTile(
+                          context,
+                          title: 'Auto-detect format from filename',
+                          subtitle:
+                              'Parse filename for VR markers (180, 360, SBS, etc.)',
+                          value: _vrAutoDetectFormat,
+                          onChanged: _setVrAutoDetectFormat,
+                          focusNode: _autoDetectFocusNode,
+                          isFocused: _autoDetectFocused,
+                        ),
+                        _buildCheckboxTile(
+                          context,
+                          title: 'Show format selection dialog',
+                          subtitle: 'Confirm VR format before launching DeoVR',
+                          value: _vrShowDialog,
+                          onChanged: _setVrShowDialog,
+                          focusNode: _showDialogFocusNode,
+                          isFocused: _showDialogFocused,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+                  SettingsInfoBanner(
+                    text:
+                        'DeoVR must be installed on your device. All videos will open in DeoVR with the selected VR format settings.',
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

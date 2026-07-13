@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../models/torrent_filter_state.dart';
 import '../../services/storage_service.dart';
 import '../../utils/tv_keys.dart';
+import 'widgets/settings_widgets.dart';
 
 class FilterSettingsPage extends StatefulWidget {
   const FilterSettingsPage({super.key});
@@ -84,11 +85,15 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
           if (tier != null) _selectedQualities.add(tier);
         }
         for (final s in sources) {
-          final source = RipSourceCategory.values.where((e) => e.name == s).firstOrNull;
+          final source = RipSourceCategory.values
+              .where((e) => e.name == s)
+              .firstOrNull;
           if (source != null) _selectedSources.add(source);
         }
         for (final l in languages) {
-          final lang = AudioLanguage.values.where((e) => e.name == l).firstOrNull;
+          final lang = AudioLanguage.values
+              .where((e) => e.name == l)
+              .firstOrNull;
           if (lang != null) _selectedLanguages.add(lang);
         }
         _loading = false;
@@ -149,151 +154,99 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
       _selectedSources.clear();
       _selectedLanguages.clear();
     });
-    await Future.wait([
-      _saveQualities(),
-      _saveSources(),
-      _saveLanguages(),
-    ]);
+    await Future.wait([_saveQualities(), _saveSources(), _saveLanguages()]);
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Filter Settings'),
-          backgroundColor: Theme.of(context).colorScheme.surface,
-        ),
-        body: const Center(child: CircularProgressIndicator()),
+      return const SettingsPageScaffold(
+        title: 'Filter Settings',
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final theme = Theme.of(context);
-    final hasFilters = _selectedQualities.isNotEmpty ||
+    final hasFilters =
+        _selectedQualities.isNotEmpty ||
         _selectedSources.isNotEmpty ||
         _selectedLanguages.isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Filter Settings'),
-        backgroundColor: theme.colorScheme.surface,
-        elevation: 0,
-        actions: [
-          if (hasFilters)
-            Focus(
-              focusNode: _clearAllFocusNode,
-              onKeyEvent: (node, event) {
-                if (event is KeyDownEvent &&
-                    (isActivateKey(event.logicalKey) ||
-                        event.logicalKey == LogicalKeyboardKey.space)) {
-                  _clearAll();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  border: _clearAllFocused
-                      ? Border.all(
-                          color: const Color(0xFF3B82F6),
-                          width: 2,
-                        )
-                      : null,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: TextButton(
-                  onPressed: _clearAll,
-                  child: const Text('Clear All'),
-                ),
+    return SettingsPageScaffold(
+      title: 'Filter Settings',
+      actions: [
+        if (hasFilters)
+          Focus(
+            focusNode: _clearAllFocusNode,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  (isActivateKey(event.logicalKey) ||
+                      event.logicalKey == LogicalKeyboardKey.space)) {
+                _clearAll();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                border: _clearAllFocused
+                    ? Border.all(color: kSettingsAccent, width: 2)
+                    : null,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: TextButton(
+                onPressed: _clearAll,
+                child: const Text('Clear All'),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(context),
-              const SizedBox(height: 24),
-              _buildSection(
-                context,
-                title: 'Quality',
-                subtitle: 'Filter by video resolution',
-                children: _buildQualityChips(),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SettingsPageHeader(
+                    icon: Icons.filter_list_rounded,
+                    title: 'Default Filters',
+                    subtitle: 'Set default filters for torrent search results',
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSection(
+                    context,
+                    title: 'Quality',
+                    subtitle: 'Filter by video resolution',
+                    children: _buildQualityChips(),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildSection(
+                    context,
+                    title: 'Rip / Source',
+                    subtitle: 'Filter by release type',
+                    children: _buildSourceChips(),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildSection(
+                    context,
+                    title: 'Language',
+                    subtitle: 'Filter by audio language',
+                    children: _buildLanguageChips(),
+                  ),
+                  const SizedBox(height: 16),
+                  const SettingsInfoBanner(
+                    text:
+                        'These filters will be applied by default when searching for torrents. You can still change filters in the search page.',
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              _buildSection(
-                context,
-                title: 'Rip / Source',
-                subtitle: 'Filter by release type',
-                children: _buildSourceChips(),
-              ),
-              const SizedBox(height: 20),
-              _buildSection(
-                context,
-                title: 'Language',
-                subtitle: 'Filter by audio language',
-                children: _buildLanguageChips(),
-              ),
-              const SizedBox(height: 16),
-              _buildInfoMessage(context),
-            ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.filter_list_rounded,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Default Filters',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Set default filters for torrent search results',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onPrimaryContainer
-                            .withValues(alpha: 0.7),
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -307,31 +260,25 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        color: kSettingsPanel,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kSettingsLine),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
+          Text(subtitle, style: TextStyle(fontSize: 12, color: kSettingsDim)),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: children,
-          ),
+          Wrap(spacing: 8, runSpacing: 8, children: children),
         ],
       ),
     );
@@ -376,40 +323,6 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         onSelected: () => _toggleLanguage(option.value),
       );
     }).toList();
-  }
-
-  Widget _buildInfoMessage(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .secondaryContainer
-            .withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.info_outline_rounded,
-            color: Theme.of(context).colorScheme.secondary,
-            size: 18,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'These filters will be applied by default when searching for torrents. You can still change filters in the search page.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -472,10 +385,7 @@ class _DpadFilterChipState extends State<_DpadFilterChip> {
       child: Container(
         decoration: BoxDecoration(
           border: _isFocused
-              ? Border.all(
-                  color: const Color(0xFF3B82F6),
-                  width: 2,
-                )
+              ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           borderRadius: BorderRadius.circular(8),
         ),
@@ -531,9 +441,21 @@ const _qualityOptions = <_QualityOption>[
 ];
 
 const _sourceOptions = <_SourceOption>[
-  _SourceOption(RipSourceCategory.web, 'WEB / WEB-DL', 'Streaming captures, WEBRip'),
-  _SourceOption(RipSourceCategory.bluRay, 'BluRay / BRRip', 'BDRip, BluRay remuxes'),
-  _SourceOption(RipSourceCategory.hdrip, 'HDRip / HDTV', 'HDRip, HDTV, HC sources'),
+  _SourceOption(
+    RipSourceCategory.web,
+    'WEB / WEB-DL',
+    'Streaming captures, WEBRip',
+  ),
+  _SourceOption(
+    RipSourceCategory.bluRay,
+    'BluRay / BRRip',
+    'BDRip, BluRay remuxes',
+  ),
+  _SourceOption(
+    RipSourceCategory.hdrip,
+    'HDRip / HDTV',
+    'HDRip, HDTV, HC sources',
+  ),
   _SourceOption(RipSourceCategory.dvdrip, 'DVDRip', 'DVD sources, SD rips'),
   _SourceOption(RipSourceCategory.cam, 'CAM / TS', 'CAM, HDCAM, telesync'),
   _SourceOption(RipSourceCategory.other, 'Other', 'Unclassified / scene'),

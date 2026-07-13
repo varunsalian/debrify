@@ -5,6 +5,7 @@ import '../../models/indexer_manager_config.dart';
 import '../../services/indexer_manager_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/torrent_service.dart';
+import 'widgets/settings_widgets.dart';
 
 class IndexerManagersSettingsPage extends StatefulWidget {
   const IndexerManagersSettingsPage({super.key});
@@ -101,36 +102,44 @@ class _IndexerManagersSettingsPageState
     messenger.showSnackBar(
       SnackBar(
         content: Text(result.message),
-        backgroundColor: result.success ? Colors.green : Colors.red,
+        backgroundColor: result.success ? kSettingsGreen : kSettingsRed,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Indexer Managers'),
-        actions: [
-          IconButton(
-            onPressed: _loading ? null : () => _openEditor(),
-            icon: const Icon(Icons.add_rounded),
-            tooltip: 'Add engine',
-          ),
-        ],
-      ),
+    return SettingsPageScaffold(
+      title: 'Indexer Managers',
+      actions: [
+        IconButton(
+          onPressed: _loading ? null : () => _openEditor(),
+          icon: const Icon(Icons.add_rounded),
+          tooltip: 'Add engine',
+        ),
+      ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
+          : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              children: [
-                _buildHeader(context),
-                const SizedBox(height: 16),
-                if (_configs.isEmpty)
-                  _buildEmptyState(context)
-                else
-                  ..._configs.map(_buildConfigTile),
-              ],
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: kSettingsMaxWidth,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildHeader(context),
+                      const SizedBox(height: 16),
+                      if (_configs.isEmpty)
+                        _buildEmptyState(context)
+                      else
+                        ..._configs.map(_buildConfigTile),
+                    ],
+                  ),
+                ),
+              ),
             ),
       floatingActionButton: _loading ? null : _buildAddEngineButton(context),
     );
@@ -143,32 +152,19 @@ class _IndexerManagersSettingsPageState
 
     return FloatingActionButton.extended(
       onPressed: () => _openEditor(),
+      backgroundColor: kSettingsAccent,
+      foregroundColor: Colors.white,
       icon: const Icon(Icons.add_rounded),
       label: const Text('Add Engine'),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(Icons.manage_search_rounded, color: theme.colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Connect public or private indexers through Jackett and Prowlarr. Enabled engines appear in the torrent search source picker.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontSize: 15,
-                  height: 1.25,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return const SettingsPageHeader(
+      icon: Icons.manage_search_rounded,
+      title: 'Indexer Managers',
+      subtitle:
+          'Connect public or private indexers through Jackett and Prowlarr. Enabled engines appear in the torrent search source picker.',
     );
   }
 
@@ -178,21 +174,21 @@ class _IndexerManagersSettingsPageState
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Icon(
-              Icons.search_off_rounded,
-              size: 40,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+            Icon(Icons.search_off_rounded, size: 40, color: kSettingsDim2),
             const SizedBox(height: 12),
             Text(
               'No indexer managers yet',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: Colors.white),
             ),
             const SizedBox(height: 8),
             Text(
               'Add a reachable Jackett or Prowlarr server to search its indexers directly from Debrify.',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
             ),
           ],
         ),
@@ -206,6 +202,7 @@ class _IndexerManagersSettingsPageState
       config.type == IndexerManagerType.prowlarr
           ? Icons.hub_rounded
           : Icons.manage_search_rounded,
+      color: kSettingsDim,
     );
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +212,7 @@ class _IndexerManagersSettingsPageState
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
-          style: theme.textTheme.titleMedium,
+          style: theme.textTheme.titleMedium?.copyWith(color: Colors.white),
         ),
         const SizedBox(height: 2),
         Text(
@@ -223,7 +220,7 @@ class _IndexerManagersSettingsPageState
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
-          style: theme.textTheme.bodySmall,
+          style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
         ),
       ],
     );

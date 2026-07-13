@@ -21,7 +21,8 @@ class EngineImportPageContent extends StatefulWidget {
   const EngineImportPageContent({super.key});
 
   @override
-  State<EngineImportPageContent> createState() => _EngineImportPageContentState();
+  State<EngineImportPageContent> createState() =>
+      _EngineImportPageContentState();
 }
 
 class _EngineImportPageContentState extends State<EngineImportPageContent> {
@@ -34,9 +35,15 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
   List<ImportedEngineMetadata> _importedEngines = [];
   List<RemoteEngineInfo> _availableEngines = [];
 
-  final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'retry-button-content');
-  final FocusNode _importLocalButtonFocusNode = FocusNode(debugLabel: 'import-local-button-content');
-  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'refresh-button-content');
+  final FocusNode _retryButtonFocusNode = FocusNode(
+    debugLabel: 'retry-button-content',
+  );
+  final FocusNode _importLocalButtonFocusNode = FocusNode(
+    debugLabel: 'import-local-button-content',
+  );
+  final FocusNode _refreshButtonFocusNode = FocusNode(
+    debugLabel: 'refresh-button-content',
+  );
   final Map<String, FocusNode> _importedEngineFocusNodes = {};
   final Map<String, FocusNode> _availableEngineFocusNodes = {};
 
@@ -71,7 +78,9 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
       _importedEngines = await _localStorage.getImportedEngines();
       final remoteEngines = await _remoteManager.fetchAvailableEngines();
       final importedIds = _importedEngines.map((e) => e.id).toSet();
-      _availableEngines = remoteEngines.where((e) => !importedIds.contains(e.id)).toList();
+      _availableEngines = remoteEngines
+          .where((e) => !importedIds.contains(e.id))
+          .toList();
 
       for (final node in _importedEngineFocusNodes.values) {
         node.dispose();
@@ -83,10 +92,14 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
       _availableEngineFocusNodes.clear();
 
       for (final engine in _importedEngines) {
-        _importedEngineFocusNodes[engine.id] = FocusNode(debugLabel: 'imported-${engine.id}');
+        _importedEngineFocusNodes[engine.id] = FocusNode(
+          debugLabel: 'imported-${engine.id}',
+        );
       }
       for (final engine in _availableEngines) {
-        _availableEngineFocusNodes[engine.id] = FocusNode(debugLabel: 'available-${engine.id}');
+        _availableEngineFocusNodes[engine.id] = FocusNode(
+          debugLabel: 'available-${engine.id}',
+        );
       }
 
       setState(() {
@@ -116,7 +129,9 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
     );
 
     try {
-      final yamlContent = await _remoteManager.downloadEngineYaml(engine.fileName);
+      final yamlContent = await _remoteManager.downloadEngineYaml(
+        engine.fileName,
+      );
       if (yamlContent == null) {
         throw Exception('Failed to download engine configuration');
       }
@@ -137,14 +152,19 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${engine.displayName} imported successfully')),
+          SnackBar(
+            content: Text('${engine.displayName} imported successfully'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) Navigator.of(context).pop();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to import: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to import: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -186,7 +206,10 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to delete: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -248,7 +271,9 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Engine Already Exists'),
-            content: Text('An engine with ID "$engineId" already exists. Do you want to replace it?'),
+            content: Text(
+              'An engine with ID "$engineId" already exists. Do you want to replace it?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -308,7 +333,10 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to import: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to import: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -399,10 +427,7 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
           children: [
             CircularProgressIndicator(color: Color(0xFFED1C24)),
             SizedBox(height: 16),
-            Text(
-              'Loading engines...',
-              style: TextStyle(color: Colors.white70),
-            ),
+            Text('Loading engines...', style: TextStyle(color: Colors.white70)),
           ],
         ),
       );
@@ -424,10 +449,7 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
               const SizedBox(height: 12),
               const Text(
                 'Failed to load engines',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
               Text(
@@ -524,9 +546,7 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
                   const Color(0xFFED1C24).withValues(alpha: 0.04),
                 ],
               ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: Icon(
               Icons.inbox_outlined,
@@ -596,10 +616,7 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  color,
-                  color.withValues(alpha: 0.6),
-                ],
+                colors: [color, color.withValues(alpha: 0.6)],
               ),
               borderRadius: BorderRadius.circular(2),
             ),
@@ -619,9 +636,7 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: color.withValues(alpha: 0.3),
-              ),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
             ),
             child: Text(
               '$count',
@@ -813,11 +828,7 @@ class _EngineImportPageContentState extends State<EngineImportPageContent> {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.download_rounded,
-                      color: Colors.white,
-                      size: 14,
-                    ),
+                    Icon(Icons.download_rounded, color: Colors.white, size: 14),
                     SizedBox(width: 4),
                     Text(
                       'Import',
@@ -859,8 +870,12 @@ class _EngineImportPageState extends State<EngineImportPage> {
   List<RemoteEngineInfo> _availableEngines = [];
 
   // Focus nodes for TV/DPAD navigation
-  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'refresh-button');
-  final FocusNode _importLocalButtonFocusNode = FocusNode(debugLabel: 'import-local-button');
+  final FocusNode _refreshButtonFocusNode = FocusNode(
+    debugLabel: 'refresh-button',
+  );
+  final FocusNode _importLocalButtonFocusNode = FocusNode(
+    debugLabel: 'import-local-button',
+  );
   final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'retry-button');
   final Map<String, FocusNode> _importedEngineFocusNodes = {};
   final Map<String, FocusNode> _availableEngineFocusNodes = {};
@@ -917,10 +932,14 @@ class _EngineImportPageState extends State<EngineImportPage> {
 
       // Create focus nodes for each engine
       for (final engine in _importedEngines) {
-        _importedEngineFocusNodes[engine.id] = FocusNode(debugLabel: 'imported-${engine.id}');
+        _importedEngineFocusNodes[engine.id] = FocusNode(
+          debugLabel: 'imported-${engine.id}',
+        );
       }
       for (final engine in _availableEngines) {
-        _availableEngineFocusNodes[engine.id] = FocusNode(debugLabel: 'available-${engine.id}');
+        _availableEngineFocusNodes[engine.id] = FocusNode(
+          debugLabel: 'available-${engine.id}',
+        );
       }
 
       setState(() {
@@ -931,9 +950,11 @@ class _EngineImportPageState extends State<EngineImportPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           if (_importedEngines.isNotEmpty) {
-            _importedEngineFocusNodes[_importedEngines.first.id]?.requestFocus();
+            _importedEngineFocusNodes[_importedEngines.first.id]
+                ?.requestFocus();
           } else if (_availableEngines.isNotEmpty) {
-            _availableEngineFocusNodes[_availableEngines.first.id]?.requestFocus();
+            _availableEngineFocusNodes[_availableEngines.first.id]
+                ?.requestFocus();
           }
         }
       });
@@ -969,7 +990,9 @@ class _EngineImportPageState extends State<EngineImportPage> {
 
     try {
       // Download YAML from GitLab
-      final yamlContent = await _remoteManager.downloadEngineYaml(engine.fileName);
+      final yamlContent = await _remoteManager.downloadEngineYaml(
+        engine.fileName,
+      );
 
       if (yamlContent == null) {
         throw Exception('Failed to download engine configuration');
@@ -997,7 +1020,9 @@ class _EngineImportPageState extends State<EngineImportPage> {
       // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${engine.displayName} imported successfully')),
+          SnackBar(
+            content: Text('${engine.displayName} imported successfully'),
+          ),
         );
       }
     } catch (e) {
@@ -1030,9 +1055,7 @@ class _EngineImportPageState extends State<EngineImportPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],
@@ -1130,7 +1153,9 @@ class _EngineImportPageState extends State<EngineImportPage> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Engine Already Exists'),
-            content: Text('An engine with ID "$engineId" already exists. Do you want to replace it?'),
+            content: Text(
+              'An engine with ID "$engineId" already exists. Do you want to replace it?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -1380,9 +1405,9 @@ class _EngineImportPageState extends State<EngineImportPage> {
         const SizedBox(width: 8),
         Text(
           title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(width: 8),
         Container(
@@ -1498,7 +1523,10 @@ class _EngineImportPageState extends State<EngineImportPage> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(8),
@@ -1706,9 +1734,7 @@ class _EnginePillButtonState extends State<_EnginePillButton> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
           gradient: widget.filled
-              ? const LinearGradient(
-                  colors: [accent, Color(0xFFB81D24)],
-                )
+              ? const LinearGradient(colors: [accent, Color(0xFFB81D24)])
               : null,
           color: widget.filled ? null : Colors.white.withValues(alpha: 0.04),
           border: Border.all(
@@ -1735,10 +1761,7 @@ class _EnginePillButtonState extends State<_EnginePillButton> {
             onTap: widget.onPressed,
             borderRadius: BorderRadius.circular(999),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
