@@ -27,6 +27,31 @@ class HomeTheme {
   /// Deep card background used by hero cards.
   static const Color cardBg = Color(0xFF0B0B10);
 
+  /// Base page background (the darkest stop of [pageBackground]).
+  static const Color bg = Color(0xFF0D0B1A);
+
+  /// Chrome accent — the purple used for active/selected controls (search pill,
+  /// mode toggle). Distinct from [focusGold] (content focus) and [accent]
+  /// (indigo hero glow).
+  static const Color chromeAccent = Color(0xFF7B5CFF);
+
+  /// The cinematic page wash used by the Home board — a dim indigo bloom near
+  /// the top fading to near-black. Shared so other screens (Stremio TV, …) sit
+  /// on the same background instead of a flat black.
+  static const BoxDecoration pageBackground = BoxDecoration(
+    gradient: RadialGradient(
+      center: Alignment(0, -0.75),
+      radius: 1.35,
+      colors: [
+        Color(0xFF241E44), // dim indigo bloom
+        Color(0xFF161327),
+        Color(0xFF0F0D1D),
+        Color(0xFF0D0B1A),
+      ],
+      stops: [0.0, 0.38, 0.68, 1.0],
+    ),
+  );
+
   // ── Gradients ────────────────────────────────────────────────────────────
   /// "Live" / now-playing pulse gradient.
   static const LinearGradient livePulseGradient = LinearGradient(

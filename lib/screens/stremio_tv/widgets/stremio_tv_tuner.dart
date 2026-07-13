@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../widgets/home/home_theme.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/stremio_tv/stremio_tv_channel.dart';
@@ -39,6 +40,14 @@ class StremioTvTuner extends StatefulWidget {
   final int Function(StremioTvChannel channel) rotationFor;
   final int mixSalt;
   final bool hideNowPlaying;
+
+  /// Resolved native Android-TV flag. Forces the wide Stage+Dial layout (with
+  /// D-pad channel switching) regardless of the constrained width — inside the
+  /// app shell the sidebar rail trims the tuner slot below the 900px wide
+  /// threshold, so a width-only check drops a real TV to the tap-only narrow
+  /// pager and the remote can no longer change channels.
+  final bool isTelevision;
+
   final Set<String> loadingChannelIds;
 
   /// Kick off a lazy item load for [channel] (no-op if already loaded).
@@ -79,6 +88,7 @@ class StremioTvTuner extends StatefulWidget {
     required this.rotationFor,
     required this.mixSalt,
     required this.hideNowPlaying,
+    required this.isTelevision,
     required this.loadingChannelIds,
     required this.ensureLoaded,
     required this.onOpenDetail,
@@ -486,7 +496,10 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 900;
+        // On a TV always use the wide Stage+Dial (D-pad channel switching) —
+        // the sidebar rail can trim the slot below 900px, and the narrow pager
+        // is tap-only, leaving the remote unable to change channels.
+        final wide = widget.isTelevision || constraints.maxWidth >= 900;
         return wide ? _buildWide() : _buildNarrow();
       },
     );
@@ -531,12 +544,14 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
         Container(
           height: 240,
           decoration: BoxDecoration(
+            // Indigo-tinted wash (was flat black) so the dial shelf melts into
+            // the Home page background instead of reading as a separate panel.
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                const Color(0xFF09090F).withValues(alpha: 0.88),
-                const Color(0xFF09090F),
+                HomeTheme.bg.withValues(alpha: 0.0),
+                HomeTheme.bg.withValues(alpha: 0.72),
               ],
             ),
             border: Border(
@@ -684,7 +699,10 @@ class _StageState extends State<_Stage> {
         : 30.0;
 
     return DecoratedBox(
-      decoration: const BoxDecoration(color: Color(0xFF09090F)),
+      // Base matches the Home page background (was a colder near-black), so a
+      // channel with no backdrop and the Stage's lower fade both land on the
+      // same indigo the rest of the app uses.
+      decoration: const BoxDecoration(color: HomeTheme.bg),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -732,20 +750,22 @@ class _StageState extends State<_Stage> {
                 begin: Alignment.bottomLeft,
                 end: Alignment.topRight,
                 colors: [
-                  const Color(0xFF09090F).withValues(alpha: 0.97),
-                  const Color(0xFF09090F).withValues(alpha: 0.50),
+                  HomeTheme.bg.withValues(alpha: 0.97),
+                  HomeTheme.bg.withValues(alpha: 0.50),
                   widget.ident.withValues(alpha: 0.06),
                 ],
                 stops: const [0.0, 0.55, 1.0],
               ),
             ),
           ),
+          // Legibility scrims share the page hue (0x0D0B1A = HomeTheme.bg) so
+          // the darkened corners meet the indigo base without a colour seam.
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.center,
-                colors: [Color(0xDD09090F), Color(0x0009090F)],
+                colors: [Color(0xDD0D0B1A), Color(0x000D0B1A)],
               ),
             ),
           ),
@@ -757,10 +777,10 @@ class _StageState extends State<_Stage> {
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    Color(0x6609090F),
-                    Color(0x0009090F),
-                    Color(0x0009090F),
-                    Color(0x3309090F),
+                    Color(0x660D0B1A),
+                    Color(0x000D0B1A),
+                    Color(0x000D0B1A),
+                    Color(0x330D0B1A),
                   ],
                   stops: [0.0, 0.15, 0.85, 1.0],
                 ),
@@ -1017,11 +1037,14 @@ class _StageState extends State<_Stage> {
     final progress = widget.displayProgress;
     return Row(
       children: [
-        _LivePip(color: widget.ident),
+        // "Live" indicator uses Home's reserved amber highlight; the progress
+        // fill below is white like every Home progress bar (was the channel's
+        // blue identity colour for both).
+        _LivePip(color: HomeTheme.highlight),
         const SizedBox(width: 9),
         Text('LIVE',
             style: TextStyle(
-              color: widget.ident,
+              color: HomeTheme.highlight,
               fontSize: 12,
               fontWeight: FontWeight.w900,
               letterSpacing: 2.5,
@@ -1044,7 +1067,7 @@ class _StageState extends State<_Stage> {
                     widthFactor: progress.clamp(0.0, 1.0),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: widget.ident,
+                        color: Colors.white.withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -1454,17 +1477,20 @@ class _DialCardState extends State<_DialCard> {
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
+              // Gold focus rim + bloom, matching the Home board's poster tiles
+              // (was the per-channel identity colour). Consistent focus colour
+              // is what makes the two screens feel like one.
               border: Border.all(
                 color: _focused
-                    ? ident
+                    ? HomeTheme.focusGold
                     : Colors.white.withValues(alpha: 0.06),
                 width: _focused ? 2.5 : 0.5,
               ),
               boxShadow: _focused
                   ? [
                       BoxShadow(
-                        color: ident.withValues(alpha: 0.40),
-                        blurRadius: 12,
+                        color: HomeTheme.focusGoldDeep.withValues(alpha: 0.45),
+                        blurRadius: 16,
                       ),
                     ]
                   : null,
@@ -1507,7 +1533,9 @@ class _DialCardState extends State<_DialCard> {
                       ),
                     ),
                   ),
-                  // Focused ident tint on top edge.
+                  // Focused gold tint on top edge (matches the Home poster
+                  // focus treatment; the CH badge below keeps its per-channel
+                  // identity colour).
                   if (_focused)
                     DecoratedBox(
                       decoration: BoxDecoration(
@@ -1515,7 +1543,7 @@ class _DialCardState extends State<_DialCard> {
                           begin: Alignment.topCenter,
                           end: Alignment.center,
                           colors: [
-                            ident.withValues(alpha: 0.18),
+                            HomeTheme.focusGold.withValues(alpha: 0.16),
                             Colors.transparent,
                           ],
                         ),
@@ -1609,8 +1637,11 @@ class _DialCardState extends State<_DialCard> {
                                     widthFactor: widget.displayProgress
                                         .clamp(0.0, 1.0),
                                     child: Container(
+                                      // White progress fill to match Home (the
+                                      // CH badge keeps the per-channel colour).
                                       decoration: BoxDecoration(
-                                        color: ident,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.9),
                                         borderRadius:
                                             BorderRadius.circular(3),
                                       ),

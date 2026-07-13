@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
+import '../../widgets/home/home_theme.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
@@ -2975,7 +2976,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: _loading
+      // Match the Home board: sit the whole screen on the same cinematic
+      // indigo→near-black wash instead of a flat black, so the tuner reads as
+      // part of the same app rather than a separate dark surface.
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: HomeTheme.pageBackground,
+        child: _loading
           ? _buildLoadingSkeleton()
           : Column(
               children: [
@@ -2987,8 +2994,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        const Color(0xFF09090F),
-                        const Color(0xFF09090F).withValues(alpha: 0.0),
+                        HomeTheme.bg,
+                        HomeTheme.bg.withValues(alpha: 0.0),
                       ],
                     ),
                   ),
@@ -3441,6 +3448,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         rotationFor: _rotationFor,
                         mixSalt: _mixSalt,
                         hideNowPlaying: _hideNowPlaying,
+                        isTelevision: widget.isTelevision,
                         loadingChannelIds: _loadingChannelIds,
                         ensureLoaded: (channel) {
                           if (!channel.hasItems &&
@@ -3482,6 +3490,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 ),
               ],
             ),
+      ),
     );
   }
 
@@ -3499,26 +3508,20 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       padding: wide ? const EdgeInsets.symmetric(horizontal: 12) : null,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: focused
-            ? Colors.white.withValues(alpha: 0.12)
-            : active
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.white.withValues(alpha: 0.04),
+        // Home chrome language (matches the Catalog/Keyword mode toggle): an
+        // active control fills with the purple accent; focus is a white ring
+        // that shows even on the active one, since DPAD focus lands there first
+        // and the fill alone wouldn't signal the remote moved.
+        color: active
+            ? HomeTheme.chromeAccent
+            : Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: focused
-              ? Colors.white.withValues(alpha: 0.5)
+              ? Colors.white.withValues(alpha: 0.9)
               : Colors.white.withValues(alpha: 0.06),
-          width: focused ? 1.5 : 0.5,
+          width: focused ? 2 : 0.5,
         ),
-        boxShadow: focused
-            ? [
-                BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  blurRadius: 12,
-                ),
-              ]
-            : null,
       ),
       child: child,
     );
@@ -3938,19 +3941,19 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
+            // Active = purple fill, focus = white ring (Home mode-toggle
+            // pattern); the ring shows even on the active pill.
             color: widget.isActive
-                ? const Color(0xFF536DFE)
-                : _focused
-                    ? const Color(0xFF536DFE).withValues(alpha: 0.15)
-                    : Colors.transparent,
+                ? HomeTheme.chromeAccent
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: _focused
-                  ? const Color(0xFF536DFE).withValues(alpha: 0.7)
+                  ? Colors.white.withValues(alpha: 0.9)
                   : widget.isActive
                       ? Colors.transparent
                       : Colors.white12,
-              width: _focused ? 1.5 : 1,
+              width: _focused ? 2 : 1,
             ),
           ),
           child: Text(
@@ -4044,13 +4047,17 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: _focused ? const Color(0xFF1A1A2E) : Colors.transparent,
+            color: _focused
+                ? HomeTheme.chromeAccent.withValues(alpha: 0.15)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
+              // White focus ring (width 2), matching the reskinned toggles /
+              // header buttons so every DPAD-focusable control reads the same.
               color: _focused
-                  ? const Color(0xFF536DFE).withValues(alpha: 0.7)
+                  ? Colors.white.withValues(alpha: 0.9)
                   : Colors.transparent,
-              width: 1.5,
+              width: 2,
             ),
           ),
           child: Row(
@@ -4105,7 +4112,7 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Color(0xFF536DFE),
+                    color: HomeTheme.chromeAccent,
                   ),
                 )
               else if (widget.isFailed)
