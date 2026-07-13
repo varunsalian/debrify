@@ -33,6 +33,10 @@ class XtreamCodesService {
   final Map<String, _CachedResult> _cache = {};
   static const _cacheDuration = Duration(minutes: 30);
 
+  // Parsed panel lists are large (tens of thousands of channels); keep only a
+  // few resident — the TTL alone never frees memory for distinct keys.
+  static const _maxCachedResults = 3;
+
   // Per-server probe result: true if the panel only serves the legacy
   // un-prefixed live URL form instead of the standard /live/ one.
   final Map<String, bool> _legacyLiveUrlCache = {};
@@ -302,6 +306,7 @@ class XtreamCodesService {
         result: IptvParseResult(channels: channels, categories: categoryNames),
         fetchedAt: DateTime.now(),
       );
+      _evictCache();
       return IptvParseResult(
         channels: channels,
         categories: categoryNames,
@@ -379,6 +384,23 @@ class XtreamCodesService {
     } else {
       _cache.clear();
       _legacyLiveUrlCache.clear();
+    }
+  }
+
+  /// Drop expired entries, then the oldest beyond the cap.
+  void _evictCache() {
+    final now = DateTime.now();
+    _cache.removeWhere((_, c) => now.difference(c.fetchedAt) >= _cacheDuration);
+    while (_cache.length > _maxCachedResults) {
+      String? oldestKey;
+      DateTime? oldestAt;
+      _cache.forEach((key, cached) {
+        if (oldestAt == null || cached.fetchedAt.isBefore(oldestAt!)) {
+          oldestAt = cached.fetchedAt;
+          oldestKey = key;
+        }
+      });
+      _cache.remove(oldestKey);
     }
   }
 }

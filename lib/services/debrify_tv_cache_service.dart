@@ -203,8 +203,18 @@ class DebrifyTvCacheService {
 
   static List<String> _decodeStringList(Object? value) {
     if (value is String && value.isNotEmpty) {
-      final List<dynamic> raw = jsonDecode(value);
-      return raw.map((e) => e?.toString() ?? '').where((e) => e.isNotEmpty).toList();
+      // Corrupt or old-format column values must not break the whole cache
+      // read — treat them as empty.
+      try {
+        final raw = jsonDecode(value);
+        if (raw is! List) return const <String>[];
+        return raw
+            .map((e) => e?.toString() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toList();
+      } on FormatException {
+        return const <String>[];
+      }
     }
     return const <String>[];
   }

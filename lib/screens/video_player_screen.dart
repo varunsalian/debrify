@@ -224,6 +224,10 @@ class VideoPlayerScreen extends StatefulWidget {
 class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     with TickerProviderStateMixin {
   late mk.Player _player;
+  // _player is assigned partway through the async _initializePlayer(); if the
+  // user backs out before that (or init throws first), dispose() must not
+  // touch the unassigned late field (LateInitializationError during pop).
+  bool _playerCreated = false;
   late mkv.VideoController _videoController;
   final math.Random _random = math.Random();
   SeriesPlaylist? _cachedSeriesPlaylist;
@@ -964,6 +968,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         },
       ),
     );
+    _playerCreated = true;
     _videoController = mkv.VideoController(_player);
 
     _currentStreamUrl = initialUrl.isNotEmpty ? initialUrl : null;
@@ -4069,7 +4074,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _bufferingSub?.cancel();
     _bufferingDebounceTimer?.cancel();
     _showBufferingIndicator.dispose();
-    _player.dispose();
+    if (_playerCreated) _player.dispose();
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
     // Restore system brightness when exiting the player

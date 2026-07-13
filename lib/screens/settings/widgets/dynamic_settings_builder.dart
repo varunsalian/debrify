@@ -345,10 +345,14 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
         _settingValues[engineId]?[settingId] as int? ??
         (setting.defaultValue as int? ?? 50);
 
-    // Get options from setting config or use defaults
-    final options =
+    // Get options from setting config or use defaults. A config-supplied
+    // EMPTY list would make the reduce below throw, so fall back on that too.
+    var options =
         setting.options ??
         [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500];
+    if (options.isEmpty) {
+      options = [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500];
+    }
 
     // Ensure current value is in options, or find closest
     int validValue = currentValue;

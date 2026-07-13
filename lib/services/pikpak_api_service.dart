@@ -613,6 +613,26 @@ class PikPakApiService {
     _userId = await StorageService.getPikPakUserId();
   }
 
+  /// Decode a PikPak response body defensively. PikPak sits behind
+  /// Cloudflare and can return HTML challenge/gateway pages (even with 2xx
+  /// codes); throw a clean [Exception] instead of leaking a FormatException
+  /// or TypeError to callers.
+  Map<String, dynamic> _decodeJsonMap(http.Response response) {
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException {
+      throw Exception(
+        'PikPak returned a non-JSON response (HTTP ${response.statusCode})',
+      );
+    }
+    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    throw Exception(
+      'PikPak returned an unexpected response shape (HTTP ${response.statusCode})',
+    );
+  }
+
   /// Make an authenticated API request with automatic token refresh
   Future<Map<String, dynamic>> _makeAuthenticatedRequest(
     String method,
@@ -686,9 +706,9 @@ class PikPakApiService {
     }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(response.body);
+      return _decodeJsonMap(response);
     } else {
-      final errorData = jsonDecode(response.body);
+      final errorData = _decodeJsonMap(response);
       final errorCode = errorData['error_code'];
       final errorMessage =
           errorData['error_description'] ?? errorData['error'] ?? '';
@@ -727,10 +747,10 @@ class PikPakApiService {
 
           // Check if retry succeeded
           if (response.statusCode >= 200 && response.statusCode < 300) {
-            return jsonDecode(response.body);
+            return _decodeJsonMap(response);
           } else {
             // If retry also failed, throw the new error
-            final retryErrorData = jsonDecode(response.body);
+            final retryErrorData = _decodeJsonMap(response);
             throw Exception(
               retryErrorData['error_description'] ??
                   retryErrorData['error'] ??

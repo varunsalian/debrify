@@ -2503,6 +2503,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } on FormatException catch (error) {
       _showSnack(error.message, color: Colors.red);
       return false;
+    } catch (error) {
+      // Corrupt archives throw ArchiveException/RangeError etc., not just
+      // FormatException — surface them the same way instead of leaving the
+      // import flow (and any progress dialog) stuck.
+      _showSnack('Failed to import channel file: $error', color: Colors.red);
+      return false;
     }
   }
 

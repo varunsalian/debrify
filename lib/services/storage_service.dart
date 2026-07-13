@@ -1211,25 +1211,34 @@ class StorageService {
         'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
     final seriesData = map[key];
-    if (seriesData == null || seriesData['type'] != 'series') return null;
+    if (seriesData is! Map || seriesData['type'] != 'series') return null;
 
-    // Find the most recently updated episode
+    // Find the most recently updated episode. Parse defensively (matching
+    // getVideoPlaybackStateByImdbId above): a corrupt or old-schema entry
+    // must skip, not throw, on this resume hot path.
     Map<String, dynamic>? lastEpisode;
     int lastUpdated = 0;
 
-    final seasons = seriesData['seasons'] as Map<String, dynamic>;
+    final seasons = seriesData['seasons'];
+    if (seasons is! Map) return null;
     for (final seasonEntry in seasons.entries) {
-      final season = int.parse(seasonEntry.key);
-      final episodes = seasonEntry.value as Map<String, dynamic>;
+      final season = int.tryParse(seasonEntry.key.toString());
+      final episodes = seasonEntry.value;
+      if (season == null || episodes is! Map) continue;
 
       for (final episodeEntry in episodes.entries) {
-        final episode = int.parse(episodeEntry.key);
-        final episodeData = episodeEntry.value as Map<String, dynamic>;
-        final updatedAt = episodeData['updatedAt'] as int;
+        final episode = int.tryParse(episodeEntry.key.toString());
+        final episodeData = episodeEntry.value;
+        if (episode == null || episodeData is! Map) continue;
+        final updatedAt = (episodeData['updatedAt'] as num?)?.toInt() ?? 0;
 
         if (updatedAt > lastUpdated) {
           lastUpdated = updatedAt;
-          lastEpisode = {'season': season, 'episode': episode, ...episodeData};
+          lastEpisode = {
+            'season': season,
+            'episode': episode,
+            ...Map<String, dynamic>.from(episodeData),
+          };
         }
       }
     }

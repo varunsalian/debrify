@@ -5,6 +5,7 @@ import '../models/rd_torrent.dart';
 import '../models/rd_user.dart';
 import '../models/rd_file_node.dart';
 import '../services/storage_service.dart';
+import '../utils/concurrency.dart';
 import '../utils/file_utils.dart';
 import '../utils/rd_folder_tree_builder.dart';
 
@@ -468,8 +469,12 @@ class DebridService {
     List<String> links,
   ) async {
     try {
-      final futures = links.map((link) => unrestrictLink(apiKey, link));
-      final results = await Future.wait(futures);
+      // Bounded: a season pack can have hundreds of links; firing them all at
+      // once exhausts sockets on weak hardware and trips RD rate limits.
+      final results = await mapWithConcurrency(
+        links,
+        (link) => unrestrictLink(apiKey, link),
+      );
       return results;
     } catch (e) {
       throw Exception('Failed to unrestrict links: $e');
@@ -652,7 +657,9 @@ class DebridService {
       // Step 5: Wait a bit and get updated torrent info
       await Future.delayed(const Duration(seconds: 2));
       final updatedInfo = await getTorrentInfo(apiKey, torrentId);
-      List<dynamic> links = updatedInfo['links'] as List<dynamic>;
+      // 'links' is absent while RD still reports downloading/queued statuses —
+      // treat as empty (the fallback chain below handles it) like the retries.
+      List<dynamic> links = updatedInfo['links'] as List<dynamic>? ?? const [];
 
       // Smart media fallback chain if initial 'smart' video selection yielded no links
       if ((tempFileSelection ?? await StorageService.getFileSelection()) ==
@@ -977,8 +984,8 @@ class DebridService {
         }
       }
 
-      // Unrestrict all links in parallel
-      final futures = linkIndices.map((index) async {
+      // Unrestrict all links with bounded concurrency (order preserved)
+      return await mapWithConcurrency(linkIndices, (index) async {
         final link = links[index] as String;
         final unrestrictedData = await unrestrictLink(apiKey, link);
         final downloadUrl = unrestrictedData['download'] as String?;
@@ -989,8 +996,6 @@ class DebridService {
 
         return downloadUrl;
       });
-
-      return await Future.wait(futures);
     } catch (e) {
       if (e.toString().contains('Exception:')) {
         rethrow;

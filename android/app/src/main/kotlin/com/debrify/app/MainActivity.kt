@@ -85,8 +85,14 @@ class MainActivity : FlutterActivity() {
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_MIME_TYPE, mimeType)
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_HEADERS, headers)
 					}
-					androidx.core.content.ContextCompat.startForegroundService(this, intent)
-					result.success(taskId)
+					try {
+						androidx.core.content.ContextCompat.startForegroundService(this, intent)
+						result.success(taskId)
+					} catch (e: Exception) {
+						// Android 12+ forbids foreground-service starts from the
+						// background (ForegroundServiceStartNotAllowedException).
+						result.error("fgs_not_allowed", e.message, null)
+					}
 				}
 				"pause" -> {
 					val taskId = call.argument<String>("taskId")
@@ -95,8 +101,12 @@ class MainActivity : FlutterActivity() {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_PAUSE
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
 					}
-					androidx.core.content.ContextCompat.startForegroundService(this, intent)
-					result.success(true)
+					try {
+						androidx.core.content.ContextCompat.startForegroundService(this, intent)
+						result.success(true)
+					} catch (e: Exception) {
+						result.error("fgs_not_allowed", e.message, null)
+					}
 				}
 				"resume" -> {
 					val taskId = call.argument<String>("taskId")
@@ -105,8 +115,12 @@ class MainActivity : FlutterActivity() {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_RESUME
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
 					}
-					androidx.core.content.ContextCompat.startForegroundService(this, intent)
-					result.success(true)
+					try {
+						androidx.core.content.ContextCompat.startForegroundService(this, intent)
+						result.success(true)
+					} catch (e: Exception) {
+						result.error("fgs_not_allowed", e.message, null)
+					}
 				}
 				"cancel" -> {
 					val taskId = call.argument<String>("taskId")
@@ -115,8 +129,12 @@ class MainActivity : FlutterActivity() {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_CANCEL
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
 					}
-					androidx.core.content.ContextCompat.startForegroundService(this, intent)
-					result.success(true)
+					try {
+						androidx.core.content.ContextCompat.startForegroundService(this, intent)
+						result.success(true)
+					} catch (e: Exception) {
+						result.error("fgs_not_allowed", e.message, null)
+					}
 				}
 				"openContentUri" -> {
 					val uriStr = call.argument<String>("uri")

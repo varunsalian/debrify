@@ -1613,10 +1613,12 @@ class DownloadService {
         unawaited(_reevaluateQueue());
         return true;
       }
-      try {
-        return await AndroidNativeDownloader.resume(task.taskId);
-      } catch (_) {
-        // If native resume fails (unknown id or already resumed), downgrade to enqueued and let reevaluator proceed
+      // Native resume failures (unknown id, already resumed, or a
+      // channel-level PlatformException mapped to false by
+      // AndroidNativeDownloader): downgrade to enqueued and let the
+      // reevaluator proceed.
+      final ok = await AndroidNativeDownloader.resume(task.taskId);
+      if (!ok) {
         AndroidDownloadHistory.instance.upsert(
           task as DownloadTask,
           TaskStatus.enqueued,
@@ -1624,8 +1626,8 @@ class DownloadService {
         );
         _statusController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
         unawaited(_reevaluateQueue());
-        return false;
       }
+      return ok;
     } else {
       final dbList = await FileDownloader().database.allRecords();
       runningCount = dbList.where((r) => r.status == TaskStatus.running).length;

@@ -29,15 +29,22 @@ class AndroidNativeDownloader {
     Map<String, String>? headers,
   }) async {
     if (!Platform.isAndroid) return null;
-    final taskId = await _channel
-        .invokeMethod<String>('startMediaStoreDownload', {
-          'url': url,
-          'fileName': fileName,
-          'subDir': subDir,
-          'mimeType': mimeType,
-          'headers': headers ?? <String, String>{},
-        });
-    return taskId;
+    // A PlatformException (e.g. foreground-service start not allowed from
+    // the background on Android 12+) must surface as a failed start, not an
+    // uncaught error in the download UI.
+    try {
+      return await _channel.invokeMethod<String>('startMediaStoreDownload', {
+        'url': url,
+        'fileName': fileName,
+        'subDir': subDir,
+        'mimeType': mimeType,
+        'headers': headers ?? <String, String>{},
+      });
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
   }
 
   static Future<String?> startUpdate({
@@ -48,57 +55,63 @@ class AndroidNativeDownloader {
     Map<String, String>? headers,
   }) async {
     if (!Platform.isAndroid) return null;
-    return _channel.invokeMethod<String>('startMediaStoreDownload', {
-      'url': url,
-      'fileName': fileName,
-      'subDir': subDir,
-      'mimeType': mimeType,
-      'headers': headers ?? <String, String>{},
-      'markAsUpdate': true,
-    });
+    try {
+      return await _channel.invokeMethod<String>('startMediaStoreDownload', {
+        'url': url,
+        'fileName': fileName,
+        'subDir': subDir,
+        'mimeType': mimeType,
+        'headers': headers ?? <String, String>{},
+        'markAsUpdate': true,
+      });
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// Invoke a bool-returning channel method, mapping channel-level failures
+  /// (PlatformException such as fgs_not_allowed, MissingPluginException) to
+  /// false instead of letting them escape into the calling UI flow.
+  static Future<bool> _invokeBool(String method, [dynamic args]) async {
+    try {
+      return (await _channel.invokeMethod<bool>(method, args)) ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
   }
 
   static Future<bool> pause(String taskId) async {
     if (!Platform.isAndroid) return false;
-    return (await _channel.invokeMethod<bool>('pause', {'taskId': taskId})) ??
-        false;
+    return _invokeBool('pause', {'taskId': taskId});
   }
 
   static Future<bool> resume(String taskId) async {
     if (!Platform.isAndroid) return false;
-    return (await _channel.invokeMethod<bool>('resume', {'taskId': taskId})) ??
-        false;
+    return _invokeBool('resume', {'taskId': taskId});
   }
 
   static Future<bool> cancel(String taskId) async {
     if (!Platform.isAndroid) return false;
-    return (await _channel.invokeMethod<bool>('cancel', {'taskId': taskId})) ??
-        false;
+    return _invokeBool('cancel', {'taskId': taskId});
   }
 
   static Future<bool> openContentUri(String uri, String mimeType) async {
     if (!Platform.isAndroid) return false;
-    return (await _channel.invokeMethod<bool>('openContentUri', {
-          'uri': uri,
-          'mimeType': mimeType,
-        })) ??
-        false;
+    return _invokeBool('openContentUri', {'uri': uri, 'mimeType': mimeType});
   }
 
   static Future<bool> openBatteryOptimizationSettings() async {
     if (!Platform.isAndroid) return false;
-    return (await _channel.invokeMethod<bool>(
-          'openBatteryOptimizationSettings',
-        )) ??
-        false;
+    return _invokeBool('openBatteryOptimizationSettings');
   }
 
   static Future<bool> requestIgnoreBatteryOptimizationsForApp() async {
     if (!Platform.isAndroid) return false;
-    return (await _channel.invokeMethod<bool>(
-          'requestIgnoreBatteryOptimizationForApp',
-        )) ??
-        false;
+    return _invokeBool('requestIgnoreBatteryOptimizationForApp');
   }
 
   static Future<bool> isTelevision() async {

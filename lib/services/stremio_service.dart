@@ -537,31 +537,28 @@ class StremioService {
     // Build stream ID
     final streamId = _buildStreamId(imdbId, season, episode);
 
-    // Search all applicable addons in parallel
-    final List<Future<List<StremioStream>>> futures = [];
-
-    for (final addon in applicableAddons) {
+    // Search all applicable addons with bounded concurrency — an unbounded
+    // fan-out over a large addon set exhausts sockets/memory on weak hardware.
+    // Higher cap than the default: this is the press-Play hot path and stream
+    // responses are small.
+    final allStreams = await mapWithConcurrency(applicableAddons, (addon) {
       // Use stremio: prefix and lowercase to match Torrent model (which lowercases source)
       final sourceKey = 'stremio:${addon.name}'.toLowerCase();
-      futures.add(
-        _fetchStreamsFromAddon(addon, type, streamId, timeout: timeout)
-            .then((streams) {
-              addonCounts[sourceKey] = streams.length;
-              debugPrint(
-                'StremioService: ${addon.name} returned ${streams.length} streams',
-              );
-              return streams;
-            })
-            .catchError((error, _) {
-              addonCounts[sourceKey] = 0;
-              addonErrors[sourceKey] = error.toString();
-              debugPrint('StremioService: ${addon.name} error: $error');
-              return <StremioStream>[];
-            }),
-      );
-    }
-
-    final allStreams = await Future.wait(futures);
+      return _fetchStreamsFromAddon(addon, type, streamId, timeout: timeout)
+          .then((streams) {
+            addonCounts[sourceKey] = streams.length;
+            debugPrint(
+              'StremioService: ${addon.name} returned ${streams.length} streams',
+            );
+            return streams;
+          })
+          .catchError((error, _) {
+            addonCounts[sourceKey] = 0;
+            addonErrors[sourceKey] = error.toString();
+            debugPrint('StremioService: ${addon.name} error: $error');
+            return <StremioStream>[];
+          });
+    }, concurrency: 16);
 
     // Flatten and convert to torrents
     final List<StremioStream> flatStreams = [];
@@ -597,31 +594,25 @@ class StremioService {
     const int minResultsThreshold = 5;
     debugPrint('StremioService: Using smart fallback for series search');
 
-    // Step 1: Try bare IMDB ID first (parallel)
-    final List<Future<List<StremioStream>>> initialFutures = [];
-
-    for (final addon in applicableAddons) {
+    // Step 1: Try bare IMDB ID first (bounded fan-out, same cap as
+    // searchStreams — this is also on the press-Play hot path)
+    final initialResults = await mapWithConcurrency(applicableAddons, (addon) {
       final sourceKey = 'stremio:${addon.name}'.toLowerCase();
-      initialFutures.add(
-        _fetchStreamsFromAddon(addon, 'series', imdbId, timeout: timeout)
-            .then((streams) {
-              addonCounts[sourceKey] = streams.length;
-              debugPrint(
-                'StremioService: ${addon.name} (bare IMDB) returned ${streams.length} streams',
-              );
-              return streams;
-            })
-            .catchError((e) {
-              addonCounts[sourceKey] = 0;
-              addonErrors[sourceKey] = e.toString();
-              debugPrint('StremioService: ${addon.name} (bare IMDB) error: $e');
-              return <StremioStream>[];
-            }),
-      );
-    }
-
-    // Execute all bare IMDB searches in parallel
-    final initialResults = await Future.wait(initialFutures);
+      return _fetchStreamsFromAddon(addon, 'series', imdbId, timeout: timeout)
+          .then((streams) {
+            addonCounts[sourceKey] = streams.length;
+            debugPrint(
+              'StremioService: ${addon.name} (bare IMDB) returned ${streams.length} streams',
+            );
+            return streams;
+          })
+          .catchError((e) {
+            addonCounts[sourceKey] = 0;
+            addonErrors[sourceKey] = e.toString();
+            debugPrint('StremioService: ${addon.name} (bare IMDB) error: $e');
+            return <StremioStream>[];
+          });
+    }, concurrency: 16);
     final List<StremioStream> initialStreams = [];
     for (final streams in initialResults) {
       initialStreams.addAll(streams);
@@ -678,32 +669,30 @@ class StremioService {
       'StremioService: Probing ${seasonsToProbe.length} seasons IN PARALLEL: $seasonsToProbe',
     );
 
-    // Create parallel futures for all season+addon combinations
-    final List<Future<List<StremioStream>>> seasonFutures = [];
-
-    for (final seasonNum in seasonsToProbe) {
-      final streamId = _buildStreamId(imdbId, seasonNum, 1); // S{n}E1
-
-      for (final addon in applicableAddons) {
-        seasonFutures.add(
-          _fetchStreamsFromAddon(
-            addon,
-            'series',
-            streamId,
-            timeout: timeout,
-          ).catchError((e) {
-            debugPrint(
-              'StremioService: ${addon.name} error probing S${seasonNum}E1: $e',
-            );
-            return <StremioStream>[];
-          }),
-        );
-      }
-    }
-
-    // Execute all season probes in parallel
-    final List<List<StremioStream>> seasonResults = await Future.wait(
-      seasonFutures,
+    // Probe all season+addon combinations with bounded concurrency — this
+    // multiplies seasons × addons (up to 10 × addon count simultaneous
+    // requests unbounded), the largest fan-out in the app.
+    final seasonProbes = <({int seasonNum, StremioAddon addon})>[
+      for (final seasonNum in seasonsToProbe)
+        for (final addon in applicableAddons) (seasonNum: seasonNum, addon: addon),
+    ];
+    final List<List<StremioStream>> seasonResults = await mapWithConcurrency(
+      seasonProbes,
+      (probe) {
+        final streamId = _buildStreamId(imdbId, probe.seasonNum, 1); // S{n}E1
+        return _fetchStreamsFromAddon(
+          probe.addon,
+          'series',
+          streamId,
+          timeout: timeout,
+        ).catchError((e) {
+          debugPrint(
+            'StremioService: ${probe.addon.name} error probing S${probe.seasonNum}E1: $e',
+          );
+          return <StremioStream>[];
+        });
+      },
+      concurrency: 16,
     );
 
     // Flatten results
@@ -960,21 +949,21 @@ class StremioService {
           .toList();
       if (candidates.isEmpty) return const [];
 
-      // Query candidate addons in parallel; tolerate individual failures.
-      final perAddon = await Future.wait(
-        candidates.map((a) async {
-          try {
-            return await _fetchStreamsFromAddon(
-              a,
-              type,
-              imdbId,
-              timeout: const Duration(seconds: 8),
-            );
-          } catch (_) {
-            return <StremioStream>[];
-          }
-        }),
-      );
+      // Query candidate addons with bounded concurrency; tolerate individual
+      // failures. Order is preserved, which the perAddon[i]/candidates[i]
+      // alignment below relies on.
+      final perAddon = await mapWithConcurrency(candidates, (a) async {
+        try {
+          return await _fetchStreamsFromAddon(
+            a,
+            type,
+            imdbId,
+            timeout: const Duration(seconds: 8),
+          );
+        } catch (_) {
+          return <StremioStream>[];
+        }
+      });
 
       // Learn which candidates are not recommendation providers so later
       // detail opens skip them. Rule: returned ≥1 stream but none were rec
@@ -1070,11 +1059,11 @@ class StremioService {
           .toList();
       if (candidates.isEmpty) return null;
 
-      // Probe candidates in parallel; tolerate individual failures. A short
-      // timeout keeps one slow/dead meta addon from holding up enrichment.
-      // Future.wait preserves order, so results stay in addon priority.
-      final results = await Future.wait(
-        candidates.map((addon) async {
+      // Probe candidates with bounded concurrency; tolerate individual
+      // failures. A short timeout keeps one slow/dead meta addon from holding
+      // up enrichment. mapWithConcurrency preserves order, so results stay in
+      // addon priority.
+      final results = await mapWithConcurrency(candidates, (addon) async {
           final url =
               '${addon.baseUrl}/meta/$type/${Uri.encodeComponent(imdbId)}.json';
           final client = http.Client();
@@ -1096,8 +1085,7 @@ class StremioService {
           } finally {
             client.close();
           }
-        }),
-      );
+      });
 
       // Prefer the first result (by addon priority) that carries real
       // structured metadata. Only fall back to a description-only result
@@ -1603,13 +1591,12 @@ class StremioService {
       'StremioService: Searching ${searchableCatalogs.length} catalogs in ${addon.name} for "$query"',
     );
 
-    // Search all catalogs in parallel
-    final futures = <Future<List<StremioMeta>>>[];
-    for (final catalog in searchableCatalogs) {
-      futures.add(_searchSingleCatalog(addon, catalog, encodedQuery));
-    }
-
-    final results = await Future.wait(futures);
+    // Search all catalogs with bounded concurrency (an addon can declare
+    // arbitrarily many searchable catalogs)
+    final results = await mapWithConcurrency(
+      searchableCatalogs,
+      (catalog) => _searchSingleCatalog(addon, catalog, encodedQuery),
+    );
 
     // Flatten and deduplicate by ID
     final seen = <String, StremioMeta>{};

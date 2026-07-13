@@ -173,7 +173,13 @@ class SubtitleCueParser {
       }
       parts.add(afterDialogue.substring(fieldStart).trim());
 
-      if (parts.length <= textFieldIndex) continue;
+      // Guard all three indices: a nonstandard Format line can order Text
+      // before Start/End, leaving fewer parts than those indices expect.
+      if (parts.length <= textFieldIndex ||
+          parts.length <= startFieldIndex ||
+          parts.length <= endFieldIndex) {
+        continue;
+      }
 
       final startMs = _parseAssTimestamp(parts[startFieldIndex]);
       final endMs = _parseAssTimestamp(parts[endFieldIndex]);

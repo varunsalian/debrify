@@ -74,10 +74,28 @@ class MediaStoreDownloadService : Service() {
 	}
 
 	override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+		// Commands from the app arrive via startForegroundService(); on
+		// Android 8+ the app is killed (ForegroundServiceDidNotStartInTimeException)
+		// if ANY such path returns without startForeground(). Claim foreground
+		// FIRST, unconditionally — no-work paths release it again via stopIfIdle().
+		// Commands from notification action buttons arrive via plain
+		// PendingIntent.getService with NO foreground obligation, but on
+		// Android 12+ startForeground() itself can throw
+		// (ForegroundServiceStartNotAllowedException) if the tap exemption has
+		// lapsed — in that case just continue handling the command un-promoted.
+		try {
+			startForeground(SERVICE_NOTIFICATION_ID, buildSummaryNotification())
+		} catch (_: Exception) {
+			// No obligation exists on the plain-startService path; proceed.
+		}
 		when (intent?.action) {
 			ACTION_START -> {
 				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: System.currentTimeMillis().toString()
-				val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
+				val url = intent.getStringExtra(EXTRA_URL)
+				if (url == null) {
+					stopIfIdle()
+					return START_NOT_STICKY
+				}
 				val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "download"
 				val subDir = intent.getStringExtra(EXTRA_RELATIVE_SUBDIR) ?: "Debrify"
 				val mimeType = intent.getStringExtra(EXTRA_MIME_TYPE) ?: "application/octet-stream"
@@ -86,17 +104,14 @@ class MediaStoreDownloadService : Service() {
 
 				val state = DownloadState(taskId, url, fileName, subDir, mimeType, headers)
 				states[taskId] = state
-				if (states.size == 1) {
-					startForeground(SERVICE_NOTIFICATION_ID, buildSummaryNotification())
-				} else {
-					updateSummaryNotification()
-				}
+				updateSummaryNotification()
 				notifyTask(state, "Preparing...", indeterminate = true, completed = false)
 				Thread { try { startOrResume(state, fresh = true) } catch (t: Throwable) { try { notifyTask(state, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to (t.message ?: "crash"))) } }.start()
 			}
 			ACTION_PAUSE -> {
-				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return START_NOT_STICKY
-				states[taskId]?.let { s ->
+				val taskId = intent.getStringExtra(EXTRA_TASK_ID)
+				val s = if (taskId != null) states[taskId] else null
+				if (s != null) {
 					s.paused = true
 					try { s.connection?.disconnect() } catch (_: Exception) {}
 					try { s.input?.close() } catch (_: Exception) {}
@@ -104,37 +119,56 @@ class MediaStoreDownloadService : Service() {
 					updateSummaryNotification()
 					ChannelBridge.emit(mapOf(
 						"type" to "paused",
-						"taskId" to taskId,
+						"taskId" to taskId!!,
 						"fileName" to s.fileName,
 						"subDir" to s.subDir,
 					))
 				}
+				// Unknown task (e.g. the service process was recreated and the
+				// in-memory state is gone): nothing to pause — just don't
+				// linger as an idle foreground service.
+				stopIfIdle()
 			}
 			ACTION_RESUME -> {
-				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return START_NOT_STICKY
-				states[taskId]?.let { s ->
-					if (s.running) return START_NOT_STICKY
+				val taskId = intent.getStringExtra(EXTRA_TASK_ID)
+				val s = if (taskId != null) states[taskId] else null
+				if (s == null) {
+					// State lost (service process was killed since the pause).
+					// Tell Dart so the UI marks the task failed instead of
+					// showing a resume that silently does nothing.
+					if (taskId != null) {
+						ChannelBridge.emit(mapOf(
+							"type" to "error",
+							"taskId" to taskId,
+							"message" to "download state lost; start the download again",
+						))
+					}
+					stopIfIdle()
+				} else if (!s.running) {
 					s.paused = false
 					Thread { try { startOrResume(s, fresh = false) } catch (t: Throwable) { try { notifyTask(s, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to s.taskId, "message" to (t.message ?: "crash"))) } }.start()
 					updateSummaryNotification()
 					ChannelBridge.emit(mapOf(
 						"type" to "resumed",
-						"taskId" to taskId,
+						"taskId" to taskId!!,
 						"fileName" to s.fileName,
 						"subDir" to s.subDir,
 					))
 				}
+				// s.running: already downloading — foreground is legitimately
+				// held; nothing else to do.
 			}
 			ACTION_CANCEL -> {
-				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return START_NOT_STICKY
-				states[taskId]?.let { s ->
+				val taskId = intent.getStringExtra(EXTRA_TASK_ID)
+				val s = if (taskId != null) states[taskId] else null
+				if (s != null) {
 					s.canceled = true
 					try { s.connection?.disconnect() } catch (_: Exception) {}
 					try { s.input?.close() } catch (_: Exception) {}
 					s.uri?.let { try { contentResolver.delete(it, null, null) } catch (_: Exception) {} }
 					ChannelBridge.emit(mapOf(
 						"type" to "canceled",
-						"taskId" to taskId,
+						"taskId" to taskId!!,
 						"fileName" to s.fileName,
 						"subDir" to s.subDir,
 					))
@@ -142,15 +176,25 @@ class MediaStoreDownloadService : Service() {
 					notificationManager.cancel(taskNotificationId(taskId))
 				}
 				if (states.isEmpty()) {
-					stopForeground(STOP_FOREGROUND_REMOVE)
-					notificationManager.cancel(SERVICE_NOTIFICATION_ID)
-					stopSelfSafely()
+					stopIfIdle()
 				} else {
 					updateSummaryNotification()
 				}
 			}
+			else -> stopIfIdle()
 		}
 		return START_NOT_STICKY
+	}
+
+	// With no tracked downloads there is nothing to be foreground for —
+	// release the foreground claim taken at the top of onStartCommand and
+	// stop, so the OS timeout can never fire on a no-work command.
+	private fun stopIfIdle() {
+		if (states.isEmpty()) {
+			stopForeground(STOP_FOREGROUND_REMOVE)
+			notificationManager.cancel(SERVICE_NOTIFICATION_ID)
+			stopSelfSafely()
+		}
 	}
 
 	private fun existingSize(uri: Uri): Long {
