@@ -41,7 +41,13 @@ import '../../utils/tv_keys.dart';
 /// Each addon catalog becomes a "channel" with a deterministic "now playing"
 /// item that rotates on a configurable schedule.
 class StremioTvScreen extends StatefulWidget {
-  const StremioTvScreen({super.key});
+  /// The resolved native Android-TV flag, threaded down from the app shell
+  /// (see main.dart `_buildPage`). Prefer this over a width heuristic: on a TV
+  /// the logical canvas sits right at the old `width >= 900` threshold, so
+  /// screens that guessed from width flipped to the non-navigable phone layout.
+  final bool isTelevision;
+
+  const StremioTvScreen({super.key, this.isTelevision = false});
 
   @override
   State<StremioTvScreen> createState() => _StremioTvScreenState();
@@ -2667,10 +2673,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
       return;
     }
-    final isWide = MediaQuery.of(context).size.width >= 900;
     final screen = CatalogItemDetailScreen(
       item: nowPlaying.item,
-      isTelevision: isWide,
+      isTelevision: widget.isTelevision,
       onPlay: () => _playChannel(channel),
       onBrowse: () => _playChannel(channel),
     );

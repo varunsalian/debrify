@@ -618,7 +618,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const PikPakFilesScreen(), // 6: PikPak
     const AddonsScreen(), // 7: Addons
     const SettingsScreen(), // 8: Settings
-    const StremioTvScreen(), // 9: Stremio TV
+    // 9: Stremio TV — overridden in _buildPage so it gets the resolved TV flag;
+    // this const entry is only an index-stable fallback (defaults to phone).
+    const StremioTvScreen(),
     const WebDavFilesScreen(), // 10: WebDAV
     const PremiumizeFilesScreen(), // 11: Premiumize
     const AllDebridFilesScreen(), // 12: AllDebrid
@@ -2340,6 +2342,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// first-frame layout/focus flash from async re-detection).
   Widget _buildPage(int index) {
     switch (index) {
+      case 9: // Stremio TV — built here (not from the const _pages list) so it
+        // gets the resolved native TV flag, like IPTV/YouTube/Home. Without it
+        // the screen fell back to a width heuristic that mis-detected the TV.
+        return StremioTvScreen(isTelevision: _isAndroidTv);
       case 13: // IPTV
         return BrowseScreen(
           tabIndex: 13,
