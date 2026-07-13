@@ -33,6 +33,7 @@ import '../services/torrent_service.dart';
 import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/video_player_launcher.dart';
+import '../utils/concurrency.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/dominant_color.dart';
 import '../utils/format_tag_detector.dart';
@@ -2020,30 +2021,35 @@ class _SearchScreenState extends State<SearchScreen> {
           .toList();
       // One row PER searchable catalog (so Movies and Series land in separate
       // categorised rows, like Stremio) instead of one merged row per addon.
-      final tasks = <Future<CatalogSection?>>[];
+      final catalogTasks =
+          <({StremioAddon addon, StremioAddonCatalog catalog})>[];
       for (final addon in addons) {
         for (final catalog in addon.catalogs.where((c) => c.supportsSearch)) {
-          tasks.add(() async {
-            try {
-              final items = await _stremio.searchSingleCatalog(
-                addon,
-                catalog,
-                query,
-              );
-              if (items.isEmpty) return null;
-              return CatalogSection(
-                title: '${addon.name}: ${catalog.name}',
-                addon: addon,
-                catalog: catalog,
-                items: items,
-              );
-            } catch (_) {
-              return null;
-            }
-          }());
+          catalogTasks.add((addon: addon, catalog: catalog));
         }
       }
-      final raw = await Future.wait(tasks);
+      // Bound the fan-out: with many installed addons this could otherwise fire
+      // hundreds of concurrent HTTP requests at once and exhaust sockets/memory
+      // on weak hardware (TVs). mapWithConcurrency preserves order.
+      final raw =
+          await mapWithConcurrency(catalogTasks, (entry) async {
+        try {
+          final items = await _stremio.searchSingleCatalog(
+            entry.addon,
+            entry.catalog,
+            query,
+          );
+          if (items.isEmpty) return null;
+          return CatalogSection(
+            title: '${entry.addon.name}: ${entry.catalog.name}',
+            addon: entry.addon,
+            catalog: entry.catalog,
+            items: items,
+          );
+        } catch (_) {
+          return null;
+        }
+      });
       if (!mounted || token != _catalogSearchToken) return;
       setState(() => _catalogSearching = false);
       _applySections(raw.whereType<CatalogSection>().toList());

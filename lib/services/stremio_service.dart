@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
+import '../utils/concurrency.dart';
 
 class StremioAddonImportResult {
   final int discovered;
@@ -1665,16 +1666,14 @@ class StremioService {
       'StremioService: Searching ${searchableCatalogs.length} catalogs for "$query"',
     );
 
-    // Search all catalogs in parallel
-    final futures = <Future<List<StremioMeta>>>[];
-
-    for (final entry in searchableCatalogs) {
-      futures.add(
-        _searchSingleCatalog(entry.addon, entry.catalog, encodedQuery),
-      );
-    }
-
-    final allResults = await Future.wait(futures);
+    // Search catalogs with bounded concurrency (order preserved so the dedup
+    // loop below can still map allResults[i] back to searchableCatalogs[i]).
+    // Capping the fan-out avoids exhausting sockets/memory on weak hardware
+    // (e.g. TVs) when many addons are installed.
+    final allResults = await mapWithConcurrency(
+      searchableCatalogs,
+      (entry) => _searchSingleCatalog(entry.addon, entry.catalog, encodedQuery),
+    );
 
     // Flatten and deduplicate by ID (supports any ID format - IMDB, TV channels, etc.)
     final Map<String, StremioMeta> uniqueResults = {};
