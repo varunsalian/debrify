@@ -256,6 +256,9 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
 
     return CustomScrollView(
       controller: _scroll,
+      // Pre-warm offscreen posters so DPAD scrolling doesn't decode on-screen
+      // mid-scroll (matches the board's cacheExtent).
+      cacheExtent: widget.isTelevision ? 800 : 250,
       slivers: [
         SliverPadding(
           padding: SeeAllGridMetrics.padding,

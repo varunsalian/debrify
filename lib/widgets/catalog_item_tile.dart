@@ -122,6 +122,13 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                   // wide, so this roughly thirds the decoded bytes per poster —
                   // the biggest memory win for the catalog grid on low-RAM TVs.
                   memCacheWidth: widget.isTelevision ? 320 : 480,
+                  // TV: no per-image crossfade — a saveLayer per poster janks the
+                  // weak GPU when a whole grid fills in at once (matches the board's
+                  // _ArtPoster path).
+                  fadeInDuration:
+                      widget.isTelevision ? Duration.zero : const Duration(milliseconds: 250),
+                  fadeOutDuration:
+                      widget.isTelevision ? Duration.zero : const Duration(milliseconds: 100),
                   placeholder: (_, __) => _placeholder(item.name),
                   errorWidget: (_, __, ___) => _placeholder(item.name),
                 )
