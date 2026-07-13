@@ -1015,118 +1015,170 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   Widget _buildFilterBar() {
     final isAddon = _kind == _HubKind.addons;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 6, 24, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // DOWN from any filter-bar control goes deterministically to the
-          // search field (when open) or the first list row — geometric
-          // traversal's direction-history would otherwise return to whatever
-          // row the user last came from.
-          Focus(
-            canRequestFocus: false,
-            skipTraversal: true,
-            onKeyEvent: (node, event) {
-              if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-                return KeyEventResult.ignored;
-              }
-              if (event.logicalKey != LogicalKeyboardKey.arrowDown) {
-                return KeyEventResult.ignored;
-              }
-              if (_searchOpen || _search.isNotEmpty) {
-                _searchFocus.requestFocus();
-                return KeyEventResult.handled;
-              }
-              _focusFirstRow();
-              return KeyEventResult.handled;
-            },
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-              // Stremio addons and torrent engines are separate features — the
-              // first dropdown picks which one is being managed.
-              StremioDropdown<_HubKind>(
-                label: 'Manage',
-                value: _kind,
-                focusNode: _kindFocus,
-                isTelevision: _isTv,
-                options: const [
-                  StremioDropdownOption(_HubKind.addons, 'Stremio Addons'),
-                  StremioDropdownOption(_HubKind.engines, 'Torrent Engines'),
-                ],
-                onSelected: _selectKind,
-              ),
-              if (isAddon)
-                StremioDropdown<_AddonSource>(
-                  label: 'Source',
-                  value: _source,
-                  focusNode: _sourceFocus,
-                  isTelevision: _isTv,
-                  options: const [
-                    StremioDropdownOption(_AddonSource.installed, 'Installed'),
-                    StremioDropdownOption(_AddonSource.official, 'Official'),
-                    StremioDropdownOption(_AddonSource.community, 'Community'),
-                  ],
-                  onSelected: _selectSource,
-                ),
-              if (isAddon)
-                StremioDropdown<String>(
-                  label: 'Type',
-                  value: _typeFilter,
-                  focusNode: _typeFocus,
-                  isTelevision: _isTv,
-                  options: const [
-                    StremioDropdownOption('', 'All'),
-                    StremioDropdownOption('movie', 'Movies'),
-                    StremioDropdownOption('series', 'Series'),
-                    StremioDropdownOption('channel', 'Channels'),
-                    StremioDropdownOption('tv', 'TV'),
-                    StremioDropdownOption('anime', 'Anime'),
-                  ],
-                  onSelected: (v) => setState(() => _typeFilter = v),
-                ),
-              if (isAddon) ...[
-                _HubActionButton(
-                  focusNode: _searchBtnFocus,
-                  icon: Icons.search_rounded,
-                  onTap: _toggleSearch,
-                ),
-                _HubActionButton(
-                  focusNode: _addFocus,
-                  icon: Icons.add_rounded,
-                  label: 'Add addon',
-                  primary: true,
-                  onTap: _addByUrl,
-                ),
-                _HubActionButton(
-                  focusNode: _moreFocus,
-                  icon: Icons.more_horiz_rounded,
-                  onTap: _showActionsMenu,
-                ),
-              ] else ...[
-                _HubActionButton(
-                  icon: Icons.file_upload_outlined,
-                  label: 'Import YAML',
-                  primary: true,
-                  onTap: _importEngineFromFile,
-                ),
-                _HubActionButton(
-                  icon: Icons.refresh_rounded,
-                  onTap: _loadEngines,
-                ),
-              ],
-              ],
-            ),
-          ),
-          if (isAddon && (_searchOpen || _search.isNotEmpty)) ...[
-            const SizedBox(height: 10),
-            _buildSearchField(),
+    return LayoutBuilder(
+      builder: (context, c) {
+        // Phone-width: the labelled dropdowns + buttons wrap into four ragged
+        // rows that eat half the screen. Compose a compact three-row bar
+        // instead (labels dropped — the values are self-explanatory) and keep
+        // the free-flowing Wrap for wide layouts.
+        final narrow = c.maxWidth < 480;
+
+        final manageDd = StremioDropdown<_HubKind>(
+          // Stremio addons and torrent engines are separate features — the
+          // first dropdown picks which one is being managed.
+          label: narrow ? null : 'Manage',
+          value: _kind,
+          focusNode: _kindFocus,
+          isTelevision: _isTv,
+          options: const [
+            StremioDropdownOption(_HubKind.addons, 'Stremio Addons'),
+            StremioDropdownOption(_HubKind.engines, 'Torrent Engines'),
           ],
-        ],
-      ),
+          onSelected: _selectKind,
+        );
+        final sourceDd = StremioDropdown<_AddonSource>(
+          label: narrow ? null : 'Source',
+          value: _source,
+          focusNode: _sourceFocus,
+          isTelevision: _isTv,
+          options: const [
+            StremioDropdownOption(_AddonSource.installed, 'Installed'),
+            StremioDropdownOption(_AddonSource.official, 'Official'),
+            StremioDropdownOption(_AddonSource.community, 'Community'),
+          ],
+          onSelected: _selectSource,
+        );
+        final typeDd = StremioDropdown<String>(
+          label: narrow ? null : 'Type',
+          value: _typeFilter,
+          focusNode: _typeFocus,
+          isTelevision: _isTv,
+          options: const [
+            StremioDropdownOption('', 'All'),
+            StremioDropdownOption('movie', 'Movies'),
+            StremioDropdownOption('series', 'Series'),
+            StremioDropdownOption('channel', 'Channels'),
+            StremioDropdownOption('tv', 'TV'),
+            StremioDropdownOption('anime', 'Anime'),
+          ],
+          onSelected: (v) => setState(() => _typeFilter = v),
+        );
+        final searchBtn = _HubActionButton(
+          focusNode: _searchBtnFocus,
+          icon: Icons.search_rounded,
+          onTap: _toggleSearch,
+        );
+        final addBtn = _HubActionButton(
+          focusNode: _addFocus,
+          icon: Icons.add_rounded,
+          label: 'Add addon',
+          primary: true,
+          expand: narrow,
+          onTap: _addByUrl,
+        );
+        final moreBtn = _HubActionButton(
+          focusNode: _moreFocus,
+          icon: Icons.more_horiz_rounded,
+          onTap: _showActionsMenu,
+        );
+        final importBtn = _HubActionButton(
+          icon: Icons.file_upload_outlined,
+          label: 'Import YAML',
+          primary: true,
+          expand: narrow,
+          onTap: _importEngineFromFile,
+        );
+        final refreshBtn = _HubActionButton(
+          icon: Icons.refresh_rounded,
+          onTap: _loadEngines,
+        );
+
+        final Widget controls;
+        if (narrow) {
+          controls = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Row 1: what's being managed + overflow / refresh.
+              Row(children: [
+                Expanded(child: Align(
+                    alignment: Alignment.centerLeft, child: manageDd)),
+                const SizedBox(width: 10),
+                if (isAddon) moreBtn else refreshBtn,
+              ]),
+              const SizedBox(height: 10),
+              if (isAddon) ...[
+                // Row 2: the filters + search toggle.
+                Row(children: [
+                  sourceDd,
+                  const SizedBox(width: 10),
+                  typeDd,
+                  const Spacer(),
+                  searchBtn,
+                ]),
+                const SizedBox(height: 10),
+                // Row 3: the primary action gets the full width.
+                addBtn,
+              ] else
+                importBtn,
+            ],
+          );
+        } else {
+          controls = Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              manageDd,
+              if (isAddon) ...[
+                sourceDd,
+                typeDd,
+                searchBtn,
+                addBtn,
+                moreBtn,
+              ] else ...[
+                importBtn,
+                refreshBtn,
+              ],
+            ],
+          );
+        }
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(narrow ? 16 : 24, 6, narrow ? 16 : 24, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // DOWN from any filter-bar control goes deterministically to the
+              // search field (when open) or the first list row — geometric
+              // traversal's direction-history would otherwise return to whatever
+              // row the user last came from.
+              Focus(
+                canRequestFocus: false,
+                skipTraversal: true,
+                onKeyEvent: (node, event) {
+                  if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+                    return KeyEventResult.ignored;
+                  }
+                  if (event.logicalKey != LogicalKeyboardKey.arrowDown) {
+                    return KeyEventResult.ignored;
+                  }
+                  if (_searchOpen || _search.isNotEmpty) {
+                    _searchFocus.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  _focusFirstRow();
+                  return KeyEventResult.handled;
+                },
+                child: controls,
+              ),
+              if (isAddon && (_searchOpen || _search.isNotEmpty)) ...[
+                const SizedBox(height: 10),
+                _buildSearchField(),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1531,33 +1583,78 @@ class _InstalledRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final chevron = Icon(Icons.chevron_right_rounded,
+        size: 26, color: Colors.white.withValues(alpha: 0.3));
     return _FocusCard(
       onTap: onTap,
       focusNode: focusNode,
-      builder: (focused) => Container(
-        decoration: _cardDecoration(focused),
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-        child: Row(
-          children: [
-            _addonLogo(null),
-            const SizedBox(width: 20),
-            Expanded(
-              child: _AddonInfo(
-                name: addon.name,
-                version: addon.version,
-                types: addon.types,
-                resources: addon.resources,
-                description: addon.description,
-                warnDebrid: warnDebrid,
-              ),
-            ),
-            const SizedBox(width: 16),
-            _StatusPill(enabled: addon.enabled),
-            const SizedBox(width: 8),
-            Icon(Icons.chevron_right_rounded,
-                size: 26, color: Colors.white.withValues(alpha: 0.3)),
-          ],
-        ),
+      builder: (focused) => LayoutBuilder(
+        builder: (context, c) {
+          // On a phone-width card the logo + status pill + chevron leave the
+          // info column too narrow (name/type truncate, chips wrap into a tall
+          // stack). Below the breakpoint, keep only the logo + title + status
+          // in a header row and let the type/chips/description use the full
+          // width beneath. Wide (tablet/desktop/TV) keeps the single-row look.
+          final narrow = c.maxWidth < 480;
+          final meta = _AddonMeta(
+            types: addon.types,
+            resources: addon.resources,
+            description: addon.description,
+            warnDebrid: warnDebrid,
+          );
+          return Container(
+            decoration: _cardDecoration(focused),
+            padding: EdgeInsets.symmetric(
+                horizontal: narrow ? 16 : 22, vertical: narrow ? 16 : 20),
+            child: narrow
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          // Compact logo + version-under-name: the header row
+                          // also carries the pill and chevron, so every fixed
+                          // pixel here comes straight out of the name's width.
+                          _addonLogo(null, size: 44),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: _AddonTitleLine(
+                                name: addon.name,
+                                version: addon.version,
+                                stacked: true),
+                          ),
+                          const SizedBox(width: 10),
+                          _StatusPill(enabled: addon.enabled),
+                          const SizedBox(width: 4),
+                          chevron,
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      meta,
+                    ],
+                  )
+                : Row(
+                    children: [
+                      _addonLogo(null),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: _AddonInfo(
+                          name: addon.name,
+                          version: addon.version,
+                          types: addon.types,
+                          resources: addon.resources,
+                          description: addon.description,
+                          warnDebrid: warnDebrid,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      _StatusPill(enabled: addon.enabled),
+                      const SizedBox(width: 8),
+                      chevron,
+                    ],
+                  ),
+          );
+        },
       ),
     );
   }
@@ -1593,31 +1690,104 @@ class _AddonInfo extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Flexible(
-              child: Text(name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2)),
-            ),
-            if (version != null && version!.isNotEmpty) ...[
-              const SizedBox(width: 10),
-              Text('v.$version',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.38),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ],
-        ),
+        _AddonTitleLine(name: name, version: version),
         const SizedBox(height: 4),
+        _AddonMeta(
+          types: types,
+          resources: resources,
+          description: description,
+          warnDebrid: warnDebrid,
+        ),
+      ],
+    );
+  }
+}
+
+/// The name + muted version, on one baseline-aligned line. Extracted so the
+/// narrow card layout can hoist it into a header row (beside the logo / status)
+/// while the rest of the info flows full-width below.
+class _AddonTitleLine extends StatelessWidget {
+  final String name;
+  final String? version;
+
+  /// When true, the version sits on its own line *under* the name instead of
+  /// beside it — the narrow header row can't afford to give the version a
+  /// fixed slice of the name's width.
+  final bool stacked;
+
+  const _AddonTitleLine({
+    required this.name,
+    required this.version,
+    this.stacked = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final nameText = Text(name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2));
+    final versionText = (version != null && version!.isNotEmpty)
+        ? Text('v.$version',
+            style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.38),
+                fontSize: 12,
+                fontWeight: FontWeight.w600))
+        : null;
+
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          nameText,
+          if (versionText != null) ...[
+            const SizedBox(height: 2),
+            versionText,
+          ],
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Flexible(child: nameText),
+        if (versionText != null) ...[
+          const SizedBox(width: 10),
+          versionText,
+        ],
+      ],
+    );
+  }
+}
+
+/// The type line, capability chips and description — everything below the
+/// title. Kept separate so the narrow layout can give it the full card width
+/// (chips no longer wrap into a tall stack in a squeezed column).
+class _AddonMeta extends StatelessWidget {
+  final List<String> types;
+  final List<String> resources;
+  final String? description;
+  final bool warnDebrid;
+  const _AddonMeta({
+    required this.types,
+    required this.resources,
+    required this.description,
+    this.warnDebrid = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
         Text(
           types.isEmpty ? 'Addon' : types.map(_capitalize).join(' & '),
           maxLines: 1,
@@ -1695,27 +1865,68 @@ class _MarketRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: _cardDecoration(false),
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-      child: Row(
-        children: [
-          _addonLogo(addon.logo),
-          const SizedBox(width: 20),
-          Expanded(
-            child: _AddonInfo(
-              name: addon.name,
-              version: addon.version,
-              types: addon.types,
-              resources: addon.resources,
-              description: addon.description,
-              warnDebrid: warnDebrid,
-            ),
-          ),
-          const SizedBox(width: 16),
-          _buildActions(),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, c) {
+        // Same responsive split as the installed card: below the breakpoint,
+        // logo + title share a header row, the info flows full-width, and the
+        // Install/Configure buttons drop to their own row (where they get room
+        // instead of squeezing the info column).
+        final narrow = c.maxWidth < 480;
+        final meta = _AddonMeta(
+          types: addon.types,
+          resources: addon.resources,
+          description: addon.description,
+          warnDebrid: warnDebrid,
+        );
+        return Container(
+          decoration: _cardDecoration(false),
+          padding: EdgeInsets.symmetric(
+              horizontal: narrow ? 16 : 22, vertical: narrow ? 16 : 20),
+          child: narrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _addonLogo(addon.logo, size: 44),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: _AddonTitleLine(
+                              name: addon.name,
+                              version: addon.version,
+                              stacked: true),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    meta,
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _buildActions(),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    _addonLogo(addon.logo),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: _AddonInfo(
+                        name: addon.name,
+                        version: addon.version,
+                        types: addon.types,
+                        resources: addon.resources,
+                        description: addon.description,
+                        warnDebrid: warnDebrid,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    _buildActions(),
+                  ],
+                ),
+        );
+      },
     );
   }
 
@@ -1984,9 +2195,9 @@ class _EngineActionPill extends StatelessWidget {
 
 /// Addon logo, Stremio-style: the image (or a plain muted puzzle piece) sits
 /// directly on the card — no tinted chip behind it.
-Widget _addonLogo(String? url) => SizedBox(
-      width: 64,
-      height: 64,
+Widget _addonLogo(String? url, {double size = 64}) => SizedBox(
+      width: size,
+      height: size,
       child: (url != null && url.isNotEmpty)
           ? ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -1994,12 +2205,12 @@ Widget _addonLogo(String? url) => SizedBox(
                 imageUrl: url,
                 fit: BoxFit.contain,
                 memCacheWidth: 192,
-                errorWidget: (_, __, ___) => const Icon(
-                    Icons.extension_rounded, color: Colors.white38, size: 46),
+                errorWidget: (_, __, ___) => Icon(Icons.extension_rounded,
+                    color: Colors.white38, size: size * 0.72),
               ),
             )
-          : const Icon(Icons.extension_rounded,
-              color: Colors.white38, size: 46),
+          : Icon(Icons.extension_rounded,
+              color: Colors.white38, size: size * 0.72),
     );
 
 class _StatusPill extends StatelessWidget {
@@ -2173,12 +2384,18 @@ class _HubActionButton extends StatefulWidget {
   final VoidCallback onTap;
   final bool primary;
   final FocusNode? focusNode;
+
+  /// Fill the parent's width with centred content (narrow filter bar rows)
+  /// instead of hugging the icon+label.
+  final bool expand;
+
   const _HubActionButton({
     required this.icon,
     required this.onTap,
     this.label,
     this.primary = false,
     this.focusNode,
+    this.expand = false,
   });
 
   @override
@@ -2226,7 +2443,9 @@ class _HubActionButtonState extends State<_HubActionButton> {
               border: Border.all(width: 2, color: borderColor),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize:
+                  widget.expand ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(widget.icon, size: 17, color: Colors.white),
                 if (widget.label != null) ...[
