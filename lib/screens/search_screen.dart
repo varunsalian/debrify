@@ -6269,7 +6269,14 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
             // Isolated in a RepaintBoundary so the Ken Burns drift re-rasterises
             // only the backdrop layer each frame — the scrim gradient and title
             // text above it stay cached and don't repaint.
+            //
+            // The ClipRect is load-bearing: the Ken Burns Transform.scale is a
+            // *paint-time* overflow (bottom-anchored, growing upward), which
+            // Stack.clipBehavior never catches — the Stack only clips overflow
+            // it detects at layout time. Without this, the zoomed backdrop
+            // smears above the hero into the search header (the "bleed").
             RepaintBoundary(
+              child: ClipRect(
               child: ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
                 begin: Alignment.topCenter,
@@ -6312,6 +6319,30 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               ),
             ),
           ),
+          ),
+          // Top scrim — compact Search hero only. The hero sits directly under
+          // the search bar, so even with the overflow clipped the backdrop's
+          // top row starts at full brightness against the header. A short dark
+          // gradient (page-coloured → transparent) melts the top edge into the
+          // page, mirroring the bottom fade. The full Home hero has nothing
+          // above it, so it's left untouched.
+          if (compact)
+            const Align(
+              alignment: Alignment.topCenter,
+              child: FractionallySizedBox(
+                heightFactor: 0.28,
+                widthFactor: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [kStremioBg, Colors.transparent],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // Left scrim for title/description legibility (vertical bands, so it
           // adds no horizontal seam). The bottom is handled by the image fade
           // above, letting the page background show through. The scrim leans
