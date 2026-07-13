@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../utils/dominant_color.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/playlist_view_mode.dart';
@@ -97,6 +101,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
   static Color get _glass2 => Colors.white.withValues(alpha: 0.07);
   static Color get _hair => Colors.white.withValues(alpha: 0.09);
 
+  /// Per-title accent, extracted once from the poster (same cheap 32px decode
+  /// the home hero uses). Colors the eyebrow, an ambient wash behind the title
+  /// and the Play button's glow, so the page feels made for *this* title rather
+  /// than a template with the artwork swapped in. Falls back to [_gold] until a
+  /// colorful dominant color is found (or forever, for a B&W poster).
+  Color _accent = _gold;
+
   ImdbEnrichment? _imdbExtra;
   ParentsGuideResult? _parentsGuide;
   List<StremioMeta>? _recommendations;
@@ -155,7 +166,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       _loadParentsGuide();
       _loadRecommendations();
       _loadTrailer();
+      _loadAccent();
     });
+  }
+
+  /// Pull a per-title accent from the poster (preferred — posters are more
+  /// brand-saturated than backdrops). One tiny 32px decode; silent on failure,
+  /// leaving the gold fallback. Extracted from the initial artwork only — a
+  /// later enrichment swap isn't worth a second pass.
+  Future<void> _loadAccent() async {
+    final url = widget.item.poster ?? widget.item.background;
+    if (url == null || url.isEmpty) return;
+    try {
+      final c = await extractDominantColor(CachedNetworkImageProvider(url));
+      if (c != null && mounted) setState(() => _accent = c);
+    } catch (_) {}
   }
 
   @override
@@ -417,6 +442,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
                 key: _backdropKey,
                 heroTag: widget.heroTag,
                 imageUrl: backdropUrl,
+                // Weak-TV GPU: sigma 0 swaps the runtime gaussian for a tiny
+                // decode upscaled by cover-fit (visually equivalent under the
+                // dark tint, zero per-frame filter cost), and drops the
+                // per-frame blur pass over the ambient trailer video.
+                imageBlurSigma: widget.isTelevision ? 0 : 42,
+                videoBlurSigma: widget.isTelevision ? 0 : 8,
                 videoUrl: _trailerAutoplayEnabled
                     ? _trailerStreams?.playUrl
                     : null,
@@ -463,6 +494,35 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
                                 _bg.withValues(alpha: 0.60),
                                 _bg.withValues(alpha: 0.88),
                               ],
+                            ),
+                          ),
+                        ),
+                        // Ambient per-title color grade: a soft glow of the
+                        // extracted accent in the upper-left, under the content,
+                        // so the whole surface is subtly lit by the title's own
+                        // color. Animates in when the accent resolves (no pop).
+                        // A radial gradient fill is a single cheap paint — no
+                        // blur, no layer — so it's safe on the weak TV GPU.
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: TweenAnimationBuilder<Color?>(
+                              duration: const Duration(milliseconds: 500),
+                              tween: ColorTween(
+                                end: _accent.withValues(alpha: 0.16),
+                              ),
+                              builder: (_, color, __) => DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: RadialGradient(
+                                    center: const Alignment(-0.7, -0.85),
+                                    radius: 1.5,
+                                    colors: [
+                                      color ?? Colors.transparent,
+                                      Colors.transparent,
+                                    ],
+                                    stops: const [0.0, 0.7],
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -582,6 +642,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
         ? item.description
         : extra?.plot;
 
+    final animate = !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
     return SingleChildScrollView(
       controller: _infoScroll,
       padding: EdgeInsets.fromLTRB(
@@ -595,47 +656,72 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _isMovie ? 'MOVIE' : 'SERIES',
-            style: TextStyle(
-              color: _gold,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2.2,
+          _StaggerReveal(
+            key: const ValueKey('rev-eyebrow'),
+            delayMs: 0,
+            enabled: animate,
+            child: Text(
+              _isMovie ? 'MOVIE' : 'SERIES',
+              style: TextStyle(
+                color: _accent,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.2,
+              ),
             ),
           ),
           SizedBox(height: t ? 5 : 8),
-          Text(
-            item.name,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: t ? 22 : 28,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              height: 1.05,
-              shadows: const [Shadow(color: Colors.black54, blurRadius: 14)],
+          _StaggerReveal(
+            key: const ValueKey('rev-title'),
+            delayMs: 55,
+            enabled: animate,
+            child: Text(
+              item.name,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: t ? 22 : 28,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                height: 1.05,
+                shadows: const [Shadow(color: Colors.black54, blurRadius: 14)],
+              ),
             ),
           ),
           SizedBox(height: t ? 8 : 10),
-          _buildMetaBar(year, extra, rating),
+          _StaggerReveal(
+            key: const ValueKey('rev-meta'),
+            delayMs: 110,
+            enabled: animate,
+            child: _buildMetaBar(year, extra, rating),
+          ),
           if (genres.isNotEmpty) ...[
             SizedBox(height: t ? 8 : 10),
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: [for (final g in genres.take(3)) _pill(g)],
+            _StaggerReveal(
+              key: const ValueKey('rev-genres'),
+              delayMs: 165,
+              enabled: animate,
+              child: Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: [for (final g in genres.take(3)) _pill(g)],
+              ),
             ),
           ],
           SizedBox(height: t ? 12 : 16),
           // Focusing the action row snaps the column to the very top so the
           // title / meta / genres above it are revealed (fixes "can't scroll
           // back up to details").
-          _ScrollAnchor(
-            toTop: true,
-            active: widget.isTelevision,
-            child: _buildActionRow(),
+          _StaggerReveal(
+            key: const ValueKey('rev-actions'),
+            delayMs: 220,
+            enabled: animate,
+            child: _ScrollAnchor(
+              toTop: true,
+              active: widget.isTelevision,
+              child: _buildActionRow(),
+            ),
           ),
           if (summary != null && summary.isNotEmpty) ...[
             SizedBox(height: t ? 16 : 20),
@@ -678,6 +764,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
     // button). Bonus: with autoplay on, the ambient trailer now owns the whole
     // screen behind the page instead of stopping at a card edge. Top padding
     // clears the 46px floating back button.
+    final animate = !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
     return Padding(
       padding: EdgeInsets.fromLTRB(
         widget.isTelevision ? 40 : 24,
@@ -689,46 +776,71 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              Text(
-                'SERIES',
+          _StaggerReveal(
+            key: const ValueKey('rev-h-eyebrow'),
+            delayMs: 0,
+            enabled: animate,
+            child: Text(
+              'SERIES',
+              style: TextStyle(
+                color: _accent,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.2,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _StaggerReveal(
+            key: const ValueKey('rev-h-title'),
+            delayMs: 55,
+            enabled: animate,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Text(
+                item.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: _gold,
-                  fontSize: 11,
+                  color: Colors.white,
+                  fontSize: _wide ? 34 : 28,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 2.2,
+                  letterSpacing: -0.5,
+                  height: 1.02,
+                  shadows: const [
+                    Shadow(color: Colors.black54, blurRadius: 18),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: _wide ? 34 : 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                    height: 1.02,
-                    shadows: const [
-                      Shadow(color: Colors.black54, blurRadius: 18),
-                    ],
-                  ),
-                ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _StaggerReveal(
+            key: const ValueKey('rev-h-meta'),
+            delayMs: 110,
+            enabled: animate,
+            child: _buildMetaBar(year, extra, rating),
+          ),
+          if (genres.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _StaggerReveal(
+              key: const ValueKey('rev-h-genres'),
+              delayMs: 165,
+              enabled: animate,
+              child: Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: [for (final g in genres.take(4)) _pill(g)],
               ),
-              const SizedBox(height: 10),
-              _buildMetaBar(year, extra, rating),
-              if (genres.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 7,
-                  runSpacing: 7,
-                  children: [for (final g in genres.take(4)) _pill(g)],
-                ),
-              ],
+            ),
+          ],
           const SizedBox(height: 14),
-          _buildActionRow(),
+          _StaggerReveal(
+            key: const ValueKey('rev-h-actions'),
+            delayMs: 220,
+            enabled: animate,
+            child: _buildActionRow(),
+          ),
         ],
       ),
     );
@@ -828,6 +940,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
             onTap: widget.onResume,
             focusNode: _leftEntryFocusNode,
             autofocus: widget.isTelevision && _isMovie,
+            glow: _accent,
           ),
         // Trailer — sits right after Play. Only when Cinemeta gave us a YouTube
         // trailer id. Reflects the ambient backdrop's state: spinner while the
@@ -1143,7 +1256,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
         ..add(const SizedBox(height: 22));
     }
 
-    final cast = extra?.cast ?? const [];
+    // Cast / More Like This are capped so the rails can build EVERY card up
+    // front (see [_focusRail]) without a wall of image fetches — DPAD needs
+    // real widgets to walk onto, and a dozen tiny thumbs is plenty of content.
+    final cast = (extra?.cast ?? const []).take(12).toList();
     if (cast.isNotEmpty) {
       sections
         ..add(_sectionLabel('Cast'))
@@ -1154,11 +1270,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
             alignment: 0.35,
             child: SizedBox(
               height: 92,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: cast.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 14),
-                itemBuilder: (_, i) => _castTile(cast[i]),
+              child: _focusRail(
+                gap: 14,
+                cards: [for (final m in cast) _castTile(m)],
               ),
             ),
           ),
@@ -1168,8 +1282,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
 
     // More Like This — placed high (right after Cast) so it's an easy DPAD-down
     // reach, ahead of the long focusable Parents-Guide list.
-    final recs = _recommendations;
-    if (recs != null && recs.isNotEmpty && widget.onRecommendationTap != null) {
+    final recs = (_recommendations ?? const <StremioMeta>[]).take(10).toList();
+    if (recs.isNotEmpty && widget.onRecommendationTap != null) {
       sections
         ..add(_sectionLabel('More Like This'))
         ..add(const SizedBox(height: 12))
@@ -1179,11 +1293,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
             alignment: 0.5,
             child: SizedBox(
               height: 168,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: recs.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 11),
-                itemBuilder: (_, i) => _recCard(recs[i]),
+              child: _focusRail(
+                gap: 11,
+                cards: [for (final r in recs) _recCard(r)],
               ),
             ),
           ),
@@ -1206,6 +1318,31 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
     }
 
     return sections;
+  }
+
+  /// Horizontal DPAD rail (Cast / More Like This). Builds ALL cards in a plain
+  /// scrollable Row — a lazy ListView only builds what's near the viewport, so
+  /// DPAD-right at the build edge found no next card and the focus jumped clean
+  /// out of the rail (into the episodes pane) mid-browse. With every card real,
+  /// traversal walks the whole rail and the framework auto-scrolls each focused
+  /// card into view. The first/last cards trap LEFT/RIGHT so the rail's ends
+  /// are dead stops instead of teleports to unrelated controls.
+  Widget _focusRail({required List<Widget> cards, required double gap}) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) SizedBox(width: gap),
+            _RailEdgeTrap(
+              trapLeft: i == 0,
+              trapRight: i == cards.length - 1,
+              child: cards[i],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _castTile(CastMember m) => _CastTile(member: m, fallback: _glass2);
@@ -1278,6 +1415,77 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
 
 // ── Small presentational widgets ───────────────────────────────────────────
 
+/// One-shot entrance for a hero-block item: after [delayMs], fades up from
+/// transparent while rising 12px, so the detail header assembles itself around
+/// the shared-element poster flight instead of popping in fully formed.
+///
+/// Cheap and TV-safe: a single 340ms opacity+translate on a small widget, run
+/// once on mount (the controller never resets, so metadata-load rebuilds don't
+/// replay it). [enabled] is false under OS reduced-motion — the child shows
+/// immediately with no controller. Late-arriving sections (their own first
+/// mount happens when enrichment lands) simply fade in on arrival.
+class _StaggerReveal extends StatefulWidget {
+  final Widget child;
+  final int delayMs;
+  final bool enabled;
+
+  const _StaggerReveal({
+    super.key,
+    required this.child,
+    this.delayMs = 0,
+    this.enabled = true,
+  });
+
+  @override
+  State<_StaggerReveal> createState() => _StaggerRevealState();
+}
+
+class _StaggerRevealState extends State<_StaggerReveal>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.enabled) return;
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 340),
+    );
+    _timer = Timer(Duration(milliseconds: widget.delayMs), () {
+      if (mounted) _controller?.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _controller;
+    if (c == null) return widget.child;
+    return AnimatedBuilder(
+      animation: c,
+      builder: (_, child) {
+        final t = Curves.easeOutCubic.transform(c.value);
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(0, (1 - t) * 12),
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
 /// Gold DPAD focus ring — an in-bounds *foreground* border, exactly like the
 /// episode rows in the right pane (and the same [HomeTheme.focusGold] hue, so
 /// the cursor doesn't shift color crossing panes). Every interactive element on
@@ -1308,6 +1516,46 @@ class _FocusHalo extends StatelessWidget {
             ? Border.all(color: HomeTheme.focusGold, width: 2.5)
             : null,
       ),
+      child: child,
+    );
+  }
+}
+
+/// Wraps a rail's end cards: consumes LEFT on the first / RIGHT on the last so
+/// the DPAD cursor stops at the rail's edge instead of escaping to whatever is
+/// geometrically nearest (the episodes pane, the back button). A non-focusable
+/// ancestor node sees the key on its way up from the focused card, before the
+/// app-level shortcuts turn it into a traversal move.
+class _RailEdgeTrap extends StatelessWidget {
+  final bool trapLeft;
+  final bool trapRight;
+  final Widget child;
+
+  const _RailEdgeTrap({
+    required this.trapLeft,
+    required this.trapRight,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!trapLeft && !trapRight) return child;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        final key = event.logicalKey;
+        if (trapLeft && key == LogicalKeyboardKey.arrowLeft) {
+          return KeyEventResult.handled;
+        }
+        if (trapRight && key == LogicalKeyboardKey.arrowRight) {
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: child,
     );
   }
@@ -1351,6 +1599,9 @@ class _CastTileState extends State<_CastTile> {
                       ? CachedNetworkImage(
                           imageUrl: m.imageUrl!,
                           fit: BoxFit.cover,
+                          // 56 logical px avatar (up to dpr 3 on phones) —
+                          // never decode a full-res headshot.
+                          memCacheWidth: 180,
                           errorWidget: (_, __, ___) =>
                               Container(color: widget.fallback),
                         )
@@ -1422,6 +1673,9 @@ class _RecCardState extends State<_RecCard> {
                   ? CachedNetworkImage(
                       imageUrl: rec.poster!,
                       fit: BoxFit.cover,
+                      // 100 logical px card (up to dpr 3 on phones) — decode
+                      // small so ten posters at once don't lean on a 2GB box.
+                      memCacheWidth: 300,
                       errorWidget: (_, __, ___) =>
                           Container(color: widget.fallback),
                     )
@@ -1440,12 +1694,18 @@ class _PrimaryButton extends StatefulWidget {
   final VoidCallback onTap;
   final FocusNode? focusNode;
   final bool autofocus;
+
+  /// Per-title accent used for the soft glow behind the white pill, so the
+  /// primary CTA reads as belonging to this title.
+  final Color glow;
+
   const _PrimaryButton({
     required this.label,
     required this.icon,
     required this.onTap,
     this.focusNode,
     this.autofocus = false,
+    this.glow = _MergedDetailScreenState._gold,
   });
 
   @override
@@ -1463,31 +1723,55 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
       child: _FocusHalo(
         focused: _focused,
         radius: BorderRadius.circular(999),
-        child: Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(999),
-          child: InkWell(
-            focusNode: widget.focusNode,
-            autofocus: widget.autofocus,
-            onFocusChange: (f) => setState(() => _focused = f),
+        // Soft accent glow behind the pill. A static drop shadow (rasterised
+        // once, carried by the AnimatedScale transform) — not a per-frame
+        // backdrop blur — so it's safe on the weak TV GPU. Animates its color
+        // to the title accent when it resolves.
+        child: TweenAnimationBuilder<Color?>(
+          duration: const Duration(milliseconds: 500),
+          tween: ColorTween(end: widget.glow.withValues(alpha: 0.45)),
+          builder: (_, color, child) => DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [
+                BoxShadow(
+                  color: color ?? Colors.transparent,
+                  blurRadius: 18,
+                  spreadRadius: -2,
+                ),
+              ],
+            ),
+            child: child,
+          ),
+          child: Material(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(999),
-            onTap: widget.onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(widget.icon, color: const Color(0xFF0D0D10), size: 20),
-                  const SizedBox(width: 7),
-                  Text(
-                    widget.label,
-                    style: const TextStyle(
-                      color: Color(0xFF0D0D10),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+            child: InkWell(
+              focusNode: widget.focusNode,
+              autofocus: widget.autofocus,
+              onFocusChange: (f) => setState(() => _focused = f),
+              borderRadius: BorderRadius.circular(999),
+              onTap: widget.onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 11,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(widget.icon, color: const Color(0xFF0D0D10), size: 20),
+                    const SizedBox(width: 7),
+                    Text(
+                      widget.label,
+                      style: const TextStyle(
+                        color: Color(0xFF0D0D10),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -285,7 +285,8 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       // Skip only when the clip is comfortably longer than the cut (or its
       // duration isn't known yet — trailers are minutes long, so assume it is).
       final dur = _duration;
-      final longEnough = dur == Duration.zero || dur > const Duration(seconds: 8);
+      final longEnough =
+          dur == Duration.zero || dur > const Duration(seconds: 8);
       if (!widget.foreground && longEnough) player.seek(_introSkip);
       setState(() => _videoVisible = true);
       _syncPlayingNotification();
@@ -512,6 +513,28 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     super.dispose();
   }
 
+  /// The static image layer. Small decode always (see build); the gaussian
+  /// only exists on the sigma > 0 (non-TV) path.
+  Widget _buildStaticBackdrop() {
+    final image = CachedNetworkImage(
+      imageUrl: widget.imageUrl!,
+      fit: BoxFit.cover,
+      // 96px on the filterless TV path (the upscale IS the blur); 480px under
+      // a real gaussian, where the filter hides the upscale.
+      memCacheWidth: widget.imageBlurSigma <= 0 ? 96 : 480,
+      filterQuality: FilterQuality.medium,
+      errorWidget: (_, __, ___) => const SizedBox.shrink(),
+    );
+    if (widget.imageBlurSigma <= 0) return image;
+    return ImageFiltered(
+      imageFilter: ImageFilter.blur(
+        sigmaX: widget.imageBlurSigma,
+        sigmaY: widget.imageBlurSigma,
+      ),
+      child: image,
+    );
+  }
+
   /// Wraps the static image layer in the destination [Hero] when a tag is set.
   /// No flightShuttleBuilder here — the source (poster card) defines one, and
   /// leaving this side null lets the card's builder drive both directions.
@@ -535,37 +558,45 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         // this layer doubles as the shared-element destination: the tapped
         // board poster flies into this rect (the flight shuttle shows the
         // poster; see the card-side flightShuttleBuilder).
-        if (widget.imageUrl != null)
-          _withHero(
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(
-                sigmaX: widget.imageBlurSigma,
-                sigmaY: widget.imageBlurSigma,
-              ),
-              child: CachedNetworkImage(
-                imageUrl: widget.imageUrl!,
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => const SizedBox.shrink(),
-              ),
-            ),
-          ),
-        // Trailer, crossfaded in once it produces frames.
+        //
+        // The soft look comes from a TINY decode upscaled by cover-fit, not a
+        // runtime gaussian: a full-screen ImageFiltered blur re-rasterises on
+        // animated frames (Hero flight, entrance cascade, focus moves) and the
+        // full-res source decode alone can stall a 2GB TV box — the "page
+        // hangs on open" failure. At sigma 42 every detail below the blur
+        // radius is gone anyway, so a small decode is visually equivalent for
+        // free. [imageBlurSigma] <= 0 requests an even smaller decode with no
+        // filter at all (the weak-TV path); > 0 keeps a light gaussian on top
+        // to hide upscale artifacts on capable GPUs.
+        if (widget.imageUrl != null) _withHero(_buildStaticBackdrop()),
+        // Trailer, crossfaded in once it produces frames. When the widget is
+        // CONFIGURED blur-free (TV), the ImageFiltered layer is omitted — it
+        // costs a per-frame filter pass over the video surface even at sigma
+        // 0. Branch on the static config, never the animated [videoBlur]: a
+        // mid-promotion branch flip would re-parent the live Video widget and
+        // flash the texture.
         if (controller != null)
           AnimatedOpacity(
             opacity: _videoVisible ? 1 : 0,
             duration: const Duration(milliseconds: 650),
             curve: Curves.easeOut,
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(
-                sigmaX: videoBlur,
-                sigmaY: videoBlur,
-              ),
-              child: mkv.Video(
-                controller: controller,
-                controls: null,
-                fit: BoxFit.cover,
-              ),
-            ),
+            child: widget.videoBlurSigma <= 0
+                ? mkv.Video(
+                    controller: controller,
+                    controls: null,
+                    fit: BoxFit.cover,
+                  )
+                : ImageFiltered(
+                    imageFilter: ImageFilter.blur(
+                      sigmaX: videoBlur,
+                      sigmaY: videoBlur,
+                    ),
+                    child: mkv.Video(
+                      controller: controller,
+                      controls: null,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
           ),
         // Foreground controls — only interactive/painted while promoted.
         if (t > 0.01 && controller != null) _buildForegroundControls(t),
