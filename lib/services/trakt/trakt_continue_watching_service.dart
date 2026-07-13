@@ -150,6 +150,23 @@ class TraktContinueWatchingService {
     );
   }
 
+  /// Remove [item] from Trakt Continue Watching: delete every playback entry,
+  /// then remove the title from watch history so shows don't reappear via the
+  /// recent-shows "next episode" augmentation. Returns true if anything was
+  /// removed.
+  Future<bool> removeItem(TraktContinueWatchingItem item) async {
+    var anySuccess = false;
+    for (final pbId in item.playbackIds) {
+      final ok = await _traktService.removePlaybackItem(pbId);
+      if (ok) anySuccess = true;
+    }
+    final historyRemoved = await _traktService.removeFromHistory(
+      item.id,
+      item.meta.type,
+    );
+    return anySuccess || historyRemoved;
+  }
+
   List<TraktContinueWatchingItem> _buildMovieItems(List<dynamic> rawItems) {
     final metas = TraktItemTransformer.transformList(
       rawItems,

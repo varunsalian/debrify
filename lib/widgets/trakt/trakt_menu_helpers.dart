@@ -18,6 +18,7 @@ enum TraktItemMenuAction {
   addToList,
   removeFromList,
   removeFromPlayback,
+  removeFromTraktPlayback,
   addToStremioTv,
   selectSource,
   playRandomEpisode,
@@ -259,6 +260,8 @@ Future<void> handleTraktMenuAction(
       return; // No context for which list to remove from
     case TraktItemMenuAction.removeFromPlayback:
       return; // Only handled in TraktResultsView which has playback IDs
+    case TraktItemMenuAction.removeFromTraktPlayback:
+      return; // Handled by callers that hold the TraktContinueWatchingItem
     case TraktItemMenuAction.addToStremioTv:
       await onAddToStremioTv?.call(item);
       return;

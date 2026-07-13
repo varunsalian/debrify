@@ -994,6 +994,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
           if (ok) success = true;
         }
         if (success && mounted) _fetchItems();
+      case TraktItemMenuAction.removeFromTraktPlayback:
+        return; // Only offered on the detail screens, not in Trakt results
       case TraktItemMenuAction.addToStremioTv:
         await _handleAddToStremioTv(item);
         return;

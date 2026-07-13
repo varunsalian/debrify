@@ -1033,6 +1033,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       case TraktItemMenuAction.removeFromPlayback:
         return 'Remove this from Continue Watching so it stops showing on your '
             'home rows and resume list.';
+      case TraktItemMenuAction.removeFromTraktPlayback:
+        return 'Delete this title\'s playback progress (and watch history) on '
+            'Trakt so it leaves the Trakt Continue Watching rows.';
     }
   }
 

@@ -1951,6 +1951,30 @@ class _SearchScreenState extends State<SearchScreen> {
     _snack('Removed from Continue Watching');
   }
 
+  /// Detail-screen action for a Trakt Continue Watching title: delete the
+  /// title's playback entries (and watch history, so shows don't reappear via
+  /// "Up Next") on Trakt, then pop the detail and reload the Trakt rows —
+  /// mirroring the old home screen's remove flow.
+  Future<void> _removeFromTraktContinueWatching(String imdbId) async {
+    final cwItem = _traktByImdb[imdbId];
+    if (cwItem == null) return;
+    final removed = await TraktContinueWatchingService.instance.removeItem(
+      cwItem,
+    );
+    if (!mounted) return;
+    if (!removed) {
+      _snack('Failed to remove from Trakt Continue Watching');
+      return;
+    }
+    // The Trakt calls take a moment — the user may have already backed out of
+    // the detail during the wait, so only pop while it's still the top route.
+    Navigator.of(context).popUntil(
+      (route) => route.settings.name != kCatalogDetailRouteName,
+    );
+    _snack('Removed from Trakt Continue Watching');
+    _loadTraktContinueWatching(refreshBound: false);
+  }
+
   /// Swap the displayed sections (homepage or search results): rebuild the
   /// per-row focus nodes and reset the hero to the first item.
   void _applySections(List<CatalogSection> sections) {
@@ -3205,6 +3229,9 @@ class _SearchScreenState extends State<SearchScreen> {
     // Show a "Remove from Continue Watching" action when this title is on the
     // Continue Watching row (regardless of which row opened it).
     final inCw = imdb != null && _cwIds.contains(imdb);
+    // Same for the Trakt Continue Watching rows — removal goes through the
+    // Trakt playback/history APIs rather than local storage.
+    final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
 
     // Full quick-actions menu, mirroring the catalog/aggregated detail screens:
     // app actions (Select Source, Add to Stremio TV, Search Packs, Random
@@ -3226,6 +3253,15 @@ class _SearchScreenState extends State<SearchScreen> {
           color: Color(0xFFEF4444),
           label: 'Remove from Continue Watching',
           caption: 'Remove',
+        ),
+      if (inTraktCw)
+        const TraktMenuOption(
+          action: TraktItemMenuAction.removeFromTraktPlayback,
+          icon: Icons.remove_circle_outline_rounded,
+          color: Color(0xFFEF4444),
+          label: 'Remove from Trakt Continue Watching',
+          caption: 'Remove',
+          isTrakt: true,
         ),
     ];
 
@@ -3349,6 +3385,10 @@ class _SearchScreenState extends State<SearchScreen> {
   }) async {
     if (action == TraktItemMenuAction.removeFromPlayback) {
       if (imdb != null) await _handleContinueDetailAction(action, imdb);
+      return;
+    }
+    if (action == TraktItemMenuAction.removeFromTraktPlayback) {
+      if (imdb != null) await _removeFromTraktContinueWatching(imdb);
       return;
     }
     await handleTraktMenuAction(
