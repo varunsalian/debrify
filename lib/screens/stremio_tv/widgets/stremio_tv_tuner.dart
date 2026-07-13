@@ -521,10 +521,13 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     return Column(
       children: [
         Expanded(
+          // No ValueKey remount on channel change: the Stage persists and
+          // animates its content in place (text cascade, continuous Ken Burns
+          // breathe) — the Home hero's model — instead of hard-swapping the
+          // whole subtree every surf step.
           child: active == null
               ? const SizedBox.shrink()
               : Builder(
-                  key: ValueKey(active.id),
                   builder: (_) {
                     final np = _nowPlaying(active);
                     return _Stage(
@@ -686,7 +689,90 @@ class _Stage extends StatefulWidget {
   State<_Stage> createState() => _StageState();
 }
 
-class _StageState extends State<_Stage> {
+class _StageState extends State<_Stage> with TickerProviderStateMixin {
+  // Slow, endless Ken Burns breathe on the backdrop — same recipe as the Home
+  // hero: a pure bottom-anchored zoom on an already-rasterised image, isolated
+  // in a RepaintBoundary so only the backdrop layer re-rasters per frame. The
+  // long duration keeps the motion barely-there.
+  late final AnimationController _ken = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 22),
+  );
+
+  // Short cascade for the text block when the channel / now-playing changes:
+  // tag, title, meta, plot and live bar slide-fade in with tiny staggers
+  // instead of hard-swapping (the Home hero's _textFx, verbatim).
+  late final AnimationController _textFx = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+    value: 1.0, // first build shows settled text; cascades start on change
+  );
+
+  bool _motionOk = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Respect reduced-motion: hold the backdrop still, skip text cascades.
+    _motionOk = !MediaQuery.of(context).disableAnimations;
+    _syncKen();
+  }
+
+  /// Run the breathe only when something actually paints it: in blur mode —
+  /// and on a channel with no backdrop yet (item still loading) — the backdrop
+  /// AnimatedBuilder isn't in the tree, and a listener-less repeating
+  /// controller would still force engine frames at 60fps for nothing.
+  void _syncKen() {
+    final item = widget.nowPlaying?.item;
+    final hasArt = (item?.background ?? item?.poster) != null;
+    final wantKen = _motionOk && !widget.hideNowPlaying && hasArt;
+    if (!wantKen) {
+      _ken.stop();
+    } else if (!_ken.isAnimating) {
+      _ken.repeat(reverse: true);
+    }
+    if (!_motionOk) _textFx.value = 1.0;
+  }
+
+  @override
+  void didUpdateWidget(_Stage old) {
+    super.didUpdateWidget(old);
+    _syncKen();
+    final itemChanged =
+        old.nowPlaying?.item.id != widget.nowPlaying?.item.id ||
+            old.channel.id != widget.channel.id;
+    if (itemChanged && _motionOk) {
+      _textFx.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ken.dispose();
+    _textFx.dispose();
+    super.dispose();
+  }
+
+  /// Wraps one text-block line in its slice of the cascade: a quick fade plus
+  /// a slight upward drift, offset by [from]..[to] of the controller.
+  Widget _cascade(Widget child, double from, double to) {
+    final curved = CurvedAnimation(
+      parent: _textFx,
+      curve: Interval(from, to, curve: Curves.easeOutCubic),
+    );
+    return FadeTransition(
+      opacity: curved,
+      child: AnimatedBuilder(
+        animation: curved,
+        builder: (context, inner) => Transform.translate(
+          offset: Offset(0, 10 * (1 - curved.value)),
+          child: inner,
+        ),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.nowPlaying?.item;
@@ -722,12 +808,37 @@ class _StageState extends State<_Stage> {
                     child: art,
                   );
                 }
-                return ColorFiltered(
+                art = ColorFiltered(
                   colorFilter: ColorFilter.mode(
                     Colors.black.withValues(alpha: 0.12),
                     BlendMode.darken,
                   ),
                   child: art,
+                );
+                // Ken Burns breathe (Home hero recipe). Skipped in blur mode —
+                // re-running the 32px blur every zoom frame would hammer the
+                // weak TV GPU for motion that's invisible under the blur.
+                // The RepaintBoundary confines the per-frame re-raster to the
+                // backdrop; the ClipRect is load-bearing — the bottom-anchored
+                // scale paints upward past the Stage at paint time, which the
+                // Stack's own clip never catches.
+                if (blurArt) return art;
+                return RepaintBoundary(
+                  child: ClipRect(
+                    child: AnimatedBuilder(
+                      animation: _ken,
+                      builder: (context, child) {
+                        final t = Curves.easeInOut.transform(_ken.value);
+                        return Transform.scale(
+                          scale: 1.0 + 0.06 * t,
+                          alignment: Alignment.bottomCenter,
+                          filterQuality: FilterQuality.low,
+                          child: child,
+                        );
+                      },
+                      child: art,
+                    ),
+                  ),
                 );
               },
             ),
@@ -838,51 +949,62 @@ class _StageState extends State<_Stage> {
   }
 
   Widget _buildContent(StremioMeta? item, bool isNarrow) {
+    // Staggered cascade offsets mirror the Home hero: tag first, then title,
+    // meta, plot, and the live bar/up-next trailing — a channel surf reads as
+    // one composed entrance instead of a hard text swap.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _channelTag(),
+        _cascade(_channelTag(), 0.0, 0.6),
         const SizedBox(height: 16),
         if (item == null)
           _tuningState()
         else if (widget.hideNowPlaying) ...[
           _hiddenState(),
           const SizedBox(height: 20),
-          _liveBar(),
+          _cascade(_liveBar(), 0.32, 1.0),
         ] else ...[
-          Text(
-            item.name,
-            maxLines: isNarrow ? 1 : 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: isNarrow ? 28 : 44,
-              height: 1.05,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.8,
-              shadows: const [
-                Shadow(blurRadius: 16, color: Colors.black),
-              ],
+          _cascade(
+            Text(
+              item.name,
+              maxLines: isNarrow ? 1 : 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: isNarrow ? 28 : 44,
+                height: 1.05,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.8,
+                shadows: const [
+                  Shadow(blurRadius: 16, color: Colors.black),
+                ],
+              ),
             ),
+            0.08,
+            0.72,
           ),
           const SizedBox(height: 12),
-          _metaRow(item),
+          _cascade(_metaRow(item), 0.16, 0.8),
           if (item.description != null &&
               item.description!.trim().isNotEmpty) ...[
             const SizedBox(height: 18),
-            _StageDescription(
-              text: item.description!.trim(),
-              title: item.name,
-              ident: widget.ident,
-              interactive: isNarrow,
+            _cascade(
+              _StageDescription(
+                text: item.description!.trim(),
+                title: item.name,
+                ident: widget.ident,
+                interactive: isNarrow,
+              ),
+              0.24,
+              0.9,
             ),
           ],
           const SizedBox(height: 22),
-          _liveBar(),
+          _cascade(_liveBar(), 0.32, 1.0),
           if (widget.nextPlaying != null) ...[
             const SizedBox(height: 14),
-            _upNext(),
+            _cascade(_upNext(), 0.4, 1.0),
           ],
         ],
       ],
@@ -1470,7 +1592,12 @@ class _DialCardState extends State<_DialCard> {
           widget.onSelect();
         },
         onLongPress: widget.onLongPress,
-        child: Transform.scale(
+        // Eased focus pop (matches the Home board's poster tiles) instead of
+        // an instant Transform snap; the ring/bloom below stay instant, like
+        // Home's shadowFx on TV, so only one property animates per move.
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
           scale: _focused ? 1.10 : 1.0,
           child: Container(
             width: 138,
