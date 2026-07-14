@@ -2316,7 +2316,7 @@ class TorrentPlaybackService {
   }
 
   /// [_resolverFor] wrapped so that a SUCCESSFUL in-player source switch also
-  /// updates the series' pinned source (see [_rebindOnSourceSwitch]). Both
+  /// updates the title's pinned source (see [_rebindOnSourceSwitch]). Both
   /// players (Flutter + native TV) funnel every switch through this one
   /// closure, so wrapping it here keeps the binding in sync on both.
   static Future<List<PlaylistEntry>?> Function(Torrent) _switchAwareResolver(
@@ -2331,28 +2331,37 @@ class TorrentPlaybackService {
     };
   }
 
-  /// Keep a series' pinned source in sync when the user switches sources in
-  /// the player: the chosen [switched] source becomes the primary binding,
-  /// replacing the one being switched away from (so the next play uses what
-  /// the user actually picked). Only syncs a series that ALREADY has a binding
-  /// — never creates one from a switch — and skips movies, non-torrent /
-  /// PikPak / local sources, and re-selecting the current source keeps the
-  /// rest of the list intact.
+  /// Keep a title's pinned source in sync when the user switches sources in
+  /// the player: the chosen [switched] source becomes the binding, replacing
+  /// the one being switched away from, so the next play uses what the user
+  /// actually picked. Only syncs a title that ALREADY has a binding — never
+  /// creates one from a switch — and skips non-torrent / local sources.
+  ///
+  /// A movie has a single bound source, so it's a straight replace (matching
+  /// [_autoBindMovieOnPlay]); a series keeps its other fallbacks and just
+  /// promotes the chosen source to primary. PikPak is excluded for series
+  /// (matching the series auto-pin feature) but allowed for movies (matching
+  /// [_autoBindMovieOnPlay]).
   static Future<void> _rebindOnSourceSwitch(
     PlaybackMeta? meta,
     Torrent switched,
     String provider,
   ) async {
     if (meta == null ||
-        meta.contentType == 'movie' ||
         meta.imdbId == null ||
         meta.imdbId!.isEmpty ||
-        meta.season == null ||
-        meta.episode == null ||
         switched.infohash.isEmpty ||
         switched.streamType != StreamType.torrent ||
-        provider == SeriesSource.localService ||
-        provider == 'pikpak') {
+        provider == SeriesSource.localService) {
+      return;
+    }
+    final isMovie = meta.contentType == 'movie';
+    // A series needs a concrete episode, and its auto-pin feature is off for
+    // PikPak; movies have neither constraint.
+    if (!isMovie &&
+        (meta.season == null ||
+            meta.episode == null ||
+            provider == 'pikpak')) {
       return;
     }
     try {
@@ -2367,11 +2376,17 @@ class TorrentPlaybackService {
         debridTorrentId: '',
         boundAt: DateTime.now().millisecondsSinceEpoch,
       );
+      if (isMovie) {
+        // Single bound source — replace it with the chosen one.
+        await SeriesSourceService.setSources(imdbId, [source]);
+        return;
+      }
+      // Series: promote the chosen source to primary, replacing the one being
+      // switched away from, but keep any other fallbacks. Re-selecting the
+      // current primary leaves the rest of the list intact.
       final currentPrimaryHash = existing.first.torrentHash;
       final list = List<SeriesSource>.from(existing)
         ..removeWhere((s) => s.torrentHash == source.torrentHash);
-      // Drop the source being switched away from (the previous primary), but
-      // not when the user re-selected the source that's already primary.
       if (currentPrimaryHash != source.torrentHash && list.isNotEmpty) {
         list.removeAt(0);
       }
