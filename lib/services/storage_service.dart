@@ -267,6 +267,12 @@ class StorageService {
       'quick_play_try_multiple_torrents';
   static const String _quickPlayMaxRetriesKey = 'quick_play_max_retries';
 
+  // Series auto-pin: on a series play with no pinned source, search packs
+  // first (complete series → season pack), and pin whatever source plays so
+  // subsequent episode plays go straight through the bound path.
+  static const String _autoBindSeriesPacksKey =
+      'auto_bind_series_packs_on_play';
+
   // Trakt settings
   static const String _traktAccessTokenKey = 'trakt_access_token';
   static const String _traktRefreshTokenKey = 'trakt_refresh_token';
@@ -4353,6 +4359,18 @@ class StorageService {
   static Future<void> setQuickPlayTryMultipleTorrents(bool tryMultiple) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_quickPlayTryMultipleTorrentsKey, tryMultiple);
+  }
+
+  /// Whether series plays should search packs first and pin whatever source
+  /// plays. Defaults ON. See [_autoBindSeriesPacksKey].
+  static Future<bool> getAutoBindSeriesPacksOnPlay() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_autoBindSeriesPacksKey) ?? true;
+  }
+
+  static Future<void> setAutoBindSeriesPacksOnPlay(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoBindSeriesPacksKey, enabled);
   }
 
   /// Get max number of torrents to try before giving up

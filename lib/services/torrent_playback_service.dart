@@ -22,6 +22,7 @@ import '../utils/formatters.dart';
 import '../utils/rd_blocked_filter.dart';
 import '../utils/rd_folder_tree_builder.dart';
 import '../utils/series_parser.dart';
+import '../utils/torrent_coverage_detector.dart';
 import '../utils/torrent_curation.dart';
 import '../widgets/debrid_action_sheet.dart';
 import '../widgets/debrid_loading_overlay.dart';
@@ -89,6 +90,45 @@ class TorrentPlaybackService {
   /// Distinguishes "user dismissed the provider picker" (silent) from
   /// "no provider configured" (null → prompt to add one in Settings).
   static const String _cancelled = '__cancelled__';
+
+  /// Series-auto-pin negative cache: "imdbId:season" → when to allow
+  /// re-searching packs. A pack-first attempt that finds no instantly-playable
+  /// pack records an entry so subsequent episodes of the SAME season (a binge,
+  /// or an ongoing show with no pack yet) skip the expensive whole-series pack
+  /// search instead of repeating it every play. Keyed by season because the
+  /// search probes the requested season, so "no pack for S1" must not suppress
+  /// finding an S7 season pack. In-memory + TTL so a newly-released pack is
+  /// still picked up after the window (or an app restart).
+  static final Map<String, DateTime> _noPackUntil = {};
+  static const Duration _noPackTtl = Duration(hours: 6);
+
+  static String _noPackKey(String imdbId, int season) => '$imdbId:$season';
+
+  static bool _recentlyNoPack(String imdbId, int season) {
+    final key = _noPackKey(imdbId, season);
+    final until = _noPackUntil[key];
+    if (until == null) return false;
+    if (!DateTime.now().isBefore(until)) {
+      _noPackUntil.remove(key);
+      return false;
+    }
+    return true;
+  }
+
+  static void _markNoPack(String imdbId, int season) {
+    // Bound the map so a long session browsing many shows can't grow it
+    // without limit; drop expired entries first, then the oldest.
+    final now = DateTime.now();
+    _noPackUntil.removeWhere((_, until) => !now.isBefore(until));
+    const cap = 200;
+    if (_noPackUntil.length >= cap) {
+      final oldest = _noPackUntil.entries
+          .reduce((a, b) => a.value.isBefore(b.value) ? a : b)
+          .key;
+      _noPackUntil.remove(oldest);
+    }
+    _noPackUntil[_noPackKey(imdbId, season)] = now.add(_noPackTtl);
+  }
 
   /// Add [torrent] to the resolved provider and run the user's post-torrent
   /// action (choose / play / download / playlist / open / none / copy).
@@ -370,72 +410,13 @@ class TorrentPlaybackService {
       _showLoading(context, prov,
           title ?? (candidates.isNotEmpty ? candidates.first.displayTitle : ''));
     }
-    _Resolved? res;
-    Torrent? winner;
-    // PikPak has no cache check and each probe queues a real download that we
-    // can't cheaply clean up — so only try the top candidate there. Others
-    // (RD/AllDebrid clean up on miss; TorBox/PM gated by cache-check) honor the
-    // user's Quick-Play retry settings (old home does the same): a single try
-    // when "try multiple torrents" is off, else up to the configured max.
-    final tryMultiple = await StorageService.getQuickPlayTryMultipleTorrents();
-    final maxRetries = await StorageService.getQuickPlayMaxRetries();
-    // Clamp to a floor of 1 so a corrupted/out-of-range pref can never yield 0
-    // probes (getQuickPlayMaxRetries doesn't clamp on read).
-    final maxAttempts =
-        prov == 'pikpak' ? 1 : (tryMultiple ? maxRetries.clamp(1, 10) : 1);
-    for (final t in candidates.take(maxAttempts)) {
-      if (cancelled()) return; // Cancel tap already dismissed the overlay
-      try {
-        final magnet = await _magnetFor(t);
-        if (magnet == null) continue;
-        if (cancelled()) return; // Cancel landed during magnet resolution
-        final r = await _add(prov, magnet, t);
-        if (r.playUrl != null && r.playUrl!.isNotEmpty) {
-          // For a series episode, don't accept a pack that resolved fine but
-          // doesn't actually contain the requested episode (mislabeled or
-          // wrong-season result) — mirror _playViaBound instead of letting the
-          // player silently start the wrong/first episode. Keep probing the
-          // remaining candidates for one that genuinely has it.
-          final mSeason = meta?.season;
-          final mEpisode = meta?.episode;
-          if (mSeason != null &&
-              mEpisode != null &&
-              !_resolvedHasEpisode(r, mSeason, mEpisode)) {
-            // Delete the fresh RD/PikPak entry this probe created so skips
-            // don't pile up orphans (TorBox/AllDebrid dedup the add; Premiumize
-            // adds nothing), matching _playViaBound's cleanup.
-            if (prov == 'debrid' && (r.rdTorrentId?.isNotEmpty ?? false)) {
-              try {
-                final apiKey = (await StorageService.getApiKey()) ?? '';
-                await DebridService.deleteTorrent(apiKey, r.rdTorrentId!);
-              } catch (_) {}
-            } else if (prov == 'pikpak' &&
-                (r.pikpakFileId?.isNotEmpty ?? false)) {
-              try {
-                await PikPakApiService.instance.batchDeleteFiles([
-                  r.pikpakFileId!,
-                ]);
-              } catch (_) {}
-            }
-            continue;
-          }
-          res = r;
-          winner = t;
-          break;
-        }
-      } on TorrentNotCachedException catch (e) {
-        // Probed torrent is downloading — remove it so RD stays clean.
-        try {
-          await DebridService.deleteTorrent(e.apiKey, e.torrentId);
-        } catch (_) {}
-      } on AllDebridTorrentNotReadyException catch (e) {
-        try {
-          await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
-        } catch (_) {}
-      } catch (_) {
-        // _TorboxNotCached / _PremiumizeNotCached / transient — try next.
-      }
-    }
+    final (res, winner) = await _probeCandidates(
+      prov,
+      candidates,
+      season: meta?.season,
+      episode: meta?.episode,
+      isCancelled: cancelled,
+    );
     if (cancelled()) return; // dismissed by the Cancel tap; nothing more to do
     closeLoading();
     if (!context.mounted) return;
@@ -454,6 +435,81 @@ class TorrentPlaybackService {
       sources: torrents,
       sourceIndex: idx < 0 ? 0 : idx,
     );
+  }
+
+  /// Probe [candidates] in order on [prov] until one resolves to an instantly
+  /// playable URL — and, when [season]/[episode] are both set, actually
+  /// contains that episode (a pack that resolved fine but lacks the episode is
+  /// skipped and its fresh RD/PikPak entry deleted, matching _playViaBound).
+  /// Honors the Quick-Play retry settings: PikPak probes only the top
+  /// candidate (each probe queues a real download we can't cheaply clean up);
+  /// others try one candidate, or up to the configured max when "try multiple
+  /// torrents" is on. Returns the resolution and the winning torrent, or
+  /// (null, null) on failure/cancel.
+  static Future<(_Resolved?, Torrent?)> _probeCandidates(
+    String prov,
+    List<Torrent> candidates, {
+    int? season,
+    int? episode,
+    bool Function()? isCancelled,
+  }) async {
+    bool cancelled() => isCancelled?.call() ?? false;
+    final tryMultiple = await StorageService.getQuickPlayTryMultipleTorrents();
+    final maxRetries = await StorageService.getQuickPlayMaxRetries();
+    // Clamp to a floor of 1 so a corrupted/out-of-range pref can never yield 0
+    // probes (getQuickPlayMaxRetries doesn't clamp on read).
+    final maxAttempts =
+        prov == 'pikpak' ? 1 : (tryMultiple ? maxRetries.clamp(1, 10) : 1);
+    for (final t in candidates.take(maxAttempts)) {
+      if (cancelled()) return (null, null);
+      try {
+        final magnet = await _magnetFor(t);
+        if (magnet == null) continue;
+        if (cancelled()) return (null, null);
+        final r = await _add(prov, magnet, t);
+        if (r.playUrl != null && r.playUrl!.isNotEmpty) {
+          // For a series episode, don't accept a pack that resolved fine but
+          // doesn't actually contain the requested episode (mislabeled or
+          // wrong-season result) — mirror _playViaBound instead of letting the
+          // player silently start the wrong/first episode. Keep probing the
+          // remaining candidates for one that genuinely has it.
+          if (season != null &&
+              episode != null &&
+              !_resolvedHasEpisode(r, season, episode)) {
+            // Delete the fresh RD/PikPak entry this probe created so skips
+            // don't pile up orphans (TorBox/AllDebrid dedup the add; Premiumize
+            // adds nothing), matching _playViaBound's cleanup.
+            if (prov == 'debrid' && (r.rdTorrentId?.isNotEmpty ?? false)) {
+              try {
+                final apiKey = (await StorageService.getApiKey()) ?? '';
+                await DebridService.deleteTorrent(apiKey, r.rdTorrentId!);
+              } catch (_) {}
+            } else if (prov == 'pikpak' &&
+                (r.pikpakFileId?.isNotEmpty ?? false)) {
+              try {
+                await PikPakApiService.instance.batchDeleteFiles([
+                  r.pikpakFileId!,
+                ]);
+              } catch (_) {}
+            }
+            continue;
+          }
+          return (r, t);
+        }
+      } on TorrentNotCachedException catch (e) {
+        // Probed torrent is downloading — remove it so RD stays clean.
+        try {
+          await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+        } catch (_) {}
+      } on AllDebridTorrentNotReadyException catch (e) {
+        try {
+          await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+        } catch (_) {}
+      } catch (_) {
+        // _TorboxNotCached / _PremiumizeNotCached / transient — try next.
+      }
+    }
+    return (null, null);
   }
 
   /// Full catalog-play flow: pick provider, show the cinematic overlay (with the
@@ -547,6 +603,91 @@ class TorrentPlaybackService {
       }
     }
 
+    // Series auto-pin (on by default, toggle in Quick Play settings): with no
+    // usable pinned source, search PACKS
+    // first — the whole-series search with season probing, same as the
+    // Sources screen's "Show Season Packs" — and play the widest pack that
+    // actually contains the requested episode (complete series → multi-season
+    // → season pack). _launch's auto-bind then pins the winner, so every later
+    // play of this series goes straight through the bound path. When no pack
+    // qualifies or none is instantly playable, fall through to the normal
+    // episode search below (whose winner also gets pinned).
+    // PikPak is excluded: it has no cache check, so each pack probe queues a
+    // real (large) offline download to the user's account that can't be
+    // cheaply cleaned up — pack-first there would be actively harmful.
+    if (!isMovie &&
+        season != null &&
+        episode != null &&
+        provider != 'pikpak' &&
+        !_recentlyNoPack(imdbId, season) &&
+        await StorageService.getAutoBindSeriesPacksOnPlay()) {
+      List<Torrent> packs = const [];
+      var searchOk = false;
+      try {
+        final packRes = await TorrentService.searchByImdbWithStremio(
+          imdbId,
+          isMovie: false,
+          contentType: 'series',
+          // No season/episode → the whole-series smart-fallback path. Seed the
+          // probe with the requested season so its season-pack tier is found
+          // for ANY season (the default probe is only S1–S5).
+          availableSeasons: [season],
+        );
+        packs = (packRes['torrents'] as List).cast<Torrent>();
+        searchOk = true;
+      } catch (_) {
+        // Pack search failed (e.g. transient network) — the episode search
+        // below still runs, and we DON'T poison the negative cache so the next
+        // episode retries rather than deferring for the whole TTL.
+      }
+      if (cancel.cancelled) return;
+      if (!context.mounted) {
+        closeLoading();
+        return;
+      }
+      packs = await _curatePackCandidates(packs,
+          label: label, season: season, provider: provider);
+      if (packs.isNotEmpty &&
+          (provider == 'torbox' || provider == 'premiumize')) {
+        packs = await _cacheFirst(provider, packs);
+      }
+      if (cancel.cancelled) return;
+      if (!context.mounted) {
+        closeLoading();
+        return;
+      }
+      if (packs.isNotEmpty) {
+        final (packResolved, packWinner) = await _probeCandidates(
+          provider,
+          packs,
+          season: season,
+          episode: episode,
+          isCancelled: () => cancel.cancelled,
+        );
+        if (cancel.cancelled) return;
+        if (!context.mounted) {
+          closeLoading();
+          return;
+        }
+        if (packResolved != null && packWinner != null) {
+          closeLoading();
+          final idx = packs.indexOf(packWinner);
+          await _launch(context, packResolved, packWinner.displayTitle,
+              provider: provider,
+              meta: meta,
+              sources: packs,
+              sourceIndex: idx < 0 ? 0 : idx);
+          return;
+        }
+        // No pack was instantly playable — fall through to the episode search.
+      }
+      // Reached only when no pack played (cancel / unmount paths returned
+      // above). Remember it — but only when the search actually SUCCEEDED with
+      // no playable pack (not a transient failure) — so the next episode of
+      // this season skips the pack search until the TTL lapses.
+      if (searchOk) _markNoPack(imdbId, season);
+    }
+
     Map<String, dynamic> res;
     try {
       res = await TorrentService.searchByImdb(imdbId,
@@ -634,6 +775,73 @@ class TorrentPlaybackService {
       if (unblocked.isNotEmpty) out = unblocked;
     }
 
+    return out;
+  }
+
+  /// Pack candidates for the series auto-pin pack-first play: torrent-type
+  /// sources whose name matches the title and whose coverage spans [season],
+  /// widest coverage first (complete series → multi-season → season pack),
+  /// then more seasons, then seeders. STRICT — no fall-back-to-unfiltered like
+  /// [_curateCandidates]: a wrong pack here would get PINNED, so when nothing
+  /// qualifies the caller falls back to the normal episode search instead.
+  static Future<List<Torrent>> _curatePackCandidates(
+    List<Torrent> torrents, {
+    required String label,
+    required int season,
+    required String provider,
+  }) async {
+    var out = torrents
+        .where((t) =>
+            t.streamType == StreamType.torrent &&
+            _hasAcquisition(t) &&
+            t.infohash.isNotEmpty)
+        .toList();
+
+    if (label.trim().isNotEmpty) {
+      out = out.where((t) => torrentMatchesTitle(t.name, label)).toList();
+    }
+
+    bool coversSeason(Torrent t) {
+      switch (t.coverageType) {
+        case 'completeSeries':
+          return true;
+        case 'multiSeasonPack':
+          if (t.startSeason != null && t.endSeason != null) {
+            return t.startSeason! <= season && t.endSeason! >= season;
+          }
+          return true; // unknown range — the probe validates episode presence
+        case 'seasonPack':
+          return t.seasonNumber == season;
+        default:
+          return false; // singles/unknown → the episode fallback handles them
+      }
+    }
+
+    out = out.where(coversSeason).toList();
+
+    if (provider == 'debrid' &&
+        await StorageService.getRdSkipBlockedTorrents()) {
+      out = out.where((t) => !isRdBlockedTorrent(t.name)).toList();
+    }
+
+    int tier(Torrent t) {
+      switch (t.coverageType) {
+        case 'completeSeries':
+          return 0;
+        case 'multiSeasonPack':
+          return 1;
+        default: // seasonPack
+          return 2;
+      }
+    }
+
+    out.sort((a, b) {
+      final d = tier(a) - tier(b);
+      if (d != 0) return d;
+      final s = b.seasonCount.compareTo(a.seasonCount); // more seasons first
+      if (s != 0) return s;
+      return b.seeders.compareTo(a.seeders);
+    });
     return out;
   }
 
@@ -852,6 +1060,43 @@ class TorrentPlaybackService {
   /// season/episode at all (absolute-numbered anime, "Episode 5" naming),
   /// trust the binding and let the player open it — rejecting those would
   /// regress packs that played fine before this check existed.
+  /// The (season, episode) of a source whose name is exactly ONE specific
+  /// episode, else null. STRICT — returns null for anything that could cover
+  /// more than one episode (ranges "S01E01-E10", doubles "S01E01E02",
+  /// multiple tokens, or non-singleEpisode coverage) so the [_playViaBound]
+  /// cheap-skip below never drops a binding that genuinely contains the
+  /// requested episode. When null, the source falls through to the normal
+  /// resolve + [_resolvedHasEpisode] check (always correct, just not free).
+  static (int, int)? _singleEpisodeOf(String name) {
+    final normalized = name.replaceAll(RegExp(r'[._]+'), ' ');
+    final matches = RegExp(r's(\d{1,2})e(\d{1,3})', caseSensitive: false)
+        .allMatches(normalized)
+        .toList();
+    if (matches.length != 1) return null; // 0, or several distinct episodes
+    // Reject anything that could span more than one episode. Kept greedy on
+    // purpose: a false positive here just returns null (→ normal resolve,
+    // always correct), whereas MISSING a range would wrongly skip a valid
+    // multi-episode binding. Covers "E01-E10", "E01 to E10", "E01 & E02",
+    // "E01,E02", and the adjacent double "E01E02".
+    if (RegExp(r'e\d{1,3}\s*(?:-|–|to|thru|through|and|&|,)\s*e?\d{1,3}',
+                caseSensitive: false)
+            .hasMatch(normalized) ||
+        RegExp(r'e\d{1,3}\s*e\d{1,3}', caseSensitive: false)
+            .hasMatch(normalized)) {
+      return null;
+    }
+    // Final cross-check against the coverage classifier.
+    if (TorrentCoverageDetector.detectCoverage(title: name).coverageType !=
+        CoverageType.singleEpisode) {
+      return null;
+    }
+    final m = matches.first;
+    final s = int.tryParse(m.group(1)!);
+    final e = int.tryParse(m.group(2)!);
+    if (s == null || e == null) return null;
+    return (s, e);
+  }
+
   static bool _resolvedHasEpisode(_Resolved r, int season, int episode) {
     final List<String> names;
     if (r.playlist != null && r.playlist!.length > 1) {
@@ -942,6 +1187,22 @@ class TorrentPlaybackService {
 
     for (final source in usable) {
       if (cancel.cancelled) return true; // Cancel already dismissed the overlay.
+
+      // Cheap skip: a bound DEBRID source whose name is a single specific
+      // episode can only serve that episode — skip it (no debrid round-trip)
+      // when a different episode is requested, so a series pinned only as
+      // single episodes doesn't churn through every binding on each play.
+      // Packs and ambiguous names fall through to the normal resolve + episode
+      // check. Local sources are excluded: a series FOLDER resolves the
+      // episode internally regardless of its name, and resolving is free.
+      if (season != null &&
+          episode != null &&
+          source.debridService != SeriesSource.localService) {
+        final se = _singleEpisodeOf(source.torrentName);
+        if (se != null && (se.$1 != season || se.$2 != episode)) {
+          continue;
+        }
+      }
 
       // Local (on-device file/folder) sources resolve without a debrid add.
       if (source.debridService == SeriesSource.localService) {
@@ -1672,6 +1933,82 @@ class TorrentPlaybackService {
     } catch (_) {}
   }
 
+  /// Series counterpart of [_autoBindMovieOnPlay] (on by default via the
+  /// series auto-pin setting): pin whatever torrent a series play resolved to
+  /// — a pack from the pack-first search or a single episode from the fallback
+  /// — so subsequent plays go straight through the bound path. A same-hash
+  /// binding is refreshed in place (keeps its priority); a new single-episode
+  /// binding is capped so a pack-less show binged over time can't grow the
+  /// list without bound (older singles are evicted; packs and manually-pinned
+  /// sources are never touched). Never binds addon direct streams or local
+  /// sources.
+  static const int _maxAutoBoundSingles = 20;
+
+  static Future<void> _autoBindSeriesOnPlay(
+    PlaybackMeta? meta,
+    Torrent? winner,
+    String provider,
+  ) async {
+    // Any non-movie episode play (contentType 'series' or a custom series-like
+    // type such as anime) — movies are handled by _autoBindMovieOnPlay.
+    // Scoped to episode plays (season+episode set) to match the pack-first
+    // gate and skip whole-series/no-episode plays.
+    if (meta == null ||
+        meta.contentType == 'movie' ||
+        meta.imdbId == null ||
+        meta.imdbId!.isEmpty ||
+        meta.season == null ||
+        meta.episode == null ||
+        winner == null ||
+        winner.infohash.isEmpty ||
+        winner.streamType != StreamType.torrent ||
+        provider == SeriesSource.localService ||
+        // Consistent with the pack-first block: the whole auto-pin feature is
+        // off for PikPak (its bindings re-queue real downloads on each replay),
+        // so a stale-true pref after switching default to PikPak stays inert.
+        provider == 'pikpak') {
+      return;
+    }
+    try {
+      if (!await StorageService.getAutoBindSeriesPacksOnPlay()) return;
+      final imdbId = meta.imdbId!;
+      final source = SeriesSource(
+        torrentHash: winner.infohash,
+        torrentName: winner.name,
+        debridService: storedProviderKey(provider),
+        debridTorrentId: '',
+        boundAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      final list = List<SeriesSource>.from(
+        await SeriesSourceService.getSources(imdbId),
+      );
+      final existingIdx =
+          list.indexWhere((s) => s.torrentHash == source.torrentHash);
+      if (existingIdx >= 0) {
+        // Same source replayed — refresh in place, keep priority.
+        list[existingIdx] = source;
+      } else {
+        // A NEW single-episode binding: bound how many auto-accumulate so a
+        // pack-less show doesn't grow the list forever. Packs and any
+        // non-single (e.g. manually pinned) sources are never evicted.
+        if (_singleEpisodeOf(source.torrentName) != null) {
+          final singles = list
+              .where((s) => _singleEpisodeOf(s.torrentName) != null)
+              .toList()
+            ..sort((a, b) => a.boundAt.compareTo(b.boundAt));
+          final overflow = singles.length + 1 - _maxAutoBoundSingles;
+          if (overflow > 0) {
+            final drop =
+                singles.take(overflow).map((s) => s.torrentHash).toSet();
+            list.removeWhere((s) => drop.contains(s.torrentHash));
+          }
+        }
+        list.add(source);
+      }
+      await SeriesSourceService.setSources(imdbId, list);
+    } catch (_) {}
+  }
+
   /// Launch the player. Passes the full source list + a resolver (so the player
   /// shows the in-player "Sources" switcher) and content metadata (so Continue
   /// Watching, subtitles and the Episodes button work) — matching Home.
@@ -1720,8 +2057,10 @@ class TorrentPlaybackService {
       return;
     }
     // Remember a catalog movie's source before handing off to the player, so the
-    // binding is saved even if the screen tears down during playback.
+    // binding is saved even if the screen tears down during playback. The series
+    // counterpart is gated by the series auto-pin setting (on by default).
     await _autoBindMovieOnPlay(meta, winner, provider);
+    await _autoBindSeriesOnPlay(meta, winner, provider);
     if (!context.mounted) return;
     await VideoPlayerLauncher.push(
       context,

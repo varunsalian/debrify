@@ -22,6 +22,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   bool _tryMultipleTorrents = false;
   int _maxRetries = 3;
 
+  // Series auto-pin
+  bool _autoBindSeriesPacks = false;
+
   // Default provider (to hide cache fallback for PikPak)
   String _defaultProvider = 'none';
 
@@ -38,6 +41,8 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
         await StorageService.getQuickPlayTryMultipleTorrents();
     final maxRetries = await StorageService.getQuickPlayMaxRetries();
     final defaultProvider = await StorageService.getDefaultTorrentProvider();
+    final autoBindSeriesPacks =
+        await StorageService.getAutoBindSeriesPacksOnPlay();
 
     if (!mounted) return;
 
@@ -47,8 +52,14 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
       _tryMultipleTorrents = tryMultipleTorrents;
       _maxRetries = maxRetries;
       _defaultProvider = defaultProvider;
+      _autoBindSeriesPacks = autoBindSeriesPacks;
       _loading = false;
     });
+  }
+
+  Future<void> _setAutoBindSeriesPacks(bool enabled) async {
+    setState(() => _autoBindSeriesPacks = enabled);
+    await StorageService.setAutoBindSeriesPacksOnPlay(enabled);
   }
 
   Future<void> _setTryMultipleTorrents(bool tryMultiple) async {
@@ -86,8 +97,11 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                 const SizedBox(height: 24),
                 _buildSourcesTimeoutSection(context),
                 const SizedBox(height: 24),
-                // Cache Fallback section (hide for PikPak - not supported)
+                // Series Auto-Pin + Cache Fallback both rely on cache-aware
+                // pack probing, which PikPak can't do — hide for PikPak.
                 if (_defaultProvider != 'pikpak') ...[
+                  _buildSeriesAutoPinSection(context),
+                  const SizedBox(height: 24),
                   _buildCacheFallbackSection(context),
                   const SizedBox(height: 24),
                 ],
@@ -250,6 +264,64 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeriesAutoPinSection(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: kSettingsPanel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kSettingsLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.push_pin_rounded,
+                  color: kSettingsAccent2,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Series Auto-Pin',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: kSettingsLine),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'When you play a series with no pinned source, search for a '
+              'complete-series pack first (then a season pack, then the single '
+              'episode) and pin whatever plays — so later episodes start '
+              'instantly from the pinned source.',
+              style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
+            ),
+          ),
+          _buildCheckboxTile(
+            context,
+            title: 'Prefer and pin series packs',
+            subtitle: _autoBindSeriesPacks
+                ? 'Packs are searched first and the playing source is pinned automatically'
+                : 'Series plays search only the requested episode and pin nothing',
+            value: _autoBindSeriesPacks,
+            onChanged: _setAutoBindSeriesPacks,
+          ),
+          const SizedBox(height: 4),
         ],
       ),
     );
