@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../../widgets/home/home_theme.dart';
+import '../../widgets/pipeline_loading_overlay.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
@@ -75,7 +76,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _hideNowPlaying = false;
   double? _currentSlotProgress;
   int _playGeneration = 0;
-  int _dialogGeneration = -1;
   String? _currentPlayTitle; // Overrides item.name when playing series episodes
   final Map<String, _StremioTvPlaybackCursor> _playbackCursors = {};
 
@@ -739,6 +739,56 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
+  /// Maps the active debrid provider to the Pipeline loader's chip label,
+  /// two-letter code, accent colour, and whether it runs a cache-check stage.
+  /// Colours mirror the Home/Search play loader (torrent_playback_service).
+  ({String label, String code, Color color, bool cacheCheck}) _tvProviderInfo() {
+    switch (_debridProvider) {
+      case 'realdebrid':
+        return (
+          label: 'Real-Debrid',
+          code: 'RD',
+          color: const Color(0xFF10B981),
+          cacheCheck: false,
+        );
+      case 'torbox':
+        return (
+          label: 'TorBox',
+          code: 'TB',
+          color: const Color(0xFF8B5CF6),
+          cacheCheck: true,
+        );
+      case 'premiumize':
+        return (
+          label: 'Premiumize',
+          code: 'PM',
+          color: const Color(0xFFF59E0B),
+          cacheCheck: true,
+        );
+      case 'alldebrid':
+        return (
+          label: 'AllDebrid',
+          code: 'AD',
+          color: const Color(0xFF26A69A),
+          cacheCheck: false,
+        );
+      case 'pikpak':
+        return (
+          label: 'PikPak',
+          code: 'PP',
+          color: const Color(0xFF6366F1),
+          cacheCheck: false,
+        );
+      default:
+        return (
+          label: 'Debrid',
+          code: 'DB',
+          color: PipelineLoadingOverlay.accent,
+          cacheCheck: false,
+        );
+    }
+  }
+
   Future<void> _playChannel(StremioTvChannel channel) async {
     final myGeneration = ++_playGeneration;
 
@@ -783,16 +833,31 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       return;
     }
 
+    // Cinematic staged loader (matches Home → detail → Play). Shown up front so
+    // it also covers the random-episode resolve; the subtitle is omitted since
+    // the episode isn't known yet for series.
+    if (!mounted) return;
+    final pInfo = _tvProviderInfo();
+    final overlay = PipelineLoadingOverlay.show(
+      context,
+      posterUrl: item.poster ?? item.background,
+      title: item.name,
+      providerLabel: pInfo.label,
+      providerCode: pInfo.code,
+      providerColor: pInfo.color,
+      hasCacheCheck: pInfo.cacheCheck,
+      onCancel: () {
+        // The overlay dismisses itself; just abort the in-flight play. Every
+        // await below bails on the _playGeneration mismatch.
+        _playGeneration++;
+        _notifyStartupAutoLaunchFailed('Playback canceled');
+      },
+    );
+
     // For series, resolve a random episode first
     int? season;
     int? episode;
     if (item.type.toLowerCase() == 'series') {
-      if (!mounted) return;
-      showPsychLoading(
-        context,
-        'Spinning the wheel of fate for ${item.name}...',
-      );
-
       final episodeSeed = _randomEpisodes
           ? '${channel.id}:${DateTime.now().millisecondsSinceEpoch}'
           : '${channel.id}:${nowPlaying.slotStart.millisecondsSinceEpoch}';
@@ -802,10 +867,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         seed: episodeSeed,
       );
 
-      if (!mounted || _playGeneration != myGeneration) return;
-      Navigator.of(context).pop(); // Dismiss episode resolution dialog
+      if (!mounted || _playGeneration != myGeneration) {
+        overlay.dismiss();
+        return;
+      }
 
       if (resolved == null) {
+        overlay.dismiss();
         _notifyStartupAutoLaunchFailed('Could not resolve episode');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -824,22 +892,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     } else {
       _currentPlayTitle = null;
     }
-
-    // Show loading dialog with updatable message
-    if (!mounted || _playGeneration != myGeneration) return;
-    _dialogGeneration = myGeneration;
-    final loadingStatus = showPsychLoadingUpdatable(
-      context,
-      season != null
-          ? 'Summoning ${item.name} S${season}E$episode from the void...'
-          : 'Warping into the ${item.name} dimension...',
-      onCancel: () {
-        _playGeneration++;
-        _dialogGeneration = -1;
-        _notifyStartupAutoLaunchFailed('Playback canceled');
-        if (mounted) Navigator.of(context).pop();
-      },
-    );
 
     try {
       final isMovie = item.type.toLowerCase() == 'movie';
@@ -880,10 +932,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       if (!mounted || _playGeneration != myGeneration) {
-        if (_dialogGeneration == myGeneration && mounted) {
-          _dialogGeneration = -1;
-          Navigator.of(context).pop();
-        }
+        overlay.dismiss();
         return;
       }
 
@@ -892,14 +941,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final torrentCount = torrents
           .where((t) => !t.isDirectStream && !t.isExternalStream)
           .length;
-      loadingStatus.value =
-          'Found $directCount direct + $torrentCount torrent streams, resolving...';
+      overlay.setStage(
+        PlayLoadStage.searching,
+        sourceCount: directCount + torrentCount,
+      );
 
       if (torrents.isEmpty) {
+        overlay.dismiss();
         _notifyStartupAutoLaunchFailed('No streams found');
         if (mounted) {
-          Navigator.of(context).pop();
-          _dialogGeneration = -1;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('No streams found for ${item.name}')),
           );
@@ -930,7 +980,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
               .where((h) => h.isNotEmpty)
               .toList();
           if (torrentHashes.isNotEmpty) {
-            if (!mounted) return;
+            if (!mounted) {
+              overlay.dismiss();
+              return;
+            }
+            overlay.setStage(PlayLoadStage.cacheCheck);
             final cachedHashes = await TorboxService.checkCachedTorrents(
               apiKey: tbKey,
               infoHashes: torrentHashes,
@@ -938,6 +992,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             final cachedSet = cachedHashes
                 .map((h) => h.trim().toLowerCase())
                 .toSet();
+            overlay.setStage(
+              PlayLoadStage.cacheCheck,
+              cachedCount: cachedSet.length,
+            );
             debugPrint(
               'StremioTV: TorBox cache check: ${cachedSet.length} cached '
               'out of ${torrentHashes.length} torrents',
@@ -966,7 +1024,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
               .where((h) => h.isNotEmpty)
               .toList();
           if (torrentHashes.isNotEmpty) {
-            if (!mounted) return;
+            if (!mounted) {
+              overlay.dismiss();
+              return;
+            }
+            overlay.setStage(PlayLoadStage.cacheCheck);
             final cachedResults = await PremiumizeService.checkCache(
               pmKey,
               torrentHashes,
@@ -977,6 +1039,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 cachedSet.add(torrentHashes[i]);
               }
             }
+            overlay.setStage(
+              PlayLoadStage.cacheCheck,
+              cachedCount: cachedSet.length,
+            );
             debugPrint(
               'StremioTV: Premiumize cache check: ${cachedSet.length} cached '
               'out of ${torrentHashes.length} torrents',
@@ -993,10 +1059,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       if (playableSources.isEmpty) {
+        overlay.dismiss();
         _notifyStartupAutoLaunchFailed('No playable streams found');
         if (mounted) {
-          Navigator.of(context).pop();
-          _dialogGeneration = -1;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('No playable streams found for ${item.name}'),
@@ -1034,6 +1099,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       String? firstPlayableUrl;
       int firstPlayableIndex = 0;
 
+      // Resolving the actual stream URL via the debrid provider.
+      overlay.setStage(PlayLoadStage.preparing);
+
       // Try torrents or direct streams based on setting, fall back to the other
       ({String url, int index})? resolved;
       if (_torrentsFirst) {
@@ -1053,10 +1121,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) {
+        overlay.dismiss();
         _notifyStartupAutoLaunchFailed('No auto-play stream resolved');
-        if (mounted) {
-          Navigator.of(context).pop();
-          _dialogGeneration = -1;
+        // Skip the manual picker if the play was cancelled mid-resolve.
+        if (mounted && _playGeneration == myGeneration) {
           // Show source picker so user can manually select
           final result = await _showManualSourcePicker(
             playableSources,
@@ -1104,11 +1172,17 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return;
       }
 
-      if (!mounted) return;
+      // Also honour a Cancel that landed while the stream was resolving — the
+      // resolve helpers can return a valid URL after onCancel bumped the
+      // generation, and this is the last gate before launch.
+      if (!mounted || _playGeneration != myGeneration) {
+        overlay.dismiss();
+        return;
+      }
 
-      // Dismiss loading dialog right before player launch
-      Navigator.of(context).pop();
-      _dialogGeneration = -1;
+      // Tick the final stage, then dismiss right before the player launches.
+      overlay.setStage(PlayLoadStage.starting);
+      overlay.dismiss();
       _notifyStartupPlayerLaunching();
       _rememberPlaybackCursor(
         channel.id,
@@ -1146,12 +1220,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         ),
       );
     } catch (e) {
+      overlay.dismiss();
       _notifyStartupAutoLaunchFailed('Error searching streams: $e');
       if (!mounted) return;
-      if (_dialogGeneration == myGeneration) {
-        _dialogGeneration = -1;
-        Navigator.of(context).pop();
-      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error searching streams: $e')));
