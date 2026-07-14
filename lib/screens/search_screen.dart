@@ -6466,7 +6466,9 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                   // decode at native res, but keep it generous — it's a single
                   // full-width image (crisp matters, and one instance is cheap;
                   // the memory win is the many small rail posters, not this).
-                  memCacheWidth: isTelevision ? 1080 : 1280,
+                  memCacheWidth: isTelevision
+                      ? HomeTheme.heroBackdropCacheWidthTv
+                      : HomeTheme.heroBackdropCacheWidth,
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 ),
               ),
@@ -7111,12 +7113,9 @@ class _StremioCardState extends State<_StremioCard> {
                     // the skeleton, dozens of posters would run a 500ms opacity
                     // crossfade at once — a saveLayer each — which janks the weak
                     // GPU. Snapping them in reads as a clean, smooth reveal.
-                    fadeInDuration: widget.isTelevision
-                        ? Duration.zero
-                        : const Duration(milliseconds: 500),
-                    fadeOutDuration: widget.isTelevision
-                        ? Duration.zero
-                        : const Duration(milliseconds: 1000),
+                    fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
+                    fadeOutDuration:
+                        HomeTheme.imageFadeOut(widget.isTelevision),
                     placeholder: (_, __) => _placeholder(item.name),
                     errorWidget: (_, __, ___) => _placeholder(item.name),
                   )
@@ -7532,12 +7531,10 @@ class _ArtPosterState extends State<_ArtPoster> {
                       memCacheWidth: widget.isTelevision ? 320 : 480,
                       // TV: no per-image crossfade (saveLayer per poster janks
                       // the weak GPU when a grid fills in at once).
-                      fadeInDuration: widget.isTelevision
-                          ? Duration.zero
-                          : const Duration(milliseconds: 500),
-                      fadeOutDuration: widget.isTelevision
-                          ? Duration.zero
-                          : const Duration(milliseconds: 1000),
+                      fadeInDuration:
+                          HomeTheme.imageFadeIn(widget.isTelevision),
+                      fadeOutDuration:
+                          HomeTheme.imageFadeOut(widget.isTelevision),
                       placeholder: (_, __) => _glyph(),
                       errorWidget: (_, __, ___) => _glyph(),
                     ),

@@ -81,9 +81,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   int _rotationFor(StremioTvChannel channel) =>
       channel.type == 'series' ? _seriesRotationMinutes : _rotationMinutes;
 
-  Timer? _refreshTimer;
   final List<FocusNode> _rowFocusNodes = [];
   int _focusedIndex = 0;
+
+  /// Bumped whenever a channel's items finish lazy-loading. The tuner is
+  /// wrapped in a ValueListenableBuilder on this, so a load completing
+  /// mid-surf rebuilds only the tuner subtree — not the whole screen with its
+  /// header — which is what made DPAD navigation stutter while channels were
+  /// still tuning in.
+  final ValueNotifier<int> _contentRevision = ValueNotifier<int>(0);
 
   // Mix salt (0-9, cycles on shuffle button)
   int _mixSalt = 0;
@@ -145,19 +151,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       _pendingChannelId = pending;
     }
 
-    // Start periodic refresh for progress bars
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && _autoRefresh) {
-        setState(() {}); // Refresh progress bars
-        // Check if any slot boundaries have been crossed
-        _checkRotationBoundaries();
-      }
-    });
+    // No periodic screen-level refresh: the tuner runs its own 15s tick
+    // (gated on the Auto-refresh setting, passed below) for progress bars
+    // and slot rollovers, so a 30s whole-screen setState here was pure
+    // rebuild churn on top of it.
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _contentRevision.dispose();
     _searchBtnFocusNode.dispose();
     _providerFocusNode.dispose();
     _menuFocusNode.dispose();
@@ -312,12 +314,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     favorites.sort((a, b) => a.channelNumber.compareTo(b.channelNumber));
     rest.sort((a, b) => a.channelNumber.compareTo(b.channelNumber));
     return [...favorites, ...rest];
-  }
-
-  void _checkRotationBoundaries() {
-    // If items need to rotate, reload channels where the slot changed
-    // This is lightweight — just recalculates getNowPlaying()
-    setState(() {}); // The getNowPlaying call in build() handles this
   }
 
   /// Wraps a MenuItemButton inside a submenu with DPAD navigation:
@@ -560,7 +556,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         }
       });
     } else {
-      setState(() {});
+      // Items landed for an existing channel: rebuild just the tuner (via its
+      // ValueListenableBuilder), not the whole screen — a full setState here
+      // fired once per completing fetch and stuttered mid-surf navigation.
+      _contentRevision.value++;
     }
   }
 
@@ -3008,60 +3007,70 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                       if (_channels.isEmpty) {
                         return const StremioTvEmptyState();
                       }
-                      final filtered = _filteredChannels;
-                      if (filtered.isEmpty && _searchQuery.isNotEmpty) {
-                        return Center(
-                          child: Text(
-                            'No channels match "$_searchQuery"',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        );
-                      }
-                      return StremioTvTuner(
-                        channels: filtered,
-                        allChannels: _channels,
-                        rowFocusNodes: _rowFocusNodes,
-                        service: _service,
-                        rotationFor: _rotationFor,
-                        mixSalt: _mixSalt,
-                        hideNowPlaying: _hideNowPlaying,
-                        isTelevision: widget.isTelevision,
-                        loadingChannelIds: _loadingChannelIds,
-                        ensureLoaded: (channel) {
-                          if (!channel.hasItems &&
-                              !_loadingChannelIds.contains(channel.id)) {
-                            _ensureChannelItemsLoaded(channel);
+                      return ValueListenableBuilder<int>(
+                        valueListenable: _contentRevision,
+                        builder: (context, _, __) {
+                          // Computed inside the builder so a revision bump
+                          // hands the tuner a fresh snapshot consistent with
+                          // the live _channels/_rowFocusNodes it also gets.
+                          final filtered = _filteredChannels;
+                          if (filtered.isEmpty && _searchQuery.isNotEmpty) {
+                            return Center(
+                              child: Text(
+                                'No channels match "$_searchQuery"',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            );
                           }
-                        },
-                        onOpenDetail: _openChannelDetail,
-                        onPlay: _playChannel,
-                        // Restore the "max start %" cap on the *displayed*
-                        // progress so the bar matches where playback will
-                        // actually join (matches the old row's
-                        // displayProgress semantics exactly).
-                        displayProgress: (channel, rawProgress) {
-                          if (_maxStartPercent == 0) return 0.0;
-                          return _computeStartProgress(
-                                channel.id,
-                                rawProgress,
-                              ) ??
-                              rawProgress;
-                        },
-                        onToggleFavorite: _toggleFavorite,
-                        onShowGuide: _showGuide,
-                        onEditLocal: _editLocalCatalog,
-                        onExportLocal: _copyLocalCatalogJson,
-                        onFocusSidebar: () =>
-                            MainPageBridge.focusTvSidebar?.call(),
-                        onFocusHeader: () =>
-                            _searchBtnFocusNode.requestFocus(),
-                        onFocusedIndexChanged: (realIndex) {
-                          // Bookkeeping only — never read in build(), so no
-                          // setState (keeps surfing lag-free) and it stays
-                          // current for header↕ navigation even mid-surf.
-                          _focusedIndex = realIndex;
+                          return StremioTvTuner(
+                            channels: filtered,
+                            allChannels: _channels,
+                            rowFocusNodes: _rowFocusNodes,
+                            service: _service,
+                            rotationFor: _rotationFor,
+                            mixSalt: _mixSalt,
+                            hideNowPlaying: _hideNowPlaying,
+                            autoRefresh: _autoRefresh,
+                            isTelevision: widget.isTelevision,
+                            loadingChannelIds: _loadingChannelIds,
+                            ensureLoaded: (channel) {
+                              if (!channel.hasItems &&
+                                  !_loadingChannelIds.contains(channel.id)) {
+                                _ensureChannelItemsLoaded(channel);
+                              }
+                            },
+                            onOpenDetail: _openChannelDetail,
+                            onPlay: _playChannel,
+                            // Restore the "max start %" cap on the *displayed*
+                            // progress so the bar matches where playback will
+                            // actually join (matches the old row's
+                            // displayProgress semantics exactly).
+                            displayProgress: (channel, rawProgress) {
+                              if (_maxStartPercent == 0) return 0.0;
+                              return _computeStartProgress(
+                                    channel.id,
+                                    rawProgress,
+                                  ) ??
+                                  rawProgress;
+                            },
+                            onToggleFavorite: _toggleFavorite,
+                            onShowGuide: _showGuide,
+                            onEditLocal: _editLocalCatalog,
+                            onExportLocal: _copyLocalCatalogJson,
+                            onFocusSidebar: () =>
+                                MainPageBridge.focusTvSidebar?.call(),
+                            onFocusHeader: () =>
+                                _searchBtnFocusNode.requestFocus(),
+                            onFocusedIndexChanged: (realIndex) {
+                              // Bookkeeping only — never read in build(), so
+                              // no setState (keeps surfing lag-free) and it
+                              // stays current for header↕ navigation even
+                              // mid-surf.
+                              _focusedIndex = realIndex;
+                            },
+                          );
                         },
                       );
                     },

@@ -70,6 +70,22 @@ class HomeTheme {
   /// Track behind a progress fill.
   static const Color progressTrack = Color(0x24FFFFFF);
 
+  // ── Image decode caps ─────────────────────────────────────────────────────
+  /// memCacheWidth for a full-bleed hero/stage backdrop. One cap shared by
+  /// every cinematic backdrop (Home/Search hero, Stremio TV stage) so tuning
+  /// it for weak TV hardware happens in exactly one place.
+  static const int heroBackdropCacheWidthTv = 1080;
+  static const int heroBackdropCacheWidth = 1280;
+
+  /// CachedNetworkImage fade durations for TV-visible surfaces: package
+  /// defaults off-TV, snap on TV — per-image opacity crossfades are a
+  /// saveLayer each and jank weak TV GPUs. One helper so every site stays in
+  /// lockstep (catalog_item_tile keeps its own intentionally snappier fade).
+  static Duration imageFadeIn(bool isTelevision) =>
+      isTelevision ? Duration.zero : const Duration(milliseconds: 500);
+  static Duration imageFadeOut(bool isTelevision) =>
+      isTelevision ? Duration.zero : const Duration(milliseconds: 1000);
+
   // ── Responsive ────────────────────────────────────────────────────────────
   /// Returns sizing tokens scaled to the current screen width.
   static HomeMetrics metricsOf(

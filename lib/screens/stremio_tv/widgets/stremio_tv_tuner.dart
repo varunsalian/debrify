@@ -42,6 +42,12 @@ class StremioTvTuner extends StatefulWidget {
   final int mixSalt;
   final bool hideNowPlaying;
 
+  /// The user's "Auto-refresh" setting: when true the tuner ticks every 15s
+  /// so progress bars sweep and slot rollovers flip live; when false the
+  /// broadcast only re-evaluates on interaction (this is the setting's sole
+  /// consumer, so turning it off must visibly stop the live updates).
+  final bool autoRefresh;
+
   /// Resolved native Android-TV flag. Forces the wide Stage+Dial layout (with
   /// D-pad channel switching) regardless of the constrained width — inside the
   /// app shell the sidebar rail trims the tuner slot below the 900px wide
@@ -89,6 +95,7 @@ class StremioTvTuner extends StatefulWidget {
     required this.rotationFor,
     required this.mixSalt,
     required this.hideNowPlaying,
+    required this.autoRefresh,
     required this.isTelevision,
     required this.loadingChannelIds,
     required this.ensureLoaded,
@@ -114,12 +121,22 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   Timer? _tick;
 
   /// Channel id currently driving the Stage (wide) / page (narrow).
-  String? _activeId;
+  /// A ValueNotifier so a surf step only rebuilds the Stage (via the
+  /// ValueListenableBuilder in [_buildWide]) — the Home hero's model — instead
+  /// of setState-ing the whole tuner and re-running every dial card.
+  final ValueNotifier<String?> _activeId = ValueNotifier<String?>(null);
 
   /// Latest focused channel id, awaiting the focus-settle debounce before it
   /// becomes [_activeId] and triggers the heavy Stage swap.
   String? _pendingId;
   Timer? _settle;
+
+  /// O(1) channel-id → index into [StremioTvTuner.allChannels] (and thus into
+  /// [StremioTvTuner.rowFocusNodes]). Rebuilt whenever the widget updates.
+  /// Replaces the per-lookup indexWhere scans that made every DPAD press and
+  /// every rebuild O(n²) once genre expansion pushed the channel count into
+  /// the hundreds.
+  Map<String, int> _indexById = const {};
 
   final PageController _pageController = PageController();
 
@@ -131,27 +148,54 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   @override
   void initState() {
     super.initState();
-    _activeId = widget.channels.isNotEmpty ? widget.channels.first.id : null;
-    _tick = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) setState(() {});
-    });
+    _rebuildIndex();
+    _activeId.value =
+        widget.channels.isNotEmpty ? widget.channels.first.id : null;
+    _syncTick();
+  }
+
+  /// Start/stop the 15s live-broadcast tick per the Auto-refresh setting.
+  void _syncTick() {
+    if (widget.autoRefresh) {
+      _tick ??= Timer.periodic(const Duration(seconds: 15), (_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      _tick?.cancel();
+      _tick = null;
+    }
   }
 
   @override
   void didUpdateWidget(StremioTvTuner old) {
     super.didUpdateWidget(old);
-    if (_activeId == null ||
-        !widget.channels.any((c) => c.id == _activeId)) {
-      _activeId = widget.channels.isNotEmpty ? widget.channels.first.id : null;
-      _pendingId = _activeId;
+    _rebuildIndex();
+    _syncTick();
+    if (_activeId.value == null ||
+        !widget.channels.any((c) => c.id == _activeId.value)) {
+      _activeId.value =
+          widget.channels.isNotEmpty ? widget.channels.first.id : null;
+      _pendingId = _activeId.value;
       _settle?.cancel();
     }
+  }
+
+  void _rebuildIndex() {
+    // First-wins on duplicate ids (the addon service allows the same addon
+    // installed twice with different config, which yields duplicate channel
+    // ids) so the map agrees with every indexWhere fallback in this file.
+    final map = <String, int>{};
+    for (var i = 0; i < widget.allChannels.length; i++) {
+      map.putIfAbsent(widget.allChannels[i].id, () => i);
+    }
+    _indexById = map;
   }
 
   @override
   void dispose() {
     _tick?.cancel();
     _settle?.cancel();
+    _activeId.dispose();
     _pageController.dispose();
     _dialScroll.dispose();
     super.dispose();
@@ -182,8 +226,18 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   double _displayProgress(StremioTvChannel c, StremioTvNowPlaying? np) =>
       np == null ? 0.0 : widget.displayProgress(c, np.progress);
 
-  int _realIndex(StremioTvChannel c) =>
-      widget.allChannels.indexWhere((x) => x.id == c.id);
+  int _realIndex(StremioTvChannel c) {
+    final all = widget.allChannels;
+    final i = _indexById[c.id];
+    // Validate the cached index against the live list: the screen mutates its
+    // channel/node lists *in place* when an empty channel is removed, so the
+    // cache can be stale for the microtask window before the next rebuild
+    // refreshes it. On a miss, re-sync the cache and answer from it (one
+    // pass, and the same first-wins semantics as the warm path).
+    if (i != null && i < all.length && all[i].id == c.id) return i;
+    _rebuildIndex();
+    return _indexById[c.id] ?? -1;
+  }
 
   FocusNode? _nodeFor(StremioTvChannel c) {
     final i = _realIndex(c);
@@ -195,22 +249,60 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   void _setActive(StremioTvChannel c) {
     if (_pendingId == c.id) return;
     _pendingId = c.id;
-    final ri = widget.allChannels.indexWhere((x) => x.id == c.id);
+    final ri = _realIndex(c);
     if (ri >= 0) widget.onFocusedIndexChanged(ri);
     _settle?.cancel();
     _settle = Timer(const Duration(milliseconds: 180), () {
       if (!mounted) return;
       final id = _pendingId;
-      if (id == null || _activeId == id) return;
-      setState(() => _activeId = id);
+      if (id == null || _activeId.value == id) return;
+      // The channel can be removed from the list during the 180ms settle
+      // (empty lazy-load). Don't write a dead id: _channelById would render
+      // channels.first while state pointed at the ghost until the next
+      // rebuild reset it.
+      if (!widget.channels.any((c) => c.id == id)) return;
+      // Only the Stage's ValueListenableBuilder rebuilds — the dial cards
+      // don't depend on the active id, so surfing never re-runs them...
+      _activeId.value = id;
+      // ...except when Auto-refresh is off: with the 15s tick cancelled a
+      // surf settle is the only moment left to re-evaluate the dial cards'
+      // now-playing/progress, otherwise they'd drift out of sync with the
+      // Stage after a slot rollover. One cheap rebuild per settle.
+      if (!widget.autoRefresh) setState(() {});
     });
   }
 
-  StremioTvChannel? get _activeChannel {
+  StremioTvChannel? _channelById(String? id) {
     for (final c in widget.channels) {
-      if (c.id == _activeId) return c;
+      if (c.id == id) return c;
     }
     return widget.channels.isNotEmpty ? widget.channels.first : null;
+  }
+
+  /// Move focus [delta] steps from [channel] along the dial (left at the
+  /// first card hands off to the sidebar). [buildIndex] is the card's dial
+  /// index captured at build time — validated against the live channel list
+  /// at press time, because a press can land in the window between the
+  /// screen's in-place removal of an empty channel and the rebuild that
+  /// refreshes the captured closures. O(1) in the common (unchanged) case.
+  void _surf(StremioTvChannel channel, int buildIndex, int delta) {
+    final live = widget.channels;
+    final cur = (buildIndex >= 0 &&
+            buildIndex < live.length &&
+            live[buildIndex].id == channel.id)
+        ? buildIndex
+        : live.indexWhere((c) => c.id == channel.id);
+    // Pressed card's channel vanished (removal landed this exact frame):
+    // deliberately drop the press — the rebuild rescues focus momentarily,
+    // and jumping a mid-dial press to the sidebar would be more surprising.
+    if (cur < 0) return;
+    final target = cur + delta;
+    if (target < 0) {
+      widget.onFocusSidebar();
+      return;
+    }
+    if (target >= live.length) return;
+    _nodeFor(live[target])?.requestFocus();
   }
 
   // --- Long-press quick actions ------------------------------------------
@@ -365,7 +457,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     final ident = _identFor(channel);
     final np = widget.hideNowPlaying ? null : _nowPlaying(channel);
     final poster = np?.item.poster;
-    final active = channel.id == _activeId;
+    final active = channel.id == _activeId.value;
     return Material(
       color: active ? ident.withValues(alpha: 0.16) : Colors.transparent,
       child: InkWell(
@@ -515,9 +607,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   // --- Wide: Stage + Dial -------------------------------------------------
 
   Widget _buildWide() {
-    final active = _activeChannel;
-    if (active != null) widget.ensureLoaded(active);
-
     final dial = widget.channels.where((c) => _nodeFor(c) != null).toList();
     assert(
       dial.length == widget.channels.length,
@@ -531,24 +620,27 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
           // No ValueKey remount on channel change: the Stage persists and
           // animates its content in place (text cascade, continuous Ken Burns
           // breathe) — the Home hero's model — instead of hard-swapping the
-          // whole subtree every surf step.
-          child: active == null
-              ? const SizedBox.shrink()
-              : Builder(
-                  builder: (_) {
-                    final np = _nowPlaying(active);
-                    return _Stage(
-                      channel: active,
-                      ident: _identFor(active),
-                      nowPlaying: np,
-                      nextPlaying: _nextPlaying(active),
-                      displayProgress: _displayProgress(active, np),
-                      hideNowPlaying: widget.hideNowPlaying,
-                      loading:
-                          widget.loadingChannelIds.contains(active.id),
-                    );
-                  },
-                ),
+          // whole subtree every surf step. The ValueListenableBuilder scopes
+          // a surf step's rebuild to the Stage alone.
+          child: ValueListenableBuilder<String?>(
+            valueListenable: _activeId,
+            builder: (context, activeId, _) {
+              final active = _channelById(activeId);
+              if (active == null) return const SizedBox.shrink();
+              widget.ensureLoaded(active);
+              final np = _nowPlaying(active);
+              return _Stage(
+                channel: active,
+                ident: _identFor(active),
+                nowPlaying: np,
+                nextPlaying: _nextPlaying(active),
+                displayProgress: _displayProgress(active, np),
+                hideNowPlaying: widget.hideNowPlaying,
+                isTelevision: widget.isTelevision,
+                loading: widget.loadingChannelIds.contains(active.id),
+              );
+            },
+          ),
         ),
         // Dial area
         Container(
@@ -624,26 +716,8 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                       onFocused: () => _setActive(channel),
                       onSelect: () => widget.onPlay(channel),
                       onLongPress: () => _openActions(channel),
-                      onLeft: () {
-                        final live = widget.channels
-                            .where((c) => _nodeFor(c) != null)
-                            .toList();
-                        final cur = live.indexWhere((c) => c.id == channel.id);
-                        if (cur <= 0) {
-                          widget.onFocusSidebar();
-                        } else {
-                          _nodeFor(live[cur - 1])?.requestFocus();
-                        }
-                      },
-                      onRight: () {
-                        final live = widget.channels
-                            .where((c) => _nodeFor(c) != null)
-                            .toList();
-                        final cur = live.indexWhere((c) => c.id == channel.id);
-                        if (cur >= 0 && cur < live.length - 1) {
-                          _nodeFor(live[cur + 1])?.requestFocus();
-                        }
-                      },
+                      onLeft: () => _surf(channel, i, -1),
+                      onRight: () => _surf(channel, i, 1),
                       onUp: widget.onFocusHeader,
                     );
                   },
@@ -685,6 +759,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
             nextPlaying: _nextPlaying(channel),
             displayProgress: _displayProgress(channel, np),
             hideNowPlaying: widget.hideNowPlaying,
+            isTelevision: widget.isTelevision,
             loading: widget.loadingChannelIds.contains(channel.id),
             onOpenList: _openChannelList,
             onOpenDetail: () => widget.onOpenDetail(channel),
@@ -706,6 +781,7 @@ class _Stage extends StatefulWidget {
   final StremioTvNowPlaying? nextPlaying;
   final double displayProgress;
   final bool hideNowPlaying;
+  final bool isTelevision;
   final bool loading;
   final VoidCallback? onOpenList;
   final VoidCallback? onOpenDetail;
@@ -717,6 +793,7 @@ class _Stage extends StatefulWidget {
     required this.nextPlaying,
     required this.displayProgress,
     required this.hideNowPlaying,
+    required this.isTelevision,
     required this.loading,
     this.onOpenList,
     this.onOpenDetail,
@@ -759,10 +836,17 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
   /// and on a channel with no backdrop yet (item still loading) — the backdrop
   /// AnimatedBuilder isn't in the tree, and a listener-less repeating
   /// controller would still force engine frames at 60fps for nothing.
+  ///
+  /// Never on TV: unlike the Home hero (a short strip), the Stage backdrop is
+  /// near-full-screen, so the breathe re-rasters almost the whole frame 60fps
+  /// forever. On weak TV GPUs that standing load is what makes everything
+  /// drawn on top — dial focus pops, the quick-actions sheet, menu focus
+  /// moves — feel sluggish, for motion that's barely perceptible anyway.
   void _syncKen() {
     final item = widget.nowPlaying?.item;
     final hasArt = (item?.background ?? item?.poster) != null;
-    final wantKen = _motionOk && !widget.hideNowPlaying && hasArt;
+    final wantKen =
+        _motionOk && !widget.hideNowPlaying && hasArt && !widget.isTelevision;
     if (!wantKen) {
       _ken.stop();
     } else if (!_ken.isAnimating) {
@@ -836,7 +920,20 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                 Widget art = CachedNetworkImage(
                   imageUrl: bg,
                   fit: BoxFit.cover,
-                  memCacheWidth: blurArt ? 480 : 1280,
+                  // The Stage swaps a fresh full-bleed backdrop on every surf
+                  // settle, so it uses the shared hero decode cap (1080 on
+                  // TV) rather than an oversized decode per step.
+                  memCacheWidth: blurArt
+                      ? 480
+                      : (widget.isTelevision
+                          ? HomeTheme.heroBackdropCacheWidthTv
+                          : HomeTheme.heroBackdropCacheWidth),
+                  // On TV, snap the swap instead of the default 500ms opacity
+                  // crossfade — that fade is a near-full-screen saveLayer per
+                  // frame on every surf step. The text cascade still provides
+                  // the transition polish.
+                  fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
+                  fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 );
                 if (blurArt) {
@@ -1685,6 +1782,10 @@ class _DialCardState extends State<_DialCard> {
                       imageUrl: poster,
                       fit: BoxFit.cover,
                       memCacheWidth: 280,
+                      fadeInDuration:
+                          HomeTheme.imageFadeIn(widget.isTelevision),
+                      fadeOutDuration:
+                          HomeTheme.imageFadeOut(widget.isTelevision),
                       placeholder: (_, __) => _placeholder(ident),
                       errorWidget: (_, __, ___) => _placeholder(ident),
                     )
