@@ -620,6 +620,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                       displayProgress: _displayProgress(channel, np),
                       hideNowPlaying: widget.hideNowPlaying,
                       loading: widget.loadingChannelIds.contains(channel.id),
+                      isTelevision: widget.isTelevision,
                       onFocused: () => _setActive(channel),
                       onSelect: () => widget.onPlay(channel),
                       onLongPress: () => _openActions(channel),
@@ -1542,6 +1543,10 @@ class _DialCard extends StatefulWidget {
   final double displayProgress;
   final bool hideNowPlaying;
   final bool loading;
+
+  /// TV shows a "press DOWN for options" hint on the focused card; desktop
+  /// shows a "right-click" hint on hover. Distinguishes the two.
+  final bool isTelevision;
   final VoidCallback onFocused;
   final VoidCallback onSelect;
   final VoidCallback onLongPress;
@@ -1558,6 +1563,7 @@ class _DialCard extends StatefulWidget {
     required this.displayProgress,
     required this.hideNowPlaying,
     required this.loading,
+    required this.isTelevision,
     required this.onFocused,
     required this.onSelect,
     required this.onLongPress,
@@ -1572,6 +1578,11 @@ class _DialCard extends StatefulWidget {
 
 class _DialCardState extends State<_DialCard> {
   bool _focused = false;
+
+  /// Desktop mouse hover. Mirrors DPAD focus for previewing a channel in the
+  /// hero above, and lights the same gold treatment — without stealing the
+  /// keyboard focus that DPAD navigation relies on.
+  bool _hovered = false;
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     final k = e.logicalKey;
@@ -1607,8 +1618,10 @@ class _DialCardState extends State<_DialCard> {
     final item = widget.nowPlaying?.item;
     final poster = item?.poster ?? item?.background;
     final ident = widget.ident;
+    // DPAD focus OR desktop hover drive the same "active" visual + hero preview.
+    final bool active = _focused || _hovered;
 
-    return Focus(
+    final card = Focus(
       focusNode: widget.focusNode,
       onKeyEvent: _onKey,
       onFocusChange: (f) {
@@ -1628,13 +1641,15 @@ class _DialCardState extends State<_DialCard> {
           widget.onSelect();
         },
         onLongPress: widget.onLongPress,
+        // Desktop: right-click opens the same quick-actions sheet as long-press.
+        onSecondaryTap: widget.onLongPress,
         // Eased focus pop (matches the Home board's poster tiles) instead of
         // an instant Transform snap; the ring/bloom below stay instant, like
         // Home's shadowFx on TV, so only one property animates per move.
         child: AnimatedScale(
           duration: const Duration(milliseconds: 140),
           curve: Curves.easeOutCubic,
-          scale: _focused ? 1.10 : 1.0,
+          scale: active ? 1.10 : 1.0,
           child: Container(
             width: 138,
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -1644,12 +1659,12 @@ class _DialCardState extends State<_DialCard> {
               // (was the per-channel identity colour). Consistent focus colour
               // is what makes the two screens feel like one.
               border: Border.all(
-                color: _focused
+                color: active
                     ? HomeTheme.focusGold
                     : Colors.white.withValues(alpha: 0.06),
-                width: _focused ? 2.5 : 0.5,
+                width: active ? 2.5 : 0.5,
               ),
-              boxShadow: _focused
+              boxShadow: active
                   ? [
                       BoxShadow(
                         color: HomeTheme.focusGoldDeep.withValues(alpha: 0.45),
@@ -1699,7 +1714,7 @@ class _DialCardState extends State<_DialCard> {
                   // Focused gold tint on top edge (matches the Home poster
                   // focus treatment; the CH badge below keeps its per-channel
                   // identity colour).
-                  if (_focused)
+                  if (active)
                     DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -1746,6 +1761,29 @@ class _DialCardState extends State<_DialCard> {
                         ),
                         child: const Icon(Icons.star_rounded,
                             size: 14, color: Color(0xFFFFC107)),
+                      ),
+                    ),
+                  // "How to open options" affordance — TV on the focused card
+                  // (press DOWN), desktop on hover (right-click). Seated on the
+                  // second row (top: 34), clear of the top-row CH badge (whose
+                  // width varies with the channel number) and the favourite
+                  // star. Never on touch.
+                  if (widget.isTelevision && _focused)
+                    const Positioned(
+                      top: 34,
+                      right: 9,
+                      child: _DialHintChip(
+                        icon: Icons.keyboard_arrow_down_rounded,
+                        label: 'OPTIONS',
+                      ),
+                    )
+                  else if (!widget.isTelevision && _hovered)
+                    const Positioned(
+                      top: 34,
+                      right: 9,
+                      child: _DialHintChip(
+                        icon: Icons.mouse_rounded,
+                        label: 'RIGHT-CLICK',
                       ),
                     ),
                   // Title + progress overlay.
@@ -1825,6 +1863,24 @@ class _DialCardState extends State<_DialCard> {
         ),
       ),
     );
+
+    // MouseRegion (mouse-only — inert for touch/DPAD) makes desktop hover
+    // preview the channel in the hero above, mirroring DPAD focus. It does not
+    // request keyboard focus, so it can't hijack remote navigation, and does
+    // not auto-scroll (only real focus does), so a passing cursor stays put.
+    return MouseRegion(
+      onEnter: (_) {
+        if (!mounted) return;
+        if (!_hovered) setState(() => _hovered = true);
+        widget.onFocused();
+      },
+      // onExit can fire in a post-frame callback when the card is removed while
+      // the cursor is over it (list recycling on scroll), so guard mounted.
+      onExit: (_) {
+        if (mounted && _hovered) setState(() => _hovered = false);
+      },
+      child: card,
+    );
   }
 
   String get channelNumberLabel =>
@@ -1852,6 +1908,46 @@ class _DialCardState extends State<_DialCard> {
           color: Colors.white.withValues(alpha: 0.18),
           size: 32,
         ),
+      ),
+    );
+  }
+}
+
+/// Small glassy affordance shown on the active dial card telling the user how
+/// to open the quick-actions sheet (DOWN on TV, right-click on desktop).
+class _DialHintChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _DialHintChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.16),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: Colors.white.withValues(alpha: 0.85)),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 8,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
