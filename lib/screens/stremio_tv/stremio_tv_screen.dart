@@ -28,10 +28,10 @@ import '../../utils/stremio_episode_selector.dart';
 import '../../services/torrent_service.dart';
 import '../catalog_item_detail_screen.dart';
 import '../settings/stremio_tv_settings_page.dart';
+import 'stremio_tv_filter_page.dart';
 import 'stremio_tv_service.dart';
 import 'widgets/stremio_tv_tuner.dart';
 import 'widgets/stremio_tv_empty_state.dart';
-import 'widgets/stremio_tv_channel_filter_sheet.dart';
 import 'widgets/stremio_tv_guide_sheet.dart';
 import 'widgets/stremio_tv_local_catalogs_dialog.dart';
 import '../../utils/tv_keys.dart';
@@ -390,19 +390,22 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final disabledBefore = await StorageService.getStremioTvDisabledFilters();
     if (!mounted) return;
 
-    await StremioTvChannelFilterSheet.show(
-      context,
-      filterTree: filterTree,
-      disabledFilters: disabledBefore,
+    // Full-screen DPAD-first filter page (instant push, matching the
+    // channel-detail transition). The page persists before popping and
+    // reports whether anything changed.
+    final changed = await Navigator.of(context).push<bool>(
+      PageRouteBuilder(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, __, ___) => StremioTvFilterPage(
+          filterTree: filterTree,
+          disabledFilters: Set.of(disabledBefore),
+          isTelevision: widget.isTelevision,
+        ),
+      ),
     );
 
-    if (!mounted) return;
-    // Re-read from storage to detect changes (covers both close button and swipe-dismiss)
-    final disabledAfter = await StorageService.getStremioTvDisabledFilters();
-    if (!mounted) return;
-
-    if (disabledBefore.length != disabledAfter.length ||
-        !disabledBefore.containsAll(disabledAfter)) {
+    if (changed == true && mounted) {
       _refresh();
     }
   }
