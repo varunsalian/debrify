@@ -26,7 +26,7 @@ import '../utils/torrent_coverage_detector.dart';
 import '../utils/torrent_curation.dart';
 import '../widgets/debrid_action_sheet.dart';
 import '../widgets/debrid_loading_overlay.dart';
-import '../widgets/poster_play_loading_overlay.dart';
+import '../widgets/pipeline_loading_overlay.dart';
 import '../widgets/provider_picker_dialog.dart';
 import 'alldebrid_service.dart';
 import 'debrid_service.dart';
@@ -313,16 +313,18 @@ class TorrentPlaybackService {
     String? provider,
     String? title,
     PlaybackMeta? meta,
-    bool overlayAlreadyShown = false,
-    PosterPlayLoadingOverlay? overlay,
+    // Non-null when the search flow already put a loader up (the search phase);
+    // null for a standalone play (e.g. the catalog board), which creates one.
+    PipelineLoadingOverlay? overlay,
     bool Function()? isCancelled,
   }) async {
     final rootNav = Navigator.of(context, rootNavigator: true);
-    // Dismiss whichever loading affordance is on screen, exactly once (the
-    // poster mask handle, else the DebridLoadingOverlay route).
+    // The play loader handle: passed in by the search flow, or created below
+    // for a standalone play (e.g. the catalog board). Dismissed exactly once.
+    var ov = overlay;
     void closeLoading() {
-      if (overlay != null) {
-        overlay.dismiss();
+      if (ov != null) {
+        ov.dismiss();
       } else if (rootNav.canPop()) {
         rootNav.pop();
       }
@@ -342,7 +344,7 @@ class TorrentPlaybackService {
       }
     }
     if (direct != null) {
-      if (overlayAlreadyShown) closeLoading();
+      if (ov != null) closeLoading();
       // Content metadata and the Sources switcher ride along (matching Home's
       // _playDirectStream) so series streams get Continue Watching, subtitles,
       // source switching, and the Next Episode hand-back. The advance reuses
@@ -372,15 +374,15 @@ class TorrentPlaybackService {
     // caller's overlay on each, or it stays stuck full-screen (both overlays
     // are non-dismissable by the system back button).
     if (!context.mounted) {
-      if (overlayAlreadyShown) closeLoading();
+      if (ov != null) closeLoading();
       return;
     }
     if (prov == _cancelled) {
-      if (overlayAlreadyShown) closeLoading(); // user dismissed the picker
+      if (ov != null) closeLoading(); // user dismissed the picker
       return;
     }
     if (prov == null) {
-      if (overlayAlreadyShown) closeLoading();
+      if (ov != null) closeLoading();
       _snack(context, 'No debrid provider configured. Add one in Settings.');
       return;
     }
@@ -390,26 +392,28 @@ class TorrentPlaybackService {
             t.streamType != StreamType.externalUrl && _hasAcquisition(t))
         .toList();
     if (candidates.isEmpty) {
-      if (overlayAlreadyShown) closeLoading();
+      if (ov != null) closeLoading();
       _snack(context, 'No playable sources found for this title.');
       return;
     }
+    // Standalone play (no loader passed by the search flow): show one now.
+    ov ??= _showPipeline(context,
+        provider: prov, meta: meta, title: title ?? candidates.first.displayTitle);
+    final loader = ov;
+    loader.setStage(PlayLoadStage.searching, sourceCount: candidates.length);
     if (prov == 'torbox' || prov == 'premiumize') {
+      loader.setStage(PlayLoadStage.cacheCheck);
       candidates = await _cacheFirst(prov, candidates);
       if (!context.mounted) {
-        // Screen went away mid cache-check — still dismiss our overlay so it
-        // can't get stuck covering the next screen (guarded so a direct
-        // playBest call, which hasn't shown its overlay yet, never pops).
-        if (overlayAlreadyShown) closeLoading();
+        // Screen went away mid cache-check — dismiss so the loader can't get
+        // stuck covering the next screen.
+        closeLoading();
         return;
       }
     }
     if (cancelled()) return; // user tapped Cancel during the cache-check
 
-    if (!overlayAlreadyShown) {
-      _showLoading(context, prov,
-          title ?? (candidates.isNotEmpty ? candidates.first.displayTitle : ''));
-    }
+    loader.setStage(PlayLoadStage.preparing);
     final (res, winner) = await _probeCandidates(
       prov,
       candidates,
@@ -418,6 +422,7 @@ class TorrentPlaybackService {
       isCancelled: cancelled,
     );
     if (cancelled()) return; // dismissed by the Cancel tap; nothing more to do
+    loader.setStage(PlayLoadStage.starting);
     closeLoading();
     if (!context.mounted) return;
     if (res == null) {
@@ -575,33 +580,17 @@ class TorrentPlaybackService {
       _snack(context, 'No debrid provider configured. Add one in Settings.');
       return;
     }
-    final rootNav = Navigator.of(context, rootNavigator: true);
-    // With a poster, show the cinematic poster mask (with Cancel); otherwise the
-    // provider-branded loading overlay. ONE overlay spans search → resolve → play.
-    final usePoster = meta.posterUrl != null && meta.posterUrl!.isNotEmpty;
+    // The Pipeline loader spans search → cache-check → prepare → start; its
+    // checklist advances via setStage as this flow progresses.
     final cancel = _PlaybackCancelToken();
-    PosterPlayLoadingOverlay? overlay;
-    if (usePoster) {
-      overlay = PosterPlayLoadingOverlay.show(
-        context,
-        posterUrl: meta.posterUrl,
-        title: label,
-        provider: _label(provider),
-        accentColor: _providerGradient(provider).first,
-        icon: _providerIcon(provider),
-        onCancel: () => cancel.cancelled = true,
-      );
-    } else {
-      _showLoading(context, provider, label);
-    }
-    final shownOverlay = overlay;
-    void closeLoading() {
-      if (shownOverlay != null) {
-        shownOverlay.dismiss();
-      } else if (rootNav.canPop()) {
-        rootNav.pop();
-      }
-    }
+    final overlay = _showPipeline(
+      context,
+      provider: provider,
+      meta: meta,
+      title: label,
+      onCancel: () => cancel.cancelled = true,
+    );
+    void closeLoading() => overlay.dismiss();
 
     // Series auto-pin (on by default, toggle in Quick Play settings): with no
     // usable pinned source, search PACKS
@@ -649,6 +638,7 @@ class TorrentPlaybackService {
           label: label, season: season, provider: provider);
       if (packs.isNotEmpty &&
           (provider == 'torbox' || provider == 'premiumize')) {
+        overlay.setStage(PlayLoadStage.cacheCheck);
         packs = await _cacheFirst(provider, packs);
       }
       if (cancel.cancelled) return;
@@ -657,6 +647,7 @@ class TorrentPlaybackService {
         return;
       }
       if (packs.isNotEmpty) {
+        overlay.setStage(PlayLoadStage.preparing);
         final (packResolved, packWinner) = await _probeCandidates(
           provider,
           packs,
@@ -670,6 +661,7 @@ class TorrentPlaybackService {
           return;
         }
         if (packResolved != null && packWinner != null) {
+          overlay.setStage(PlayLoadStage.starting);
           closeLoading();
           final idx = packs.indexOf(packWinner);
           await _launch(context, packResolved, packWinner.displayTitle,
@@ -709,6 +701,7 @@ class TorrentPlaybackService {
       _snack(context, 'No sources found for "$label".');
       return;
     }
+    overlay.setStage(PlayLoadStage.searching, sourceCount: torrents.length);
     // Curate candidates so the RIGHT torrent is probed first (mirrors old home):
     // drop unrelated titles, keep/relevance-sort by the requested episode/season,
     // then drop RD-blocked keywords when RD is the provider. Without this the raw
@@ -731,7 +724,6 @@ class TorrentPlaybackService {
         provider: provider,
         title: label,
         meta: meta,
-        overlayAlreadyShown: true,
         overlay: overlay,
         isCancelled: () => cancel.cancelled);
   }
@@ -858,35 +850,17 @@ class TorrentPlaybackService {
     required PlaybackMeta meta,
     required String label,
   }) async {
-    const accent = Color(0xFF7B5CFF);
     final cancel = _PlaybackCancelToken();
-    final rootNav = Navigator.of(context, rootNavigator: true);
-    final usePoster = meta.posterUrl != null && meta.posterUrl!.isNotEmpty;
-    PosterPlayLoadingOverlay? overlay;
-    if (usePoster) {
-      overlay = PosterPlayLoadingOverlay.show(
-        context,
-        posterUrl: meta.posterUrl,
-        title: label,
-        provider: 'Stream',
-        accentColor: accent,
-        icon: Icons.live_tv_rounded,
-        onCancel: () => cancel.cancelled = true,
-      );
-    } else {
-      DebridLoadingOverlay.show(context,
-          provider: 'Stream',
-          torrentName: label,
-          accentColor: accent,
-          icon: Icons.live_tv_rounded);
-    }
-    void closeLoading() {
-      if (overlay != null) {
-        overlay.dismiss();
-      } else if (rootNav.canPop()) {
-        rootNav.pop();
-      }
-    }
+    // Direct addon/IPTV stream — the loader dismisses as soon as playBest opens
+    // the direct stream. Neutral "Stream" identity (no debrid provider).
+    final overlay = _showPipeline(
+      context,
+      provider: 'stream',
+      meta: meta,
+      title: label,
+      onCancel: () => cancel.cancelled = true,
+    );
+    void closeLoading() => overlay.dismiss();
 
     Map<String, dynamic> res;
     try {
@@ -919,7 +893,6 @@ class TorrentPlaybackService {
     await playBest(context, torrents,
         title: label,
         meta: meta,
-        overlayAlreadyShown: true,
         overlay: overlay,
         isCancelled: () => cancel.cancelled);
   }
@@ -1150,31 +1123,18 @@ class TorrentPlaybackService {
     if (usable.isEmpty) return false;
 
     final firstProv = _providerFromStored(usable.first.debridService);
-    final usePoster = meta.posterUrl != null && meta.posterUrl!.isNotEmpty;
     final cancel = _PlaybackCancelToken();
-    final rootNav = Navigator.of(context, rootNavigator: true);
-    PosterPlayLoadingOverlay? overlay;
-    if (usePoster) {
-      overlay = PosterPlayLoadingOverlay.show(
-        context,
-        posterUrl: meta.posterUrl,
-        title: label,
-        provider: _label(firstProv),
-        accentColor: _providerGradient(firstProv).first,
-        icon: _providerIcon(firstProv),
-        onCancel: () => cancel.cancelled = true,
-      );
-    } else {
-      _showLoading(context, firstProv, label);
-    }
-    final shownOverlay = overlay;
-    void closeLoading() {
-      if (shownOverlay != null) {
-        shownOverlay.dismiss();
-      } else if (rootNav.canPop()) {
-        rootNav.pop();
-      }
-    }
+    // Bound-source play: the short (prepare → start) checklist — there's no
+    // search, we're resolving an already-pinned source.
+    final overlay = _showPipeline(
+      context,
+      provider: firstProv,
+      meta: meta,
+      title: label,
+      bound: true,
+      onCancel: () => cancel.cancelled = true,
+    );
+    void closeLoading() => overlay.dismiss();
 
     // Series requests carry a concrete season+episode (gated by the caller);
     // movies leave them null and skip the episode-presence check.
@@ -1209,6 +1169,7 @@ class TorrentPlaybackService {
         final (r, hint) = await _resolveLocalBound(imdbId, source, meta);
         if (cancel.cancelled) return true;
         if (r != null) {
+          overlay.setStage(PlayLoadStage.starting);
           closeLoading();
           if (!context.mounted) return false;
           await _launch(context, r, r.title,
@@ -1287,6 +1248,7 @@ class TorrentPlaybackService {
       }
       if (cancel.cancelled) return true;
       if (res != null) {
+        overlay.setStage(PlayLoadStage.starting);
         closeLoading();
         if (!context.mounted) return false;
         await _launch(context, res, t.displayTitle,
@@ -3754,9 +3716,58 @@ class TorrentPlaybackService {
         return 'PikPak';
       case SeriesSource.localService:
         return 'On-device';
+      case 'stream':
+        return 'Stream';
       default:
         return provider;
     }
+  }
+
+  /// Two-letter provider glyph for the Pipeline loader's provider chip.
+  static String _providerCode(String provider) {
+    switch (provider) {
+      case 'debrid':
+        return 'RD';
+      case 'torbox':
+        return 'TB';
+      case 'premiumize':
+        return 'PM';
+      case 'alldebrid':
+        return 'AD';
+      case 'pikpak':
+        return 'PP';
+      case 'stream':
+        return 'TV';
+      default:
+        return provider.isEmpty ? '·' : provider.substring(0, 1).toUpperCase();
+    }
+  }
+
+  /// Show the Pipeline play loader, wired to this provider. [bound] uses the
+  /// short (prepare → start) checklist; otherwise it's the full search flow.
+  static PipelineLoadingOverlay _showPipeline(
+    BuildContext context, {
+    required String provider,
+    required PlaybackMeta? meta,
+    required String title,
+    bool bound = false,
+    VoidCallback? onCancel,
+  }) {
+    final sub = (meta != null && meta.season != null && meta.episode != null)
+        ? _seLabel(meta.season!, meta.episode!)
+        : null;
+    return PipelineLoadingOverlay.show(
+      context,
+      posterUrl: meta?.posterUrl,
+      title: title,
+      subtitle: sub,
+      providerLabel: _label(provider),
+      providerCode: _providerCode(provider),
+      providerColor: _providerGradient(provider).first,
+      bound: bound,
+      hasCacheCheck: provider == 'torbox' || provider == 'premiumize',
+      onCancel: onCancel,
+    );
   }
 
   // ── Minimal UI feedback ────────────────────────────────────────────────────

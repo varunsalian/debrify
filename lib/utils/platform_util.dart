@@ -9,6 +9,11 @@ class PlatformUtil {
 
   static bool? _isAndroidTVCached;
 
+  /// Last-resolved TV detection, read synchronously. Defaults to false until
+  /// [isAndroidTV] has run once (it's called early in app startup, so this is
+  /// reliably warm by the time playback starts). For UI that can't await.
+  static bool get isAndroidTvCached => _isAndroidTVCached ?? false;
+
   /// Check if the current device is an Android TV
   ///
   /// Returns `true` if running on Android TV, `false` otherwise.

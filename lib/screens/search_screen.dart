@@ -25,6 +25,7 @@ import '../services/playlist_player_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/series_source_service.dart';
 import '../services/stremio_service.dart';
+import '../services/next_episode_service.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_bulk_add_service.dart';
@@ -4025,6 +4026,26 @@ class _SearchScreenState extends State<SearchScreen> {
     // right addon id into meta.addonId (addon-stream resume/next), instead of a
     // stale one left over from a previously-browsed series.
     _activeAddonId = addon.id;
+
+    // Trakt continue-watching resume (movie OR series): resolve the Trakt
+    // paused/next position via selectionForItem — the exact path the Trakt
+    // row's Quick Play uses, and what the deprecated home did. Without this the
+    // merged detail Resume used only local history: a series defaulted to
+    // S01E01, and a movie lost its watch position — both wrong for a title
+    // watched entirely on Trakt.
+    if (isTraktSource) {
+      final cw = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
+      if (cw != null) {
+        final sel = await TraktContinueWatchingService.instance
+            .selectionForItem(cw);
+        if (!mounted) return;
+        if (sel != null) {
+          _playSelection(sel);
+          return;
+        }
+      }
+    }
+
     if (item.type != 'series') {
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
@@ -4051,6 +4072,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final byId = await StorageService.getLastPlayedEpisodeByImdbId(playId);
     season = byId?['season'] as int?;
     episode = byId?['episode'] as int?;
+    final lastFinished = byId?['finished'] == true;
     if (season == null || episode == null) {
       final byTitle = await StorageService.getLastPlayedEpisode(
         seriesTitle: item.name,
@@ -4060,6 +4082,21 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     season ??= 1;
     episode ??= 1;
+    // If the last-played episode is finished, resume the NEXT one instead of
+    // re-opening it — parity with the deprecated home's continue-watching
+    // quick-play (only the local, non-Trakt path; Trakt resolves its own next).
+    if (lastFinished) {
+      final next = await NextEpisodeService.findNextEpisode(
+        playId,
+        season,
+        episode,
+      );
+      if (!mounted) return;
+      if (next != null) {
+        season = next.season;
+        episode = next.episode;
+      }
+    }
     if (!mounted) return;
 
     _playSelection(
