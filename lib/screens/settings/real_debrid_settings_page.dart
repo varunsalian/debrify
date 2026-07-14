@@ -637,49 +637,31 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                       ?.copyWith(color: kSettingsDim),
                                 ),
                                 const SizedBox(height: 12),
-                                RadioListTile<String>(
-                                  title: const Text('Smart (recommended)'),
-                                  subtitle: const Text(
-                                    'Detects media vs non-media automatically',
-                                  ),
-                                  value: 'smart',
-                                  groupValue: _fileSelection,
-                                  onChanged: (v) =>
-                                      v == null ? null : _saveSelection(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('File with highest size'),
-                                  subtitle: const Text(
-                                    'Ideal for movies - selects the largest file',
-                                  ),
-                                  value: 'largest',
-                                  groupValue: _fileSelection,
-                                  onChanged: (v) =>
-                                      v == null ? null : _saveSelection(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('All video files'),
-                                  subtitle: const Text(
-                                    'Selects all video files (mp4, mkv, avi, etc.) from the torrent',
-                                  ),
-                                  value: 'video',
-                                  groupValue: _fileSelection,
-                                  onChanged: (v) =>
-                                      v == null ? null : _saveSelection(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('All files'),
-                                  subtitle: const Text(
-                                    'Downloads all files in the torrent',
-                                  ),
-                                  value: 'all',
-                                  groupValue: _fileSelection,
-                                  onChanged: (v) =>
-                                      v == null ? null : _saveSelection(v),
-                                  contentPadding: EdgeInsets.zero,
+                                SettingsSelectDropdown(
+                                  value: _fileSelection,
+                                  onChanged: _saveSelection,
+                                  options: const [
+                                    SettingsSelectOption(
+                                      'smart',
+                                      'Smart (recommended)',
+                                      'Detects media vs non-media automatically',
+                                    ),
+                                    SettingsSelectOption(
+                                      'largest',
+                                      'File with highest size',
+                                      'Ideal for movies - selects the largest file',
+                                    ),
+                                    SettingsSelectOption(
+                                      'video',
+                                      'All video files',
+                                      'Selects all video files (mp4, mkv, avi, etc.) from the torrent',
+                                    ),
+                                    SettingsSelectOption(
+                                      'all',
+                                      'All files',
+                                      'Downloads all files in the torrent',
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -718,82 +700,46 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                       ?.copyWith(color: kSettingsDim),
                                 ),
                                 const SizedBox(height: 12),
-                                RadioListTile<String>(
-                                  title: const Text('None'),
-                                  subtitle: const Text(
-                                    'Do nothing - just add the torrent to Real Debrid',
-                                  ),
-                                  value: 'none',
-                                  groupValue: _postTorrentAction,
-                                  onChanged: (v) =>
-                                      v == null ? null : _savePostAction(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('Let me choose'),
-                                  subtitle: const Text(
-                                    'Show a quick Play/Download picker after adding a torrent',
-                                  ),
-                                  value: 'choose',
-                                  groupValue: _postTorrentAction,
-                                  onChanged: (v) =>
-                                      v == null ? null : _savePostAction(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('Open in Real-Debrid'),
-                                  subtitle: const Text(
-                                    'View the torrent in Real-Debrid tab',
-                                  ),
-                                  value: 'open',
-                                  groupValue: _postTorrentAction,
-                                  onChanged: (v) =>
-                                      v == null ? null : _savePostAction(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('Play video'),
-                                  subtitle: const Text(
-                                    'Automatically open video player',
-                                  ),
-                                  value: 'play',
-                                  groupValue: _postTorrentAction,
-                                  onChanged: (v) =>
-                                      v == null ? null : _savePostAction(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('Download to device'),
-                                  subtitle: const Text(
-                                    'If the torrent contains only video files, all videos will download immediately',
-                                  ),
-                                  value: 'download',
-                                  groupValue: _postTorrentAction,
-                                  onChanged: (v) =>
-                                      v == null ? null : _savePostAction(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('Add to playlist'),
-                                  subtitle: const Text(
-                                    'Keep this torrent handy in your Debrify playlist',
-                                  ),
-                                  value: 'playlist',
-                                  groupValue: _postTorrentAction,
-                                  onChanged: (v) =>
-                                      v == null ? null : _savePostAction(v),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                RadioListTile<String>(
-                                  title: const Text('Add to channel'),
-                                  subtitle: const Text(
-                                    'Cache this torrent in a Debrify TV channel',
-                                  ),
-                                  value: 'channel',
-                                  groupValue: _postTorrentAction,
-                                  onChanged: (v) =>
-                                      v == null ? null : _savePostAction(v),
-                                  contentPadding: EdgeInsets.zero,
+                                SettingsSelectDropdown(
+                                  value: _postTorrentAction,
+                                  onChanged: _savePostAction,
+                                  options: const [
+                                    SettingsSelectOption(
+                                      'none',
+                                      'None',
+                                      'Do nothing - just add the torrent to Real Debrid',
+                                    ),
+                                    SettingsSelectOption(
+                                      'choose',
+                                      'Let me choose',
+                                      'Show a quick Play/Download picker after adding a torrent',
+                                    ),
+                                    SettingsSelectOption(
+                                      'open',
+                                      'Open in Real-Debrid',
+                                      'View the torrent in Real-Debrid tab',
+                                    ),
+                                    SettingsSelectOption(
+                                      'play',
+                                      'Play video',
+                                      'Automatically open video player',
+                                    ),
+                                    SettingsSelectOption(
+                                      'download',
+                                      'Download to device',
+                                      'If the torrent contains only video files, all videos will download immediately',
+                                    ),
+                                    SettingsSelectOption(
+                                      'playlist',
+                                      'Add to playlist',
+                                      'Keep this torrent handy in your Debrify playlist',
+                                    ),
+                                    SettingsSelectOption(
+                                      'channel',
+                                      'Add to channel',
+                                      'Cache this torrent in a Debrify TV channel',
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),

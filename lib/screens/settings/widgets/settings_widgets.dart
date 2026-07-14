@@ -1514,6 +1514,121 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
   }
 }
 
+/// One choice inside a [SettingsSelectDropdown].
+class SettingsSelectOption {
+  final String value;
+  final String title;
+  final String? subtitle;
+
+  const SettingsSelectOption(this.value, this.title, [this.subtitle]);
+}
+
+/// Single-choice dropdown for settings cards — replaces the old
+/// RadioListTile stacks (Post-Torrent Action, File Selection, …).
+///
+/// DPAD notes: the closed field is one focusable node (focus ring comes from
+/// the themed `focusedBorder`); OK opens the menu, whose items take DPAD
+/// focus natively, and BACK dismisses it. The selected option's subtitle is
+/// echoed under the field so the descriptive copy isn't lost when closed.
+class SettingsSelectDropdown extends StatelessWidget {
+  final List<SettingsSelectOption> options;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const SettingsSelectDropdown({
+    super.key,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final SettingsSelectOption? selected = options
+        .cast<SettingsSelectOption?>()
+        .firstWhere((o) => o!.value == value, orElse: () => null);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          // A stale stored value (e.g. removed option) renders as an empty
+          // field instead of tripping DropdownButton's value assert.
+          value: selected?.value,
+          isExpanded: true,
+          // Variable item heights so subtitles fit in the open menu.
+          itemHeight: null,
+          dropdownColor: kSettingsPanel2,
+          borderRadius: BorderRadius.circular(14),
+          // No focusColor: with an InputDecoration the SDK swaps the fill
+          // color for it on focus, which would blank the panel fill. Focus
+          // is carried by the themed focusedBorder instead.
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: kSettingsDim),
+          decoration: const InputDecoration(),
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+          // Closed field shows just the title; the subtitle lives below.
+          selectedItemBuilder: (context) => [
+            for (final o in options)
+              Align(alignment: Alignment.centerLeft, child: Text(o.title)),
+          ],
+          items: [
+            for (final o in options)
+              DropdownMenuItem<String>(
+                value: o.value,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        o.title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: o.value == value
+                              ? kSettingsAccent2
+                              : Colors.white,
+                        ),
+                      ),
+                      if (o.subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          o.subtitle!,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.35,
+                            color: kSettingsDim,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+          ],
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+        ),
+        if (selected?.subtitle != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Text(
+              selected!.subtitle!,
+              style: TextStyle(fontSize: 11.5, height: 1.4, color: kSettingsDim),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 /// Non-interactive key/value row (e.g. Version).
 class SettingsInfoTile extends StatelessWidget {
   final IconData icon;

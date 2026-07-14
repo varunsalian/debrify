@@ -610,72 +610,42 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                                         ?.copyWith(color: kSettingsDim),
                                   ),
                                   const SizedBox(height: 12),
-                                  RadioListTile<String>(
-                                    title: const Text('None'),
-                                    subtitle: const Text(
-                                      'Do nothing - just add the torrent to Premiumize',
-                                    ),
-                                    value: 'none',
-                                    groupValue: _postTorrentAction,
-                                    onChanged: (v) =>
-                                        v == null ? null : _savePostAction(v),
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                  RadioListTile<String>(
-                                    title: const Text('Let me choose'),
-                                    subtitle: const Text(
-                                      'Show a quick Play/Download picker after adding',
-                                    ),
-                                    value: 'choose',
-                                    groupValue: _postTorrentAction,
-                                    onChanged: (v) =>
-                                        v == null ? null : _savePostAction(v),
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                  RadioListTile<String>(
-                                    title: const Text('Open in Premiumize'),
-                                    subtitle: const Text(
-                                      'Navigate to your Premiumize cloud library',
-                                    ),
-                                    value: 'open',
-                                    groupValue: _postTorrentAction,
-                                    onChanged: (v) =>
-                                        v == null ? null : _savePostAction(v),
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                  RadioListTile<String>(
-                                    title: const Text('Play video'),
-                                    subtitle: const Text(
-                                      'Automatically open the video player',
-                                    ),
-                                    value: 'play',
-                                    groupValue: _postTorrentAction,
-                                    onChanged: (v) =>
-                                        v == null ? null : _savePostAction(v),
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                  RadioListTile<String>(
-                                    title: const Text('Download to device'),
-                                    subtitle: const Text(
-                                      'If the torrent contains only video files, all '
-                                      'videos will download immediately',
-                                    ),
-                                    value: 'download',
-                                    groupValue: _postTorrentAction,
-                                    onChanged: (v) =>
-                                        v == null ? null : _savePostAction(v),
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                  RadioListTile<String>(
-                                    title: const Text('Add to channel'),
-                                    subtitle: const Text(
-                                      'Cache this torrent in a Debrify TV channel',
-                                    ),
-                                    value: 'channel',
-                                    groupValue: _postTorrentAction,
-                                    onChanged: (v) =>
-                                        v == null ? null : _savePostAction(v),
-                                    contentPadding: EdgeInsets.zero,
+                                  SettingsSelectDropdown(
+                                    value: _postTorrentAction,
+                                    onChanged: _savePostAction,
+                                    options: const [
+                                      SettingsSelectOption(
+                                        'none',
+                                        'None',
+                                        'Do nothing - just add the torrent to Premiumize',
+                                      ),
+                                      SettingsSelectOption(
+                                        'choose',
+                                        'Let me choose',
+                                        'Show a quick Play/Download picker after adding',
+                                      ),
+                                      SettingsSelectOption(
+                                        'open',
+                                        'Open in Premiumize',
+                                        'Navigate to your Premiumize cloud library',
+                                      ),
+                                      SettingsSelectOption(
+                                        'play',
+                                        'Play video',
+                                        'Automatically open the video player',
+                                      ),
+                                      SettingsSelectOption(
+                                        'download',
+                                        'Download to device',
+                                        'If the torrent contains only video files, all '
+                                            'videos will download immediately',
+                                      ),
+                                      SettingsSelectOption(
+                                        'channel',
+                                        'Add to channel',
+                                        'Cache this torrent in a Debrify TV channel',
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
