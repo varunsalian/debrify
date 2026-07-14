@@ -2072,8 +2072,9 @@ class TorrentPlaybackService {
         startIndex: r.hasPlaylist ? r.startIndex : null,
         stremioSources: sources,
         stremioCurrentSourceIndex: sources != null ? sourceIndex : null,
-        resolveSourceToPlaylist:
-            (sources != null && sources.length > 1) ? _resolverFor(provider) : null,
+        resolveSourceToPlaylist: (sources != null && sources.length > 1)
+            ? _switchAwareResolver(provider, meta)
+            : null,
         meta: meta,
         rdTorrentId: r.rdTorrentId,
         torboxTorrentId: r.torboxTorrentId,
@@ -2312,6 +2313,71 @@ class TorrentPlaybackService {
       } catch (_) {}
       return null;
     };
+  }
+
+  /// [_resolverFor] wrapped so that a SUCCESSFUL in-player source switch also
+  /// updates the series' pinned source (see [_rebindOnSourceSwitch]). Both
+  /// players (Flutter + native TV) funnel every switch through this one
+  /// closure, so wrapping it here keeps the binding in sync on both.
+  static Future<List<PlaylistEntry>?> Function(Torrent) _switchAwareResolver(
+      String provider, PlaybackMeta? meta) {
+    final inner = _resolverFor(provider);
+    return (Torrent t) async {
+      final playlist = await inner(t);
+      if (playlist != null && playlist.isNotEmpty) {
+        await _rebindOnSourceSwitch(meta, t, provider);
+      }
+      return playlist;
+    };
+  }
+
+  /// Keep a series' pinned source in sync when the user switches sources in
+  /// the player: the chosen [switched] source becomes the primary binding,
+  /// replacing the one being switched away from (so the next play uses what
+  /// the user actually picked). Only syncs a series that ALREADY has a binding
+  /// — never creates one from a switch — and skips movies, non-torrent /
+  /// PikPak / local sources, and re-selecting the current source keeps the
+  /// rest of the list intact.
+  static Future<void> _rebindOnSourceSwitch(
+    PlaybackMeta? meta,
+    Torrent switched,
+    String provider,
+  ) async {
+    if (meta == null ||
+        meta.contentType == 'movie' ||
+        meta.imdbId == null ||
+        meta.imdbId!.isEmpty ||
+        meta.season == null ||
+        meta.episode == null ||
+        switched.infohash.isEmpty ||
+        switched.streamType != StreamType.torrent ||
+        provider == SeriesSource.localService ||
+        provider == 'pikpak') {
+      return;
+    }
+    try {
+      final imdbId = meta.imdbId!;
+      final existing = await SeriesSourceService.getSources(imdbId);
+      // Only keep an existing binding in sync; never create one from a switch.
+      if (existing.isEmpty) return;
+      final source = SeriesSource(
+        torrentHash: switched.infohash,
+        torrentName: switched.name,
+        debridService: storedProviderKey(provider),
+        debridTorrentId: '',
+        boundAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      final currentPrimaryHash = existing.first.torrentHash;
+      final list = List<SeriesSource>.from(existing)
+        ..removeWhere((s) => s.torrentHash == source.torrentHash);
+      // Drop the source being switched away from (the previous primary), but
+      // not when the user re-selected the source that's already primary.
+      if (currentPrimaryHash != source.torrentHash && list.isNotEmpty) {
+        list.removeAt(0);
+      }
+      list.insert(0, source);
+      await SeriesSourceService.setSources(imdbId, list);
+    } catch (_) {}
   }
 
   /// Download a direct/external addon stream to device (parity with the old
