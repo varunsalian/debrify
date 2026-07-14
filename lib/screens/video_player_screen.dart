@@ -2426,6 +2426,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   ) async {
     _hideSourceSheet();
     _clearBufferingIndicator();
+    // Capture the episode we're on BEFORE swapping the playlist, so we can
+    // land on it in the new source instead of jumping to the pack's first
+    // entry (S1E1). Read from the current playlist entry (tracks auto-advance).
+    final se = _traktSeasonEpisode();
+    // Checkpoint the OUTGOING episode now, while _activePlaylist/_currentIndex
+    // still point at it — after the swap the index would resolve against the
+    // new playlist. _loadPlaylistIndex below is told to skip its own save.
+    await _saveResume();
+    if (!mounted) return;
     setState(() {
       _isTransitioning = true;
       _currentSourceIndex = sourceIndex;
@@ -2443,8 +2452,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _playlistIdentityToken++;
     });
 
-    // Load first entry of new playlist
-    await _loadPlaylistIndex(0, autoplay: true);
+    // Resume the SAME episode from the new source (a season/complete pack would
+    // otherwise restart at S1E1); _loadPlaylistIndex restores its saved
+    // position. Falls back to the first entry when the episode isn't found.
+    var targetIndex = 0;
+    if (se.season != null && se.episode != null) {
+      final idx = _seriesPlaylist
+              ?.findOriginalIndexBySeasonEpisode(se.season!, se.episode!) ??
+          -1;
+      if (idx >= 0) targetIndex = idx;
+    }
+    await _loadPlaylistIndex(targetIndex, autoplay: true, skipInitialSave: true);
     if (!mounted) return;
 
     // End transition (same pattern as _switchToStremioSource)
@@ -3097,7 +3115,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  Future<void> _loadPlaylistIndex(int index, {bool autoplay = false}) async {
+  Future<void> _loadPlaylistIndex(
+    int index, {
+    bool autoplay = false,
+    bool skipInitialSave = false,
+  }) async {
     if (_activePlaylist == null ||
         index < 0 ||
         index >= _activePlaylist!.length)
@@ -3111,7 +3133,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _stopTraktHeartbeat();
     _traktScrobble('stop');
 
-    await _saveResume();
+    // Callers that already checkpointed the outgoing episode (e.g. a source
+    // switch, which saves BEFORE swapping the playlist) skip this save so it
+    // can't write the current position against the newly-swapped playlist.
+    if (!skipInitialSave) {
+      await _saveResume();
+    }
     final entry = _activePlaylist![index];
     _currentIndex = index;
     _currentEpisodeMarkedAsFinished = false;
