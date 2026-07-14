@@ -2719,6 +2719,7 @@ class TorrentPlaybackService {
           color: const Color(0xFF10B981),
           title: 'Play now',
           subtitle: 'Stream it right away.',
+          pillLabel: 'Play',
           enabled: hasVideo,
           onTap: () => unawaited(_play(context, r, torrent,
               provider: provider,
@@ -2731,6 +2732,7 @@ class TorrentPlaybackService {
           color: const Color(0xFF3B82F6),
           title: 'Download to device',
           subtitle: 'Grab the file(s) via ${_label(provider)}.',
+          pillLabel: 'Download',
           onTap: () => unawaited(_download(context, r, torrent)),
         ),
         DebridActionItem(
@@ -2738,6 +2740,7 @@ class TorrentPlaybackService {
           color: const Color(0xFF8B5CF6),
           title: 'Add to playlist',
           subtitle: 'Save it to your playlist for later.',
+          pillLabel: 'Playlist',
           enabled: hasVideo,
           onTap: () =>
               unawaited(_addToPlaylist(context, r, torrent, provider, meta: meta)),
