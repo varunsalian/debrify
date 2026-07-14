@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -122,6 +123,11 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
   final PageController _pageController = PageController();
 
+  /// Drives the wide layout's horizontal channel dial. Needed on desktop so a
+  /// mouse (no DPAD focus to auto-scroll) can pan the row: a vertical wheel is
+  /// mapped to horizontal offset, and mouse/trackpad drag is enabled below.
+  final ScrollController _dialScroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -147,6 +153,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     _tick?.cancel();
     _settle?.cancel();
     _pageController.dispose();
+    _dialScroll.dispose();
     super.dispose();
   }
 
@@ -566,52 +573,81 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
           ),
           child: Padding(
             padding: const EdgeInsets.only(top: 10, bottom: 14),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              itemCount: dial.length,
-              itemBuilder: (context, i) {
-                final channel = dial[i];
-                widget.ensureLoaded(channel);
-                final node = _nodeFor(channel)!;
-                final np = _nowPlaying(channel);
-                return _DialCard(
-                  key: ValueKey(channel.id),
-                  channel: channel,
-                  ident: _identFor(channel),
-                  focusNode: node,
-                  nowPlaying: np,
-                  displayProgress: _displayProgress(channel, np),
-                  hideNowPlaying: widget.hideNowPlaying,
-                  loading: widget.loadingChannelIds.contains(channel.id),
-                  onFocused: () => _setActive(channel),
-                  onSelect: () => widget.onPlay(channel),
-                  onLongPress: () => _openActions(channel),
-                  onLeft: () {
-                    final live = widget.channels
-                        .where((c) => _nodeFor(c) != null)
-                        .toList();
-                    final cur =
-                        live.indexWhere((c) => c.id == channel.id);
-                    if (cur <= 0) {
-                      widget.onFocusSidebar();
-                    } else {
-                      _nodeFor(live[cur - 1])?.requestFocus();
-                    }
-                  },
-                  onRight: () {
-                    final live = widget.channels
-                        .where((c) => _nodeFor(c) != null)
-                        .toList();
-                    final cur =
-                        live.indexWhere((c) => c.id == channel.id);
-                    if (cur >= 0 && cur < live.length - 1) {
-                      _nodeFor(live[cur + 1])?.requestFocus();
-                    }
-                  },
-                  onUp: widget.onFocusHeader,
+            // Desktop can't move DPAD focus to auto-scroll and a vertical mouse
+            // wheel doesn't pan a horizontal list, so translate the wheel to a
+            // horizontal offset; ScrollConfiguration also enables mouse/trackpad
+            // drag. Touch and DPAD focus-scroll are unaffected.
+            child: Listener(
+              onPointerSignal: (signal) {
+                if (signal is! PointerScrollEvent) return;
+                if (!_dialScroll.hasClients) return;
+                // Only translate a VERTICAL wheel: a horizontal Scrollable
+                // already applies horizontal (dx) deltas itself, so handling
+                // those here too would double-scroll a trackpad swipe.
+                final dy = signal.scrollDelta.dy;
+                if (dy == 0) return;
+                final target = (_dialScroll.offset + dy).clamp(
+                  0.0,
+                  _dialScroll.position.maxScrollExtent,
                 );
+                _dialScroll.jumpTo(target);
               },
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: const {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.mouse,
+                    PointerDeviceKind.trackpad,
+                    PointerDeviceKind.stylus,
+                  },
+                ),
+                child: ListView.builder(
+                  controller: _dialScroll,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  itemCount: dial.length,
+                  itemBuilder: (context, i) {
+                    final channel = dial[i];
+                    widget.ensureLoaded(channel);
+                    final node = _nodeFor(channel)!;
+                    final np = _nowPlaying(channel);
+                    return _DialCard(
+                      key: ValueKey(channel.id),
+                      channel: channel,
+                      ident: _identFor(channel),
+                      focusNode: node,
+                      nowPlaying: np,
+                      displayProgress: _displayProgress(channel, np),
+                      hideNowPlaying: widget.hideNowPlaying,
+                      loading: widget.loadingChannelIds.contains(channel.id),
+                      onFocused: () => _setActive(channel),
+                      onSelect: () => widget.onPlay(channel),
+                      onLongPress: () => _openActions(channel),
+                      onLeft: () {
+                        final live = widget.channels
+                            .where((c) => _nodeFor(c) != null)
+                            .toList();
+                        final cur = live.indexWhere((c) => c.id == channel.id);
+                        if (cur <= 0) {
+                          widget.onFocusSidebar();
+                        } else {
+                          _nodeFor(live[cur - 1])?.requestFocus();
+                        }
+                      },
+                      onRight: () {
+                        final live = widget.channels
+                            .where((c) => _nodeFor(c) != null)
+                            .toList();
+                        final cur = live.indexWhere((c) => c.id == channel.id);
+                        if (cur >= 0 && cur < live.length - 1) {
+                          _nodeFor(live[cur + 1])?.requestFocus();
+                        }
+                      },
+                      onUp: widget.onFocusHeader,
+                    );
+                  },
+                ),
+              ),
             ),
           ),
         ),
