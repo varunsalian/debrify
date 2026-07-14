@@ -27,6 +27,12 @@ class CatalogItemDetailScreen extends StatefulWidget {
   /// Triggers the primary play action.
   final VoidCallback onPlay;
 
+  /// Resolves whether the title has prior progress and, for a series, the
+  /// season/episode [onPlay] would land on — so the button can read
+  /// "Start Watching" vs "Resume · S3E4". Null keeps the static "Play" label.
+  final Future<({bool started, int? season, int? episode})> Function()?
+  resumeInfoLoader;
+
   /// Opens the sources/episodes flow (was "Sources" / "Episodes" in the list).
   final VoidCallback onBrowse;
 
@@ -58,6 +64,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
     required this.item,
     required this.onPlay,
     required this.onBrowse,
+    this.resumeInfoLoader,
     this.isTelevision = false,
     this.showQuickPlay = true,
     this.hasBoundSource = false,
@@ -117,6 +124,14 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// the accent on immediately instead of staying stale until reopen.
   late bool _hasBoundSource = widget.hasBoundSource;
 
+  /// Primary-button resume state. Until loaded the button keeps its static "Play"
+  /// label; once resolved it reads "Start Watching" (no progress) or "Resume"
+  /// (+ an "S3E4" tag for series). Re-read when the player pops back.
+  bool _resumeLoaded = false;
+  bool _resumeStarted = false;
+  int? _resumeSeason;
+  int? _resumeEpisode;
+
   @override
   void initState() {
     super.initState();
@@ -140,7 +155,38 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _loadEnrichedMeta();
       _loadParentsGuide();
       _loadImdbEnrichment();
+      _loadResumeInfo();
     });
+  }
+
+  Future<void> _loadResumeInfo() async {
+    final loader = widget.resumeInfoLoader;
+    if (loader == null) return;
+    try {
+      final info = await loader();
+      if (!mounted) return;
+      setState(() {
+        _resumeLoaded = true;
+        _resumeStarted = info.started;
+        _resumeSeason = info.season;
+        _resumeEpisode = info.episode;
+      });
+    } catch (_) {
+      // Non-critical — leave the static label.
+    }
+  }
+
+  /// The primary-button label: "Start Watching" before any progress, otherwise
+  /// "Resume" with an OTT-style "· S3E4" tag for series. Falls back to the
+  /// static "Play" until the resume state resolves.
+  String get _primaryLabel {
+    final isMovie = _item.type != 'series';
+    if (!_resumeLoaded) return 'Play';
+    if (!_resumeStarted) return isMovie ? 'Play' : 'Start Watching';
+    if (isMovie || _resumeSeason == null || _resumeEpisode == null) {
+      return 'Resume';
+    }
+    return 'Resume · S${_resumeSeason}E$_resumeEpisode';
   }
 
   @override
@@ -156,6 +202,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   @override
   void didPopNext() {
     _refreshBoundState();
+    _loadResumeInfo();
   }
 
   /// Re-read this title's bound-source count and flip the Play accent to match.
@@ -1217,6 +1264,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         playFocus: _playFocus,
         browseFocus: _browseFocus,
         tv: widget.isTelevision,
+        playLabel: _primaryLabel,
         // TV only: the top row is the highest focusable widget, so a D-pad
         // "up" there reveals the header instead of dead-ending.
         onArrowUp: widget.isTelevision ? _scrollWideToTop : null,
@@ -1887,6 +1935,10 @@ class _ActionRow extends StatelessWidget {
   final FocusNode playFocus;
   final FocusNode browseFocus;
   final bool tv;
+
+  /// The primary button's label — progress-aware ("Start Watching" /
+  /// "Resume · S3E4"), computed by the host.
+  final String playLabel;
   final VoidCallback onPlay;
   final VoidCallback onBrowse;
 
@@ -1902,6 +1954,7 @@ class _ActionRow extends StatelessWidget {
     required this.playFocus,
     required this.browseFocus,
     required this.tv,
+    required this.playLabel,
     required this.onPlay,
     required this.onBrowse,
     this.onArrowUp,
@@ -1930,7 +1983,7 @@ class _ActionRow extends StatelessWidget {
     final play = _PrimaryButton(
       focusNode: playFocus,
       icon: Icons.play_arrow_rounded,
-      label: 'Play',
+      label: playLabel,
       filled: true,
       compact: compact,
       tv: tv,

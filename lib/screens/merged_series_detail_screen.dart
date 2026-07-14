@@ -8,6 +8,7 @@ import '../utils/dominant_color.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/playlist_view_mode.dart';
+import '../services/app_route_observer.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/storage_service.dart';
@@ -41,6 +42,12 @@ class MergedDetailScreen extends StatefulWidget {
   /// Movie: play the movie. Mirrors the detail screen's "Play".
   final VoidCallback onResume;
 
+  /// Resolves whether the title has prior progress and, for a series, the
+  /// season/episode [onResume] would land on — so the button can read
+  /// "Start Watching" vs "Resume · S3E4". Null keeps the static label.
+  final Future<({bool started, int? season, int? episode})> Function()?
+  resumeInfoLoader;
+
   /// Movie only: open the Sources list (manual pick). Ignored for series (the
   /// episode list is the picker). When null the Sources button is hidden.
   final VoidCallback? onBrowse;
@@ -73,6 +80,7 @@ class MergedDetailScreen extends StatefulWidget {
     required this.item,
     required this.addon,
     required this.onResume,
+    this.resumeInfoLoader,
     this.onBrowse,
     this.isTelevision = false,
     this.showQuickPlay = true,
@@ -93,7 +101,8 @@ class MergedDetailScreen extends StatefulWidget {
   State<MergedDetailScreen> createState() => _MergedDetailScreenState();
 }
 
-class _MergedDetailScreenState extends State<MergedDetailScreen> {
+class _MergedDetailScreenState extends State<MergedDetailScreen>
+    with RouteAware {
   // ── Stremio-flat palette (neutral glass + gold state) ──
   static const Color _bg = Color(0xFF0B0B0E);
   static const Color _gold = Color(0xFFF5B942);
@@ -156,6 +165,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
 
   StremioMeta get _item => _enriched ?? widget.item;
 
+  /// Primary-button resume state. Until loaded the button keeps its static
+  /// label; once resolved it reads "Start Watching" (no progress) or "Resume"
+  /// (+ an "S3E4" tag for series). Re-read when the player pops back.
+  bool _resumeLoaded = false;
+  bool _resumeStarted = false;
+  int? _resumeSeason;
+  int? _resumeEpisode;
+
   @override
   void initState() {
     super.initState();
@@ -167,7 +184,51 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
       _loadRecommendations();
       _loadTrailer();
       _loadAccent();
+      _loadResumeInfo();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) appRouteObserver.subscribe(this, route);
+  }
+
+  /// Playback (Resume, or an inline episode) pushes the player on top of this
+  /// screen, so it pops BACK here when playback ends — refresh the label then.
+  @override
+  void didPopNext() {
+    _loadResumeInfo();
+  }
+
+  Future<void> _loadResumeInfo() async {
+    final loader = widget.resumeInfoLoader;
+    if (loader == null) return;
+    try {
+      final info = await loader();
+      if (!mounted) return;
+      setState(() {
+        _resumeLoaded = true;
+        _resumeStarted = info.started;
+        _resumeSeason = info.season;
+        _resumeEpisode = info.episode;
+      });
+    } catch (_) {
+      // Non-critical — leave the static label.
+    }
+  }
+
+  /// The primary-button label: "Start Watching" before any progress, otherwise
+  /// "Resume" with an OTT-style "· S3E4" tag for series. Falls back to the
+  /// static Play/Resume label until the resume state resolves.
+  String get _primaryLabel {
+    if (!_resumeLoaded) return _isMovie ? 'Play' : 'Resume';
+    if (!_resumeStarted) return _isMovie ? 'Play' : 'Start Watching';
+    if (_isMovie || _resumeSeason == null || _resumeEpisode == null) {
+      return 'Resume';
+    }
+    return 'Resume · S${_resumeSeason}E$_resumeEpisode';
   }
 
   /// Pull a per-title accent from the poster (preferred — posters are more
@@ -185,6 +246,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _infoScroll.dispose();
     _leftEntryFocusNode.dispose();
     super.dispose();
@@ -935,7 +997,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen> {
         // has no episode list to auto-focus).
         if (widget.showQuickPlay)
           _PrimaryButton(
-            label: _isMovie ? 'Play' : 'Resume',
+            label: _primaryLabel,
             icon: Icons.play_arrow_rounded,
             onTap: widget.onResume,
             focusNode: _leftEntryFocusNode,

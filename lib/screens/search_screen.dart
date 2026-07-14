@@ -3286,6 +3286,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 showQuickPlay: !_pikpakOnly,
                 isTraktSource: isTraktSource,
                 heroTag: heroTag,
+                resumeInfoLoader: () =>
+                    _resolveResumeInfo(item, addon, isTraktSource: isTraktSource),
                 onResume: () => _onCatalogPlay(
                   item,
                   addon,
@@ -3342,6 +3344,8 @@ class _SearchScreenState extends State<SearchScreen> {
               showQuickPlay: !_pikpakOnly,
               // Gold-tint the Sources button when a source is already pinned.
               hasBoundSource: _isBound(item),
+              resumeInfoLoader: () =>
+                  _resolveResumeInfo(item, addon, isTraktSource: isTraktSource),
               onPlay: () =>
                   _onCatalogPlay(item, addon, isTraktSource: isTraktSource),
               onBrowse: () =>
@@ -4112,6 +4116,72 @@ class _SearchScreenState extends State<SearchScreen> {
         traktSource: isTraktSource,
       ),
     );
+  }
+
+  /// Read-only mirror of [_onCatalogPlay]'s resume resolution, used to label the
+  /// detail screen's primary button. Returns whether the title has prior
+  /// progress and, for a series, the season/episode a Play would actually land
+  /// on (the next episode when the last one was finished). Never plays — keep in
+  /// sync with [_onCatalogPlay].
+  Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
+    StremioMeta item,
+    StremioAddon addon, {
+    bool isTraktSource = false,
+  }) async {
+    // Trakt continue-watching (movie OR series): the paused/next position.
+    if (isTraktSource) {
+      final cw = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
+      if (cw != null) {
+        final sel = await TraktContinueWatchingService.instance
+            .selectionForItem(cw);
+        if (!mounted) return (started: false, season: null, episode: null);
+        if (sel != null) {
+          return (started: true, season: sel.season, episode: sel.episode);
+        }
+      }
+    }
+
+    // Movie: started == a saved playback position exists. No S/E tag.
+    if (item.type != 'series') {
+      final playId = item.imdbId ?? item.effectiveImdbId ?? item.id;
+      final st = await StorageService.getVideoPlaybackStateByImdbId(playId);
+      return (started: st != null, season: null, episode: null);
+    }
+
+    // Series: last-played episode (by imdbId, then title). Nothing found ⇒ not
+    // started (defaults to S01E01 only for display symmetry with the play path).
+    final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
+    final playId = ttId.isNotEmpty ? ttId : (item.effectiveImdbId ?? item.id);
+    int? season;
+    int? episode;
+    final byId = await StorageService.getLastPlayedEpisodeByImdbId(playId);
+    season = byId?['season'] as int?;
+    episode = byId?['episode'] as int?;
+    final lastFinished = byId?['finished'] == true;
+    if (season == null || episode == null) {
+      final byTitle = await StorageService.getLastPlayedEpisode(
+        seriesTitle: item.name,
+      );
+      season ??= byTitle?['season'] as int?;
+      episode ??= byTitle?['episode'] as int?;
+    }
+    final started = season != null && episode != null;
+    season ??= 1;
+    episode ??= 1;
+    // Finished the last episode ⇒ the button plays the NEXT one, so show it.
+    if (lastFinished) {
+      final next = await NextEpisodeService.findNextEpisode(
+        playId,
+        season,
+        episode,
+      );
+      if (!mounted) return (started: started, season: season, episode: episode);
+      if (next != null) {
+        season = next.season;
+        episode = next.episode;
+      }
+    }
+    return (started: started, season: season, episode: episode);
   }
 
   void _onCatalogBrowse(
