@@ -21,6 +21,10 @@ class DesktopNavEntry {
 /// label beneath the icon inside a highlighted rounded box (no floating
 /// tooltip, no rail expansion). TV keeps its focus-driven rail and mobile keeps
 /// the floating bar.
+///
+/// When [expanded] is true the rail is wider and every item's label is always
+/// visible beneath its icon — used on touch tablets (iPad / Android tablet in
+/// landscape) where there is no mouse hover to reveal the other labels.
 class DesktopSidebarNav extends StatelessWidget {
   /// Index into [entries] of the active screen.
   final int currentIndex;
@@ -29,13 +33,18 @@ class DesktopSidebarNav extends StatelessWidget {
   /// Called with the index into [entries] that was clicked.
   final ValueChanged<int> onTap;
 
+  /// Show every label permanently in a wider rail (touch tablets have no hover).
+  final bool expanded;
+
   static const double width = 90.0;
+  static const double expandedWidth = 128.0;
 
   const DesktopSidebarNav({
     super.key,
     required this.currentIndex,
     required this.entries,
     required this.onTap,
+    this.expanded = false,
   });
 
   @override
@@ -53,13 +62,14 @@ class DesktopSidebarNav extends StatelessWidget {
           icon: e.icon,
           label: e.label,
           selected: i == currentIndex,
+          alwaysShowLabel: expanded,
           onTap: () => onTap(i),
         ),
       );
     }
 
     return Container(
-      width: width,
+      width: expanded ? expandedWidth : width,
       decoration: const BoxDecoration(color: _kRailBg),
       foregroundDecoration: BoxDecoration(
         border: Border(
@@ -113,12 +123,16 @@ class _SidebarItem extends StatefulWidget {
   final IconData icon;
   final String label;
   final bool selected;
+
+  /// When true the label is shown regardless of hover/selection (touch tablets).
+  final bool alwaysShowLabel;
   final VoidCallback onTap;
 
   const _SidebarItem({
     required this.icon,
     required this.label,
     required this.selected,
+    required this.alwaysShowLabel,
     required this.onTap,
   });
 
@@ -133,8 +147,9 @@ class _SidebarItemState extends State<_SidebarItem> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final selected = widget.selected;
-    // The label shows for the active item and for any item on hover.
-    final showLabel = selected || _hovered;
+    // The label shows for the active item and for any item on hover — or
+    // always, on touch tablets where there is no hover to reveal it.
+    final showLabel = selected || _hovered || widget.alwaysShowLabel;
     final Color fg = selected
         ? _kAccent
         : (_hovered ? cs.onSurface : Colors.white.withValues(alpha: 0.6));

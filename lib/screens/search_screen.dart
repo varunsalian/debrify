@@ -393,6 +393,12 @@ class _SearchScreenState extends State<SearchScreen> {
   // "N sources didn't respond" note so failing addons don't just vanish.
   int _catalogSearchFailures = 0;
 
+  // Rows the user hid via Settings → Home Page → Home Rows (fixed-section
+  // leaves like `cw:movies`/`trakt:shows`/`fav:iptv` and catalog leaves
+  // `addonId:type:catalogId`). Gates every Home board row below. Refreshed by
+  // [_reloadForHomeSettings] when the manager saves.
+  Set<String> _homeDisabled = {};
+
   // Board infinite scroll. Every (addon, catalog) pair is enumerated up front in
   // [_boardRefs] (cheap — manifest metadata, no network), then fetched in batches
   // as the user nears the bottom. [_boardCursor] is the next ref to load; it
@@ -523,7 +529,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// non-empty groups are included. Each row carries its own progress lookup
   /// and open / quick-play handlers so local and Trakt sources coexist.
   List<_CwRow> get _cwRows => [
-    if (_cwEnabled && _cwMovies.isNotEmpty)
+    if (_cwEnabled &&
+        _cwMovies.isNotEmpty &&
+        !_homeDisabled.contains('cw:movies'))
       _CwRow(
         title: 'Continue Watching',
         tag: 'Movies',
@@ -535,7 +543,9 @@ class _SearchScreenState extends State<SearchScreen> {
         onQuickPlay: _onContinuePlay,
         onSeeAll: () => _openContinueWatchingSeeAll('movie'),
       ),
-    if (_cwEnabled && _cwSeries.isNotEmpty)
+    if (_cwEnabled &&
+        _cwSeries.isNotEmpty &&
+        !_homeDisabled.contains('cw:series'))
       _CwRow(
         title: 'Continue Watching',
         tag: 'Series',
@@ -547,7 +557,7 @@ class _SearchScreenState extends State<SearchScreen> {
         onQuickPlay: _onContinuePlay,
         onSeeAll: () => _openContinueWatchingSeeAll('series'),
       ),
-    if (_traktMovies.isNotEmpty)
+    if (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies'))
       _CwRow(
         title: 'Trakt Continue Watching',
         tag: 'Movies',
@@ -559,7 +569,7 @@ class _SearchScreenState extends State<SearchScreen> {
         onQuickPlay: _playTraktItem,
         onSeeAll: () => _openTraktSeeAll('movie'),
       ),
-    if (_traktSeries.isNotEmpty)
+    if (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows'))
       _CwRow(
         title: 'Trakt Continue Watching',
         tag: 'Shows',
@@ -577,9 +587,15 @@ class _SearchScreenState extends State<SearchScreen> {
   /// wiring between it and the first catalog row). Uses allocation-free field
   /// checks (not `_cwRows`) since it's read on the per-card build hot path.
   bool get _cwVisible =>
-      ((_cwEnabled && (_cwMovies.isNotEmpty || _cwSeries.isNotEmpty)) ||
-          _traktMovies.isNotEmpty ||
-          _traktSeries.isNotEmpty) &&
+      ((_cwEnabled &&
+                  ((_cwMovies.isNotEmpty &&
+                          !_homeDisabled.contains('cw:movies')) ||
+                      (_cwSeries.isNotEmpty &&
+                          !_homeDisabled.contains('cw:series')))) ||
+              (_traktMovies.isNotEmpty &&
+                  !_homeDisabled.contains('trakt:movies')) ||
+              (_traktSeries.isNotEmpty &&
+                  !_homeDisabled.contains('trakt:shows'))) &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
@@ -639,6 +655,12 @@ class _SearchScreenState extends State<SearchScreen> {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
+    // Home board only: live-refresh when the Home Rows manager changes which
+    // rows are hidden (on non-TV, Settings is a pushed route so the board isn't
+    // rebuilt on return; on TV a tab switch already reloads it fresh).
+    if (!widget.searchMode && !widget.discoverMode) {
+      MainPageBridge.addHomeSettingsListener(_reloadForHomeSettings);
+    }
     // Unified (non-TV) layout: drive the catalog Sources bar off search-field
     // focus, with a delayed hide so clicking the button doesn't yank it away
     // before the tap lands (blurring the field would otherwise unmount it
@@ -826,6 +848,7 @@ class _SearchScreenState extends State<SearchScreen> {
       MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
     }
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
+    MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
     _tintTimer?.cancel();
@@ -885,6 +908,20 @@ class _SearchScreenState extends State<SearchScreen> {
     _rowCol.clear();
   }
 
+  /// Re-read the hidden-rows set and reload the board if it actually changed.
+  /// Fires on any home-settings change (the broadcast is shared), so the
+  /// set-equality guard skips reloads for unrelated settings.
+  Future<void> _reloadForHomeSettings() async {
+    if (!mounted) return;
+    final disabled = await StorageService.getHomeDisabledSections();
+    if (!mounted) return;
+    final unchanged = disabled.length == _homeDisabled.length &&
+        disabled.containsAll(_homeDisabled);
+    if (unchanged) return;
+    setState(() => _homeDisabled = disabled);
+    _load();
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -892,6 +929,7 @@ class _SearchScreenState extends State<SearchScreen> {
     });
     unawaited(_refreshPikpakOnly());
     try {
+      _homeDisabled = await StorageService.getHomeDisabledSections();
       final addons = await _stremio.getCatalogAddons();
       if (!mounted) return;
       // Enumerate every BROWSABLE catalog across all addons — no global row cap.
@@ -899,12 +937,15 @@ class _SearchScreenState extends State<SearchScreen> {
       // scroll. Catalogs that require a `search` extra are search-only: browsing
       // them without a query just returns empty after a wasted round trip, so
       // skip them here (they still power the Keyword/catalog search path).
+      // Catalogs the user hid in the Home Rows manager are skipped too.
       _boardRefs
         ..clear()
         ..addAll([
           for (final a in addons)
             for (final c in a.catalogs)
-              if (c.isBrowsable) (a, c),
+              if (c.isBrowsable &&
+                  !_homeDisabled.contains('${a.id}:${c.type}:${c.id}'))
+                (a, c),
         ]);
       _boardCursor = 0;
       _addonsById.clear();
@@ -1316,14 +1357,24 @@ class _SearchScreenState extends State<SearchScreen> {
   // [_cwVisible]. Each has its own visibility so an empty source just drops out.
   bool get _iptvFavVisible =>
       _iptvFavChannels.isNotEmpty &&
+      !_homeDisabled.contains('fav:iptv') &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
   bool get _tvFavVisible =>
-      _tvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
+      _tvFavChannels.isNotEmpty &&
+      !_homeDisabled.contains('fav:debrify') &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
   bool get _stvFavVisible =>
-      _stvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
+      _stvFavChannels.isNotEmpty &&
+      !_homeDisabled.contains('fav:stremio') &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
   bool get _playlistFavVisible =>
-      _playlistItems.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
+      _playlistItems.isNotEmpty &&
+      !_homeDisabled.contains('fav:playlist') &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
 
   /// The visible favourites rows in render order: Playlist, Debrify TV, Stremio
   /// TV, then IPTV. This is the single source of truth for both rendering

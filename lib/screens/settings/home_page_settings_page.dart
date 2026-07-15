@@ -3,6 +3,8 @@ import '../../models/stremio_addon.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import '../../utils/platform_util.dart';
+import 'home_sections_filter_page.dart';
 import 'widgets/settings_widgets.dart';
 
 class HomePageSettingsPage extends StatefulWidget {
@@ -187,6 +189,31 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String _catalogKey(StremioAddonCatalog catalog) =>
       '${catalog.type}:${catalog.id}';
 
+  /// Open the two-pane Home Rows manager (which rows/catalogs appear on the
+  /// Home board). Feeds it the same browsable catalog tree the board uses;
+  /// notifies the board to rebuild if anything changed.
+  Future<void> _openHomeRowsManager() async {
+    final tree = [
+      for (final a in _addons)
+        (
+          addon: a,
+          catalogs: a.catalogs.where((c) => c.isBrowsable).toList(),
+        ),
+    ].where((e) => e.catalogs.isNotEmpty).toList();
+    final disabled = await StorageService.getHomeDisabledSections();
+    if (!mounted) return;
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => HomeSectionsFilterPage(
+          catalogTree: tree,
+          disabled: Set.of(disabled),
+          isTelevision: PlatformUtil.isAndroidTvCached,
+        ),
+      ),
+    );
+    if (changed == true) MainPageBridge.notifyHomeSettingsChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -212,6 +239,20 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                   subtitle: 'Choose what shows first when the app opens',
                 ),
                 const SizedBox(height: 24),
+
+                // Home Rows manager entry — hide/show individual Home rows.
+                Card(
+                  child: ListTile(
+                    leading:
+                        const Icon(Icons.dashboard_customize_rounded),
+                    title: const Text('Home Rows'),
+                    subtitle:
+                        const Text('Choose which rows appear on Home'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _openHomeRowsManager,
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // Main settings card
                 Card(

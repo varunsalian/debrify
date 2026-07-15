@@ -245,20 +245,19 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
     });
   }
 
-  void _setEverything(bool v) => _mutate(() {
-        for (final a in _addons) {
-          for (final c in a.cats) {
-            c.on.fillRange(0, c.on.length, v);
-          }
+  // Header actions target the SELECTED addon's catalogs (the 2nd pane), not
+  // every addon — so "All off" clears just the addon you're looking at. The
+  // genre wall keeps its own per-catalog All on/off.
+  void _setCurrentAddon(bool v) => _mutate(() {
+        for (final c in _addons[_selectedAddon].cats) {
+          c.on.fillRange(0, c.on.length, v);
         }
       });
 
-  void _invertEverything() => _mutate(() {
-        for (final a in _addons) {
-          for (final c in a.cats) {
-            for (var i = 0; i < c.on.length; i++) {
-              c.on[i] = !c.on[i];
-            }
+  void _invertCurrentAddon() => _mutate(() {
+        for (final c in _addons[_selectedAddon].cats) {
+          for (var i = 0; i < c.on.length; i++) {
+            c.on[i] = !c.on[i];
           }
         }
       });
@@ -302,6 +301,16 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   void _focusAfterFrame(FocusNode node) {
+    // If the node is already mounted (wide layout — both panes are always
+    // built), focus it NOW. A bare post-frame callback would never fire in
+    // that case: switching panes on the wide layout schedules no rebuild, so
+    // no frame runs to flush the callback and DPAD focus gets stuck on the
+    // current pane (the "can't reach the second pane" bug). In narrow mode the
+    // caller setState()s to build the target pane first, so defer until mount.
+    if (node.context != null) {
+      node.requestFocus();
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) node.requestFocus();
     });
@@ -395,11 +404,11 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
     if (isActivateKey(k)) {
       switch (i) {
         case 0:
-          _setEverything(true);
+          _setCurrentAddon(true);
         case 1:
-          _setEverything(false);
+          _setCurrentAddon(false);
         case 2:
-          _invertEverything();
+          _invertCurrentAddon();
       }
       return KeyEventResult.handled;
     }
@@ -752,11 +761,11 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
             onTap: () {
               switch (i) {
                 case 0:
-                  _setEverything(true);
+                  _setCurrentAddon(true);
                 case 1:
-                  _setEverything(false);
+                  _setCurrentAddon(false);
                 case 2:
-                  _invertEverything();
+                  _invertCurrentAddon();
               }
             },
             child: Container(

@@ -2394,6 +2394,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     body: Row(
                       children: [
                         DesktopSidebarNav(
+                          // Touch tablets (iPad / Android tablet in landscape)
+                          // have no mouse hover to reveal labels, so expand the
+                          // rail and show every label. True desktop keeps the
+                          // slim hover-reveal icon rail.
+                          expanded:
+                              !kIsWeb && (Platform.isAndroid || Platform.isIOS),
                           currentIndex: sidebarSelected == -1
                               ? 0
                               : sidebarSelected,
