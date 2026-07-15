@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_explode;
@@ -73,6 +74,13 @@ class YoutubeResolvedStreams {
   bool get hasPlayable => playUrl != null && playUrl!.isNotEmpty;
 }
 
+/// A resolved-streams cache entry with the time it was resolved (for TTL).
+class _ResolvedCacheEntry {
+  final YoutubeResolvedStreams streams;
+  final DateTime at;
+  const _ResolvedCacheEntry(this.streams, this.at);
+}
+
 /// Service for searching and resolving YouTube videos fully on-device.
 ///
 /// - **Search** uses YouTube's internal InnerTube API directly (the same
@@ -98,9 +106,6 @@ class YoutubeService {
   static const String _clientName = 'WEB';
   static const String _clientVersion = '2.20240101.00.00';
   static const Duration _httpTimeout = Duration(seconds: 15);
-
-  /// Long-lived extraction client (kept open for the app lifetime).
-  static final yt_explode.YoutubeExplode _yt = yt_explode.YoutubeExplode();
 
   /// Continuation token for the current search (for pagination).
   static String? _continuationToken;
@@ -251,14 +256,78 @@ class YoutubeService {
 
   // ============== Stream resolution (youtube_explode) ==============
 
+  /// Short-lived cache of successful resolves, keyed by videoId. googlevideo
+  /// stream URLs stay valid far longer than this TTL, so a hit is safe to play —
+  /// and it spares a second isolate + extraction when the detail page's trailer
+  /// prefetch and its Trailer button (or a re-open) resolve the same id.
+  static final Map<String, _ResolvedCacheEntry> _resolveCache = {};
+  static const Duration _resolveCacheTtl = Duration(minutes: 10);
+
+  /// Resolves in flight, keyed by videoId, so concurrent callers for the same id
+  /// (prefetch + Trailer button) share one isolate instead of spawning two.
+  static final Map<String, Future<YoutubeResolvedStreams?>> _resolveInFlight = {};
+
   /// Resolve a YouTube [videoId] into playable/downloadable stream URLs.
   ///
   /// For playback this prefers a high-res *video-only* H.264 stream at or below
   /// the user's preferred resolution (see [StorageService.getYoutubeMaxHeight])
   /// paired with a separate AAC audio stream (the player muxes them). For
   /// downloads it returns the best muxed single-file stream (has audio, ~360p).
-  static Future<YoutubeResolvedStreams?> resolveStreams(String videoId) async {
+  ///
+  /// Deduped by in-flight id + cached briefly; the heavy extraction runs off the
+  /// main isolate (see [_resolveStreamsBlocking]).
+  static Future<YoutubeResolvedStreams?> resolveStreams(String videoId) {
+    final cached = _resolveCache[videoId];
+    if (cached != null &&
+        DateTime.now().difference(cached.at) < _resolveCacheTtl) {
+      return Future.value(cached.streams);
+    }
+    final inFlight = _resolveInFlight[videoId];
+    if (inFlight != null) return inFlight;
+    final future = _resolveUncached(videoId);
+    _resolveInFlight[videoId] = future;
+    return future.whenComplete(() => _resolveInFlight.remove(videoId));
+  }
+
+  static Future<YoutubeResolvedStreams?> _resolveUncached(String videoId) async {
+    // Read the user's resolution cap on the MAIN isolate — SharedPreferences is
+    // a platform channel and isn't available in the background isolate below.
     final maxHeight = await StorageService.getYoutubeMaxHeight();
+    try {
+      // youtube_explode fetches the watch page, deciphers the signature cipher
+      // and parses a large player-response JSON — all synchronous CPU that would
+      // otherwise freeze the UI isolate (blocking DPAD/focus) for ~1s per client
+      // it tries. Run it in a throwaway background isolate so the main isolate
+      // only awaits (the network calls are already async).
+      final streams =
+          await Isolate.run(() => _resolveStreamsBlocking(videoId, maxHeight));
+      if (streams != null) {
+        // Prune expired entries so the cache stays bounded to the active window.
+        _resolveCache
+            .removeWhere((_, e) => DateTime.now().difference(e.at) >= _resolveCacheTtl);
+        _resolveCache[videoId] = _ResolvedCacheEntry(streams, DateTime.now());
+      }
+      return streams;
+    } catch (e) {
+      // Covers both isolate-spawn failures and any error rethrown from the
+      // extraction (the isolate lets errors propagate rather than swallowing
+      // them) — so a YouTube cipher/player-response break is still diagnosable.
+      debugPrint('YoutubeService: resolve failed for $videoId — $e');
+      return null;
+    }
+  }
+
+  /// The heavy resolution, run OFF the main isolate. Pure Dart (youtube_explode
+  /// is HTTP-only, no plugins/platform channels), so it's isolate-safe. The
+  /// [yt_explode.YoutubeExplode] instance (and any sockets) die with the isolate.
+  /// Errors propagate to [_resolveUncached] on the main isolate (where logging
+  /// works); only [yt_explode.YoutubeExplode.close] is guarded so a teardown
+  /// failure can't discard a valid result.
+  static Future<YoutubeResolvedStreams?> _resolveStreamsBlocking(
+    String videoId,
+    int maxHeight,
+  ) async {
+    final yt = yt_explode.YoutubeExplode();
     try {
       // Use the ANDROID_VR client: its googlevideo stream URLs open directly in
       // ffmpeg/mpv, whereas the default (ANDROID) client's URLs return HTTP 403
@@ -267,12 +336,12 @@ class YoutubeService {
       // extraction fails for a given video.
       yt_explode.StreamManifest manifest;
       try {
-        manifest = await _yt.videos.streamsClient.getManifest(
+        manifest = await yt.videos.streamsClient.getManifest(
           videoId,
           ytClients: [yt_explode.YoutubeApiClient.androidVr],
         );
       } catch (_) {
-        manifest = await _yt.videos.streamsClient.getManifest(videoId);
+        manifest = await yt.videos.streamsClient.getManifest(videoId);
       }
 
       // Best muxed single-file stream (download + playback fallback).
@@ -325,7 +394,7 @@ class YoutubeService {
       String? thumb;
       int? duration;
       try {
-        final video = await _yt.videos.get(videoId);
+        final video = await yt.videos.get(videoId);
         title = video.title;
         thumb = video.thumbnails.highResUrl;
         duration = video.duration?.inSeconds;
@@ -341,9 +410,12 @@ class YoutubeService {
         thumbnailUrl: thumb,
         durationSeconds: duration,
       );
-    } catch (e) {
-      debugPrint('YoutubeService: resolve failed for $videoId — $e');
-      return null;
+    } finally {
+      // Guarded: a close() failure must not replace a valid return value (or a
+      // legitimately-propagating extraction error) with a teardown exception.
+      try {
+        yt.close();
+      } catch (_) {}
     }
   }
 
