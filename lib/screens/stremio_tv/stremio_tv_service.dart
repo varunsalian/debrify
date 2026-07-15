@@ -171,6 +171,39 @@ class StremioTvService {
   /// Max number of pages to consider when picking a random page.
   static const int _maxPages = 50;
 
+  /// Cap on how many channels keep their loaded [StremioTvChannel.items] in
+  /// memory at once. Genre expansion yields hundreds of channels; a long surf
+  /// session used to permanently retain ~100 metas for EVERY channel visited,
+  /// steadily growing the heap on a 2 GB TV box until GC jank set in. LRU:
+  /// loading a new channel past the cap evicts the least-recently-loaded one
+  /// (its items just refetch on revisit, same as the 30-min staleness path).
+  /// Favorites keep their items on eviction (Home's rows read them) and local
+  /// channels are never tracked (their items can't be refetched). 30
+  /// comfortably covers the visible dial neighbourhood plus recent history.
+  static const int _maxLoadedChannels = 30;
+  final List<StremioTvChannel> _loadedLru = [];
+
+  /// Mark [channel] most-recently-used and evict past the cap.
+  ///
+  /// The LRU is strictly bounded at [_maxLoadedChannels] — this service is a
+  /// singleton and each screen visit re-discovers FRESH channel objects, so
+  /// any entry kept forever would pin a dead generation's items in memory.
+  /// Evicted favorites keep their items (Home's favorite rows re-read
+  /// `channel.items` from their live objects); dropping them from the LRU is
+  /// enough — once the owning screen is gone the object GCs whole.
+  void _touchLoadedChannel(StremioTvChannel channel) {
+    if (channel.isLocal) return;
+    _loadedLru.remove(channel);
+    _loadedLru.add(channel);
+    while (_loadedLru.length > _maxLoadedChannels) {
+      final oldest = _loadedLru.removeAt(0);
+      if (!oldest.isFavorite) {
+        oldest.items = const [];
+        oldest.lastFetched = null;
+      }
+    }
+  }
+
   /// Load items for a single channel from a random catalog page.
   /// Uses a deterministic hash of the channel ID to pick a page, so the
   /// same channel always loads the same page (until cache expires).
@@ -216,6 +249,7 @@ class StremioTvService {
 
       channel.items = items;
       channel.lastFetched = DateTime.now();
+      _touchLoadedChannel(channel);
     } catch (e) {
       debugPrint(
         'StremioTvService: Error loading items for ${channel.displayName}: $e',

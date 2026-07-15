@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 
 /// One action row in [showDebridActionSheet].
@@ -86,6 +87,16 @@ Future<void> showDebridActionSheet(
   );
 }
 
+/// Glass blur behind the sheet on phone/desktop; a no-op on TV where the
+/// backdrop blur's per-frame cost makes DPAD focus animations stutter.
+Widget _maybeBlur({required bool isTv, required Widget child}) {
+  if (isTv) return child;
+  return BackdropFilter(
+    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+    child: child,
+  );
+}
+
 class _NeonActionSheet extends StatelessWidget {
   final String providerLabel;
   final String torrentName;
@@ -107,6 +118,12 @@ class _NeonActionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // TV: skip the glass BackdropFilter. A live 18px backdrop blur is
+    // re-evaluated every frame anything above it animates — and every DPAD
+    // move runs a ~120ms focus animation, so item-to-item navigation dragged
+    // the blur along and felt sluggish on weak TV GPUs. The panel colour is
+    // 95% opaque anyway, so an opaque panel reads near-identically.
+    final isTv = PlatformUtil.isAndroidTvCached;
     // First three actions are the primaries (Play / Download / Playlist —
     // the order _showChooser builds); everything else goes to the quiet list.
     final pillCount = actions.length >= 4 ? 3 : actions.length;
@@ -144,11 +161,13 @@ class _NeonActionSheet extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: radius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: _maybeBlur(
+            isTv: isTv,
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xF212141D),
+                // Fully opaque on TV (no backdrop to see through); 95% glass
+                // over the blur elsewhere.
+                color: isTv ? const Color(0xFF12141D) : const Color(0xF212141D),
                 borderRadius: radius,
                 border:
                     Border.all(color: Colors.white.withValues(alpha: 0.10)),

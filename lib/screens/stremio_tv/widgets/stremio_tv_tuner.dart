@@ -158,7 +158,15 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   void _syncTick() {
     if (widget.autoRefresh) {
       _tick ??= Timer.periodic(const Duration(seconds: 15), (_) {
-        if (mounted) setState(() {});
+        if (!mounted) return;
+        // Skip the sweep while a pushed route (detail screen, player) or a
+        // modal sheet covers the tuner — the page stays mounted under it, and
+        // rebuilding every visible card 4×/minute behind an overlay is pure
+        // waste on a weak TV. The first tick after it's current again
+        // catches the progress bars up.
+        final route = ModalRoute.of(context);
+        if (route != null && !route.isCurrent) return;
+        setState(() {});
       });
     } else {
       _tick?.cancel();
@@ -169,6 +177,10 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   @override
   void didUpdateWidget(StremioTvTuner old) {
     super.didUpdateWidget(old);
+    // NB: always rebuild — the host mutates its channel list IN PLACE (empty-
+    // channel removal), so old.channels is the same object as widget.channels
+    // and an identical()/length guard can never detect the change. The O(n)
+    // walk is microseconds; correctness wins.
     _rebuildIndex();
     _syncTick();
     if (_activeId.value == null ||
@@ -269,7 +281,42 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
       // now-playing/progress, otherwise they'd drift out of sync with the
       // Stage after a slot rollover. One cheap rebuild per settle.
       if (!widget.autoRefresh) setState(() {});
+      _precacheNeighborBackdrops(id);
     });
+  }
+
+  /// Warm the image cache with the ADJACENT channels' Stage backdrops after a
+  /// surf settle, so the next left/right step swaps to an already-decoded
+  /// image instead of paying a full-screen decode mid-surf (the visible jank
+  /// when ranging across many channels). ±1 only: the TV image cache is
+  /// capped at 40 MB (~15 backdrops), so a wider net would evict more than it
+  /// warms. Decode params mirror the Stage's exactly — a mismatched width
+  /// would decode a SECOND copy instead of hitting the same cache entry.
+  void _precacheNeighborBackdrops(String id) {
+    if (!mounted) return;
+    final channels = widget.channels;
+    final idx = channels.indexWhere((c) => c.id == id);
+    if (idx < 0) return;
+    final width = widget.hideNowPlaying
+        ? 480
+        : (widget.isTelevision
+            ? HomeTheme.heroBackdropCacheWidthTv
+            : HomeTheme.heroBackdropCacheWidth);
+    for (final n in [idx - 1, idx + 1]) {
+      if (n < 0 || n >= channels.length) continue;
+      final item = _nowPlaying(channels[n])?.item;
+      final bg = item?.background ?? item?.poster;
+      if (bg == null || bg.isEmpty) continue;
+      unawaited(precacheImage(
+        ResizeImage.resizeIfNeeded(
+          width,
+          null,
+          CachedNetworkImageProvider(bg),
+        ),
+        context,
+        onError: (_, __) {}, // best-effort warm-up; the Stage has its own error path
+      ));
+    }
   }
 
   StremioTvChannel? _channelById(String? id) {

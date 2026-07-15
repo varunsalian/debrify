@@ -69,12 +69,58 @@ import 'services/update_service.dart';
 Future<void> _capImageCache() async {
   var isTv = false;
   try {
-    isTv = await AndroidNativeDownloader.isTelevision();
+    // Via PlatformUtil (not AndroidNativeDownloader) so this also warms
+    // PlatformUtil.isAndroidTvCached before runApp — the synchronous flag the
+    // theme's page-transition builder reads on every route push.
+    isTv = await PlatformUtil.isAndroidTV();
   } catch (_) {}
   if (!isTv) return; // leave non-TV devices on the framework defaults
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 90;
   cache.maximumSizeBytes = 40 << 20; // 40 MB
+}
+
+/// TV-aware page transition: on Android TV every push/pop animates a
+/// full-screen layer, and the default Material zoom transition (scale + fade +
+/// snapshotting) is visibly janky on weak TV GPUs — it's a big part of why the
+/// app doesn't feel native there. TV gets a plain fast fade instead: the
+/// incoming page fades in over the first 40% of the route animation (~120ms of
+/// the standard 300ms), which reads as an instant, native-style switch and
+/// costs one opacity layer. Phones keep the stock zoom transition untouched.
+///
+/// The TV check reads [PlatformUtil.isAndroidTvCached] per transition build —
+/// warmed in main() before runApp — so the ThemeData stays const/synchronous.
+class _TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
+  const _TvAwarePageTransitionsBuilder();
+
+  static const PageTransitionsBuilder _phoneDefault =
+      ZoomPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (PlatformUtil.isAndroidTvCached) {
+      return FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
+        ),
+        child: child,
+      );
+    }
+    return _phoneDefault.buildTransitions(
+      route,
+      context,
+      animation,
+      secondaryAnimation,
+      child,
+    );
+  }
 }
 
 Future<void> main() async {
@@ -277,6 +323,13 @@ class DebrifyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
+        // TV: fast fade instead of the Material zoom push/pop (see
+        // _TvAwarePageTransitionsBuilder). Phones/desktop keep their defaults.
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: _TvAwarePageTransitionsBuilder(),
+          },
+        ),
         colorScheme: const ColorScheme.dark(
           primary: Color(
             0xFF818CF8,
@@ -558,8 +611,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   final GlobalKey<TvSidebarNavState> _tvSidebarKey =
       GlobalKey<TvSidebarNavState>();
   // Whether the TV sidebar overlay is expanded — drives the dim scrim over the
-  // content behind it (depth, and pulls the eye to the open menu).
-  bool _tvSidebarExpanded = false;
+  // content behind it (depth, and pulls the eye to the open menu). A
+  // ValueNotifier, NOT setState: the sidebar toggles this on every focus
+  // enter/exit, and a MainScreen setState would rebuild the entire content
+  // page (a new page widget under the same AnimatedSwitcher key → full
+  // subtree rebuild of a ~3000-line screen) just to fade a scrim. The
+  // notifier scopes that to the scrim's ValueListenableBuilder alone.
+  final ValueNotifier<bool> _tvSidebarExpanded = ValueNotifier<bool>(false);
 
   // Remote control state
   bool _remoteControlEnabled = true;
@@ -864,6 +922,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.focusTvSidebar = null;
     MainPageBridge.isTvSidebarFocused = null;
     _animationController.dispose();
+    _tvSidebarExpanded.dispose();
     DeepLinkService().dispose();
     RemoteControlState().stop();
     _autoUpdateDownloadSub?.cancel();
@@ -2268,13 +2327,20 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         // Dim the content while the sidebar overlay is open —
                         // depth cue that pulls the eye to the menu. IgnorePointer
                         // always (it's purely visual); one fade, no blur, cheap.
+                        // ValueListenableBuilder so a sidebar focus enter/exit
+                        // rebuilds ONLY this scrim, never the content page.
                         Positioned.fill(
                           child: IgnorePointer(
-                            child: AnimatedOpacity(
-                              opacity: _tvSidebarExpanded ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOut,
-                              child: const ColoredBox(color: Color(0x8A05060E)),
+                            child: ValueListenableBuilder<bool>(
+                              valueListenable: _tvSidebarExpanded,
+                              builder: (context, expanded, _) =>
+                                  AnimatedOpacity(
+                                opacity: expanded ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 200),
+                                curve: Curves.easeOut,
+                                child:
+                                    const ColoredBox(color: Color(0x8A05060E)),
+                              ),
                             ),
                           ),
                         ),
@@ -2303,11 +2369,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               FocusScope.of(context).nextFocus();
                             },
                             onExpandedChanged: (expanded) {
-                              if (mounted &&
-                                  expanded != _tvSidebarExpanded) {
-                                setState(
-                                  () => _tvSidebarExpanded = expanded,
-                                );
+                              // No setState — see _tvSidebarExpanded's comment.
+                              if (mounted) {
+                                _tvSidebarExpanded.value = expanded;
                               }
                             },
                           ),
