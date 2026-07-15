@@ -515,7 +515,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _allDebridInfo,
         _pikpakInfo,
         _webDavInfo,
-        _redditInfo,
+        // Reddit source is retired — card hidden, settings code kept.
+        // _redditInfo,
         _iptvInfo,
         _traktInfo,
         _indexerManagersInfo,

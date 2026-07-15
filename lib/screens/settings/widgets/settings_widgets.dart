@@ -764,12 +764,13 @@ class ConnectionsSummary extends StatefulWidget {
 
 class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   // Focus nodes for grid navigation
-  // Layout (wide):
+  // Layout (wide) — the Reddit card is hidden (source retired), its
+  // ConnectionInfo/focus node are kept so nothing else has to change:
   // [realDebrid,  torbox]
   // [premiumize,  allDebrid]
   // [pikpak,      webDav]
-  // [indexerManagers, reddit]
-  // [iptv,        trakt]
+  // [indexerManagers, iptv]
+  // [trakt]
   late final FocusNode _torboxFocusNode;
   late final FocusNode _premiumizeFocusNode;
   late final FocusNode _allDebridFocusNode;
@@ -822,12 +823,12 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
             final double itemWidth = wide
                 ? (constraints.maxWidth - 10) / 2
                 : constraints.maxWidth;
-            // Grid layout (wide):
+            // Grid layout (wide) — Reddit card hidden, source retired:
             // [RD]         [Torbox]
             // [Premiumize] [AllDebrid]
             // [PikPak]     [WebDAV]
-            // [Indexers]   [Reddit]
-            // [IPTV]       [Trakt]
+            // [Indexers]   [IPTV]
+            // [Trakt]
             return Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -908,57 +909,48 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                     leftNeighbor: wide ? _pikpakFocusNode : null,
                     upNeighbor: wide ? _allDebridFocusNode : _pikpakFocusNode,
                     downNeighbor: wide
-                        ? _redditFocusNode
+                        ? _iptvFocusNode
                         : _indexerManagersFocusNode,
                   ),
                 ),
-                // Row 4: Indexer managers (left), Reddit (right)
+                // Row 4: Indexer managers (left), IPTV (right).
+                // The Reddit card that used to sit here is hidden — the
+                // source is retired but widget.reddit/_redditFocusNode are
+                // kept so the API and settings code stay untouched.
                 SizedBox(
                   width: itemWidth,
                   child: ConnectionCard(
                     info: widget.indexerManagers,
                     focusNode: _indexerManagersFocusNode,
                     isLeftColumn: true,
-                    rightNeighbor: wide ? _redditFocusNode : null,
+                    rightNeighbor: wide ? _iptvFocusNode : null,
                     upNeighbor: wide ? _pikpakFocusNode : _webDavFocusNode,
-                    downNeighbor: wide ? _iptvFocusNode : _redditFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.reddit,
-                    focusNode: _redditFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _indexerManagersFocusNode : null,
-                    upNeighbor: wide
-                        ? _webDavFocusNode
-                        : _indexerManagersFocusNode,
                     downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
                   ),
                 ),
-                // Row 5: IPTV (left), Trakt (right)
                 SizedBox(
                   width: itemWidth,
                   child: ConnectionCard(
                     info: widget.iptv,
                     focusNode: _iptvFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _traktFocusNode : null,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _indexerManagersFocusNode : null,
                     upNeighbor: wide
-                        ? _indexerManagersFocusNode
-                        : _redditFocusNode,
-                    downNeighbor: wide ? null : _traktFocusNode,
+                        ? _webDavFocusNode
+                        : _indexerManagersFocusNode,
+                    downNeighbor: _traktFocusNode,
                   ),
                 ),
+                // Row 5: Trakt (left)
                 SizedBox(
                   width: itemWidth,
                   child: ConnectionCard(
                     info: widget.trakt,
                     focusNode: _traktFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _iptvFocusNode : null,
-                    upNeighbor: wide ? _redditFocusNode : _iptvFocusNode,
+                    isLeftColumn: true,
+                    upNeighbor: wide
+                        ? _indexerManagersFocusNode
+                        : _iptvFocusNode,
                   ),
                 ),
               ],
