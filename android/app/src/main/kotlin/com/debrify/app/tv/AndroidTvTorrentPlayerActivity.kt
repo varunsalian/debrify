@@ -313,6 +313,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var pikPakReactivationIndicator: View
     private lateinit var pikPakReactivationText: TextView
     private var hasEverBeenReady = false
+    // Guards against falsely marking an item watched on Trakt. maxStableDurationMs
+    // is the largest duration ExoPlayer has reported this item; lastRealPositionMs
+    // is the most recent genuine playback position. A subtitle reload re-prepares
+    // the source and can make ExoPlayer briefly report a short duration or fire a
+    // spurious STATE_ENDED — either of which would otherwise inflate progress to
+    // ~100% and scrobble the item as fully watched. Both reset per item.
+    private var maxStableDurationMs: Long = 0L
+    private var lastRealPositionMs: Long = 0L
     private val bufferingHandler = Handler(Looper.getMainLooper())
     private var bufferingDebounceRunnable: Runnable? = null
 
@@ -420,6 +428,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
                 Player.STATE_ENDED -> {
                     hideBufferingIndicator()
+                    // Ignore a spurious end: if real playback never got near the full
+                    // (stable) duration, the source "ended" early — e.g. a subtitle
+                    // reload re-prepared it against an incomplete timeline. Reporting
+                    // it as completed would scrobble the item as fully watched on Trakt
+                    // and auto-advance, despite little of it being watched.
+                    val stableDur = maxStableDurationMs
+                    val genuineEnd = stableDur <= 0L ||
+                        lastRealPositionMs >= (stableDur * 0.9).toLong()
+                    if (!genuineEnd) {
+                        android.util.Log.w(
+                            "AndroidTvPlayer",
+                            "Ignoring spurious STATE_ENDED at ${lastRealPositionMs}ms of stable ${stableDur}ms"
+                        )
+                        return
+                    }
                     sendProgress(completed = true)
                     val model = payload ?: return
                     if (continuousShuffleEnabled) {
@@ -1706,6 +1729,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Reset buffering state for new content
         hasEverBeenReady = false
+        maxStableDurationMs = 0L
+        lastRealPositionMs = 0L
         hideBufferingIndicator()
         hideUpNextCard()
 
@@ -3782,6 +3807,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val duration = player.duration
 
         if (duration > 0) {
+            // Track the largest stable duration and the last genuine position so a
+            // later transient short-duration reading or a spurious STATE_ENDED can be
+            // recognised and not scrobbled as a full watch (see maxStableDurationMs).
+            if (duration > maxStableDurationMs) maxStableDurationMs = duration
+            if (currentPosition in 0..duration) lastRealPositionMs = currentPosition
+
             // Update Cinema Mode split time displays
             debrifyTimeCurrent?.text = formatTime(currentPosition)
             debrifyTimeTotal?.text = formatTime(duration)
@@ -5370,8 +5401,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun sendProgress(completed: Boolean) {
         val model = payload ?: return
         val item = model.items[currentIndex]
-        val position = if (completed) player?.duration ?: 0 else player?.currentPosition ?: 0
-        val duration = player?.duration ?: 0
+        // Use the largest stable duration seen — ExoPlayer can briefly report a
+        // short duration right after a subtitle reload re-prepares the source, which
+        // would otherwise inflate progress% and scrobble a false watch on Trakt.
+        val duration = maxOf(player?.duration ?: 0L, maxStableDurationMs)
+        val position = if (completed) duration else player?.currentPosition ?: 0
 
         // Update the item's progress in the payload for live UI updates
         val updatedItem = item.copy(
