@@ -5045,27 +5045,45 @@ class _SearchScreenState extends State<SearchScreen> {
                         },
                         child: ListView.builder(
                           controller: _kwScroll,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 10,
+                          ),
                           cacheExtent: 1200,
                           itemCount: _kwResults.length,
                           itemBuilder: (context, i) {
                             final t = _kwResults[i];
                             final selectable =
                                 !t.isDirectStream && !t.isExternalStream;
-                            return TorrentResultRow(
+                            final isStream = !selectable;
+                            final labels =
+                                _kwCache[t.infohash.toLowerCase()] ?? const [];
+                            final tags = isStream
+                                ? const <FormatTag>[]
+                                : FormatTagDetector.detect(t.name);
+                            return SourceRow(
                               key: ValueKey(
                                 '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
                               ),
-                              torrent: t,
-                              index: i,
+                              title: t.displayTitle,
+                              titleMaxLines: 2,
+                              subtitle: _kwRowSubtitle(t),
                               focusNode: _kwNodes[i],
                               isTelevision: widget.isTelevision,
-                              qualityTier: t.qualityTier,
-                              cacheLabels:
-                                  _kwCache[t.infohash.toLowerCase()] ??
-                                  const [],
+                              showPlayPill: widget.isTelevision,
+                              formatTags: tags,
+                              cacheLabel:
+                                  labels.isEmpty ? null : labels.join(' | '),
+                              streamBadge: t.isExternalStream
+                                  ? 'External'
+                                  : t.isDirectStream
+                                  ? 'Direct'
+                                  : null,
                               isSelectionMode: _kwSelectionMode && selectable,
                               isSelected: _kwSelected.contains(t.infohash),
+                              onCopy: selectable
+                                  ? () => _copyKwMagnet(t)
+                                  : null,
                               onTap: () {
                                 if (_kwSelectionMode && selectable) {
                                   _toggleKwSelection(t);
@@ -5104,7 +5122,6 @@ class _SearchScreenState extends State<SearchScreen> {
                                       _kwFreeze();
                                       _showKwStreamMenu(t, i);
                                     },
-                              onCopyMagnet: () => _copyKwMagnet(t),
                               onNavigateUp: () {
                                 _kwFreeze();
                                 if (i > 0) {
@@ -5197,6 +5214,23 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       ),
     );
+  }
+
+  /// `size · ↑seeders · ↓leechers · SOURCE · date` meta line for a keyword
+  /// row — same grammar as the Sources screen's rows (shared SourceRow look).
+  static String _kwRowSubtitle(Torrent t) {
+    final parts = <String>[];
+    if (t.isDirectStream || t.isExternalStream) {
+      if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+      return parts.join(' · ');
+    }
+    if (t.sizeBytes > 0) parts.add(_SourcesScreenState._fmtSize(t.sizeBytes));
+    if (t.seeders > 0) parts.add('↑ ${t.seeders}');
+    if (t.leechers > 0) parts.add('↓ ${t.leechers}');
+    if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+    final date = _SourcesScreenState._fmtDate(t.createdUnix);
+    if (date != null) parts.add(date);
+    return parts.join(' · ');
   }
 
   /// Display name for a source tab ('stremio:foo' → 'Foo').

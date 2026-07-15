@@ -34,6 +34,10 @@ class SourceRow extends StatefulWidget {
     this.streamBadge,
     this.isTelevision = false,
     this.showPlayPill = false,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onCopy,
+    this.titleMaxLines,
     this.onLongPress,
     this.onNavigateUp,
     this.onNavigateDown,
@@ -65,6 +69,20 @@ class SourceRow extends StatefulWidget {
   /// Show the "Play" pill when focused (TV). The tap still runs the configured
   /// activate action; the pill is an affordance, not a promise of "play".
   final bool showPlayPill;
+
+  /// Multi-select mode (keyword bulk actions): a leading check indicator
+  /// replaces the play affordance and [isSelected] accents the card.
+  final bool isSelectionMode;
+  final bool isSelected;
+
+  /// Copy-magnet affordance (keyword rows): a muted copy icon before the
+  /// chevron. Touch-only — not DPAD-focusable, matching TorrentResultRow.
+  final VoidCallback? onCopy;
+
+  /// Title line cap. Defaults to the layout's own rule (2 for the compact
+  /// row, 1 for the format-logo row); keyword rows pass 2 — raw release
+  /// names carry their meaning in the tail, so one line truncates too much.
+  final int? titleMaxLines;
 
   final VoidCallback? onLongPress;
   final VoidCallback? onNavigateUp;
@@ -172,7 +190,11 @@ class _SourceRowState extends State<SourceRow> {
         color: _isFocused ? _surfaceHi : _surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: _isFocused ? _accent : Colors.transparent,
+          color: _isFocused
+              ? _accent
+              : widget.isSelected
+                  ? _accent.withValues(alpha: 0.55)
+                  : Colors.transparent,
           width: 1.5,
         ),
         boxShadow: _isFocused
@@ -184,11 +206,31 @@ class _SourceRowState extends State<SourceRow> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            if (widget.isSelectionMode)
+              Padding(
+                padding: const EdgeInsets.only(right: 11),
+                child: Icon(
+                  widget.isSelected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 21,
+                  color: widget.isSelected ? _accent : _dim2,
+                ),
+              ),
             Expanded(child: _buildBody()),
-            if (widget.showPlayPill && _isFocused) ...[
+            if (widget.showPlayPill && _isFocused && !widget.isSelectionMode) ...[
               const SizedBox(width: 8),
               _playPill(),
             ],
+            if (widget.onCopy != null && !widget.isSelectionMode)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                iconSize: 18,
+                splashRadius: 18,
+                tooltip: 'Copy magnet',
+                onPressed: widget.onCopy,
+                icon: Icon(Icons.copy_rounded, color: _dim2),
+              ),
             const SizedBox(width: 8),
             Icon(
               Icons.chevron_right_rounded,
@@ -244,7 +286,7 @@ class _SourceRowState extends State<SourceRow> {
           ),
         Text(
           widget.title,
-          maxLines: widget.formatTags.isEmpty ? 2 : 1,
+          maxLines: widget.titleMaxLines ?? (widget.formatTags.isEmpty ? 2 : 1),
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: _fg,
