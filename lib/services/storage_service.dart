@@ -380,20 +380,15 @@ class StorageService {
   }
 
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
-  /// metadata addon provides one. Default: ON everywhere EXCEPT Android TV,
-  /// where autoplay + audio is heavy on weak boxes and intrusive on a shared
-  /// screen. Once the user toggles it (Settings → Home Page) their explicit
-  /// choice is stored and the per-device default no longer applies.
+  /// metadata addon provides one. Default: ON everywhere, including Android TV
+  /// (the TV backdrop now decodes through native ExoPlayer, so it's light enough
+  /// for weak boxes). Once the user toggles it (Settings → Home Page) their
+  /// explicit choice is stored and the default no longer applies.
   static Future<bool> getDetailTrailerAutoplayEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getBool('detail_trailer_autoplay_enabled');
     if (stored != null) return stored;
-    // Unset → per-device default. isTelevision() is false on non-Android.
-    bool isTv = false;
-    try {
-      isTv = await AndroidNativeDownloader.isTelevision();
-    } catch (_) {}
-    return !isTv;
+    return true;
   }
 
   static Future<void> setDetailTrailerAutoplayEnabled(bool enabled) async {
@@ -5073,6 +5068,37 @@ class StorageService {
     } else {
       await prefs.setString(
         _catalogSearchDisabledAddonsKey,
+        jsonEncode(disabled.toList()),
+      );
+    }
+  }
+
+  static const String _homeDisabledSectionsKey = 'home_disabled_sections_v1';
+
+  /// Get the set of Home-row IDs the user has hidden via the Home Page manager
+  /// (empty = every row shown). IDs are fixed-section leaves (e.g. `cw:movies`,
+  /// `trakt:shows`, `fav:iptv`) and catalog leaves (`addonId:type:catalogId`).
+  static Future<Set<String>> getHomeDisabledSections() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_homeDisabledSectionsKey);
+    if (json == null) return {};
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      return list.cast<String>().toSet();
+    } catch (e) {
+      debugPrint('Error reading home disabled sections: $e');
+      return {};
+    }
+  }
+
+  /// Save the set of hidden Home-row IDs.
+  static Future<void> setHomeDisabledSections(Set<String> disabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (disabled.isEmpty) {
+      await prefs.remove(_homeDisabledSectionsKey);
+    } else {
+      await prefs.setString(
+        _homeDisabledSectionsKey,
         jsonEncode(disabled.toList()),
       );
     }

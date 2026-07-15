@@ -6,12 +6,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart' as mk;
-import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 import '../services/app_route_observer.dart';
 import '../services/main_page_bridge.dart';
+import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
+import 'trailer_engine.dart';
 
 /// OTT-style "living backdrop": shows the static blurred [imageUrl] and, when
 /// [videoUrl] is supplied and enabled, crossfades to an audible, looping trailer in
@@ -103,11 +103,15 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// the ambient loop lands on actual footage (re-applied on each loop).
   static const Duration _introSkip = Duration(seconds: 5);
 
-  mk.Player? _player;
-  mkv.VideoController? _controller;
+  /// Cap the ExoPlayer render texture (TV only) — the backdrop never needs full
+  /// res, and trimming the per-frame GPU upload is what kills the TV stutter.
+  static const int _tvTrailerMaxHeight = 720;
+
+  TrailerEngine? _engine;
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<Duration>? _durSub;
+  StreamSubscription<void>? _errorSub;
   Timer? _startTimer;
 
   /// Auto-hides the foreground chrome (pause/seek/mute) a few seconds after the
@@ -167,7 +171,18 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// brought forward. Requires [_videoVisible] so promotion never fades the page
   /// out onto a still-buffering (blurred-poster / black) surface — during the
   /// buffer window the parent falls back to launching the standalone player.
-  bool get canPromote => _player != null && _videoVisible;
+  bool get canPromote => _engine != null && _videoVisible;
+
+  /// TV (Android) gets the native ExoPlayer-into-a-Texture engine — libmpv
+  /// stutters decoding the trailer on weak TV SoCs. Everything else keeps the
+  /// proven media_kit path.
+  TrailerEngine _createEngine() {
+    final useExo =
+        !kIsWeb && Platform.isAndroid && PlatformUtil.isAndroidTvCached;
+    return useExo
+        ? ExoTrailerEngine(maxHeight: _tvTrailerMaxHeight)
+        : MediaKitTrailerEngine();
+  }
 
   @override
   void initState() {
@@ -193,7 +208,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     if (route is PageRoute) appRouteObserver.subscribe(this, route);
     // Handles the first-build-with-a-url case (e.g. a cached stream). The far
     // more common async-arrival case is handled by didUpdateWidget.
-    if (_canPlay && _player == null && _startTimer == null) _scheduleStart();
+    if (_canPlay && _engine == null && _startTimer == null) _scheduleStart();
   }
 
   @override
@@ -205,18 +220,18 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     if (urlChanged || widget.enabled != old.enabled) {
       if (!_canPlay) {
         _teardownPlayer();
-      } else if (urlChanged && _player != null) {
+      } else if (urlChanged && _engine != null) {
         // The URL changed under a live player — restart on the new media.
         _teardownPlayer();
         _scheduleStart();
-      } else if (_player == null) {
+      } else if (_engine == null) {
         _scheduleStart();
       }
     }
 
     // Foreground promotion / demotion.
     if (widget.foreground != old.foreground) {
-      if (widget.foreground && _player != null) {
+      if (widget.foreground && _engine != null) {
         _enterForeground();
       } else if (widget.foreground) {
         // Asked to promote with no live player (teardown raced the promote) —
@@ -257,83 +272,81 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   }
 
   Future<void> _initPlayer() async {
-    if (_player != null) return;
+    if (_engine != null) return;
     final url = widget.videoUrl;
     if (url == null || url.isEmpty) return;
-    // Idempotent; the main player initializes it too, but guard in case the
-    // trailer is the first media_kit surface in this session.
-    mk.MediaKit.ensureInitialized();
-    final player = mk.Player();
-    final controller = mkv.VideoController(player);
-    _player = player;
-    _controller = controller;
+
+    final engine = _createEngine();
+    _engine = engine;
 
     // Subscribe synchronously, before any await, so a teardown landing in the
     // await window below cancels these subscriptions instead of orphaning them.
-    _playingSub = player.stream.playing.listen((playing) {
+    _playingSub = engine.playingStream.listen((playing) {
       if (!mounted) return;
       setState(() => _playing = playing);
       _syncPlayingNotification();
     });
     // Reveal the video (and tell the parent "playing") only once the first
-    // frame has actually RENDERED — `stream.playing` flips true the moment
-    // open() starts, long before frames exist, which would kill the loading
-    // spinner early and crossfade onto a black/buffering surface.
-    controller.waitUntilFirstFrameRendered.then((_) {
-      if (!mounted || _controller != controller || _videoVisible) return;
+    // frame has actually RENDERED — `playing` flips true the moment open()
+    // starts, long before frames exist, which would kill the loading spinner
+    // early and crossfade onto a black/buffering surface.
+    engine.firstFrameRendered.then((_) {
+      if (!mounted || _engine != engine || _videoVisible) return;
       // Jump past the intro/rating card so the ambient loop shows footage.
       // Skip only when the clip is comfortably longer than the cut (or its
       // duration isn't known yet — trailers are minutes long, so assume it is).
       final dur = _duration;
       final longEnough =
           dur == Duration.zero || dur > const Duration(seconds: 8);
-      if (!widget.foreground && longEnough) player.seek(_introSkip);
+      if (!widget.foreground && longEnough) engine.seek(_introSkip);
       setState(() => _videoVisible = true);
       _syncPlayingNotification();
     });
-    _posSub = player.stream.position.listen((p) {
+    // Fatal playback error (dead/expired stream), including mid-play after the
+    // trailer was already showing or promoted to fullscreen → tear down so we
+    // drop back to the poster (and, if foregrounded, back the user out) rather
+    // than freezing on the last frame.
+    _errorSub = engine.errorStream.listen((_) {
+      if (mounted && _engine == engine) _teardownPlayer();
+    });
+    _posSub = engine.positionStream.listen((p) {
       // Loop restart (position wrapped back to the start) → skip the intro
       // again. Ambient only: never fight a manual scrub or foreground seek.
       if (!widget.foreground &&
           !_scrubbing &&
           _lastPos > const Duration(seconds: 6) &&
           p < const Duration(seconds: 1)) {
-        player.seek(_introSkip);
+        engine.seek(_introSkip);
       }
       _lastPos = p;
       // Don't snap the thumb back to stale positions mid-drag.
       if (mounted && !_scrubbing) setState(() => _position = p);
     });
-    _durSub = player.stream.duration.listen((d) {
+    _durSub = engine.durationStream.listen((d) {
       if (mounted) setState(() => _duration = d);
     });
 
     try {
       // Ambient: audible-but-quiet + looping (sound plays in the backdrop too;
-      // the foreground mute chip is the user's off switch). Every player call
-      // sits inside the try with an identity re-check after each await: a
-      // teardown (URL switch, toggle off) can dispose [player] mid-await, and
-      // media_kit throws on use-after-dispose.
-      await player.setVolume(_userMuted ? 0 : _ambientVolume);
-      await player.setPlaylistMode(mk.PlaylistMode.single);
-      if (_player != player) return;
-      await player.open(mk.Media(url), play: true);
-      if (_player != player) return;
-      // YouTube rarely serves a muxed stream anymore, so [url] is usually
-      // video-only — mux the separate audio track in for sound (the same path
-      // the main player uses for high-res YouTube).
-      final audio = widget.audioUrl;
-      if (audio != null && audio.isNotEmpty) {
-        await player.setAudioTrack(mk.AudioTrack.uri(audio));
-      }
-      if (_player == player && widget.foreground) {
-        _applyVolume(foreground: true);
-      }
+      // the foreground mute chip is the user's off switch). A teardown (URL
+      // switch, toggle off) can detach [engine] mid-open; the engine aborts
+      // cleanly, and we re-check identity after.
+      await engine.open(
+        videoUrl: url,
+        // YouTube rarely serves a muxed stream anymore, so [url] is usually
+        // video-only — mux the separate audio track in for sound (the same
+        // path the main player uses for high-res YouTube).
+        audioUrl: widget.audioUrl,
+        volume: _userMuted ? 0 : _ambientVolume,
+        loop: true,
+      );
+      if (_engine != engine) return;
+      if (widget.foreground) _applyVolume(foreground: true);
     } catch (_) {
       // Bot-blocked / dead stream → stay on the static poster. Guarded: a
-      // STALE player's error (e.g. its open() aborting after a URL switch
-      // already tore it down) must not destroy the replacement player.
-      if (_player == player) _teardownPlayer();
+      // STALE engine's error (e.g. its open() aborting after a URL switch
+      // already tore it down) must not destroy the replacement engine.
+      if (_engine == engine) _teardownPlayer();
     }
   }
 
@@ -346,21 +359,25 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _posSub = null;
     _durSub?.cancel();
     _durSub = null;
-    final player = _player;
-    _player = null;
-    _controller = null;
+    _errorSub?.cancel();
+    _errorSub = null;
+    final engine = _engine;
+    _engine = null;
     _lastPos = Duration.zero;
     // Pause intent is player-scoped: a fresh player (URL switch, toggle
     // off→on) always opens with play:true, so a leftover pause from the
     // previous trailer must not suppress the new one's resume paths.
     _pausedByUser = false;
+    // Flip the engine's disposed flag NOW (sync) so any in-flight open() bails
+    // and stale control calls no-op — but defer the surface release below.
+    engine?.detach();
     if (mounted) setState(() => _videoVisible = false);
     // Change-detected: no-ops for a benign teardown that never started a player
     // (so it can't kill the parent's loading spinner), fires false when a live
     // ambient trailer actually stops.
     _syncPlayingNotification();
     // Nothing to dispose / rescue if no player existed.
-    if (player == null) return;
+    if (engine == null) return;
     // If the stream died while foregrounded, the page content is faded out and
     // input-blocked with no controls left to paint — ask the parent to back out
     // so the user isn't stranded on a frozen surface.
@@ -369,9 +386,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         (_) => widget.onRequestClose?.call(),
       );
     }
-    // Dispose only after this frame's rebuild has dropped the Video widget, so it
-    // never renders against a disposed controller.
-    WidgetsBinding.instance.addPostFrameCallback((_) => player.dispose());
+    // Dispose only after this frame's rebuild has dropped the Video/Texture, so
+    // it never renders against a disposed controller.
+    WidgetsBinding.instance.addPostFrameCallback((_) => engine.dispose());
   }
 
   // ── Foreground promotion ────────────────────────────────────────────────────
@@ -384,7 +401,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _showControlsTemporarily();
     _fg.forward();
     _applyVolume(foreground: true);
-    _player?.play();
+    _engine?.play();
   }
 
   void _exitForeground() {
@@ -395,7 +412,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     // Respect an explicit pause: if the user paused in the player, the ambient
     // backdrop stays paused too (re-tapping Trailer re-promotes and resumes).
     // Only auto-resume the ambient loop when it wasn't paused on purpose.
-    if (!_pausedByUser) _player?.play();
+    if (!_pausedByUser) _engine?.play();
     _syncPlayingNotification();
   }
 
@@ -412,7 +429,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   /// Muted → 0; foreground → full; ambient → deliberately low.
   void _applyVolume({required bool foreground}) {
-    _player?.setVolume(
+    _engine?.setVolume(
       _userMuted ? 0 : (foreground ? _foregroundVolume : _ambientVolume),
     );
   }
@@ -427,7 +444,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// screen, playing, and not promoted to fullscreen. This is what the parent
   /// reflects as "trailer playing in background".
   bool get _activelyPlayingAmbient =>
-      _player != null && _videoVisible && _playing && !widget.foreground;
+      _engine != null && _videoVisible && _playing && !widget.foreground;
 
   /// Notify the parent only when the ambient-playing state actually changes.
   /// Change-detection also fixes the loading spinner: a benign teardown (no
@@ -446,7 +463,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   }
 
   void _togglePlay() {
-    final p = _player;
+    final p = _engine;
     if (p == null) return;
     if (_playing) {
       _pausedByUser = true;
@@ -460,19 +477,33 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   // ── Single-decoder discipline ──────────────────────────────────────────────
 
+  /// On Android TV the trailer decodes through native ExoPlayer, which holds a
+  /// hardware H.264 codec even while merely paused. Real playback launches a
+  /// *separate* ExoPlayer (the fullscreen torrent activity), and weak TV SoCs
+  /// have a tiny decoder pool — a paused trailer can starve it and black-screen
+  /// the real video. So when the trailer is hidden (a route covers us, or the
+  /// app backgrounds as the native player takes over), fully release it and
+  /// re-create on return. Off-TV (media_kit) keeps the cheaper pause/resume.
+  bool get _releaseDecoderWhenHidden =>
+      !kIsWeb && Platform.isAndroid && PlatformUtil.isAndroidTvCached;
+
   @override
   void didPushNext() {
     _covered = true;
-    _player?.pause();
+    if (_releaseDecoderWhenHidden) {
+      _teardownPlayer();
+    } else {
+      _engine?.pause();
+    }
   }
 
   @override
   void didPopNext() {
     _covered = false;
     if (!_canPlay || _appPaused) return;
-    if (_player != null) {
+    if (_engine != null) {
       // Respect an explicit user pause of the foreground trailer.
-      if (!_pausedByUser) _player!.play();
+      if (!_pausedByUser) _engine!.play();
     } else {
       _scheduleStart();
     }
@@ -483,8 +514,8 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     if (state == AppLifecycleState.resumed) {
       _appPaused = false;
       if (_covered) return;
-      if (_player != null) {
-        if (!_pausedByUser) _player!.play();
+      if (_engine != null) {
+        if (!_pausedByUser) _engine!.play();
       } else if (mounted && _canPlay) {
         // The start timer may have fired (and skipped) while backgrounded —
         // give the trailer another dwell-delayed start now.
@@ -492,7 +523,13 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       }
     } else {
       _appPaused = true;
-      _player?.pause();
+      // Release the hardware decoder on TV so the native fullscreen player can
+      // claim it (see [_releaseDecoderWhenHidden]); pause/resume elsewhere.
+      if (_releaseDecoderWhenHidden) {
+        _teardownPlayer();
+      } else {
+        _engine?.pause();
+      }
     }
   }
 
@@ -508,8 +545,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _playingSub?.cancel();
     _posSub?.cancel();
     _durSub?.cancel();
+    _errorSub?.cancel();
     _fg.dispose();
-    _player?.dispose();
+    _engine?.dispose();
     super.dispose();
   }
 
@@ -546,7 +584,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   @override
   Widget build(BuildContext context) {
-    final controller = _controller;
+    final engine = _engine;
     final t = _fg.value; // 0 ambient → 1 foreground
     final videoBlur = lerpDouble(widget.videoBlurSigma, 0, t)!;
 
@@ -575,31 +613,23 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         // 0. Branch on the static config, never the animated [videoBlur]: a
         // mid-promotion branch flip would re-parent the live Video widget and
         // flash the texture.
-        if (controller != null)
+        if (engine != null)
           AnimatedOpacity(
             opacity: _videoVisible ? 1 : 0,
             duration: const Duration(milliseconds: 650),
             curve: Curves.easeOut,
             child: widget.videoBlurSigma <= 0
-                ? mkv.Video(
-                    controller: controller,
-                    controls: null,
-                    fit: BoxFit.cover,
-                  )
+                ? engine.buildVideo(fit: BoxFit.cover)
                 : ImageFiltered(
                     imageFilter: ImageFilter.blur(
                       sigmaX: videoBlur,
                       sigmaY: videoBlur,
                     ),
-                    child: mkv.Video(
-                      controller: controller,
-                      controls: null,
-                      fit: BoxFit.cover,
-                    ),
+                    child: engine.buildVideo(fit: BoxFit.cover),
                   ),
           ),
         // Foreground controls — only interactive/painted while promoted.
-        if (t > 0.01 && controller != null) _buildForegroundControls(t),
+        if (t > 0.01 && engine != null) _buildForegroundControls(t),
       ],
     );
   }
@@ -627,7 +657,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       final delta = key == LogicalKeyboardKey.arrowRight ? 10 : -10;
       var target = _position + Duration(seconds: delta);
       if (target < Duration.zero) target = Duration.zero;
-      _player?.seek(target);
+      _engine?.seek(target);
       _showControlsTemporarily();
       return KeyEventResult.handled;
     }
@@ -768,7 +798,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
                         milliseconds: (v * durMs).round(),
                       );
                       setState(() => _position = target);
-                      _player?.seek(target);
+                      _engine?.seek(target);
                     },
               onChangeEnd: durMs == 0
                   ? null

@@ -25,6 +25,9 @@ class MainActivity : FlutterActivity() {
     private val ANDROID_TV_CHANNEL = "com.debrify.app/android_tv_player"
     private val REMOTE_CONTROL_CHANNEL = "com.debrify.app/remote_control"
 
+    // Inline texture-based ExoPlayer for the ambient trailer backdrop on TV.
+    private var tvTrailerPlayer: com.debrify.app.tv.TvTrailerTexturePlayer? = null
+
     companion object {
         @JvmStatic
         private var androidTvPlayerChannel: MethodChannel? = null
@@ -47,6 +50,12 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         ActivityTracker.currentActivity = this
+    }
+
+    override fun onDestroy() {
+        tvTrailerPlayer?.releaseAll()
+        tvTrailerPlayer = null
+        super.onDestroy()
     }
 
     override fun onPause() {
@@ -287,6 +296,27 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        }
+
+        // Inline ExoPlayer texture surface for the ambient trailer backdrop —
+        // TV only (the Dart side only selects the Exo engine on Android TV, so
+        // there's no reason to stand up the native player + channel elsewhere).
+        // Release any prior instance first in case configureFlutterEngine runs
+        // again on a reused engine without an intervening onDestroy.
+        tvTrailerPlayer?.releaseAll()
+        tvTrailerPlayer = null
+        val isTelevision = try {
+            (getSystemService(UI_MODE_SERVICE) as UiModeManager)
+                .currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+        } catch (e: Exception) {
+            false
+        }
+        if (isTelevision) {
+            tvTrailerPlayer = com.debrify.app.tv.TvTrailerTexturePlayer(
+                this,
+                flutterEngine.renderer,
+                flutterEngine.dartExecutor.binaryMessenger,
+            )
         }
 
         // Remote control channel for injecting key events and text
