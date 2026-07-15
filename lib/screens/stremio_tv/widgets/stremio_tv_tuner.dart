@@ -942,13 +942,27 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                     child: art,
                   );
                 }
-                art = ColorFiltered(
-                  colorFilter: ColorFilter.mode(
-                    Colors.black.withValues(alpha: 0.12),
-                    BlendMode.darken,
-                  ),
-                  child: art,
-                );
+                if (widget.isTelevision) {
+                  // A full-screen ColorFiltered(darken) is a saveLayer that
+                  // gets re-composited on every surf settle — heavy on TV. For
+                  // this subtle 12% darken a plain black overlay (srcOver) reads
+                  // the same but costs nothing: no saveLayer, no blend pass.
+                  art = Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      art,
+                      Container(color: Colors.black.withValues(alpha: 0.12)),
+                    ],
+                  );
+                } else {
+                  art = ColorFiltered(
+                    colorFilter: ColorFilter.mode(
+                      Colors.black.withValues(alpha: 0.12),
+                      BlendMode.darken,
+                    ),
+                    child: art,
+                  );
+                }
                 // Ken Burns breathe (Home hero recipe). Skipped in blur mode —
                 // re-running the 32px blur every zoom frame would hammer the
                 // weak TV GPU for motion that's invisible under the blur.
@@ -1761,7 +1775,12 @@ class _DialCardState extends State<_DialCard> {
                     : Colors.white.withValues(alpha: 0.06),
                 width: active ? 2.5 : 0.5,
               ),
-              boxShadow: active
+              // The AnimatedScale pop re-rasterizes any blur shadow every frame
+              // of the 140ms animation — on every DPAD move — which is what
+              // janks surfing on weak TV GPUs. So on TV the focus cue is the
+              // gold ring + scale only (no blurred bloom). Phone/desktop, which
+              // have the GPU headroom and no rapid DPAD surfing, keep the bloom.
+              boxShadow: (active && !widget.isTelevision)
                   ? [
                       BoxShadow(
                         color: HomeTheme.focusGoldDeep.withValues(alpha: 0.45),
@@ -1969,18 +1988,26 @@ class _DialCardState extends State<_DialCard> {
     // preview the channel in the hero above, mirroring DPAD focus. It does not
     // request keyboard focus, so it can't hijack remote navigation, and does
     // not auto-scroll (only real focus does), so a passing cursor stays put.
-    return MouseRegion(
-      onEnter: (_) {
-        if (!mounted) return;
-        if (!_hovered) setState(() => _hovered = true);
-        widget.onFocused();
-      },
-      // onExit can fire in a post-frame callback when the card is removed while
-      // the cursor is over it (list recycling on scroll), so guard mounted.
-      onExit: (_) {
-        if (mounted && _hovered) setState(() => _hovered = false);
-      },
-      child: card,
+    //
+    // RepaintBoundary confines this card's repaints to itself: the focus
+    // scale-pop repaints only the card you moved to (not the whole strip), and
+    // the tuner's 15s broadcast tick — a bare setState on the whole subtree —
+    // can't force neighbours to repaint, only cards whose progress changed.
+    return RepaintBoundary(
+      child: MouseRegion(
+        onEnter: (_) {
+          if (!mounted) return;
+          if (!_hovered) setState(() => _hovered = true);
+          widget.onFocused();
+        },
+        // onExit can fire in a post-frame callback when the card is removed
+        // while the cursor is over it (list recycling on scroll), so guard
+        // mounted.
+        onExit: (_) {
+          if (mounted && _hovered) setState(() => _hovered = false);
+        },
+        child: card,
+      ),
     );
   }
 
