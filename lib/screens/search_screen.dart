@@ -42,6 +42,7 @@ import '../utils/torrent_curation.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
 import '../widgets/add_source_picker_dialog.dart';
+import '../widgets/debrid_action_sheet.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
@@ -1552,7 +1553,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// The full action menu for a playlist item — the same set of actions as the
   /// Home playlist section (Home is being phased out, so this row is a complete
-  /// playlist manager on its own).
+  /// playlist manager on its own). Rendered with the post-torrent Neon action
+  /// sheet: bottom sheet on phones, centered card on desktop/TV, with the
+  /// first three actions as primary pills.
   Future<void> _onPlaylistItemTap(Map<String, dynamic> item) async {
     if (!mounted) return;
     final dedupeKey = StorageService.computePlaylistDedupeKey(item);
@@ -1560,113 +1563,90 @@ class _SearchScreenState extends State<SearchScreen> {
     final hasProgress = _playlistProgress.containsKey(dedupeKey);
     final isCollection = (item['kind'] as String?) != 'single';
     final title = (item['title'] as String?) ?? 'Unknown';
-    final tv = widget.isTelevision;
 
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => Center(
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 380),
-            decoration: BoxDecoration(
-              color: const Color(0xFF141824),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
-                _PlaylistMenuItem(
-                  icon: Icons.play_circle_filled_rounded,
-                  label: 'Play',
-                  subtitle: 'Start playback',
-                  color: const Color(0xFF10B981),
-                  autofocus: true,
-                  isTelevision: tv,
-                  onTap: () => Navigator.pop(dialogContext, 'play'),
-                ),
-                if (isCollection)
-                  _PlaylistMenuItem(
-                    icon: Icons.shuffle_rounded,
-                    label: 'Play Random',
-                    subtitle: 'Start a random file from this collection',
-                    color: const Color(0xFFA78BFA),
-                    isTelevision: tv,
-                    onTap: () => Navigator.pop(dialogContext, 'play_random'),
-                  ),
-                _PlaylistMenuItem(
-                  icon: Icons.folder_open_rounded,
-                  label: 'View Files',
-                  subtitle: 'Browse folder contents',
-                  color: const Color(0xFF818CF8),
-                  isTelevision: tv,
-                  onTap: () => Navigator.pop(dialogContext, 'view_files'),
-                ),
-                _PlaylistMenuItem(
-                  icon: isFavorited
-                      ? Icons.star_rounded
-                      : Icons.star_border_rounded,
-                  label: isFavorited
-                      ? 'Remove from Favorites'
-                      : 'Add to Favorites',
-                  subtitle: isFavorited
-                      ? 'Remove from your favorites list'
-                      : 'Add to your favorites list',
-                  color: const Color(0xFFFFD700),
-                  isTelevision: tv,
-                  onTap: () => Navigator.pop(dialogContext, 'favorite'),
-                ),
-                if (hasProgress)
-                  _PlaylistMenuItem(
-                    icon: Icons.replay_rounded,
-                    label: 'Clear Progress',
-                    subtitle: 'Reset playback progress',
-                    color: const Color(0xFF60A5FA),
-                    isTelevision: tv,
-                    onTap: () => Navigator.pop(dialogContext, 'clear_progress'),
-                  ),
-                _PlaylistMenuItem(
-                  icon: Icons.launch_rounded,
-                  label: 'Launch on Startup',
-                  subtitle: 'Auto-play this item when Debrify opens',
-                  color: const Color(0xFFEF4444),
-                  subtitleColor: const Color(0xFFFCA5A5),
-                  isTelevision: tv,
-                  onTap: () =>
-                      Navigator.pop(dialogContext, 'launch_on_startup'),
-                ),
-                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
-                _PlaylistMenuItem(
-                  icon: Icons.delete_outline_rounded,
-                  label: 'Delete',
-                  subtitle: 'Remove from playlist',
-                  color: const Color(0xFFEF4444),
-                  isTelevision: tv,
-                  onTap: () => Navigator.pop(dialogContext, 'delete'),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        ),
-      ),
+    // The sheet pops itself before running an action, so route every choice
+    // through the handler instead of awaiting a dialog result.
+    void run(String choice) => unawaited(
+      _handlePlaylistMenuChoice(choice, item, dedupeKey, isFavorited),
     );
 
-    if (choice == null || !mounted) return;
+    await showDebridActionSheet(
+      context,
+      providerLabel: 'Playlist',
+      torrentName: title,
+      gradient: const [Color(0xFF7B5CFF), Color(0xFF9B7BFF)],
+      providerIcon: Icons.playlist_play_rounded,
+      subtitle: isCollection
+          ? 'Saved collection. Choose your next step.'
+          : 'Saved item. Choose your next step.',
+      actions: [
+        DebridActionItem(
+          icon: Icons.play_circle_fill_rounded,
+          color: const Color(0xFF10B981),
+          title: 'Play',
+          subtitle: 'Start playback',
+          onTap: () => run('play'),
+        ),
+        if (isCollection)
+          DebridActionItem(
+            icon: Icons.shuffle_rounded,
+            color: const Color(0xFFA78BFA),
+            title: 'Play Random',
+            subtitle: 'Start a random file from this collection',
+            pillLabel: 'Random',
+            onTap: () => run('play_random'),
+          ),
+        DebridActionItem(
+          icon: Icons.folder_open_rounded,
+          color: const Color(0xFF818CF8),
+          title: 'View Files',
+          subtitle: 'Browse folder contents',
+          pillLabel: 'Files',
+          onTap: () => run('view_files'),
+        ),
+        DebridActionItem(
+          icon: isFavorited ? Icons.star_rounded : Icons.star_border_rounded,
+          color: const Color(0xFFFFD700),
+          title: isFavorited ? 'Remove from Favorites' : 'Add to Favorites',
+          subtitle: isFavorited
+              ? 'Remove from your favorites list'
+              : 'Add to your favorites list',
+          pillLabel: 'Favorite',
+          onTap: () => run('favorite'),
+        ),
+        if (hasProgress)
+          DebridActionItem(
+            icon: Icons.replay_rounded,
+            color: const Color(0xFF60A5FA),
+            title: 'Clear Progress',
+            subtitle: 'Reset playback progress',
+            onTap: () => run('clear_progress'),
+          ),
+        DebridActionItem(
+          icon: Icons.launch_rounded,
+          color: const Color(0xFFEF4444),
+          title: 'Launch on Startup',
+          subtitle: 'Auto-play this item when Debrify opens',
+          onTap: () => run('launch_on_startup'),
+        ),
+        DebridActionItem(
+          icon: Icons.delete_outline_rounded,
+          color: const Color(0xFFEF4444),
+          title: 'Delete',
+          subtitle: 'Remove from playlist',
+          onTap: () => run('delete'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handlePlaylistMenuChoice(
+    String choice,
+    Map<String, dynamic> item,
+    String dedupeKey,
+    bool isFavorited,
+  ) async {
+    if (!mounted) return;
     switch (choice) {
       case 'play':
         _playPlaylistItem(item);
@@ -7706,97 +7686,6 @@ class _ArtPosterState extends State<_ArtPoster> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A single row in the playlist item action menu ([_onPlaylistItemTap]). Ported
-/// from the Home playlist section so the Search Playlist row is a self-contained
-/// manager; keyboard/DPAD focusable with a highlight on focus.
-class _PlaylistMenuItem extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final Color color;
-  final Color? subtitleColor;
-  final VoidCallback onTap;
-  final bool autofocus;
-  final bool isTelevision;
-
-  const _PlaylistMenuItem({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-    this.subtitleColor,
-    this.autofocus = false,
-    this.isTelevision = false,
-  });
-
-  @override
-  State<_PlaylistMenuItem> createState() => _PlaylistMenuItemState();
-}
-
-class _PlaylistMenuItemState extends State<_PlaylistMenuItem> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      autofocus: widget.autofocus,
-      canRequestFocus: true,
-      onTap: widget.onTap,
-      onFocusChange: (f) => setState(() => _focused = f),
-      borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: widget.isTelevision ? 0 : 150),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: _focused
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: widget.color.withValues(alpha: _focused ? 0.2 : 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(widget.icon, size: 18, color: widget.color),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.label,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color:
-                          widget.subtitleColor ??
-                          Colors.white.withValues(alpha: 0.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
