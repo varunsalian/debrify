@@ -313,6 +313,17 @@ class _SearchScreenState extends State<SearchScreen> {
   /// unreachable by the remote — you couldn't pick sources before searching.
   final FocusNode _kwSourcesBtnFocus = FocusNode(debugLabel: 'kw_sources_btn');
 
+  /// DPAD focus for the catalog-mode "Sources" button (empty-prompt state) —
+  /// its keyword-mode twin, for picking which searchable addons are queried.
+  final FocusNode _catalogSourcesBtnFocus =
+      FocusNode(debugLabel: 'catalog_sources_btn');
+
+  /// Whether the unified (non-TV) catalog Sources bar under the field is shown.
+  /// Driven by search-field focus with a delayed hide (see
+  /// [_onSearchFocusForSources]) so a click on the button isn't lost.
+  bool _catalogSourcesBarShown = false;
+  Timer? _catalogSourcesHideTimer;
+
   /// Source tab strip (All / per-source), single-select on top of the
   /// Providers multi-select. Null = All.
   String? _kwSourceTab;
@@ -628,6 +639,13 @@ class _SearchScreenState extends State<SearchScreen> {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
+    // Unified (non-TV) layout: drive the catalog Sources bar off search-field
+    // focus, with a delayed hide so clicking the button doesn't yank it away
+    // before the tap lands (blurring the field would otherwise unmount it
+    // mid-click). See _buildUnifiedCatalogSourcesBar.
+    if (!widget.isTelevision && !widget.searchMode) {
+      _searchFocusNode.addListener(_onSearchFocusForSources);
+    }
     _boardScroll.addListener(_onBoardScroll);
     _kwScroll.addListener(() {
       if (_kwScroll.hasClients) _kwLastScroll = _kwScroll.offset;
@@ -815,6 +833,8 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroEnriched.dispose();
     _heroTint.dispose();
     _searchController.dispose();
+    _catalogSourcesHideTimer?.cancel();
+    _searchFocusNode.removeListener(_onSearchFocusForSources);
     _searchFocusNode.dispose();
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
@@ -823,6 +843,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _kwScroll.dispose();
     _kwPillFocus.dispose();
     _kwSourcesBtnFocus.dispose();
+    _catalogSourcesBtnFocus.dispose();
     for (final n in _kwTabNodes) {
       n.dispose();
     }
@@ -2052,7 +2073,13 @@ class _SearchScreenState extends State<SearchScreen> {
     // its spinner until every catalog is in and lands in one shot (see below).
     _applySections(const []);
     try {
-      final addons = await _stremio.getSearchableAddons();
+      // Honour the per-addon toggles from the catalog Sources dialog: skip
+      // addons the user disabled for catalog search (empty set = all queried).
+      final disabledAddons =
+          await StorageService.getCatalogSearchDisabledAddons();
+      final addons = (await _stremio.getSearchableAddons())
+          .where((a) => !disabledAddons.contains(a.id))
+          .toList();
       // One row PER searchable catalog (so Movies and Series land in separate
       // categorised rows, like Stremio) instead of one merged row per addon.
       final catalogTasks =
@@ -2350,6 +2377,14 @@ class _SearchScreenState extends State<SearchScreen> {
       !_kwLoading &&
       _kwError == null &&
       _kwQuery.isEmpty;
+
+  /// Catalog-mode twin of [_kwSourcesButtonVisible]: the Sources button shown
+  /// on the empty catalog prompt (Search tab, no query yet, not mid-search).
+  bool get _catalogSourcesButtonVisible =>
+      _mode == _Mode.catalog &&
+      widget.searchMode &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
 
   void _focusRow(int row, int column) {
     if (row >= _rowNodes.length) {
@@ -4779,11 +4814,67 @@ class _SearchScreenState extends State<SearchScreen> {
                   : Column(
                       children: [
                         _buildHeader(),
+                        _buildUnifiedCatalogSourcesBar(),
                         Expanded(child: _buildBody()),
                       ],
                     ),
         ),
       ),
+    );
+  }
+
+  /// Show/hide the unified catalog Sources bar as the search field gains/loses
+  /// focus. The hide is DELAYED: clicking the Sources button blurs the field,
+  /// and hiding synchronously would unmount the button before its onTap fires
+  /// (the bug where "clicking Sources does nothing"). The delay keeps it up
+  /// long enough for the tap; a re-focus within the window cancels the hide.
+  void _onSearchFocusForSources() {
+    if (_searchFocusNode.hasFocus) {
+      _catalogSourcesHideTimer?.cancel();
+      if (!_catalogSourcesBarShown) {
+        setState(() => _catalogSourcesBarShown = true);
+      }
+    } else {
+      _catalogSourcesHideTimer?.cancel();
+      _catalogSourcesHideTimer = Timer(
+        const Duration(milliseconds: 250),
+        () {
+          if (mounted && _catalogSourcesBarShown) {
+            setState(() => _catalogSourcesBarShown = false);
+          }
+        },
+      );
+    }
+  }
+
+  /// On the unified (non-TV) layout there's no dedicated Search tab, so the
+  /// catalog Sources button lives just under the search field and appears while
+  /// that field is focused (clicked into) in Catalog mode — click away and it
+  /// hides. TV keeps it in the dedicated Search tab's prompt instead, so this
+  /// renders nothing there.
+  Widget _buildUnifiedCatalogSourcesBar() {
+    if (widget.isTelevision || widget.searchMode) {
+      return const SizedBox.shrink();
+    }
+    final show = _catalogSourcesBarShown && _mode == _Mode.catalog;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      alignment: Alignment.topCenter,
+      child: !show
+          ? const SizedBox(width: double.infinity)
+          : Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _catalogSourcesButton(),
+                  ),
+                ),
+              ),
+            ),
     );
   }
 
@@ -4852,11 +4943,13 @@ class _SearchScreenState extends State<SearchScreen> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          // Pre-search keyword state: the Sources button is the only content,
-          // and _focusContent keeps focus on the field there — so target it
-          // directly, otherwise Down is a dead end and Sources is unreachable.
+          // Pre-search Sources button (keyword or catalog empty state) is the
+          // only content, and _focusContent keeps focus on the field there —
+          // so target it directly, otherwise Down is a dead end.
           if (_kwSourcesButtonVisible) {
             _kwSourcesBtnFocus.requestFocus();
+          } else if (_catalogSourcesButtonVisible) {
+            _catalogSourcesBtnFocus.requestFocus();
           } else {
             _focusContent();
           }
@@ -5021,10 +5114,100 @@ class _SearchScreenState extends State<SearchScreen> {
                 height: 1.4,
               ),
             ),
+            const SizedBox(height: 20),
+            // Pick which searchable addons the catalog search queries. Mirrors
+            // the keyword tab's Sources button; DPAD reaches it via the search
+            // field's Down (see _catalogSourcesButtonVisible).
+            _catalogSourcesButton(),
           ],
         ),
       ),
     );
+  }
+
+  /// "Sources" button for catalog search — opens a dialog to enable/disable
+  /// the search-capable addons, persisted across launches. Catalog-mode twin
+  /// of [_kwSourcesButton].
+  Widget _catalogSourcesButton() {
+    final scheme = Theme.of(context).colorScheme;
+    return Focus(
+      focusNode: _catalogSourcesBtnFocus,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+          _openCatalogSources();
+          return KeyEventResult.handled;
+        }
+        // Up returns to the search field, Left hands off to the sidebar.
+        if (key == LogicalKeyboardKey.arrowUp) {
+          _focusSearchFieldAtEnd();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          MainPageBridge.focusTvSidebar?.call();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: ListenableBuilder(
+        listenable: _catalogSourcesBtnFocus,
+        builder: (context, _) {
+          final focused = _catalogSourcesBtnFocus.hasFocus;
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _openCatalogSources,
+              borderRadius: BorderRadius.circular(999),
+              canRequestFocus: false,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: focused
+                        ? Colors.white.withValues(alpha: 0.9)
+                        : Colors.white.withValues(alpha: 0.10),
+                    width: 1.5,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.dns_rounded,
+                        size: 16, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Sources',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Open the catalog Sources dialog, then re-run the search if one is active
+  /// (so toggling an addon reflects immediately, like the keyword twin).
+  Future<void> _openCatalogSources() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const _CatalogSourcesDialog(),
+    );
+    if (!mounted) return;
+    if (_catalogQuery.isNotEmpty) {
+      _runCatalogSearch(_catalogQuery);
+    }
   }
 
   Widget _buildKeyword() {
@@ -10520,9 +10703,481 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   );
 }
 
-/// Active-sources checklist for keyword search: toggle which torrent engines
-/// are queried. Backed by [SettingsManager] (same store Home uses), so changes
-/// persist and apply to the next search.
+// ─── Shared Stremio-themed "Sources" dialog pieces (keyword + catalog) ───────
+
+/// A pill knob switch, purple when on. Purely visual — the parent row owns the
+/// tap/DPAD toggle so the whole row is one focus target.
+class _SrcMiniToggle extends StatelessWidget {
+  final bool value;
+  const _SrcMiniToggle({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      width: 44,
+      height: 26,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: value ? kStremioAccent : Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: AnimatedAlign(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          width: 20,
+          height: 20,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One toggle row in a Sources dialog: leading state chip, label (+ optional
+/// subtitle), trailing [_SrcMiniToggle]. Focusable — Select/OK or tap flips it,
+/// arrows fall through to directional focus so the list is DPAD-navigable.
+class _SrcToggleRow extends StatefulWidget {
+  final String label;
+  final String? subtitle;
+  final bool enabled;
+  final bool autofocus;
+  final ValueChanged<bool> onToggle;
+  const _SrcToggleRow({
+    required this.label,
+    required this.enabled,
+    required this.onToggle,
+    this.subtitle,
+    this.autofocus = false,
+  });
+
+  @override
+  State<_SrcToggleRow> createState() => _SrcToggleRowState();
+}
+
+class _SrcToggleRowState extends State<_SrcToggleRow> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = widget.enabled;
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: (f) => setState(() => _focused = f),
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+          widget.onToggle(!on);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => widget.onToggle(!on),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: _focused
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _focused
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : Colors.white.withValues(alpha: 0.06),
+              width: _focused ? 1.6 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: on
+                      ? kStremioAccent.withValues(alpha: 0.18)
+                      : Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  on ? Icons.check_circle_rounded : Icons.block_rounded,
+                  size: 18,
+                  color: on ? kStremioAccent : Colors.white.withValues(alpha: 0.3),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: on ? 0.95 : 0.55),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (widget.subtitle != null) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        widget.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              _SrcMiniToggle(value: on),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A focusable pill button for the Sources dialog header/footer actions
+/// (Enable all / Disable all / Done). Filled = purple primary (Done).
+class _SrcActionChip extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final bool filled;
+  final VoidCallback onTap;
+  const _SrcActionChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  @override
+  State<_SrcActionChip> createState() => _SrcActionChipState();
+}
+
+class _SrcActionChipState extends State<_SrcActionChip> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Focus(
+      onFocusChange: (f) => setState(() => _focused = f),
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: widget.filled
+                ? kStremioAccent.withValues(alpha: _focused ? 1.0 : 0.9)
+                : Colors.white.withValues(alpha: _focused ? 0.14 : 0.06),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: _focused
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : Colors.white.withValues(alpha: 0.12),
+              width: _focused ? 1.6 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                size: 16,
+                color: widget.filled ? Colors.white : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 7),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: widget.filled ? Colors.white : scheme.onSurface,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Stremio-themed shell for the Sources dialogs: dark glass card, purple icon
+/// chip header, optional Enable-all/Disable-all row, scrolling [body], Done.
+class _SrcDialogShell extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final Widget body;
+  final VoidCallback? onEnableAll;
+  final VoidCallback? onDisableAll;
+  const _SrcDialogShell({
+    required this.title,
+    required this.subtitle,
+    required this.body,
+    this.onEnableAll,
+    this.onDisableAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440, maxHeight: 580),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF16131F),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 34,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          // Group so DPAD directional focus stays inside the dialog and walks
+          // the rows/actions in a predictable order (mirrors the debrid action
+          // sheet, the app's proven TV-dialog pattern).
+          child: FocusTraversalGroup(
+            policy: ReadingOrderTraversalPolicy(),
+            child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF7B5CFF), Color(0xFF9B7BFF)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: const Icon(Icons.dns_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              fontSize: 12,
+                              height: 1.25,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onEnableAll != null || onDisableAll != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Row(
+                    children: [
+                      if (onEnableAll != null)
+                        _SrcActionChip(
+                          icon: Icons.done_all_rounded,
+                          label: 'Enable all',
+                          onTap: onEnableAll!,
+                        ),
+                      if (onDisableAll != null) ...[
+                        const SizedBox(width: 8),
+                        _SrcActionChip(
+                          icon: Icons.remove_done_rounded,
+                          label: 'Disable all',
+                          onTap: onDisableAll!,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              Flexible(child: body),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _SrcActionChip(
+                    icon: Icons.check_rounded,
+                    label: 'Done',
+                    filled: true,
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ),
+            ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _srcDialogMessage(String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      child: Text(
+        text,
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.6), height: 1.4),
+      ),
+    );
+
+Widget _srcDialogLoading() => const SizedBox(
+      height: 120,
+      child: Center(child: CircularProgressIndicator(color: kStremioAccent)),
+    );
+
+/// Enable/disable the search-capable Stremio addons queried by catalog search.
+/// Stores the DISABLED set (empty = all on) via StorageService so it sticks.
+class _CatalogSourcesDialog extends StatefulWidget {
+  const _CatalogSourcesDialog();
+
+  @override
+  State<_CatalogSourcesDialog> createState() => _CatalogSourcesDialogState();
+}
+
+class _CatalogSourcesDialogState extends State<_CatalogSourcesDialog> {
+  List<StremioAddon> _addons = [];
+  Set<String> _disabled = {};
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final addons = await StremioService.instance.getSearchableAddons();
+    final disabled = await StorageService.getCatalogSearchDisabledAddons();
+    if (!mounted) return;
+    setState(() {
+      _addons = addons;
+      _disabled = disabled;
+      _loading = false;
+    });
+  }
+
+  // Persist immediately so the choice sticks even if the app is killed before
+  // the dialog closes.
+  void _toggle(String addonId, bool enabled) {
+    setState(() {
+      if (enabled) {
+        _disabled.remove(addonId);
+      } else {
+        _disabled.add(addonId);
+      }
+    });
+    StorageService.setCatalogSearchDisabledAddons(_disabled);
+  }
+
+  void _enableAll() {
+    setState(() => _disabled = {});
+    StorageService.setCatalogSearchDisabledAddons(_disabled);
+  }
+
+  void _disableAll() {
+    setState(() => _disabled = _addons.map((a) => a.id).toSet());
+    StorageService.setCatalogSearchDisabledAddons(_disabled);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget body;
+    if (_loading) {
+      body = _srcDialogLoading();
+    } else if (_addons.isEmpty) {
+      body = _srcDialogMessage(
+        'No search-capable addons installed. Add a catalog addon that '
+        'supports search (e.g. Cinemeta) from Addons.',
+      );
+    } else {
+      body = ListView.builder(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+        shrinkWrap: true,
+        itemCount: _addons.length,
+        itemBuilder: (context, i) {
+          final a = _addons[i];
+          final searchable =
+              a.catalogs.where((c) => c.supportsSearch).length;
+          return _SrcToggleRow(
+            label: a.name,
+            subtitle: searchable > 1 ? '$searchable searchable catalogs' : null,
+            enabled: !_disabled.contains(a.id),
+            autofocus: i == 0,
+            onToggle: (v) => _toggle(a.id, v),
+          );
+        },
+      );
+    }
+    return _SrcDialogShell(
+      title: 'Search sources',
+      subtitle: 'Choose which addons catalog search queries.',
+      onEnableAll: _addons.isEmpty ? null : _enableAll,
+      onDisableAll: _addons.isEmpty ? null : _disableAll,
+      body: body,
+    );
+  }
+}
+
 class _KeywordSourcesDialog extends StatefulWidget {
   const _KeywordSourcesDialog();
 
@@ -10562,46 +11217,51 @@ class _KeywordSourcesDialogState extends State<_KeywordSourcesDialog> {
     });
   }
 
+  void _set(String name, bool v) {
+    setState(() => _enabled[name] = v);
+    _settings.setEnabled(name, v);
+  }
+
+  void _setAll(bool v) {
+    setState(() {
+      for (final e in _engines) {
+        _enabled[e.name] = v;
+      }
+    });
+    for (final e in _engines) {
+      _settings.setEnabled(e.name, v);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return AlertDialog(
-      backgroundColor: scheme.surfaceContainerHigh,
-      title: const Text('Active sources'),
-      content: SizedBox(
-        width: 360,
-        child: _loading
-            ? const SizedBox(
-                height: 80,
-                child: Center(child: CircularProgressIndicator()),
-              )
-            : _engines.isEmpty
-            ? const Text('No search sources installed.')
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: _engines.map((e) {
-                    final on = _enabled[e.name] ?? true;
-                    return SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      title: Text(e.displayName),
-                      value: on,
-                      onChanged: (v) {
-                        setState(() => _enabled[e.name] = v);
-                        _settings.setEnabled(e.name, v);
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
-        ),
-      ],
+    final Widget body;
+    if (_loading) {
+      body = _srcDialogLoading();
+    } else if (_engines.isEmpty) {
+      body = _srcDialogMessage('No search sources installed.');
+    } else {
+      body = ListView.builder(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+        shrinkWrap: true,
+        itemCount: _engines.length,
+        itemBuilder: (context, i) {
+          final e = _engines[i];
+          return _SrcToggleRow(
+            label: e.displayName,
+            enabled: _enabled[e.name] ?? true,
+            autofocus: i == 0,
+            onToggle: (v) => _set(e.name, v),
+          );
+        },
+      );
+    }
+    return _SrcDialogShell(
+      title: 'Search sources',
+      subtitle: 'Choose which trackers keyword search queries.',
+      onEnableAll: _engines.isEmpty ? null : () => _setAll(true),
+      onDisableAll: _engines.isEmpty ? null : () => _setAll(false),
+      body: body,
     );
   }
 }
