@@ -106,6 +106,13 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   /// page from anywhere.
   String _area = 'rail';
 
+  /// Narrow (phone / small window) layout: the 300px rail + list Row doesn't
+  /// fit, so the page shows ONE pane at a time and drills down instead.
+  /// [_narrow] is refreshed from the window width on every build;
+  /// [_narrowList] is true while the catalog list is the visible pane.
+  bool _narrow = false;
+  bool _narrowList = false;
+
   @override
   void initState() {
     super.initState();
@@ -300,6 +307,23 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
     });
   }
 
+  /// Moves to the catalog list. In narrow mode this swaps the visible pane
+  /// first, so the target node has a context to focus (post-frame).
+  void _showListPane({int? focusIndex}) {
+    if (_narrow && !_narrowList) setState(() => _narrowList = true);
+    if (focusIndex != null && _listNodes.isNotEmpty) {
+      _focusAfterFrame(
+        _listNodes[focusIndex.clamp(0, _listNodes.length - 1)],
+      );
+    }
+  }
+
+  /// Moves back to the addon rail (swapping panes in narrow mode).
+  void _showRailPane() {
+    if (_narrow && _narrowList) setState(() => _narrowList = false);
+    if (_railNodes.isNotEmpty) _focusAfterFrame(_railNodes[_selectedAddon]);
+  }
+
   void _openWall(_FilterCatalog c) {
     setState(() {
       _wall = c;
@@ -348,6 +372,17 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.arrowDown) {
+      // Narrow mode: land on whichever pane is actually visible — the
+      // remembered return area may belong to the hidden pane.
+      if (_narrow) {
+        if (_narrowList && _listNodes.isNotEmpty) {
+          _listNodes[_selectedCat.clamp(0, _listNodes.length - 1)]
+              .requestFocus();
+        } else if (_railNodes.isNotEmpty) {
+          _railNodes[_selectedAddon].requestFocus();
+        }
+        return KeyEventResult.handled;
+      }
       final (area, index) = _headerReturn;
       if (area == 'list' && index < _listNodes.length) {
         _listNodes[index].requestFocus();
@@ -397,10 +432,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
     }
     if (e is! KeyDownEvent) return KeyEventResult.handled;
     if (k == LogicalKeyboardKey.arrowRight) {
-      if (_listNodes.isNotEmpty) {
-        _listNodes[_selectedCat.clamp(0, _listNodes.length - 1)]
-            .requestFocus();
-      }
+      _showListPane(focusIndex: _selectedCat);
       return KeyEventResult.handled;
     }
     if (isActivateKey(k)) {
@@ -441,7 +473,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
         k == LogicalKeyboardKey.goBack) {
       // BACK from the catalog list steps out to the rail (platforms where
       // back arrives as a key event; system back goes through the PopScope).
-      _railNodes[_selectedAddon].requestFocus();
+      _showRailPane();
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.arrowRight) {
@@ -553,6 +585,10 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   @override
   Widget build(BuildContext context) {
     final (on, total) = _totals;
+    _narrow = MediaQuery.sizeOf(context).width < 640;
+    // A resize back to wide shows both panes again; drop the stale flag so
+    // BACK doesn't detour through _showRailPane.
+    if (!_narrow) _narrowList = false;
     return PopScope(
       // Back always routes through here and walks one level at a time:
       // genre wall → catalog list → addon rail → save & close.
@@ -561,8 +597,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
         if (didPop) return;
         if (_wall != null) {
           _closeWall();
-        } else if (_area == 'list' && _railNodes.isNotEmpty) {
-          _railNodes[_selectedAddon].requestFocus();
+        } else if ((_narrowList || _area == 'list') && _railNodes.isNotEmpty) {
+          _showRailPane();
         } else {
           _saveAndClose();
         }
@@ -598,62 +634,94 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _buildHeader(int on, int total) {
+    final backButton = IconButton(
+      // Explicit close affordance: skip the hierarchical BACK walk
+      // (maybePop would step list→rail first), just close the wall if
+      // open, then save & leave.
+      onPressed: () {
+        if (_wall != null) {
+          _closeWall();
+        } else {
+          _saveAndClose();
+        }
+      },
+      icon: Icon(
+        Icons.arrow_back_rounded,
+        color: Colors.white.withValues(alpha: 0.7),
+      ),
+    );
+    const title = Text(
+      'Channel Filters',
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: 19,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.2,
+      ),
+    );
+    final countPill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$on',
+              style: const TextStyle(
+                color: _onColor,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            // Narrow header trades the label for space.
+            TextSpan(text: _narrow ? ' / $total on' : ' / $total channels on'),
+          ],
+        ),
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.65),
+          fontSize: 12.5,
+        ),
+      ),
+    );
+    // Narrow: the single Row overflows, so stack — title line, then the
+    // count pill and actions wrapping onto as many lines as they need.
+    if (_narrow) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 16, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [backButton, const SizedBox(width: 4), title]),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  countPill,
+                  _actionButton(0, 'All on'),
+                  _actionButton(1, 'All off'),
+                  _actionButton(2, 'Invert'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
       child: Row(
         children: [
-          IconButton(
-            // Explicit close affordance: skip the hierarchical BACK walk
-            // (maybePop would step list→rail first), just close the wall if
-            // open, then save & leave.
-            onPressed: () {
-              if (_wall != null) {
-                _closeWall();
-              } else {
-                _saveAndClose();
-              }
-            },
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: Colors.white.withValues(alpha: 0.7),
-            ),
-          ),
+          backButton,
           const SizedBox(width: 4),
-          const Text(
-            'Channel Filters',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.2,
-            ),
-          ),
+          title,
           const SizedBox(width: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(99),
-            ),
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: '$on',
-                    style: const TextStyle(
-                      color: _onColor,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  TextSpan(text: ' / $total channels on'),
-                ],
-              ),
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.65),
-                fontSize: 12.5,
-              ),
-            ),
-          ),
+          countPill,
           const Spacer(),
           _actionButton(0, 'All on'),
           const SizedBox(width: 8),
@@ -732,6 +800,18 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   // ─── Two panes ────────────────────────────────────────────────────────────
 
   Widget _buildPanes() {
+    // Narrow: one pane at a time — the rail, or the selected addon's
+    // catalogs behind a breadcrumb.
+    if (_narrow) {
+      if (!_narrowList) return _buildRail();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildNarrowBreadcrumb(),
+          Expanded(child: _buildCatalogList()),
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -739,6 +819,41 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
         Container(width: 0.5, color: Colors.white.withValues(alpha: 0.07)),
         Expanded(child: _buildCatalogList()),
       ],
+    );
+  }
+
+  /// Narrow-mode header above the catalog list: tappable "‹ addon" trail
+  /// back to the rail (DPAD users get there with LEFT/BACK).
+  Widget _buildNarrowBreadcrumb() {
+    final a = _addons[_selectedAddon];
+    return GestureDetector(
+      onTap: _showRailPane,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
+        child: Row(
+          children: [
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+            const SizedBox(width: 2),
+            Flexible(
+              child: Text(
+                a.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -767,7 +882,12 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               return GestureDetector(
                 onTap: () {
                   _selectAddon(i);
-                  node.requestFocus();
+                  if (_narrow) {
+                    // Tap drills into the addon's catalogs on small screens.
+                    _showListPane(focusIndex: 0);
+                  } else {
+                    node.requestFocus();
+                  }
                 },
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 3),
@@ -824,7 +944,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                         ),
                       ),
                       // Focused cue: right opens this addon's catalogs.
-                      if (focused) ...[
+                      // Always shown when narrow — tap drills in there.
+                      if (focused || _narrow) ...[
                         const SizedBox(width: 4),
                         Icon(
                           Icons.chevron_right_rounded,
@@ -873,6 +994,41 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Touch affordance for opening a catalog's genre wall: a small bordered
+  /// chip that reads as a button (fill + outline + chevron), unlike the old
+  /// bare "▸ genres" text which looked like a status label.
+  Widget _genresButton() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: HomeTheme.chromeAccent.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: HomeTheme.chromeAccent.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Genres',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 15,
+            color: Colors.white.withValues(alpha: 0.8),
           ),
         ],
       ),
@@ -978,21 +1134,27 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                             _selectedCat = i;
                             _openWall(c);
                           },
+                          // Opaque so the padding counts toward the tap
+                          // target, not just the painted chip.
+                          behavior: HitTestBehavior.opaque,
                           child: Padding(
-                            padding: const EdgeInsets.only(right: 12),
-                            // Focused on TV: prominent "▸ GENRES" chip so the
-                            // hidden third level is discoverable; otherwise a
-                            // quiet tappable label.
-                            child: focused && widget.isTelevision
-                                ? _genresHintChip()
-                                : Text(
-                                    '▸ genres',
-                                    style: TextStyle(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.42),
-                                      fontSize: 11,
-                                    ),
-                                  ),
+                            padding: const EdgeInsets.fromLTRB(4, 8, 10, 8),
+                            // TV: quiet label, upgraded to the glassy
+                            // "▸ GENRES" chip on the focused row (RIGHT opens
+                            // it). Touch: a bordered button-looking chip on
+                            // every row, so users know it's tappable.
+                            child: widget.isTelevision
+                                ? (focused
+                                      ? _genresHintChip()
+                                      : Text(
+                                          '▸ genres',
+                                          style: TextStyle(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.42),
+                                            fontSize: 11,
+                                          ),
+                                        ))
+                                : _genresButton(),
                           ),
                         ),
                       _switchPill(on, c.total),
