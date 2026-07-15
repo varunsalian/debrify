@@ -560,6 +560,10 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
       // Non-blocking — tiles render immediately with the show-poster fallback.
       _enrichEpisodeThumbnails(show, seasons, generation);
 
+      // Backfill per-episode ratings from Trakt when the addon didn't supply
+      // real ones (Cinemeta sends rating:0). Non-blocking — ratings pop in.
+      _enrichEpisodeRatings(show, seasons, generation);
+
       // Scroll to (and focus) the target episode once its tile is built.
       // Robust against variable EpisodeTile height + lazy ListView building
       // (the old fixed focusIndex*128 estimate is wrong for the new tile).
@@ -578,6 +582,59 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
         _isLoadingEpisodes = false;
         _episodesUnavailable = true;
       });
+    }
+  }
+
+  /// Backfill per-episode ratings from Trakt's public seasons API, keyed off
+  /// the show's IMDb id. Runs only when NO episode already has a real rating —
+  /// i.e. an addon like Cinemeta returned `rating: 0` for everything. This is
+  /// exactly the rating source the Trakt fallback path uses, applied on top of
+  /// the addon's richer metadata (thumbnails, overviews, air dates). Best-effort
+  /// and non-blocking: any failure just leaves ratings unshown.
+  Future<void> _enrichEpisodeRatings(
+    StremioMeta show,
+    List<TraktSeason> seasons,
+    int generation,
+  ) async {
+    // Nothing to do if the episodes already carry real ratings.
+    final hasRealRating =
+        seasons.any((s) => s.episodes.any((e) => (e.rating ?? 0) > 0));
+    if (hasRealRating) return;
+
+    final imdbId = show.effectiveImdbId ?? show.id;
+    if (imdbId.isEmpty) return;
+
+    try {
+      final raw = await _traktService.fetchShowSeasons(imdbId);
+      if (!mounted || generation != _episodeModeGeneration) return;
+
+      // Build lookup: "S-E" → rating (only real, >0 ratings).
+      final ratingMap = <String, double>{};
+      for (final s in raw.map((s) => TraktSeason.fromJson(s))) {
+        for (final e in s.episodes) {
+          final r = e.rating;
+          if (r != null && r > 0) ratingMap['${e.season}-${e.number}'] = r;
+        }
+      }
+      if (ratingMap.isEmpty) return;
+
+      var changed = false;
+      for (final season in seasons) {
+        for (final episode in season.episodes) {
+          if ((episode.rating ?? 0) > 0) continue;
+          final r = ratingMap['${episode.season}-${episode.number}'];
+          if (r != null) {
+            episode.rating = r;
+            changed = true;
+          }
+        }
+      }
+
+      if (changed && mounted && generation == _episodeModeGeneration) {
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('EpisodesPanel: Trakt rating enrichment failed: $e');
     }
   }
 
@@ -1578,9 +1635,16 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
     final thumbUrl = (e.thumbnailUrl?.isNotEmpty ?? false)
         ? e.thumbnailUrl
         : widget.showImageUrl;
-    final subtitle = (e.overview?.isNotEmpty ?? false)
-        ? e.overview!
-        : (e.firstAired ?? '');
+    // The air date now has its own formatted meta line below the title, so the
+    // description no longer falls back to the raw date string — it's overview
+    // or nothing.
+    final subtitle = (e.overview?.isNotEmpty ?? false) ? e.overview! : '';
+    final airDate = e.formattedAirDate;
+    // Some addons (e.g. Cinemeta) send `imdbRating: 0` for episodes that have no
+    // rating rather than omitting it — treat 0/negative as "no rating" so we
+    // don't render a meaningless ★ 0.0 on every episode.
+    final rating = (e.rating != null && e.rating! > 0) ? e.rating : null;
+    final hasMeta = (airDate != null && airDate.isNotEmpty) || rating != null;
 
     return Focus(
       focusNode: widget.focusNode,
@@ -1730,6 +1794,50 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                           height: 1.2,
                         ),
                       ),
+                      // IMDb rating + air date, mirroring the series-level meta
+                      // bar in the left pane so each episode reads at a glance.
+                      if (hasMeta) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            if (rating != null) ...[
+                              const Icon(
+                                Icons.star_rounded,
+                                size: 12,
+                                color: Color(0xFFFACC15),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                rating.toStringAsFixed(1),
+                                style: const TextStyle(
+                                  color: Color(0xFFFACC15),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                            if (rating != null &&
+                                airDate != null &&
+                                airDate.isNotEmpty)
+                              Text(
+                                '  ·  ',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.4),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            if (airDate != null && airDate.isNotEmpty)
+                              Text(
+                                airDate,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.55),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                       if (subtitle.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(

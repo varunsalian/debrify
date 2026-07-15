@@ -4,7 +4,12 @@ class TraktEpisode {
   final int number;
   final String title;
   final String? overview;
-  final double? rating;
+
+  /// Community rating (0–10). Mutable so it can be backfilled from Trakt after
+  /// the episode list renders — addons like Cinemeta send `rating: 0` (no real
+  /// per-episode rating), which the Trakt seasons API fills in. See
+  /// EpisodesPanel._enrichEpisodeRatings.
+  double? rating;
   final String? firstAired;
   final int? runtime;
   final String? imdbId;
