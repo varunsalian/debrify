@@ -79,11 +79,6 @@ abstract final class SettingsRows {
     title: 'Player Settings',
     subtitle: 'Configure preferred video player',
   );
-  static const startup = SettingsRowContent(
-    icon: Icons.rocket_launch_rounded,
-    title: 'Startup',
-    subtitle: 'Decide what happens on app launch',
-  );
   static const remote = SettingsRowContent(
     icon: Icons.phonelink_rounded,
     title: 'Remote',

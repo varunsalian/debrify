@@ -38,7 +38,6 @@ import 'settings/real_debrid_settings_page.dart';
 import 'settings/reddit_settings_page.dart';
 import 'settings/iptv_settings_page.dart';
 import 'settings/home_page_settings_page.dart';
-import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/premiumize_settings_page.dart';
 import 'settings/alldebrid_settings_page.dart';
@@ -524,7 +523,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       firstFocusNode: _firstCardFocusNode,
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
-      onOpenStartupSettings: _openStartupSettings,
       onOpenRemoteControl: _openRemoteControl,
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenFilterSettings: _openFilterSettings,
@@ -571,7 +569,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenHomePageSettings: _openHomePageSettings,
-      onOpenStartupSettings: _openStartupSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
       isAndroidTv: _isAndroidTv,
@@ -658,12 +655,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openHomePageSettings() async {
     await pushSettingsPage(context, const HomePageSettingsPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openStartupSettings() async {
-    await pushSettingsPage(context, const StartupSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
@@ -1647,7 +1638,6 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenHomePageSettings;
-  final Future<void> Function() onOpenStartupSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
   final bool isAndroidTv;
@@ -1676,7 +1666,6 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
     required this.onOpenHomePageSettings,
-    required this.onOpenStartupSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
     required this.isAndroidTv,
@@ -1724,10 +1713,6 @@ class _SettingsLayout extends StatelessWidget {
                     SettingsTile.spec(
                       SettingsRows.player,
                       onTap: onOpenExternalPlayerSettings,
-                    ),
-                    SettingsTile.spec(
-                      SettingsRows.startup,
-                      onTap: onOpenStartupSettings,
                     ),
                     // Remote: shown on TV and desktop. Mobile keeps its
                     // entry in the floating menu, so it's hidden here.

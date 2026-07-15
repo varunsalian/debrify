@@ -1566,9 +1566,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // The sheet pops itself before running an action, so route every choice
     // through the handler instead of awaiting a dialog result.
-    void run(String choice) => unawaited(
-      _handlePlaylistMenuChoice(choice, item, dedupeKey, isFavorited),
-    );
+    void run(String choice) =>
+        unawaited(_handlePlaylistMenuChoice(choice, item, isFavorited));
 
     await showDebridActionSheet(
       context,
@@ -1623,13 +1622,6 @@ class _SearchScreenState extends State<SearchScreen> {
             onTap: () => run('clear_progress'),
           ),
         DebridActionItem(
-          icon: Icons.launch_rounded,
-          color: const Color(0xFFEF4444),
-          title: 'Launch on Startup',
-          subtitle: 'Auto-play this item when Debrify opens',
-          onTap: () => run('launch_on_startup'),
-        ),
-        DebridActionItem(
           icon: Icons.delete_outline_rounded,
           color: const Color(0xFFEF4444),
           title: 'Delete',
@@ -1643,7 +1635,6 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _handlePlaylistMenuChoice(
     String choice,
     Map<String, dynamic> item,
-    String dedupeKey,
     bool isFavorited,
   ) async {
     if (!mounted) return;
@@ -1678,9 +1669,6 @@ class _SearchScreenState extends State<SearchScreen> {
         HapticFeedback.mediumImpact();
         _loadPlaylistFavorites();
         break;
-      case 'launch_on_startup':
-        await _setPlaylistLaunchOnStartup(item, dedupeKey);
-        break;
       case 'delete':
         await _confirmDeletePlaylistItem(item);
         break;
@@ -1703,23 +1691,6 @@ class _SearchScreenState extends State<SearchScreen> {
     } finally {
       if (mounted) _playlistLaunching = false;
     }
-  }
-
-  Future<void> _setPlaylistLaunchOnStartup(
-    Map<String, dynamic> item,
-    String dedupeKey,
-  ) async {
-    await Future.wait([
-      StorageService.setStartupAutoLaunchEnabled(true),
-      StorageService.setStartupMode('playlist'),
-      StorageService.setStartupPlaylistItemId(dedupeKey),
-    ]);
-    if (!mounted) return;
-    final title = (item['title'] as String?) ?? 'Playlist item';
-    HapticFeedback.mediumImpact();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('"$title" will launch automatically on startup')),
-    );
   }
 
   Future<void> _confirmDeletePlaylistItem(Map<String, dynamic> item) async {

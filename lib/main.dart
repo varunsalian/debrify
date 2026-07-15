@@ -33,25 +33,18 @@ import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
-import 'services/debrify_tv_repository.dart';
-import 'services/trakt/trakt_continue_watching_service.dart';
-import 'screens/stremio_tv/stremio_tv_service.dart';
-import 'models/debrify_tv_channel_record.dart';
 import 'widgets/app_initializer.dart';
-import 'package:collection/collection.dart';
 
 import 'widgets/animated_background.dart';
 import 'widgets/premium_nav_bar.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'widgets/premium_top_nav.dart';
 import 'services/main_page_bridge.dart';
-import 'services/playlist_player_service.dart';
 import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
 import 'services/magnet_link_handler.dart';
 import 'services/stremio_service.dart';
-import 'widgets/auto_launch_overlay.dart';
 import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
 import 'widgets/tv_sidebar_nav.dart';
@@ -444,15 +437,6 @@ class DebrifyApp extends StatelessWidget {
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
-  /// Get the startup channel ID if set (used by DebrifyTVScreen)
-  static String? getStartupChannelId() {
-    return _MainPageState._getStartupChannelId();
-  }
-
-  /// Check if auto-launch overlay is currently showing
-  static bool get isAutoLaunchShowingOverlay =>
-      _MainPageState.isAutoLaunchShowingOverlay;
-
   @override
   State<MainPage> createState() => _MainPageState();
 }
@@ -545,15 +529,7 @@ class _SupportCampaignDialogState extends State<_SupportCampaignDialog> {
 }
 
 class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
-  static String? _startupChannelIdToLaunch;
-  static bool _startupChannelIdConsumed = false;
   static bool _didAutoUpdateCheck = false;
-
-  // Track if auto-launch is currently showing overlay
-  static bool _isAutoLaunchShowingOverlay = false;
-
-  // Public getter for other widgets to check
-  static bool get isAutoLaunchShowingOverlay => _isAutoLaunchShowingOverlay;
 
   int _selectedIndex = 15; // Home (the Stremio board); old index-0 Home retired
   late AnimationController _animationController;
@@ -573,13 +549,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _allDebridEnabled = false;
   bool _allDebridHiddenFromNav = false;
   bool _isAndroidTv = false;
-
-  // Auto-launch overlay state
-  bool _showAutoLaunchOverlay = false;
-  String _autoLaunchTitle = 'Launching Debrify TV';
-  String? _autoLaunchChannelName;
-  int? _autoLaunchChannelNumber;
-  bool _autoLaunchInProgress = false;
 
   // Back button press tracking for Android TV exit
   DateTime? _lastBackPressTime;
@@ -836,7 +805,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       );
     };
     MainPageBridge.openCloudProvider = _openCloudProvider;
-    MainPageBridge.hideAutoLaunchOverlay = _hideAutoLaunchOverlay;
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     _loadIntegrationState();
     _animationController = AnimationController(
@@ -881,9 +849,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     });
 
     _scheduleSupportCampaignPrompt();
-
-    // Check if startup auto-launch is enabled
-    _checkStartupAutoLaunch();
   }
 
   @override
@@ -896,7 +861,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openPremiumizeFolder = null;
     MainPageBridge.openAllDebridFolder = null;
     MainPageBridge.openCloudProvider = null;
-    MainPageBridge.hideAutoLaunchOverlay = null;
     MainPageBridge.focusTvSidebar = null;
     MainPageBridge.isTvSidebarFocused = null;
     _animationController.dispose();
@@ -1159,7 +1123,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   Future<void> _runDeferredSupportCampaignPrompt() async {
     if (!mounted || _supportCampaignResolved) return;
-    if (MainPage.isAutoLaunchShowingOverlay || _startupModalActive) {
+    if (_startupModalActive) {
       Future<void>.delayed(const Duration(seconds: 3), () async {
         if (!mounted) return;
         await _runDeferredSupportCampaignPrompt();
@@ -1700,359 +1664,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   void _handleIntegrationChanged() {
     _loadIntegrationState();
-  }
-
-  /// Static getter for startup channel ID (used by DebrifyTVScreen)
-  static String? _getStartupChannelId() {
-    // Check if already consumed (prevents double-read by AnimatedSwitcher)
-    if (_startupChannelIdConsumed) {
-      debugPrint(
-        'MainPage: Startup channel ID already consumed, returning null',
-      );
-      return null;
-    }
-
-    // Mark as consumed and return the value
-    _startupChannelIdConsumed = true;
-    debugPrint(
-      'MainPage: Startup channel ID consumed: $_startupChannelIdToLaunch',
-    );
-    return _startupChannelIdToLaunch;
-  }
-
-  /// Check if startup auto-launch is enabled and navigate to Debrify TV or play playlist item
-  Future<void> _checkStartupAutoLaunch() async {
-    // Prevent duplicate launches
-    if (_autoLaunchInProgress) return;
-    _autoLaunchInProgress = true;
-
-    try {
-      // Check if auto-launch is enabled
-      final autoLaunchEnabled =
-          await StorageService.getStartupAutoLaunchEnabled();
-      if (!autoLaunchEnabled) {
-        _autoLaunchInProgress = false;
-        return;
-      }
-
-      // Get startup mode
-      final startupMode = await StorageService.getStartupMode();
-
-      // TEMPORARILY DISABLED: the continue-watching / Trakt startup auto-launch
-      // relied on the OLD Home board (now deprecated) to consume the queued
-      // item via MainPageBridge.getAndClear…ToAutoPlay. The new Home doesn't
-      // pick it up yet, so skip these modes to avoid a stuck "Launching…"
-      // overlay. TODO: port that consumption into SearchScreen, then remove.
-      const disabledStartupModes = {
-        'continue_watching',
-        'trakt_continue_watching_movies',
-        'trakt_continue_watching_shows',
-      };
-      if (disabledStartupModes.contains(startupMode)) {
-        _autoLaunchInProgress = false;
-        return;
-      }
-
-      switch (startupMode) {
-        case 'playlist':
-          await _launchPlaylistItem();
-          break;
-        case 'continue_watching':
-          await _launchContinueWatchingItem();
-          break;
-        case 'trakt_continue_watching_movies':
-          await _launchTraktContinueWatchingItem(
-            TraktContinueWatchingService.moviesContentType,
-          );
-          break;
-        case 'trakt_continue_watching_shows':
-          await _launchTraktContinueWatchingItem(
-            TraktContinueWatchingService.showsContentType,
-          );
-          break;
-        case 'stremio_tv':
-          await _launchStremioTvChannel();
-          break;
-        case 'channel':
-        default:
-          await _launchChannel();
-          break;
-      }
-    } catch (e) {
-      debugPrint('MainPage: Failed to auto-launch: $e');
-      // Remove overlay on error
-      if (mounted) {
-        setState(() {
-          _showAutoLaunchOverlay = false;
-          _autoLaunchTitle = 'Launching Debrify TV';
-          _autoLaunchChannelName = null;
-          _autoLaunchChannelNumber = null;
-        });
-      }
-      // Clear flags on error
-      _isAutoLaunchShowingOverlay = false;
-      _startupChannelIdToLaunch = null;
-      _startupChannelIdConsumed = false;
-    } finally {
-      _autoLaunchInProgress = false;
-    }
-  }
-
-  /// Launch a channel on startup
-  Future<void> _launchChannel() async {
-    // Load channels
-    final channels = await DebrifyTvRepository.instance.fetchAllChannels();
-    if (channels.isEmpty) {
-      return;
-    }
-
-    // Get selected channel ID
-    final selectedChannelId =
-        await StorageService.getStartupChannelId() ?? 'random';
-
-    // Determine which channel to launch
-    DebrifyTvChannelRecord channelToLaunch;
-
-    if (selectedChannelId == 'random') {
-      final random = Random();
-      channelToLaunch = channels[random.nextInt(channels.length)];
-    } else {
-      final foundChannel = channels.firstWhereOrNull(
-        (c) => c.channelId == selectedChannelId,
-      );
-      if (foundChannel == null) {
-        // Channel not found, fallback to random
-        final random = Random();
-        channelToLaunch = channels[random.nextInt(channels.length)];
-      } else {
-        channelToLaunch = foundChannel;
-      }
-    }
-
-    // Show overlay IMMEDIATELY (before any navigation)
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _showAutoLaunchOverlay = true;
-      _autoLaunchTitle = 'Launching Debrify TV';
-      _autoLaunchChannelName = channelToLaunch.name;
-      _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
-          ? channelToLaunch.channelNumber
-          : null;
-    });
-
-    // Set flag to indicate overlay is showing
-    _isAutoLaunchShowingOverlay = true;
-
-    // Set the startup channel for DebrifyTVScreen to pick up
-    _startupChannelIdToLaunch = channelToLaunch.channelId;
-    _startupChannelIdConsumed = false; // Reset consumption flag
-    debugPrint(
-      'MainPage: Set startup channel ID: ${channelToLaunch.channelId}',
-    );
-
-    // Navigate to Debrify TV tab (index 3) - no delay needed, overlay is showing
-    if (!mounted) {
-      return;
-    }
-
-    _onItemTapped(3); // Debrify TV tab
-  }
-
-  /// Launch a Stremio TV channel on startup
-  Future<void> _launchStremioTvChannel() async {
-    final channels = await StremioTvService.instance.discoverChannels();
-    if (channels.isEmpty) {
-      return;
-    }
-
-    final selectedChannelId =
-        await StorageService.getStartupStremioTvChannelId() ?? 'random';
-
-    final channelToLaunch = selectedChannelId == 'random'
-        ? channels[Random().nextInt(channels.length)]
-        : channels.firstWhereOrNull(
-                (channel) => channel.id == selectedChannelId,
-              ) ??
-              channels[Random().nextInt(channels.length)];
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _showAutoLaunchOverlay = true;
-      _autoLaunchTitle = 'Launching Stremio TV';
-      _autoLaunchChannelName = channelToLaunch.displayName;
-      _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
-          ? channelToLaunch.channelNumber
-          : null;
-    });
-
-    _isAutoLaunchShowingOverlay = true;
-
-    MainPageBridge.notifyStremioTvChannelToAutoPlay(channelToLaunch.id);
-
-    if (!mounted) {
-      return;
-    }
-
-    _onItemTapped(9); // Stremio TV tab
-  }
-
-  /// Launch a playlist item on startup
-  Future<void> _launchPlaylistItem() async {
-    // Get playlist items
-    final playlistItems = await StorageService.getPlaylistItemsRaw();
-    if (playlistItems.isEmpty) {
-      return;
-    }
-
-    // Get selected playlist item ID
-    final selectedItemId = await StorageService.getStartupPlaylistItemId();
-    if (selectedItemId == null || selectedItemId.isEmpty) {
-      return;
-    }
-
-    // Find the playlist item
-    final playlistItem = playlistItems.firstWhereOrNull(
-      (item) => StorageService.computePlaylistDedupeKey(item) == selectedItemId,
-    );
-
-    if (playlistItem == null) {
-      return;
-    }
-
-    // Show overlay
-    if (!mounted) {
-      return;
-    }
-
-    final itemTitle = (playlistItem['title'] as String?) ?? 'Playlist Item';
-    setState(() {
-      _showAutoLaunchOverlay = true;
-      _autoLaunchTitle = 'Launching Playlist';
-      _autoLaunchChannelName = itemTitle;
-      _autoLaunchChannelNumber = null;
-    });
-
-    // Set flag to indicate overlay is showing
-    _isAutoLaunchShowingOverlay = true;
-
-    // Wait a bit for the overlay to show
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (!mounted) {
-      return;
-    }
-
-    await PlaylistPlayerService.play(context, playlistItem);
-    // Dismiss overlay after play returns (covers early-exit error paths
-    // where notifyPlayerLaunching is never called)
-    if (mounted) _hideAutoLaunchOverlay();
-  }
-
-  /// Launch a selected local Continue Watching item on startup.
-  Future<void> _launchContinueWatchingItem() async {
-    final items = await StorageService.getContinueWatchingItems();
-    if (items.isEmpty) {
-      return;
-    }
-
-    final selectedItemId =
-        await StorageService.getStartupContinueWatchingItemId();
-    if (selectedItemId == null || selectedItemId.isEmpty) {
-      return;
-    }
-
-    final itemToLaunch = items.firstWhereOrNull(
-      (item) => item['imdbId'] == selectedItemId,
-    );
-    if (itemToLaunch == null) {
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    final itemTitle = (itemToLaunch['title'] as String?) ?? 'Continue Watching';
-    setState(() {
-      _showAutoLaunchOverlay = true;
-      _autoLaunchTitle = 'Launching Continue Watching';
-      _autoLaunchChannelName = itemTitle;
-      _autoLaunchChannelNumber = null;
-    });
-
-    _isAutoLaunchShowingOverlay = true;
-    MainPageBridge.notifyContinueWatchingItemToAutoPlay(itemToLaunch);
-
-    if (!mounted) {
-      return;
-    }
-
-    _onItemTapped(15); // Home (Stremio board). NOTE: the Continue-Watching auto-play
-    // item queued above was consumed by the OLD home only — the new home does
-    // not yet pick it up, so this currently just lands on Home (see review).
-  }
-
-  /// Launch a selected Trakt Continue Watching movie/show on startup.
-  Future<void> _launchTraktContinueWatchingItem(String traktContentType) async {
-    final selectedItemId =
-        traktContentType == TraktContinueWatchingService.moviesContentType
-        ? await StorageService.getStartupTraktContinueWatchingMovieId()
-        : await StorageService.getStartupTraktContinueWatchingShowId();
-
-    final selection = await TraktContinueWatchingService.instance
-        .resolveSelection(
-          traktContentType: traktContentType,
-          itemId: selectedItemId,
-        );
-    if (selection == null) {
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _showAutoLaunchOverlay = true;
-      _autoLaunchTitle = 'Launching Trakt Continue Watching';
-      _autoLaunchChannelName = selection.formattedLabel;
-      _autoLaunchChannelNumber = null;
-    });
-
-    _isAutoLaunchShowingOverlay = true;
-    MainPageBridge.notifyAdvancedSearchSelectionToAutoPlay(selection);
-
-    if (!mounted) {
-      return;
-    }
-
-    _onItemTapped(15); // Home (Stremio board). NOTE: the Continue-Watching auto-play
-    // item queued above was consumed by the OLD home only — the new home does
-    // not yet pick it up, so this currently just lands on Home (see review).
-  }
-
-  void _hideAutoLaunchOverlay() {
-    if (!_showAutoLaunchOverlay) return;
-    if (!mounted) return;
-    setState(() {
-      _showAutoLaunchOverlay = false;
-      _autoLaunchTitle = 'Launching Debrify TV';
-      _autoLaunchChannelName = null;
-      _autoLaunchChannelNumber = null;
-    });
-
-    // Clear flags when overlay is hidden
-    _isAutoLaunchShowingOverlay = false;
-
-    // Clean up startup channel variables (optional, for memory cleanup)
-    _startupChannelIdToLaunch = null;
-    _startupChannelIdConsumed = false;
   }
 
   Future<void> _loadIntegrationState() async {
@@ -2828,15 +2439,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             ),
           ),
         ),
-
-        // Auto-launch overlay (covers everything when shown)
-        if (_showAutoLaunchOverlay)
-          AutoLaunchOverlay(
-            launchTitle: _autoLaunchTitle,
-            channelName: _autoLaunchChannelName ?? 'Loading...',
-            channelNumber: _autoLaunchChannelNumber,
-            onTimeout: _hideAutoLaunchOverlay,
-          ),
       ],
     );
   }

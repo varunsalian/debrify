@@ -47,7 +47,6 @@ import '../utils/rd_blocked_filter.dart';
 import '../utils/series_parser.dart';
 import '../utils/tv_keys.dart';
 import 'video_player_screen.dart';
-import '../main.dart';
 import 'debrify_tv/widgets/focus_highlight_wrapper.dart';
 import 'debrify_tv/widgets/random_start_slider.dart';
 import 'debrify_tv/widgets/switch_row.dart';
@@ -291,9 +290,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     };
     MainPageBridge.registerTvContentFocusHandler(3, _tvContentFocusHandler!);
 
-    // Check if this is a startup auto-launch or pending auto-play from home screen
+    // Check for pending auto-play from home screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkStartupAutoLaunch();
       _checkPendingAutoPlay();
     });
   }
@@ -387,87 +385,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return KeyEventResult.ignored;
   }
 
-  /// Check if there's a startup channel to auto-launch
-  Future<void> _checkStartupAutoLaunch() async {
-    try {
-      debugPrint('🚀 [AUTO-LAUNCH] Starting check...');
-
-      // Check if there's a startup channel to launch
-      final startupChannelId = MainPage.getStartupChannelId();
-      debugPrint('🚀 [AUTO-LAUNCH] Channel ID: $startupChannelId');
-
-      if (startupChannelId == null) {
-        debugPrint('🚀 [AUTO-LAUNCH] No channel configured, skipping');
-        return;
-      }
-
-      // Wait for channels to be loaded with a timeout
-      debugPrint('DebrifyTVScreen: Waiting for channels to load...');
-      int attempts = 0;
-      const maxAttempts = 50; // 5 seconds max wait (50 * 100ms)
-
-      while (_channels.isEmpty && attempts < maxAttempts) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        attempts++;
-        if (!mounted) {
-          debugPrint(
-            'DebrifyTVScreen: Widget unmounted while waiting for channels',
-          );
-          return;
-        }
-      }
-
-      if (_channels.isEmpty) {
-        debugPrint(
-          'DebrifyTVScreen: Channels list is still empty after waiting',
-        );
-        MainPageBridge.notifyAutoLaunchFailed('Channels not loaded');
-        return;
-      }
-
-      debugPrint(
-        'DebrifyTVScreen: Channels loaded (${_channels.length} channels)',
-      );
-
-      // Find the channel in the loaded channels list
-      final channel = _channels.firstWhereOrNull(
-        (c) => c.id == startupChannelId,
-      );
-
-      if (channel == null) {
-        debugPrint(
-          'DebrifyTVScreen: Channel with ID $startupChannelId not found in ${_channels.length} channels',
-        );
-        debugPrint(
-          'DebrifyTVScreen: Available channel IDs: ${_channels.map((c) => c.id).join(", ")}',
-        );
-        MainPageBridge.notifyAutoLaunchFailed('Startup channel not found');
-        return;
-      }
-
-      debugPrint('🚀 [AUTO-LAUNCH] Found channel: ${channel.name}');
-      debugPrint(
-        '🚀 [AUTO-LAUNCH] Keywords: ${channel.keywords.length}, isAndroidTv: $_isAndroidTv',
-      );
-
-      // Small delay to ensure UI is ready
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (!mounted) {
-        debugPrint('🚀 [AUTO-LAUNCH] Widget unmounted, aborting');
-        return;
-      }
-
-      debugPrint('🚀 [AUTO-LAUNCH] Calling _watchChannel()...');
-
-      // Call the existing watch channel method
-      _watchChannel(channel);
-    } catch (e, stackTrace) {
-      debugPrint('DebrifyTVScreen: Failed to auto-play startup channel: $e');
-      debugPrint('DebrifyTVScreen: Stack trace: $stackTrace');
-      MainPageBridge.notifyAutoLaunchFailed('Auto-launch exception: $e');
-      // Silently fail - user can manually select a channel
-    }
-  }
 
   void _closeProgressDialog() {
     if (!_progressOpen) {
@@ -969,7 +886,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final channelId = MainPageBridge.getAndClearDebrifyTvChannelToAutoPlay();
     if (channelId == null) return;
 
-    // Wait for channels to load (similar to _checkStartupAutoLaunch)
+    // Wait for channels to load
     int attempts = 0;
     const maxAttempts = 50; // 5 seconds max wait
     while (_channels.isEmpty && attempts < maxAttempts) {
@@ -7327,15 +7244,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // even when the dialog is skipped (auto-launch has its own overlay UI).
     _watchCancelled = false;
     debugPrint('[MagicTV] _showCachedPlaybackDialog: Reset _watchCancelled to false');
-
-    // Skip showing dialog during auto-launch (overlay handles loading UI).
-    // Note: _watchCancelled is already reset above, so playback will proceed normally.
-    if (MainPage.isAutoLaunchShowingOverlay) {
-      debugPrint(
-        'DebrifyTVScreen: Skipping progress dialog during auto-launch',
-      );
-      return;
-    }
 
     _progress.value = [];
     _progressOpen = true;

@@ -29,7 +29,6 @@ class SettingsTvLayout extends StatefulWidget {
 
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
-  final Future<void> Function() onOpenStartupSettings;
   final VoidCallback onOpenRemoteControl;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenFilterSettings;
@@ -58,7 +57,6 @@ class SettingsTvLayout extends StatefulWidget {
     required this.firstFocusNode,
     required this.onOpenHomePageSettings,
     required this.onOpenExternalPlayerSettings,
-    required this.onOpenStartupSettings,
     required this.onOpenRemoteControl,
     required this.onOpenTorrentSettings,
     required this.onOpenFilterSettings,
@@ -411,14 +409,9 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 focusNode: _paneNodes[1],
               ),
               SettingsTile.spec(
-                SettingsRows.startup,
-                onTap: widget.onOpenStartupSettings,
-                focusNode: _paneNodes[2],
-              ),
-              SettingsTile.spec(
                 SettingsRows.remote,
                 onTap: () async => widget.onOpenRemoteControl(),
-                focusNode: _paneNodes[3],
+                focusNode: _paneNodes[2],
               ),
             ],
           ),
