@@ -308,6 +308,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// DPAD focus for the "+N new results" pill.
   final FocusNode _kwPillFocus = FocusNode(debugLabel: 'kw_pill');
 
+  /// DPAD focus for the pre-search "Sources" button (shown in the empty
+  /// keyword state before a query). Without its own node it's a bare InkWell
+  /// unreachable by the remote — you couldn't pick sources before searching.
+  final FocusNode _kwSourcesBtnFocus = FocusNode(debugLabel: 'kw_sources_btn');
+
   /// Source tab strip (All / per-source), single-select on top of the
   /// Providers multi-select. Null = All.
   String? _kwSourceTab;
@@ -817,6 +822,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _boardScroll.dispose();
     _kwScroll.dispose();
     _kwPillFocus.dispose();
+    _kwSourcesBtnFocus.dispose();
     for (final n in _kwTabNodes) {
       n.dispose();
     }
@@ -2335,6 +2341,15 @@ class _SearchScreenState extends State<SearchScreen> {
       !_kwLoading &&
       _kwError == null &&
       _kwQuery.isNotEmpty;
+
+  /// Whether the pre-search "Sources" button is on-screen — the empty keyword
+  /// state, before a query. It's the only focusable content then, so DPAD-down
+  /// from the search field must land on it (see the field's key handler).
+  bool get _kwSourcesButtonVisible =>
+      _mode == _Mode.keyword &&
+      !_kwLoading &&
+      _kwError == null &&
+      _kwQuery.isEmpty;
 
   void _focusRow(int row, int column) {
     if (row >= _rowNodes.length) {
@@ -4837,7 +4852,14 @@ class _SearchScreenState extends State<SearchScreen> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          _focusContent();
+          // Pre-search keyword state: the Sources button is the only content,
+          // and _focusContent keeps focus on the field there — so target it
+          // directly, otherwise Down is a dead end and Sources is unreachable.
+          if (_kwSourcesButtonVisible) {
+            _kwSourcesBtnFocus.requestFocus();
+          } else {
+            _focusContent();
+          }
           return KeyEventResult.handled;
         }
         // Arrow-up jumps to the Catalog/Keyword toggle (top-right). Works on
@@ -5229,34 +5251,72 @@ class _SearchScreenState extends State<SearchScreen> {
   /// can pick which trackers are queried before typing a query.
   Widget _kwSourcesButton() {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _openKeywordSources,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.dns_rounded, size: 16, color: scheme.onSurfaceVariant),
-              const SizedBox(width: 8),
-              Text(
-                'Sources',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurface,
+    return Focus(
+      focusNode: _kwSourcesBtnFocus,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+          _openKeywordSources();
+          return KeyEventResult.handled;
+        }
+        // It's the only content in the pre-search state: Up returns to the
+        // search field, Left hands off to the sidebar. Down has nowhere to go.
+        if (key == LogicalKeyboardKey.arrowUp) {
+          _focusSearchFieldAtEnd();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          MainPageBridge.focusTvSidebar?.call();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: ListenableBuilder(
+        listenable: _kwSourcesBtnFocus,
+        builder: (context, _) {
+          final focused = _kwSourcesBtnFocus.hasFocus;
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _openKeywordSources,
+              borderRadius: BorderRadius.circular(999),
+              canRequestFocus: false,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(999),
+                  // 1.5px always so focus never shifts layout: white ring when
+                  // focused, else the faint idle border.
+                  border: Border.all(
+                    color: focused
+                        ? Colors.white.withValues(alpha: 0.9)
+                        : Colors.white.withValues(alpha: 0.10),
+                    width: 1.5,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.dns_rounded,
+                        size: 16, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Sources',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
