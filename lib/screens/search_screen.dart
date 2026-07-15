@@ -7904,6 +7904,30 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   Map<String, bool>? _pmCache;
   int _cacheToken = 0;
 
+  // --- streaming search: rows appear per engine as each one finishes, instead
+  // of waiting for the slowest engine's timeout. ---
+  /// Raw per-source batches accumulated for the CURRENT search token; merged
+  /// with [TorrentService.mergeSearchResults] so provisional sets match the
+  /// awaited search's final merge exactly.
+  final List<List<Torrent>> _streamBatches = [];
+
+  /// True while engines are still in flight (drives the "Still searching…"
+  /// strip under the toolbar).
+  bool _searching = false;
+
+  /// Set on the first real interaction (drag scroll, row D-pad move, row menu,
+  /// toolbar use). Frozen ⇒ later arrivals buffer into [_pendingTorrents]
+  /// behind the "+N new sources" pill instead of reshuffling the list under
+  /// the user's finger/focus.
+  bool _streamFrozen = false;
+
+  /// Post-processed FULL result set waiting behind the pill while frozen.
+  List<Torrent>? _pendingTorrents;
+
+  /// D-pad target for the "+N new sources" pill (UP from row 0 reaches it
+  /// when visible; UP again reaches the toolbar funnel).
+  final FocusNode _pillFocus = FocusNode(debugLabel: 'src_new_pill');
+
   /// Free-text keyword-bind mode: an editable query that seeds a pack search.
   bool get _keywordMode => widget.keywordSeed != null;
   late final TextEditingController _kwCtrl;
@@ -8023,6 +8047,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     _kwCtrl.dispose();
     _filterFocus.removeListener(_onFilterFocusChanged);
     _filterFocus.dispose();
+    _pillFocus.dispose();
     for (final n in _nodes) {
       n.dispose();
     }
@@ -8140,6 +8165,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// or leak its focus nodes.
   Future<void> _runSearch() async {
     final token = ++_searchToken;
+    _streamBatches.clear();
+    _searching = true;
+    _streamFrozen = false;
+    _pendingTorrents = null;
     if (mounted) {
       setState(() {
         _loading = true;
@@ -8152,6 +8181,24 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     _nodes.clear();
     try {
       final sel = _effectiveSelection;
+      // Streaming: each engine's batch lands as soon as THAT engine finishes,
+      // so first rows show in seconds instead of after the slowest engine's
+      // timeout. Batches merge exactly like the final result (dedupe + sort
+      // via mergeSearchResults); the awaited result below stays authoritative
+      // and snaps the list to it on completion.
+      void onBatch(String source, List<Torrent> batch) {
+        if (!mounted || token != _searchToken || batch.isEmpty) return;
+        // A timed-out engine's original future keeps running after the
+        // timeout fires — its late batch must not mutate the list after the
+        // awaited result already snapped it to the authoritative set.
+        if (!_searching) return;
+        _streamBatches.add(batch);
+        _presentStreaming(
+          TorrentService.mergeSearchResults(_streamBatches),
+          token,
+        );
+      }
+
       // Match Home's Sources list: the Stremio-aware search returns BOTH torrents
       // AND addon direct-link streams for movies/series, and resolves IPTV/non-IMDb
       // items straight from the addon (it skips the on-device torrent engines for
@@ -8159,7 +8206,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // torrent-only, so addon direct links never appeared in the Search tab's
       // Sources list even though Home showed them.
       final res = _keywordMode
-          ? await TorrentService.searchAllEngines(_query)
+          ? await TorrentService.searchAllEngines(_query, onBatch: onBatch)
           : await TorrentService.searchByImdbWithStremio(
               sel.imdbId,
               isMovie: !sel.isSeries,
@@ -8170,77 +8217,219 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               // smart-fallback probing to seasons that actually exist.
               availableSeasons:
                   _availableSeasons.isNotEmpty ? _availableSeasons : null,
+              onBatch: onBatch,
             );
       if (!mounted || token != _searchToken) return;
-      final rawTorrents = (res['torrents'] as List).cast<Torrent>();
-      // Series pack/bind post-processing — ported from the old Home
-      // (torrent_search_screen) so this list matches. For a specific episode,
-      // scope results to that episode exactly like the Play path
-      // (curateEpisodeCandidates): keep single episodes matching the S/E token
-      // and packs covering the season, exact matches first. Otherwise (whole
-      // series/season, no episode) drop direct-link singles, season-filter, and
-      // float season/complete packs to the top by coverage priority.
-      final List<Torrent> torrents;
-      if (sel.isSeries && sel.season != null && sel.episode != null) {
-        torrents = curateEpisodeCandidates(
-          rawTorrents,
-          isSeries: true,
-          season: sel.season,
-          episode: sel.episode,
-        );
-      } else {
-        torrents = _sortSeriesPacks(
-          _filterSeriesPacks(rawTorrents, sel),
-          sel,
-        );
-      }
-      _torrents = torrents;
-      // Snapshot the chip-menu fallback seasons from unscoped results only —
-      // a season-scoped set is already filtered and would collapse the menu.
-      if (_seasonChipVisible && sel.season == null) {
-        _derivedSeasons = _deriveSeasons(torrents);
-      }
-      // A source-group pill selected for a previous search may not exist in a
-      // new keyword result set — drop it so the toolbar filter can't hide every
-      // row ("No matches") when results actually exist.
-      if (_sourceFilter != null &&
-          !torrents.any((t) => t.source == _sourceFilter)) {
-        _sourceFilter = null;
-      }
-      _visible = _redesign ? _applyToolbar(torrents) : torrents;
-      for (var i = 0; i < _visible.length; i++) {
-        _nodes.add(FocusNode(debugLabel: 'src_$i'));
-      }
-      // Invalidate any in-flight cache check and drop stale maps — these are a
-      // NEW result set — then re-check (non-blocking) for the ⚡ badges.
-      _cacheToken++;
-      _tbCache = null;
-      _pmCache = null;
-      setState(() {
-        _loading = false;
-      });
-      _maybeCheckCache();
-      // On TV the list is the only content — give the D-pad an anchor to move
-      // from, otherwise the remote has nothing focused and can't select a row.
-      // With ZERO rows (e.g. a season scope with no packs) anchor the filter
-      // funnel instead so the remote can still reach the toolbar and recover.
-      if (widget.isTelevision) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          if (_nodes.isNotEmpty) {
-            _nodes.first.requestFocus();
-          } else if (_seasonChipVisible) {
-            _filterFocus.requestFocus();
-          }
-        });
-      }
+      _searching = false;
+      _presentStreaming((res['torrents'] as List).cast<Torrent>(), token);
+      _finishSearch(token);
     } catch (e) {
       if (!mounted || token != _searchToken) return;
       setState(() {
+        _searching = false;
         _error = e.toString();
         _loading = false;
       });
     }
+  }
+
+  /// Post-processes a (provisional or final) raw result set exactly like the
+  /// pre-streaming search did, then either applies it to the list or — when
+  /// the user has started interacting ([_streamFrozen]) — parks it behind the
+  /// "+N new sources" pill so rows never reshuffle mid-read.
+  void _presentStreaming(List<Torrent> raw, int token) {
+    if (!mounted || token != _searchToken) return;
+    final sel = _effectiveSelection;
+    // Series pack/bind post-processing — ported from the old Home
+    // (torrent_search_screen) so this list matches. For a specific episode,
+    // scope results to that episode exactly like the Play path
+    // (curateEpisodeCandidates): keep single episodes matching the S/E token
+    // and packs covering the season, exact matches first. Otherwise (whole
+    // series/season, no episode) drop direct-link singles, season-filter, and
+    // float season/complete packs to the top by coverage priority.
+    final List<Torrent> torrents;
+    if (sel.isSeries && sel.season != null && sel.episode != null) {
+      torrents = curateEpisodeCandidates(
+        raw,
+        isSeries: true,
+        season: sel.season,
+        episode: sel.episode,
+      );
+    } else {
+      torrents = _sortSeriesPacks(_filterSeriesPacks(raw, sel), sel);
+    }
+    if (_streamFrozen) {
+      _pendingTorrents = torrents;
+      if (mounted) setState(() {}); // pill count / banner update
+      return;
+    }
+    _applyStreamingResults(torrents);
+  }
+
+  /// Swaps the displayed result set, preserving the focused row BY IDENTITY
+  /// across the reshuffle (a late engine can insert rows above the D-pad
+  /// focus; without this the remote lands on a different torrent).
+  void _applyStreamingResults(List<Torrent> torrents) {
+    // Identity-preserving refocus only makes sense for USER-placed focus —
+    // i.e. after a freeze (adopt-pending / toolbar paths). During live
+    // streaming the only focus is the programmatic TV anchor on row 0;
+    // following it by identity would drag the viewport down as better rows
+    // insert above (review round: "the anchor is not user intent").
+    Torrent? focusedTorrent;
+    if (_streamFrozen) {
+      for (var i = 0; i < _nodes.length && i < _visible.length; i++) {
+        if (_nodes[i].hasFocus) {
+          focusedTorrent = _visible[i];
+          break;
+        }
+      }
+    }
+    _torrents = torrents;
+    _visible = _redesign ? _applyToolbar(torrents) : torrents;
+    _syncStreamNodes();
+    if (mounted) {
+      setState(() {
+        _loading = false;
+      });
+    }
+    if (focusedTorrent != null) {
+      final idx = _visible.indexWhere(
+        (t) =>
+            identical(t, focusedTorrent) ||
+            (t.hasRealInfoHash &&
+                t.infohash.isNotEmpty &&
+                t.infohash == focusedTorrent!.infohash),
+      );
+      if (idx >= 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && idx < _nodes.length) _nodes[idx].requestFocus();
+        });
+      }
+    } else if (widget.isTelevision && !_streamFrozen) {
+      // Live streaming on TV: keep the remote anchored to the TOP row (the
+      // best-ranked source right now) — the anchor exists from the first
+      // batch instead of waiting for the slowest engine.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _nodes.isEmpty || _streamFrozen) return;
+        if (_filterFocus.hasFocus || _pillFocus.hasFocus) return;
+        _nodes.first.requestFocus();
+      });
+    }
+  }
+
+  /// Grows/shrinks [_nodes] to match [_visible] without ever disposing the
+  /// focused node unanchored. Removed nodes are disposed POST-FRAME — their
+  /// row widgets are still mounted this frame, and unmounting a Focus widget
+  /// whose node is already disposed asserts (same rule _rebuildVisible
+  /// documents).
+  void _syncStreamNodes() {
+    while (_nodes.length < _visible.length) {
+      _nodes.add(FocusNode(debugLabel: 'src_${_nodes.length}'));
+    }
+    if (_nodes.length > _visible.length) {
+      final removed = <FocusNode>[];
+      while (_nodes.length > _visible.length) {
+        final node = _nodes.removeLast();
+        if (node.hasFocus && _nodes.isNotEmpty) _nodes.last.requestFocus();
+        removed.add(node);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final node in removed) {
+          node.dispose();
+        }
+      });
+    }
+  }
+
+  /// Completion-only steps: season snapshot, cache badges, TV focus anchor.
+  void _finishSearch(int token) {
+    if (!mounted || token != _searchToken) return;
+    final sel = _effectiveSelection;
+    // Snapshot the chip-menu fallback seasons from unscoped results only —
+    // a season-scoped set is already filtered and would collapse the menu.
+    // Use the FULL set even when part of it is parked behind the pill.
+    final fullSet = _pendingTorrents ?? _torrents;
+    if (_seasonChipVisible && sel.season == null) {
+      _derivedSeasons = _deriveSeasons(fullSet);
+    }
+    // A source-group pill selected for a previous search may not exist in the
+    // new result set — checked ONLY here, against the authoritative full set:
+    // an early batch that merely hasn't delivered that source yet must not
+    // silently clear the user's filter mid-stream.
+    if (_sourceFilter != null &&
+        !fullSet.any((t) => t.source == _sourceFilter)) {
+      _sourceFilter = null;
+      if (_pendingTorrents == null) {
+        _visible = _redesign ? _applyToolbar(_torrents) : _torrents;
+        _syncStreamNodes();
+      }
+    }
+    // Invalidate any in-flight cache check — this is the final result set —
+    // then re-check (non-blocking) for the ⚡ badges. Keep interim maps so
+    // badges already shown don't flicker off while the re-check runs.
+    _cacheToken++;
+    setState(() {
+      _loading = false;
+    });
+    _maybeCheckCache();
+    // On TV the list is the only content — give the D-pad an anchor to move
+    // from, otherwise the remote has nothing focused and can't select a row.
+    // With ZERO rows (e.g. a season scope with no packs) anchor the filter
+    // funnel instead so the remote can still reach the toolbar and recover.
+    // Never steal focus the user already placed somewhere mid-stream.
+    if (widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_nodes.any((n) => n.hasFocus) ||
+            _filterFocus.hasFocus ||
+            _pillFocus.hasFocus) {
+          return;
+        }
+        if (_nodes.isNotEmpty) {
+          _nodes.first.requestFocus();
+        } else if (_seasonChipVisible) {
+          _filterFocus.requestFocus();
+        }
+      });
+    }
+  }
+
+  /// First real user interaction → stop live-reshuffling; buffer new arrivals
+  /// behind the pill instead.
+  void _freezeStreaming() {
+    _streamFrozen = true;
+  }
+
+  /// Identity key for pending-row diffing (infohash when real, else the
+  /// name+URL pair addon streams are distinguished by).
+  static String _rowKey(Torrent t) =>
+      t.hasRealInfoHash && t.infohash.isNotEmpty
+          ? 'h:${t.infohash.toLowerCase()}'
+          : 'n:${t.name}|${t.directUrl ?? ''}';
+
+  /// Rows waiting behind the pill (0 hides it) — a SET difference, not a
+  /// length delta: episode curation can shrink the pending set below the
+  /// displayed length even when it carries genuinely new rows.
+  int get _pendingNewCount {
+    final p = _pendingTorrents;
+    if (p == null) return 0;
+    final shown = {for (final t in _torrents) _rowKey(t)};
+    var count = 0;
+    for (final t in p) {
+      if (!shown.contains(_rowKey(t))) count++;
+    }
+    return count;
+  }
+
+  /// Folds the parked result set into the list (pill tap / toolbar use) and
+  /// refreshes the ⚡ badges for the fresh rows.
+  void _adoptPending() {
+    final p = _pendingTorrents;
+    if (p == null) return;
+    _pendingTorrents = null;
+    _applyStreamingResults(p);
+    _cacheToken++;
+    _maybeCheckCache();
   }
 
   void _submitKeyword(String q) {
@@ -8335,6 +8524,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   void _showRowMenu(Torrent t, int i) {
+    _freezeStreaming();
     // Direct / external addon streams have no infohash to pin — offer the
     // stream-appropriate actions (play/open + copy link), mirroring Home's
     // direct-stream action sheet.
@@ -8516,16 +8706,31 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                       if (_redesign &&
                           (_torrents.isNotEmpty || _seasonChipVisible))
                         _redesignToolbar(scheme),
+                      if (_searching) _searchingStrip(),
                       if (_bound.isNotEmpty) _pinnedBanner(),
                       Expanded(
-                        child: _visible.isEmpty
-                            ? _centered(
-                                scheme,
-                                _torrents.isEmpty
-                                    ? 'No sources found.'
-                                    : 'No matches for your filters.',
-                              )
-                            : ListView.builder(
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: _visible.isEmpty
+                                  ? _centered(
+                                      scheme,
+                                      _torrents.isEmpty
+                                          ? 'No sources found.'
+                                          : 'No matches for your filters.',
+                                    )
+                                  : NotificationListener<ScrollNotification>(
+                                      // A user drag (not the programmatic
+                                      // ensureVisible scrolls) freezes live
+                                      // reshuffling.
+                                      onNotification: (n) {
+                                        if (n is ScrollStartNotification &&
+                                            n.dragDetails != null) {
+                                          _freezeStreaming();
+                                        }
+                                        return false;
+                                      },
+                                      child: ListView.builder(
                                 padding: EdgeInsets.symmetric(
                                   vertical: 8,
                                   horizontal: _redesign ? 10 : 0,
@@ -8550,21 +8755,146 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                     },
                                     onLongPress: () => _showRowMenu(t, i),
                                     onNavigateUp: () {
-                                      if (i > 0) _nodes[i - 1].requestFocus();
+                                      _freezeStreaming();
+                                      if (i > 0) {
+                                        _nodes[i - 1].requestFocus();
+                                      } else if (_pendingNewCount > 0) {
+                                        _pillFocus.requestFocus();
+                                      }
                                     },
                                     onNavigateDown: () {
+                                      _freezeStreaming();
                                       if (i < _nodes.length - 1) {
                                         _nodes[i + 1].requestFocus();
                                       }
                                     },
                                   );
                                 },
+                                      ),
+                                    ),
+                            ),
+                            // Frozen-mode arrivals wait behind this pill so
+                            // the list never reshuffles under the user.
+                            if (_pendingNewCount > 0)
+                              Positioned(
+                                top: 10,
+                                left: 0,
+                                right: 0,
+                                child: Center(child: _newSourcesPill()),
                               ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Slim "still searching" strip under the toolbar while engines are in
+  /// flight — rows are already usable, this just says more may arrive.
+  Widget _searchingStrip() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 11,
+            height: 11,
+            child: CircularProgressIndicator(strokeWidth: 1.6),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Still searching sources…',
+            style: TextStyle(
+              fontSize: 11.5,
+              color: Colors.white.withValues(alpha: 0.55),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The "+N new sources" pill: tap (or OK on TV) folds the parked arrivals
+  /// into the list; DOWN returns to the rows, UP reaches the toolbar funnel.
+  Widget _newSourcesPill() {
+    const accent = Color(0xFF7B5CFF);
+    final n = _pendingNewCount;
+    return Focus(
+      focusNode: _pillFocus,
+      onKeyEvent: (node, e) {
+        if (e is! KeyDownEvent) return KeyEventResult.ignored;
+        if (isActivateKey(e.logicalKey)) {
+          _adoptPending();
+          if (_nodes.isNotEmpty) _nodes.first.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (e.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (_nodes.isNotEmpty) _nodes.first.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (e.logicalKey == LogicalKeyboardKey.arrowUp) {
+          // The toolbar funnel only exists in redesign mode — in the classic
+          // list _filterFocus is never attached, so let the key fall through
+          // rather than focusing a parentless node (dead D-pad stop).
+          if (_filterFocus.context != null) {
+            _filterFocus.requestFocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: ListenableBuilder(
+        listenable: _pillFocus,
+        builder: (context, _) {
+          final focused = _pillFocus.hasFocus;
+          return GestureDetector(
+            onTap: () {
+              _adoptPending();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: focused ? Colors.white : accent,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: focused ? Colors.white : Colors.transparent,
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.arrow_upward_rounded,
+                    size: 14,
+                    color: focused ? const Color(0xFF17131F) : Colors.white,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$n new source${n == 1 ? '' : 's'}',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: focused ? const Color(0xFF17131F) : Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -8611,6 +8941,16 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// triggered the change land on the newly-focused first row — activating it
   /// (adding the first result to the debrid) as an unwanted "double tap".
   void _rebuildVisible() {
+    // Toolbar use is a deliberate reshuffle: freeze live streaming updates
+    // and fold any parked arrivals in first, so the user filters/sorts the
+    // complete set they can see.
+    _freezeStreaming();
+    if (_pendingTorrents != null) {
+      _torrents = _pendingTorrents!;
+      _pendingTorrents = null;
+      _cacheToken++;
+      _maybeCheckCache();
+    }
     final old = List<FocusNode>.from(_nodes);
     _nodes.clear();
     _visible = _applyToolbar(_torrents);
@@ -9023,8 +9363,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       },
       onLongPress: () => _showRowMenu(t, i),
       onNavigateUp: () {
+        _freezeStreaming();
         if (i > 0) {
           _nodes[i - 1].requestFocus();
+        } else if (_pendingNewCount > 0) {
+          // From the first row, UP reaches the "+N new sources" pill first.
+          _pillFocus.requestFocus();
         } else if (widget.isTelevision) {
           // From the first row, UP reaches the toolbar (otherwise unreachable
           // by remote — the list consumes UP).
@@ -9032,6 +9376,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         }
       },
       onNavigateDown: () {
+        _freezeStreaming();
         if (i < _nodes.length - 1) _nodes[i + 1].requestFocus();
       },
     );

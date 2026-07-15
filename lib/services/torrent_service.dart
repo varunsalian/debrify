@@ -9,6 +9,13 @@ import 'engine/settings_manager.dart';
 import 'indexer_manager_service.dart';
 import 'stremio_service.dart';
 
+/// Streaming-search hook: fired once per source (engine / addon batch) that
+/// returned results, AS it completes — long before the slowest engine's
+/// timeout. Fires on the search's async context; UI callers must re-check
+/// mounted/token guards inside. The awaited search result stays the
+/// authoritative full set.
+typedef SearchBatchCallback = void Function(String source, List<Torrent> batch);
+
 /// Service for searching torrents across multiple dynamic engines.
 ///
 /// This service provides a unified interface for searching torrents
@@ -145,6 +152,7 @@ class TorrentService {
     Map<String, bool>? engineStates,
     String? imdbIdOverride,
     Map<String, int>? maxResultsOverrides,
+    SearchBatchCallback? onBatch,
   }) async {
     await ensureInitialized();
 
@@ -222,6 +230,15 @@ class TorrentService {
               debugPrint(
                 'TorrentService: $engineId returned ${results.length} results (max: $maxResults)',
               );
+              // Isolated: a throwing consumer callback must never reject the
+              // search future or be misrecorded as an engine failure.
+              if (results.isNotEmpty) {
+                try {
+                  onBatch?.call(engineId, results);
+                } catch (e) {
+                  debugPrint('TorrentService: onBatch callback threw: $e');
+                }
+              }
               return results;
             })
             .catchError((error, _) {
@@ -271,6 +288,7 @@ class TorrentService {
     int? episode,
     List<int>? availableSeasons,
     Duration? timeout,
+    SearchBatchCallback? onBatch,
   }) async {
     await ensureInitialized();
 
@@ -334,6 +352,15 @@ class TorrentService {
                 debugPrint(
                   'TorrentService: $engineId (IMDB) returned ${results.length} results (max: $maxResults)',
                 );
+                // Isolated: see the keyword path — consumer exceptions must
+                // never alter the awaited search result.
+                if (results.isNotEmpty) {
+                  try {
+                    onBatch?.call(engineId, results);
+                  } catch (e) {
+                    debugPrint('TorrentService: onBatch callback threw: $e');
+                  }
+                }
                 return results;
               })
               .catchError((error, _) {
@@ -401,6 +428,7 @@ class TorrentService {
     contentType, // Optional explicit content type (for TV channels, etc.)
     Duration? stremioTimeout,
     Duration? engineTimeout,
+    SearchBatchCallback? onBatch,
   }) async {
     // For non-IMDB content types (TV channels, etc.), skip traditional engine search
     final isNonImdbContent =
@@ -422,6 +450,7 @@ class TorrentService {
           episode: episode,
           availableSeasons: availableSeasons,
           timeout: engineTimeout,
+          onBatch: onBatch, // per-engine batches stream straight through
         ),
       );
     }
@@ -437,7 +466,19 @@ class TorrentService {
           availableSeasons: availableSeasons,
           contentType: contentType,
           timeout: stremioTimeout,
-        ),
+        ).then((result) {
+          // The addon side reports as one batch when it completes (it never
+          // throws — errors come back as an empty result).
+          final streams = result['torrents'] as List<Torrent>? ?? const [];
+          if (streams.isNotEmpty) {
+            try {
+              onBatch?.call('stremio', streams);
+            } catch (e) {
+              debugPrint('TorrentService: onBatch callback threw: $e');
+            }
+          }
+          return result;
+        }),
       );
     }
 
@@ -871,23 +912,52 @@ class TorrentService {
   }
 
   /// Deduplicate torrent results by infohash and sort by seeders descending.
+  /// Public form of the search-result merge (dedupe by infohash keeping the
+  /// higher-seeded copy, sort seeders-desc) so streaming consumers can build
+  /// PROVISIONAL result sets from accumulated [SearchBatchCallback] batches
+  /// that match the awaited search's final merge exactly.
+  static List<Torrent> mergeSearchResults(List<List<Torrent>> batches) =>
+      _deduplicateAndSort(batches);
+
+  /// Total order used for dedupe tie-breaks and sort tie-breaks, so the merge
+  /// is deterministic and INDEPENDENT of batch arrival order — a streaming
+  /// provisional merge and the awaited (nested) final merge can never pick
+  /// different representatives or row orders for the same inputs.
+  static int _mergeTieBreak(Torrent a, Torrent b) {
+    final n = a.name.compareTo(b.name);
+    if (n != 0) return n;
+    return a.source.compareTo(b.source);
+  }
+
   static List<Torrent> _deduplicateAndSort(List<List<Torrent>> allResults) {
     final Map<String, Torrent> uniqueTorrents = {};
 
     for (final torrentList in allResults) {
       for (final torrent in torrentList) {
-        // Only add if we haven't seen this infohash
-        // or if this one has more seeders
+        // Keep the higher-seeded copy of a shared infohash; on equal seeders
+        // pick deterministically (NOT first-seen — that would depend on which
+        // engine happened to answer first).
         final existing = uniqueTorrents[torrent.infohash];
-        if (existing == null || torrent.seeders > existing.seeders) {
+        if (existing == null ||
+            torrent.seeders > existing.seeders ||
+            (torrent.seeders == existing.seeders &&
+                _mergeTieBreak(torrent, existing) < 0)) {
           uniqueTorrents[torrent.infohash] = torrent;
         }
       }
     }
 
-    // Convert to list and sort by seeders descending
+    // Sort by seeders descending with a total-order tiebreak, so equal-seeder
+    // runs (e.g. addon direct streams, all seeders == 0) can't reorder
+    // arbitrarily between two merges of the same inputs.
     final deduplicatedResults = uniqueTorrents.values.toList();
-    deduplicatedResults.sort((a, b) => b.seeders.compareTo(a.seeders));
+    deduplicatedResults.sort((a, b) {
+      final s = b.seeders.compareTo(a.seeders);
+      if (s != 0) return s;
+      final h = a.infohash.compareTo(b.infohash);
+      if (h != 0) return h;
+      return _mergeTieBreak(a, b);
+    });
 
     debugPrint(
       'TorrentService: Deduplicated to ${deduplicatedResults.length} unique torrents',
