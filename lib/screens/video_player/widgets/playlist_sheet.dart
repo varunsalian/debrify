@@ -63,17 +63,26 @@ class PlaylistSheet {
                       final originalIndex = seriesPlaylist
                           .findOriginalIndexBySeasonEpisode(season, episode);
                       if (originalIndex != -1) {
-                        // Check if this episode has saved progress
+                        // Check if this episode has saved progress — local
+                        // resume, or Trakt cross-device progress (so an episode
+                        // watched partway on another device resumes here too).
+                        final title =
+                            seriesPlaylist.seriesTitle ?? 'Unknown Series';
                         final playbackState =
                             await StorageService.getSeriesPlaybackState(
-                          seriesTitle:
-                              seriesPlaylist.seriesTitle ?? 'Unknown Series',
+                          seriesTitle: title,
                           season: season,
                           episode: episode,
                         );
+                        final traktMap =
+                            await StorageService.getEpisodeTraktProgress(
+                                seriesTitle: title);
+                        final hasTrakt =
+                            (traktMap['${season}_$episode'] ?? 0) > 0;
 
                         // Allow resuming if the episode has saved progress
-                        await onSelect(originalIndex, allowResume: playbackState != null);
+                        await onSelect(originalIndex,
+                            allowResume: playbackState != null || hasTrakt);
                       } else {
                         // Show error message to user
                         if (context.mounted) {

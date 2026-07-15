@@ -411,19 +411,45 @@ class VideoPlayerLauncher {
       for (final entry in playbackMap.entries) {
         if (entry.value > 0) merged[entry.key] = entry.value;
       }
-      if (merged.isEmpty) return;
 
       final filenames = playlist.map((e) => e.title).toList();
-      final parsed = SeriesParser.parsePlaylist(filenames);
       // Derive the same series title SeriesBrowser keys on (from filenames).
       final effectiveTitle =
           SeriesParser.extractCommonSeriesTitle(filenames) ?? fallbackTitle;
+
+      // The complete per-episode Trakt truth for the show ("season_episode" →
+      // 0-100), for the playlist bars + cross-device resume. Kept in a dedicated
+      // store apart from the ms-based resume state (the players convert % → ms at
+      // play time), so partial progress never seeds a fake position. Built from
+      // ALL Trakt episodes (every season, not just this playlist) so a show split
+      // across torrents keeps each season's bars; written whole (replace) so
+      // un-watched episodes clear — including the empty case below.
+      final traktPercents = <String, double>{};
+      merged.forEach((key, pct) {
+        // Trakt keys are "season-episode"; store as "season_episode".
+        final dash = key.indexOf('-');
+        if (dash > 0) {
+          traktPercents['${key.substring(0, dash)}_${key.substring(dash + 1)}'] =
+              pct;
+        }
+      });
+      await StorageService.saveEpisodeTraktProgress(
+        seriesTitle: effectiveTitle,
+        percents: traktPercents,
+      );
+
+      if (merged.isEmpty) return;
+
+      final parsed = SeriesParser.parsePlaylist(filenames);
 
       for (var i = 0; i < parsed.length; i++) {
         final info = parsed[i];
         if (info.season == null || info.episode == null) continue;
         final traktPercent = merged['${info.season}-${info.episode}'];
-        if (traktPercent == null || traktPercent < 95) continue;
+        if (traktPercent == null || traktPercent <= 0) continue;
+
+        // Fully-watched: also mark finished (badge) + seed native watched state.
+        if (traktPercent < 95) continue;
 
         // Writes to 'finishedEpisodes' (badges) + 'seasons' (bars), preserving
         // any existing local progress.
@@ -2401,6 +2427,10 @@ class _AndroidTvPlaybackItem {
   final int updatedAt;
   final String? resumeId;
   final String? provider;
+  // Trakt cross-device progress for this episode (0-100), or null. Display-only
+  // fallback for the playlist bar + a resume source when there's no local
+  // position; the player converts it to ms once it knows the real duration.
+  final double? traktProgressPercent;
 
   const _AndroidTvPlaybackItem({
     required this.id,
@@ -2419,6 +2449,7 @@ class _AndroidTvPlaybackItem {
     required this.updatedAt,
     required this.resumeId,
     required this.provider,
+    this.traktProgressPercent,
   });
 
   Map<String, dynamic> toMap() {
@@ -2439,6 +2470,8 @@ class _AndroidTvPlaybackItem {
       'updatedAt': updatedAt,
       'resumeId': resumeId,
       'provider': provider,
+      if (traktProgressPercent != null)
+        'traktProgressPercent': traktProgressPercent,
     };
   }
 }
@@ -2632,6 +2665,14 @@ class _AndroidTvPlaybackPayloadBuilder {
     final seriesPlaylist = await _buildSeriesPlaylist(playlistEntries);
     final contentType = _determineContentType(seriesPlaylist, playlistEntries);
     final perItemStates = await _fetchPerItemPlaybackState(playlistEntries);
+    // Trakt cross-device per-episode progress ("season_episode" → 0-100), for
+    // the playlist bars + resuming any episode from Trakt (see the Kotlin
+    // player). Display-only fallback — local resume still wins.
+    final traktProgress = seriesPlaylist?.seriesTitle != null
+        ? await StorageService.getEpisodeTraktProgress(
+            seriesTitle: seriesPlaylist!.seriesTitle!,
+          )
+        : const <String, double>{};
     final startIndex = await _determineStartIndex(
       contentType,
       seriesPlaylist,
@@ -2714,6 +2755,11 @@ class _AndroidTvPlaybackPayloadBuilder {
           updatedAt: resumeInfo.updatedAt,
           resumeId: resumeId,
           provider: entry.provider,
+          traktProgressPercent: (episodeInfo.seriesInfo.season != null &&
+                  episodeInfo.seriesInfo.episode != null)
+              ? traktProgress[
+                  '${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}']
+              : null,
         ),
       );
     }

@@ -163,6 +163,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var currentIndex = 0
     private var pendingSeekMs: Long = 0
     private var percentSeekApplied = false
+    // Per-item Trakt resume (0-100) for the item currently loading, applied on
+    // STATE_READY when it has no local resume — lets ANY switched-to episode
+    // resume from Trakt, not just the launched one (which uses the payload-level
+    // percent + percentSeekApplied latch). Local resume always wins.
+    private var pendingItemTraktPercent: Double = 0.0
+    // Set right before an auto-advance / skip / shuffle playItem so that path
+    // starts the next episode fresh (no Trakt resume), matching the Flutter
+    // player's _isAutoAdvancing behavior. Consumed at the top of playItem.
+    private var isAutoAdvancing = false
     private var controlsMenuVisible = false
     private var playlistVisible = false
     private var seekbarVisible = false
@@ -348,14 +357,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     if (traktPct > 0 && traktPct < 100 && !percentSeekApplied) {
                         val duration = player?.duration ?: 0
                         if (duration > 0) {
+                            // Consume the launch percent once duration is known —
+                            // even if the offset is rejected below — so it can never
+                            // re-fire on a later STATE_READY and hijack a switched-to
+                            // episode's own resume.
+                            percentSeekApplied = true
+                            pendingItemTraktPercent = 0.0
                             val offset = (duration * traktPct / 100.0).toLong()
                             if (offset > 2000 && offset < (duration * 0.9).toLong()) {
                                 player?.seekTo(offset)
                                 android.util.Log.d("AndroidTvPlayer", "Trakt: Resumed from Trakt progress ${traktPct.toInt()}% ($offset ms of $duration ms)")
-                                percentSeekApplied = true
+                                pendingSeekMs = 0
+                            } else if (pendingSeekMs > 0 && pendingSeekMs < duration) {
+                                // Trakt offset rejected (near start/end) → fall back to
+                                // the local resume this pass rather than starting at 0.
+                                player?.seekTo(pendingSeekMs)
                                 pendingSeekMs = 0
                             }
-                            // If guards failed, fall through to startPct / pendingSeekMs
                         }
                     } else if (startPct > 0 && !startPct.isNaN() && !percentSeekApplied) {
                         val duration = player?.duration ?: 0
@@ -367,6 +385,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             }
                             percentSeekApplied = true
                             pendingSeekMs = 0
+                            pendingItemTraktPercent = 0.0
                         }
                     } else if (pendingSeekMs > 0) {
                         val duration = player?.duration ?: 0
@@ -374,6 +393,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             player?.seekTo(pendingSeekMs)
                         }
                         pendingSeekMs = 0
+                        pendingItemTraktPercent = 0.0
+                    } else if (pendingItemTraktPercent > 0 && pendingItemTraktPercent < 100) {
+                        // A switched-to episode with Trakt progress but no local
+                        // resume: convert its percent to ms now the duration is known.
+                        val pct = pendingItemTraktPercent
+                        pendingItemTraktPercent = 0.0
+                        val duration = player?.duration ?: 0
+                        if (duration > 0) {
+                            val offset = (duration * pct / 100.0).toLong()
+                            if (offset > 2000 && offset < (duration * 0.9).toLong()) {
+                                player?.seekTo(offset)
+                                android.util.Log.d("AndroidTvPlayer", "Trakt: Resumed switched episode from ${pct.toInt()}% ($offset ms of $duration ms)")
+                            }
+                        }
                     }
                     // Initialize night mode if needed
                     if (loudnessEnhancer == null && nightModeIndex > 0) {
@@ -395,6 +428,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             showNextOverlay(model.items[shuffleIndex])
                             progressHandler.postDelayed({
                                 hideNextOverlay()
+                                isAutoAdvancing = true
                                 playItem(shuffleIndex)
                             }, 1500)
                             return
@@ -406,6 +440,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         showNextOverlay(model.items[nextIndex])
                         progressHandler.postDelayed({
                             hideNextOverlay()
+                            isAutoAdvancing = true
                             playItem(nextIndex)
                         }, 1500)
                     } else {
@@ -1681,6 +1716,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val item = model.items[index]
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         pendingSeekMs = item.resumePositionMs
+        // Trakt cross-device resume for this episode, but only for a MANUAL
+        // selection with no local position (local wins). Never during
+        // auto-advance/skip — binge starts the next episode fresh, matching the
+        // Flutter player. The payload-level percent still handles the launched item.
+        val autoAdvance = isAutoAdvancing
+        isAutoAdvancing = false
+        pendingItemTraktPercent =
+            if (autoAdvance || item.resumePositionMs > 0) 0.0
+            else (item.traktProgressPercent ?: 0.0)
 
         // Check if URL needs to be resolved (lazy loading)
         if (item.url.isBlank()) {
@@ -2006,6 +2050,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (continuousShuffleEnabled) {
             val shuffleIndex = pickShuffleIndex()
             if (shuffleIndex != null) {
+                isAutoAdvancing = true
                 playItem(shuffleIndex)
                 return
             }
@@ -2013,6 +2058,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         val nextIndex = getNextPlayableIndex(currentIndex)
         if (nextIndex != null) {
+            isAutoAdvancing = true
             playItem(nextIndex)
         } else {
             if (isStremioTvMode && stremioTvChannels.any { it.isCurrent }) {
@@ -2042,6 +2088,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         val randomIndex = pickShuffleIndex() ?: return
+        isAutoAdvancing = true
         playItem(randomIndex)
     }
 
@@ -7323,6 +7370,10 @@ private data class PlaybackItem(
     val sizeBytes: Long?,
     val rating: Double?,
     val provider: String?,
+    // Trakt cross-device progress for this episode (0-100), or null. Display-only
+    // fallback for the playlist bar, and a resume source when there's no local
+    // position — converted to ms once the real duration is known.
+    val traktProgressPercent: Double? = null,
 ) {
     fun seasonEpisodeLabel(): String {
         return if (season != null && episode != null) {
@@ -7331,6 +7382,16 @@ private data class PlaybackItem(
             "S${seasonStr}E${episodeStr}"
         } else {
             ""
+        }
+    }
+
+    /** Playlist-bar progress percent: local resume when present, else the Trakt
+     *  cross-device percent (episode watched partway on another device), else 0. */
+    fun displayProgressPercent(): Int {
+        return if (durationMs > 0 && resumePositionMs > 0) {
+            ((resumePositionMs.toDouble() / durationMs.toDouble()) * 100).toInt()
+        } else {
+            traktProgressPercent?.toInt() ?: 0
         }
     }
 
@@ -7354,6 +7415,7 @@ private data class PlaybackItem(
                 sizeBytes = if (obj.has("sizeBytes")) obj.optLong("sizeBytes") else null,
                 rating = if (obj.has("rating")) obj.optDouble("rating") else null,
                 provider = if (obj.has("provider")) obj.optString("provider") else null,
+                traktProgressPercent = if (obj.has("traktProgressPercent")) obj.optDouble("traktProgressPercent") else null,
             )
         }
     }
@@ -7631,9 +7693,7 @@ private class PlaylistAdapter(
             }
 
             // Progress calculation
-            val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
-                ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
-            } else 0
+            val progressPercent = item.displayProgressPercent()
 
             val isWatched = progressPercent >= 95
             val hasProgress = progressPercent > 5 && progressPercent < 95
@@ -7717,9 +7777,7 @@ private class PlaylistAdapter(
         }
 
         fun updateProgress(item: PlaybackItem, isActive: Boolean) {
-            val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
-                ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
-            } else 0
+            val progressPercent = item.displayProgressPercent()
 
             val isWatched = progressPercent >= 95
             val hasProgress = progressPercent > 5 && progressPercent < 95
@@ -7988,11 +8046,7 @@ private class MoviePlaylistAdapter(
                 descriptionView.visibility = View.GONE
             }
 
-            val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
-                ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
-            } else {
-                0
-            }
+            val progressPercent = item.displayProgressPercent()
 
             val isWatched = progressPercent >= 95
             container.alpha = if (isWatched && !isActive) 0.4f else 1.0f
@@ -8046,11 +8100,7 @@ private class MoviePlaylistAdapter(
 
         fun updateProgress(item: PlaybackItem, isActive: Boolean) {
             // Only update progress-related views, not the entire item
-            val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
-                ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
-            } else {
-                0
-            }
+            val progressPercent = item.displayProgressPercent()
 
             val isWatched = progressPercent >= 95
 

@@ -66,6 +66,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Map<String, dynamic>? _lastPlayedEpisode;
   Map<String, Set<int>> _finishedEpisodes = {}; // Map of season -> Set of episode numbers
   Map<String, Map<String, dynamic>> _episodeProgress = {}; // Map of "season_episode" -> progress data
+  // Trakt cross-device progress ("season_episode" -> percent 0-100). Shown as a
+  // bar only when there's no local resume for that episode (local wins the bar
+  // because it's ms-precise; Trakt fills in episodes watched on other devices).
+  Map<String, double> _traktEpisodeProgress = {};
 
   // Top padding on the episode grid; part of the scroll-centering math.
   static const double _gridTopPadding = 4.0;
@@ -295,12 +299,19 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Future<void> _loadEpisodeProgress() async {
     try {
       if (widget.seriesPlaylist.isSeries && widget.seriesPlaylist.seriesTitle != null) {
-        final allEpisodeProgress = await StorageService.getEpisodeProgress(
-          seriesTitle: widget.seriesPlaylist.seriesTitle!,
-        );
+        final results = await Future.wait([
+          StorageService.getEpisodeProgress(
+            seriesTitle: widget.seriesPlaylist.seriesTitle!,
+          ),
+          StorageService.getEpisodeTraktProgress(
+            seriesTitle: widget.seriesPlaylist.seriesTitle!,
+          ),
+        ]);
         if (mounted) {
           setState(() {
-            _episodeProgress = allEpisodeProgress;
+            _episodeProgress =
+                results[0] as Map<String, Map<String, dynamic>>;
+            _traktEpisodeProgress = results[1] as Map<String, double>;
           });
         }
       }
@@ -599,7 +610,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     }
     final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
     final progressData = _episodeProgress[episodeKey];
-    if (progressData == null) return 0.0;
+    if (progressData == null) {
+      // No local resume — fall back to Trakt cross-device progress (e.g. an
+      // episode watched partway on another device).
+      final traktPercent = _traktEpisodeProgress[episodeKey];
+      if (traktPercent == null) return 0.0;
+      return (traktPercent / 100).clamp(0.0, 1.0);
+    }
     final positionMs = progressData['positionMs'] as int? ?? 0;
     final durationMs = progressData['durationMs'] as int? ?? 1;
     if (durationMs <= 0) return 0.0;

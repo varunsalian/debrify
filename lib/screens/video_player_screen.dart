@@ -523,6 +523,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Trakt scrobble state
   bool _traktScrobbleEnabled = false;
   bool _traktProgressApplied = false;
+  // Per-episode Trakt cross-device progress ("season_episode" → 0-100), loaded
+  // once per series; drives resume for episodes switched to in-session.
+  Map<String, double>? _traktEpisodeProgress;
   String? _traktLastScrobbleAction;
   Timer? _traktHeartbeatTimer;
 
@@ -779,17 +782,50 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  void _maybeSeekToTraktProgress() {
-    final percent = widget.traktProgressPercent;
-    if (percent == null || percent <= 0 || percent >= 100) return;
+  /// Seeks to a Trakt progress percentage, converting % → ms now the duration
+  /// is known. [percent] defaults to the launched item's [widget.traktProgressPercent];
+  /// pass a per-episode value when resuming a switched-to episode.
+  void _maybeSeekToTraktProgress({double? percent}) {
+    final p = percent ?? widget.traktProgressPercent;
+    if (p == null || p <= 0 || p >= 100) return;
     final dur = _duration;
     if (dur <= Duration.zero) return;
-    final ms = (dur.inMilliseconds * percent / 100).floor();
+    final ms = (dur.inMilliseconds * p / 100).floor();
     final position = Duration(milliseconds: ms);
     if (position > const Duration(seconds: 2) && position < dur * 0.9) {
       _player.seek(position);
-      debugPrint('Trakt: Resumed from Trakt progress ${percent.round()}%');
+      debugPrint('Trakt: Resumed from Trakt progress ${p.round()}%');
     }
+  }
+
+  /// The current episode's cross-device Trakt progress percent (0-100), or null.
+  /// Loaded once per series from the dedicated store (kept apart from the
+  /// ms-based resume state) and looked up by the current episode's season/episode.
+  Future<double?> _currentEpisodeTraktPercent() async {
+    final seriesPlaylist = _seriesPlaylist;
+    if (seriesPlaylist == null || !seriesPlaylist.isSeries) return null;
+    final title = seriesPlaylist.seriesTitle;
+    if (title == null) return null;
+    _traktEpisodeProgress ??=
+        await StorageService.getEpisodeTraktProgress(seriesTitle: title);
+    final playlist = _activePlaylist;
+    if (playlist == null || _currentIndex < 0 || _currentIndex >= playlist.length) {
+      return null;
+    }
+    // Must be the CURRENT episode — no orElse-to-first fallback, or we'd seek to
+    // an unrelated episode's Trakt position on filtered/reordered playlists.
+    SeriesEpisode? ep;
+    for (final e in seriesPlaylist.allEpisodes) {
+      if (e.originalIndex == _currentIndex) {
+        ep = e;
+        break;
+      }
+    }
+    if (ep == null) return null;
+    final s = ep.seriesInfo.season;
+    final e = ep.seriesInfo.episode;
+    if (s == null || e == null) return null;
+    return _traktEpisodeProgress!['${s}_$e'];
   }
 
   /// Load an external audio track to play alongside a video-only stream
@@ -4248,7 +4284,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    // If playing from Trakt and Trakt has progress, prefer it over local resume (first load only)
+    // The LAUNCHED item resumes from Trakt over local (cross-device continuity,
+    // first load only). Switched-to episodes instead prefer LOCAL resume and
+    // only fall back to their per-episode Trakt percent when there's no local
+    // position (handled below), so we never discard a fresher on-device spot —
+    // matching the native TV player.
     if (!_traktProgressApplied &&
         widget.traktProgressPercent != null &&
         widget.traktProgressPercent! > 0 &&
@@ -4295,10 +4335,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _waitForDuration();
     final data = await StorageService.getVideoResume(_resumeKey);
     if (data == null) {
-      // Final fallback: Trakt progress (only when no local resume exists, first load only)
-      if (!_traktProgressApplied) {
-        _traktProgressApplied = true;
-        _maybeSeekToTraktProgress();
+      // No local resume anywhere → fall back to Trakt cross-device progress.
+      // Launch item uses widget's (first load); a switched-to episode uses its
+      // own per-episode percent (e.g. watched partway on another device). No
+      // local state means there's no saved speed/aspect to restore either.
+      final pct = (!_traktProgressApplied ? widget.traktProgressPercent : null) ??
+          await _currentEpisodeTraktPercent();
+      _traktProgressApplied = true;
+      if (pct != null && pct > 0 && pct < 100) {
+        _maybeSeekToTraktProgress(percent: pct);
       }
       return;
     }

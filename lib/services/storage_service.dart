@@ -2,7 +2,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
-import 'android_native_downloader.dart';
 import 'debrid_service.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
@@ -1045,6 +1044,59 @@ class StorageService {
     }
 
     return result;
+  }
+
+  static const String _episodeTraktProgressKey = 'episode_trakt_progress_v1';
+
+  /// Cross-device Trakt playback progress per episode (percent, 0–100), kept
+  /// SEPARATE from the ms-based resume state. It drives the playlist progress
+  /// bars only — never a resume seek directly (the players convert % → ms at
+  /// play time once the real duration is known, so we never store a fake
+  /// position). Keyed by the same normalized series title as
+  /// [getEpisodeProgress]; episode keys are "season_episode".
+  static Future<Map<String, double>> getEpisodeTraktProgress({
+    required String seriesTitle,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_episodeTraktProgressKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final key =
+          'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+      final series = decoded[key];
+      if (series is! Map) return {};
+      final out = <String, double>{};
+      series.forEach((k, v) {
+        final p = (v as num?)?.toDouble();
+        if (p != null) out[k.toString()] = p;
+      });
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Replace the stored Trakt per-episode percents for [seriesTitle]. [percents]
+  /// is keyed by "season_episode".
+  static Future<void> saveEpisodeTraktProgress({
+    required String seriesTitle,
+    required Map<String, double> percents,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_episodeTraktProgressKey);
+    Map<String, dynamic> all = {};
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) all = decoded;
+      } catch (_) {}
+    }
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    all[key] = percents;
+    await prefs.setString(_episodeTraktProgressKey, jsonEncode(all));
   }
 
   /// Get episode progress by IMDB ID (scans playback state for matching imdbId)
