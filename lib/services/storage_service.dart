@@ -243,6 +243,8 @@ class StorageService {
       'default_filter_rip_sources_v1';
   static const String _defaultFilterLanguagesKey =
       'default_filter_languages_v1';
+  static const String _quickPlayHonorsFiltersKey =
+      'quick_play_honors_filters_v1';
 
   // Default Torrent Provider Settings
   // Values: 'none' (ask every time), 'torbox', 'debrid', 'pikpak'
@@ -4063,6 +4065,18 @@ class StorageService {
   static Future<void> setTorrentSearchHistoryEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_torrentSearchHistoryEnabledKey, enabled);
+  }
+
+  /// Whether quick-play ranks candidates by the default filters (the
+  /// FilterLadder). ON by default — the ladder only reorders, never drops.
+  static Future<bool> getQuickPlayHonorsFilters() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_quickPlayHonorsFiltersKey) ?? true;
+  }
+
+  static Future<void> setQuickPlayHonorsFilters(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_quickPlayHonorsFiltersKey, value);
   }
 
   // Default Torrent Filter Settings

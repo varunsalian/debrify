@@ -156,4 +156,59 @@ void main() {
     expect(tester.takeException(), isNull); // no RenderFlex overflow
     expect(find.text('The Last of Us'), findsOneWidget);
   });
+  testWidgets('setNote shows, updates, survives setStage, and hides on null',
+      (tester) async {
+    final handle = await showOverlay(tester);
+
+    // Hidden by default — plays without filters look exactly as before.
+    expect(find.byIcon(Icons.filter_alt_rounded), findsNothing);
+
+    handle.setNote('Matching your filters (1080p \u00b7 WEB) \u00b7 12 sources');
+    await tester.pump();
+    expect(
+      find.text('Matching your filters (1080p \u00b7 WEB) \u00b7 12 sources'),
+      findsOneWidget,
+    );
+
+    // A stage advance must not clobber the note.
+    handle.setStage(PlayLoadStage.preparing);
+    await tester.pump();
+    expect(
+      find.text('Matching your filters (1080p \u00b7 WEB) \u00b7 12 sources'),
+      findsOneWidget,
+    );
+
+    // Non-monotonic: the note can change to a relax message...
+    handle.setNote('No full filter match \u2014 trying without language match');
+    await tester.pump();
+    expect(
+      find.text('No full filter match \u2014 trying without language match'),
+      findsOneWidget,
+    );
+
+    // ...and null hides the line entirely.
+    handle.setNote(null);
+    await tester.pump();
+    expect(find.byIcon(Icons.filter_alt_rounded), findsNothing);
+  });
+  testWidgets('landscape layout renders the note; setNote after dismiss is a no-op',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final handle = await showOverlay(tester);
+    handle.setNote('Matching your filters \u00b7 3 sources');
+    await tester.pump();
+    expect(find.text('Matching your filters \u00b7 3 sources'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    handle.dismiss();
+    await tester.pumpAndSettle();
+    // Dismissed: setNote must be a silent no-op, not a crash or a ghost note.
+    handle.setNote('after dismiss');
+    await tester.pump();
+    expect(find.text('after dismiss'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

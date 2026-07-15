@@ -14,6 +14,7 @@ class FilterSettingsPage extends StatefulWidget {
 
 class _FilterSettingsPageState extends State<FilterSettingsPage> {
   bool _loading = true;
+  bool _quickPlayHonors = true;
   final Set<QualityTier> _selectedQualities = {};
   final Set<RipSourceCategory> _selectedSources = {};
   final Set<AudioLanguage> _selectedLanguages = {};
@@ -77,8 +78,10 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
       final qualities = await StorageService.getDefaultFilterQualities();
       final sources = await StorageService.getDefaultFilterRipSources();
       final languages = await StorageService.getDefaultFilterLanguages();
+      final quickPlayHonors = await StorageService.getQuickPlayHonorsFilters();
 
       setState(() {
+        _quickPlayHonors = quickPlayHonors;
         // Convert stored strings back to enums
         for (final q in qualities) {
           final tier = QualityTier.values.where((e) => e.name == q).firstOrNull;
@@ -101,6 +104,11 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     } catch (e) {
       setState(() => _loading = false);
     }
+  }
+
+  Future<void> _setQuickPlayHonors(bool value) async {
+    setState(() => _quickPlayHonors = value);
+    await StorageService.setQuickPlayHonorsFilters(value);
   }
 
   Future<void> _toggleQuality(QualityTier tier) async {
@@ -236,6 +244,20 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
                     title: 'Language',
                     subtitle: 'Filter by audio language',
                     children: _buildLanguageChips(),
+                  ),
+                  const SizedBox(height: 20),
+                  SettingsSection(
+                    title: '',
+                    children: [
+                      SettingsToggleTile(
+                        icon: Icons.bolt_rounded,
+                        title: 'Apply filters to Quick Play',
+                        subtitle:
+                            'Play prefers sources matching these filters',
+                        value: _quickPlayHonors,
+                        onChanged: _setQuickPlayHonors,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   const SettingsInfoBanner(

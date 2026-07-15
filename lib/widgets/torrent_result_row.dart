@@ -521,8 +521,15 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
 
 /// Extension to detect quality tier from torrent name
 extension TorrentQualityExtension on Torrent {
-  QualityTier get qualityTier {
-    final nameLower = name.toLowerCase();
+  QualityTier get qualityTier => qualityTierForName(name);
+}
+
+/// Name-based quality classification, shared by the row badge (via
+/// [TorrentQualityExtension]) and quick-play's FilterLadder (which ranks by
+/// name). One implementation so the badge, the browse filter, and the play
+/// ladder can never disagree.
+QualityTier qualityTierForName(String name) {
+  final nameLower = name.toLowerCase();
 
     // Explicit pixel resolutions WIN. "uhd"/"4k" often name the SOURCE, not the
     // encode — e.g. "UHD BluRay 1080p" is a 1080p file — so those keywords only
@@ -555,7 +562,6 @@ extension TorrentQualityExtension on Torrent {
       return QualityTier.hd;
     }
 
-    // SD/unknown - default to SD
-    return QualityTier.sd;
-  }
+  // SD/unknown - default to SD
+  return QualityTier.sd;
 }

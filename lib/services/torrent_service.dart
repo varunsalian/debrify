@@ -517,6 +517,28 @@ class TorrentService {
   }
 
   /// Search Stremio addons for streams
+  /// Stremio-addon-only search (no torrent engines). Same result shape as
+  /// [searchByImdb]. Used by quick-play as a fallback when the engine search
+  /// returns nothing — addon streams include direct-URL links that play
+  /// without any torrent at all.
+  static Future<Map<String, dynamic>> searchStremioAddonsOnly({
+    required String imdbId,
+    required bool isMovie,
+    int? season,
+    int? episode,
+    String? contentType,
+    Duration? timeout,
+  }) {
+    return _searchStremioAddons(
+      imdbId: imdbId,
+      isMovie: isMovie,
+      season: season,
+      episode: episode,
+      contentType: contentType,
+      timeout: timeout,
+    );
+  }
+
   static Future<Map<String, dynamic>> _searchStremioAddons({
     required String imdbId,
     required bool isMovie,

@@ -15,8 +15,10 @@ import '../models/rd_torrent.dart';
 import '../models/torbox_file.dart';
 import '../models/torrent.dart';
 import '../screens/video_player/models/playlist_entry.dart';
+import '../models/torrent_filter_state.dart';
 import '../utils/deovr_utils.dart' as deovr;
 import '../utils/dialog_tap_guard.dart';
+import '../utils/filter_ladder.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
 import '../utils/rd_blocked_filter.dart';
@@ -317,7 +319,14 @@ class TorrentPlaybackService {
     // null for a standalone play (e.g. the catalog board), which creates one.
     PipelineLoadingOverlay? overlay,
     bool Function()? isCancelled,
+    // Quick-play filter ladder (QUICK_PLAY_FILTERS_PLAN.md): ranks candidates
+    // by filter strictness. Null/inactive ⇒ byte-identical legacy behavior.
+    FilterLadder? ladder,
   }) async {
+    // Idempotent for callers that already ordered (stable sort).
+    if (ladder != null && ladder.isActive) {
+      torrents = ladder.order(torrents);
+    }
     final rootNav = Navigator.of(context, rootNavigator: true);
     // The play loader handle: passed in by the search flow, or created below
     // for a standalone play (e.g. the catalog board). Dismissed exactly once.
@@ -332,24 +341,14 @@ class TorrentPlaybackService {
 
     bool cancelled() => isCancelled?.call() ?? false;
 
-    // A direct-URL addon stream, if present, is the cheapest instant play — and
-    // needs no debrid provider, so play it before prompting for one. This is the
-    // IPTV / non-IMDb catalog path (streams come straight from the addon).
-    Torrent? direct;
-    for (final t in torrents) {
-      if (t.streamType == StreamType.directUrl &&
-          (t.directUrl?.isNotEmpty ?? false)) {
-        direct = t;
-        break;
-      }
-    }
-    if (direct != null) {
+    // Plays a direct-URL addon stream instantly (no debrid needed). Content
+    // metadata and the Sources switcher ride along (matching Home's
+    // _playDirectStream) so series streams get Continue Watching, subtitles,
+    // source switching, and the Next Episode hand-back. The advance reuses
+    // [provider] when the caller resolved one (torrent chain); otherwise it
+    // stays on the bound-sources → addon-stream path this play came from.
+    Future<void> playDirect(Torrent direct) async {
       if (ov != null) closeLoading();
-      // Content metadata and the Sources switcher ride along (matching Home's
-      // _playDirectStream) so series streams get Continue Watching, subtitles,
-      // source switching, and the Next Episode hand-back. The advance reuses
-      // [provider] when the caller resolved one (torrent chain); otherwise it
-      // stays on the bound-sources → addon-stream path this play came from.
       await VideoPlayerLauncher.push(
         context,
         _playerArgs(
@@ -365,6 +364,21 @@ class TorrentPlaybackService {
         onQuickPlayNextEpisode:
             _nextEpisodeHandlerFor(context, meta, provider: provider),
       );
+    }
+
+    // A direct-URL addon stream, if present, is the cheapest instant play — and
+    // needs no debrid provider, so play it before prompting for one. This is the
+    // IPTV / non-IMDb catalog path (streams come straight from the addon).
+    // With an active ladder, it plays NOW only from the best PLAYABLE tier
+    // (a full-match torrent beats a relaxed-tier direct link, plan §3.4) —
+    // but a relaxed-tier direct link is KEPT as [fallbackDirect] and rescues
+    // every torrent-path dead end below, so the ladder can only ever reorder,
+    // never lose the instant play the pre-ladder flow guaranteed.
+    final bool tiered = ladder != null && ladder.isActive;
+    final (direct, fallbackDirect) = selectDirect(torrents, ladder);
+    if (direct != null) {
+      if (cancelled()) return; // e.g. Cancel during a caller's await
+      await playDirect(direct);
       return;
     }
 
@@ -382,6 +396,12 @@ class TorrentPlaybackService {
       return;
     }
     if (prov == null) {
+      // Without a provider no torrent can play — a relaxed-tier direct link
+      // is still the guaranteed instant play (pre-ladder behavior).
+      if (fallbackDirect != null) {
+        await playDirect(fallbackDirect);
+        return;
+      }
       if (ov != null) closeLoading();
       _snack(context, 'No debrid provider configured. Add one in Settings.');
       return;
@@ -392,6 +412,10 @@ class TorrentPlaybackService {
             t.streamType != StreamType.externalUrl && _hasAcquisition(t))
         .toList();
     if (candidates.isEmpty) {
+      if (fallbackDirect != null) {
+        await playDirect(fallbackDirect);
+        return;
+      }
       if (ov != null) closeLoading();
       _snack(context, 'No playable sources found for this title.');
       return;
@@ -404,6 +428,10 @@ class TorrentPlaybackService {
     if (prov == 'torbox' || prov == 'premiumize') {
       loader.setStage(PlayLoadStage.cacheCheck);
       candidates = await _cacheFirst(prov, candidates);
+      // One cache call for the whole list, then a stable tier re-sort:
+      // filters dominate cachedness, cached-first survives WITHIN each tier
+      // (plan §3.4, "cache-first demoted to within-tier").
+      if (tiered) candidates = ladder.order(candidates);
       if (!context.mounted) {
         // Screen went away mid cache-check — dismiss so the loader can't get
         // stuck covering the next screen.
@@ -413,6 +441,26 @@ class TorrentPlaybackService {
     }
     if (cancelled()) return; // user tapped Cancel during the cache-check
 
+    // Base tier for probe narration — captured BEFORE the pack-top safety,
+    // so a hoisted relaxed-tier single still triggers the tier-crossing note.
+    final int probeBaseTier =
+        tiered && candidates.isNotEmpty ? ladder.tierOf(candidates.first) : 0;
+    // Pack-top safety (§3.4b.3), applied AFTER every ladder/cache re-sort so
+    // no later ordering can undo it: if the ladder promoted a pack over every
+    // exact-episode single, guarantee the best single still gets probed.
+    var minAttempts = 1;
+    if (tiered) {
+      final (safeList, safeAttempts) = packTopSafety(
+        candidates,
+        provider: prov,
+        ladder: ladder,
+        season: meta?.season,
+        episode: meta?.episode,
+      );
+      candidates = safeList;
+      minAttempts = safeAttempts;
+    }
+
     loader.setStage(PlayLoadStage.preparing);
     final (res, winner) = await _probeCandidates(
       prov,
@@ -420,12 +468,33 @@ class TorrentPlaybackService {
       season: meta?.season,
       episode: meta?.episode,
       isCancelled: cancelled,
+      minAttempts: minAttempts,
+      onCandidate: !tiered
+          ? null
+          : (t) {
+              // Narrate tier crossings while probing (try-multiple / the
+              // pack-top safety attempt).
+              final tier = ladder.tierOf(t);
+              if (tier > probeBaseTier) {
+                loader.setNote(
+                  "Filtered match wasn't playable — trying "
+                  '${ladder.describeTier(tier) ?? 'any available source'}',
+                );
+              }
+            },
     );
     if (cancelled()) return; // dismissed by the Cancel tap; nothing more to do
     loader.setStage(PlayLoadStage.starting);
     closeLoading();
     if (!context.mounted) return;
     if (res == null) {
+      // Every probe failed — a ladder-demoted direct link still guarantees
+      // the play the pre-ladder flow would have delivered (dismiss above is
+      // idempotent, so playDirect's own closeLoading is harmless).
+      if (fallbackDirect != null) {
+        await playDirect(fallbackDirect);
+        return;
+      }
       _snack(context,
           'No instantly-playable source found. Open Sources to pick or download one.');
       return;
@@ -440,6 +509,104 @@ class TorrentPlaybackService {
       sources: torrents,
       sourceIndex: idx < 0 ? 0 : idx,
     );
+  }
+
+  /// Selects the direct-URL stream to play instantly ([direct]) and the one
+  /// kept as the dead-end rescue ([fallbackDirect]) — always the FIRST direct
+  /// stream in [torrents] (tier-sorted when the ladder is active). [direct]
+  /// is set only when no PLAYABLE candidate (probeable torrent or direct
+  /// stream — external links and acquisition-less entries don't count)
+  /// occupies a strictly better tier, so a full-match torrent beats a
+  /// relaxed-tier direct link, but unplayable tier-0 noise can't suppress
+  /// the instant play. Null/inactive ladder ⇒ legacy first-direct-wins.
+  @visibleForTesting
+  static (Torrent?, Torrent?) selectDirect(
+    List<Torrent> torrents,
+    FilterLadder? ladder,
+  ) {
+    final tiered = ladder != null && ladder.isActive;
+    int? bestPlayableTier;
+    for (final t in torrents) {
+      final isDirect = t.streamType == StreamType.directUrl &&
+          (t.directUrl?.isNotEmpty ?? false);
+      final isProbeable =
+          t.streamType != StreamType.externalUrl && _hasAcquisition(t);
+      if (!isDirect && !isProbeable) continue;
+      if (tiered) bestPlayableTier ??= ladder.tierOf(t);
+      if (!isDirect) continue;
+      final direct =
+          (!tiered || ladder.tierOf(t) == bestPlayableTier) ? t : null;
+      return (direct, t);
+    }
+    return (null, null);
+  }
+
+  /// Probe budget for one play. PikPak is ALWAYS 1 — every probe queues a
+  /// real download that can't be cheaply undone — and beats every floor.
+  /// Otherwise the user's try-multiple setting (clamped 1–10 so a corrupted
+  /// pref can never yield 0 probes), raised to [minAttempts] (the pack-top
+  /// safety's 2-attempt floor).
+  @visibleForTesting
+  static int probeAttemptCount(
+    String prov, {
+    required bool tryMultiple,
+    required int maxRetries,
+    int minAttempts = 1,
+  }) {
+    if (prov == 'pikpak') return 1;
+    final base = tryMultiple ? maxRetries.clamp(1, 10) : 1;
+    return base < minAttempts ? minAttempts : base;
+  }
+
+  /// Pack coverage types — the only tops the pack-top safety rescues from.
+  static const Set<String> _packCoverageTypes = {
+    'seasonPack',
+    'multiSeasonPack',
+    'completeSeries',
+  };
+
+  /// Pack-top safety (QUICK_PLAY_FILTERS_PLAN.md §3.4b.3): when the ladder
+  /// promoted a genuine PACK (torrent-typed, pack coverage metadata) above
+  /// every exact-episode single, guarantee the best single still gets probed.
+  /// Standard providers get it at index 1 plus a 2-attempt floor; PikPak —
+  /// which probes exactly ONCE and each probe queues a real, possibly
+  /// whole-pack download — gets the single moved to index 0 instead, so its
+  /// lone probe is never spent on a pack. Guards (round-2 review): a top
+  /// without pack coverage (episode-scoped addon streams, singles whose
+  /// names lack S/E tokens) is NOT treated as a pack, and a cam-floored
+  /// single is never hoisted (it would defeat §3.3c). Returns the (possibly
+  /// copied) list and the minimum probe attempts.
+  @visibleForTesting
+  static (List<Torrent>, int) packTopSafety(
+    List<Torrent> candidates, {
+    required String provider,
+    required FilterLadder ladder,
+    int? season,
+    int? episode,
+  }) {
+    if (season == null || episode == null || candidates.length < 2) {
+      return (candidates, 1);
+    }
+    final top = candidates.first;
+    if (top.streamType != StreamType.torrent ||
+        !_packCoverageTypes.contains(top.coverageType) ||
+        nameHasExactEpisode(top.name, season, episode)) {
+      return (candidates, 1);
+    }
+    final singleIdx = candidates.indexWhere(
+      (t) =>
+          nameHasExactEpisode(t.name, season, episode) &&
+          ladder.tierOf(t) < ladder.tierCount, // never hoist a cam-floor single
+    );
+    if (singleIdx <= 0) return (candidates, 1);
+    final list = List.of(candidates);
+    final single = list.removeAt(singleIdx);
+    if (provider == 'pikpak') {
+      list.insert(0, single);
+      return (list, 1);
+    }
+    list.insert(1, single);
+    return (list, 2);
   }
 
   /// Probe [candidates] in order on [prov] until one resolves to an instantly
@@ -457,16 +624,24 @@ class TorrentPlaybackService {
     int? season,
     int? episode,
     bool Function()? isCancelled,
+    // Floor on attempts (the ladder's pack-top safety). PikPak stays at 1 —
+    // every probe there queues a real download that can't be cheaply undone.
+    int minAttempts = 1,
+    // Called as each candidate is about to be probed (ladder narration).
+    void Function(Torrent t)? onCandidate,
   }) async {
     bool cancelled() => isCancelled?.call() ?? false;
     final tryMultiple = await StorageService.getQuickPlayTryMultipleTorrents();
     final maxRetries = await StorageService.getQuickPlayMaxRetries();
-    // Clamp to a floor of 1 so a corrupted/out-of-range pref can never yield 0
-    // probes (getQuickPlayMaxRetries doesn't clamp on read).
-    final maxAttempts =
-        prov == 'pikpak' ? 1 : (tryMultiple ? maxRetries.clamp(1, 10) : 1);
+    final maxAttempts = probeAttemptCount(
+      prov,
+      tryMultiple: tryMultiple,
+      maxRetries: maxRetries,
+      minAttempts: minAttempts,
+    );
     for (final t in candidates.take(maxAttempts)) {
       if (cancelled()) return (null, null);
+      onCandidate?.call(t);
       try {
         final magnet = await _magnetFor(t);
         if (magnet == null) continue;
@@ -592,6 +767,17 @@ class TorrentPlaybackService {
     );
     void closeLoading() => overlay.dismiss();
 
+    // Quick-play filter ladder: saved default filters as a tiered preference
+    // (full match → relax language → relax rip → anything). Inactive when no
+    // filters are set or the Filter Settings toggle is off — then every
+    // ladder call below is a no-op and behavior is unchanged.
+    final ladder = await loadLadder();
+    if (cancel.cancelled) return; // Cancel during the prefs read
+    if (!context.mounted) {
+      closeLoading();
+      return;
+    }
+
     // Series auto-pin (on by default, toggle in Quick Play settings): with no
     // usable pinned source, search PACKS
     // first — the whole-series search with season probing, same as the
@@ -636,11 +822,18 @@ class TorrentPlaybackService {
       }
       packs = await _curatePackCandidates(packs,
           label: label, season: season, provider: provider);
+      // Ladder tier is the PRIMARY pack sort key (stable over the coverage/
+      // seeders order): the winning pack gets PINNED by auto-bind, so it must
+      // be one the user's filters approve of when any such pack exists.
+      packs = ladder.order(packs);
       if (packs.isNotEmpty &&
           (provider == 'torbox' || provider == 'premiumize')) {
         overlay.setStage(PlayLoadStage.cacheCheck);
         packs = await _cacheFirst(provider, packs);
+        // Stable re-sort: tier dominates cachedness, cached-first within tier.
+        packs = ladder.order(packs);
       }
+      _applyLadderNote(overlay, ladder, packs);
       if (cancel.cancelled) return;
       if (!context.mounted) {
         closeLoading();
@@ -696,36 +889,112 @@ class TorrentPlaybackService {
       return;
     }
     var torrents = (res['torrents'] as List).cast<Torrent>();
+    if (torrents.isNotEmpty) {
+      overlay.setStage(PlayLoadStage.searching, sourceCount: torrents.length);
+      // Curate candidates so the RIGHT torrent is probed first (mirrors old
+      // home): drop unrelated titles, keep/relevance-sort by the requested
+      // episode/season, then drop RD-blocked keywords when RD is the provider.
+      // Without this the raw seeder-ranked list can lead with wrong-episode/
+      // other-season packs that resolve fine but get rejected by
+      // _resolvedHasEpisode, burning the probes.
+      torrents = await _curateCandidates(
+        torrents,
+        label: label,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+        provider: provider,
+      );
+    }
+    if (torrents.isEmpty) {
+      // Torrent engines came up dry — fall back to the Stremio addons' own
+      // streams. A direct-URL stream plays instantly via playBest's
+      // direct-first preference; addon torrents keep the normal probe path.
+      // Torrents stay preferred overall because this runs only when the
+      // engine search found nothing. (No curation here: addon streams are
+      // already id/episode-scoped by the /stream endpoint, and their names
+      // — quality labels, not titles — would fail the title match.)
+      try {
+        final addonRes = await TorrentService.searchStremioAddonsOnly(
+          imdbId: imdbId,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+        );
+        torrents = (addonRes['torrents'] as List).cast<Torrent>();
+      } catch (_) {
+        torrents = const [];
+      }
+      if (cancel.cancelled) return;
+      if (!context.mounted) {
+        closeLoading();
+        return;
+      }
+      if (torrents.isNotEmpty) {
+        overlay.setStage(PlayLoadStage.searching, sourceCount: torrents.length);
+      }
+    }
     if (torrents.isEmpty) {
       closeLoading();
       _snack(context, 'No sources found for "$label".');
       return;
     }
-    overlay.setStage(PlayLoadStage.searching, sourceCount: torrents.length);
-    // Curate candidates so the RIGHT torrent is probed first (mirrors old home):
-    // drop unrelated titles, keep/relevance-sort by the requested episode/season,
-    // then drop RD-blocked keywords when RD is the provider. Without this the raw
-    // seeder-ranked list can lead with wrong-episode/other-season packs that
-    // resolve fine but get rejected by _resolvedHasEpisode, burning the probes.
-    torrents = await _curateCandidates(
-      torrents,
-      label: label,
-      isMovie: isMovie,
-      season: season,
-      episode: episode,
-      provider: provider,
-    );
-    if (torrents.isEmpty) {
-      closeLoading();
-      _snack(context, 'No sources found for "$label".');
-      return;
-    }
+
+    // Rank by filter strictness (stable — curation's relevance order survives
+    // within each tier) and narrate the outcome on the loader. The pack-top
+    // safety (§3.4b.3) lives inside playBest, AFTER its final re-sorts.
+    torrents = ladder.order(torrents);
+    _applyLadderNote(overlay, ladder, torrents);
     await playBest(context, torrents,
         provider: provider,
         title: label,
         meta: meta,
         overlay: overlay,
-        isCancelled: () => cancel.cancelled);
+        isCancelled: () => cancel.cancelled,
+        ladder: ladder);
+  }
+
+  /// Loads the quick-play ladder: inactive (a no-op) when the user disabled
+  /// "Apply filters to Quick Play" or has no default filters saved.
+  /// Public only for tests (the kill-switch gate).
+  @visibleForTesting
+  static Future<FilterLadder> loadLadder() async {
+    if (!await StorageService.getQuickPlayHonorsFilters()) {
+      return FilterLadder(const TorrentFilterState.empty());
+    }
+    return FilterLadder.fromSavedDefaults();
+  }
+
+  /// The loader narration line for what the ladder found (plan §3.5), or
+  /// null when there is nothing to say (inactive ladder / empty list) — so
+  /// filterless plays look exactly as before. Pure; public only for tests.
+  @visibleForTesting
+  static String? ladderNote(FilterLadder ladder, List<Torrent> ordered) {
+    if (!ladder.isActive || ordered.isEmpty) return null;
+    final summary = ladder.filterSummary();
+    final best = ladder.tierOf(ordered.first);
+    final n = ordered.where((t) => ladder.tierOf(t) == best).length;
+    final plural = n == 1 ? 'source' : 'sources';
+    if (best == 0) {
+      return 'Matching your filters ($summary) · $n $plural';
+    }
+    if (best >= ladder.tierCount) {
+      return 'Only cam-quality sources found — playing best available';
+    }
+    if (best == ladder.tierCount - 1) {
+      return 'Nothing matches your filters ($summary) — playing best available';
+    }
+    return 'No full filter match — trying '
+        '${ladder.describeTier(best) ?? 'any available source'} · $n $plural';
+  }
+
+  static void _applyLadderNote(
+    PipelineLoadingOverlay overlay,
+    FilterLadder ladder,
+    List<Torrent> ordered,
+  ) {
+    final note = ladderNote(ladder, ordered);
+    if (note != null) overlay.setNote(note);
   }
 
   /// Curate torrent candidates before probing, mirroring the old Home engine:
@@ -888,13 +1157,23 @@ class TorrentPlaybackService {
       _snack(context, 'No stream found for "$label".');
       return;
     }
+    // Same filter ladder as the torrent path — addon streams rank by how
+    // well their labels match the saved filters.
+    final ladder = await loadLadder();
+    if (cancel.cancelled) return; // Cancel during the prefs read
+    if (!context.mounted) {
+      closeLoading();
+      return;
+    }
+    _applyLadderNote(overlay, ladder, ladder.order(torrents));
     // playBest plays a direct addon stream instantly (no provider needed); if
     // there somehow isn't one it falls through to the normal provider path.
     await playBest(context, torrents,
         title: label,
         meta: meta,
         overlay: overlay,
-        isCancelled: () => cancel.cancelled);
+        isCancelled: () => cancel.cancelled,
+        ladder: ladder);
   }
 
   /// Real-Debrid is `'rd'` in [SeriesSource] (Home's convention, shared

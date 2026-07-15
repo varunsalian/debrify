@@ -111,6 +111,22 @@ class PipelineLoadingOverlay {
       stage: newIdx > curIdx ? stage : s.stage,
       sourceCount: sourceCount ?? s.sourceCount,
       cachedCount: cachedCount ?? s.cachedCount,
+      note: s.note,
+    );
+  }
+
+  /// Free-text line under the checklist — quick-play's filter narration
+  /// ("Matching your filters…", "No full filter match — trying without
+  /// language…"). Unlike [setStage] it is NOT monotonic: it reflects the
+  /// latest truth and may change repeatedly. Null hides the line.
+  void setNote(String? note) {
+    if (_dismissed) return;
+    final s = _state.value;
+    _state.value = _PlState(
+      stage: s.stage,
+      sourceCount: s.sourceCount,
+      cachedCount: s.cachedCount,
+      note: note,
     );
   }
 
@@ -125,7 +141,13 @@ class _PlState {
   final PlayLoadStage stage;
   final int? sourceCount;
   final int? cachedCount;
-  const _PlState({required this.stage, this.sourceCount, this.cachedCount});
+  final String? note;
+  const _PlState({
+    required this.stage,
+    this.sourceCount,
+    this.cachedCount,
+    this.note,
+  });
 }
 
 class _PlContent extends StatefulWidget {
@@ -342,7 +364,13 @@ class _PlContentState extends State<_PlContent>
           const SizedBox(height: 26),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 320),
-            child: _StepsList(state: widget.state, steps: widget.steps, scale: 1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _StepsList(state: widget.state, steps: widget.steps, scale: 1),
+                _NoteLine(state: widget.state, scale: 1),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           _providerChip(),
@@ -394,6 +422,7 @@ class _PlContentState extends State<_PlContent>
         ),
         SizedBox(height: (tv ? 20 : 16) * scale),
         _StepsList(state: widget.state, steps: widget.steps, scale: tv ? 1.15 * scale : 1),
+        _NoteLine(state: widget.state, scale: tv ? 1.15 * scale : 1),
         SizedBox(height: (tv ? 22 : 16) * scale),
         Row(
           children: [
@@ -703,6 +732,52 @@ class _StepsList extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
+    );
+  }
+}
+
+/// Quiet one-liner under the checklist for quick-play's filter narration.
+/// Hidden (zero-size) while the note is null, so plays without filters look
+/// exactly as before.
+class _NoteLine extends StatelessWidget {
+  final ValueNotifier<_PlState> state;
+  final double scale;
+  const _NoteLine({required this.state, required this.scale});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<_PlState>(
+      valueListenable: state,
+      builder: (context, st, _) {
+        final note = st.note;
+        if (note == null || note.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: EdgeInsets.only(top: 8 * scale),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.filter_alt_rounded,
+                size: 13 * scale,
+                color: const Color(0xFFB9A6FF).withValues(alpha: 0.85),
+              ),
+              SizedBox(width: 6 * scale),
+              Flexible(
+                child: Text(
+                  note,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.62),
+                    fontSize: 11.5 * scale,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

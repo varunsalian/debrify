@@ -46,6 +46,25 @@ bool torrentMatchesTitle(String torrentName, String searchTitle) {
   return true;
 }
 
+/// Whether [name] carries an explicit token for exactly [season]/[episode]
+/// (S01E01 / S1E1 / 1x01 / 1x1). Shared by [curateEpisodeCandidates] and the
+/// quick-play pack-top safety probe. Tokens are digit-bounded so `S1E1`
+/// can't match inside `S1E10` and `1x05` can't match inside `21x05` —
+/// substring matching used to accept both, steering plays at the wrong
+/// episode.
+bool nameHasExactEpisode(String name, int season, int episode) {
+  final u = name.toUpperCase();
+  bool hit(String token) => RegExp(
+    '(?<![0-9])${RegExp.escape(token)}(?![0-9])',
+  ).hasMatch(u);
+  final ss = season.toString().padLeft(2, '0');
+  final ee = episode.toString().padLeft(2, '0');
+  return hit('S${ss}E$ee') ||
+      hit('S${season}E$episode') ||
+      hit('${season}X$ee') ||
+      hit('${season}X$episode');
+}
+
 /// Filter + relevance-sort [torrents] for a specific series episode. Keeps
 /// single episodes matching the exact S/E pattern and packs that contain the
 /// requested season; sorts exact matches first, then season/multi-season/
@@ -67,17 +86,8 @@ List<Torrent> curateEpisodeCandidates(
     return torrents;
   }
 
-  final s = 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}'
-      .toUpperCase();
-  final sNoZero = 'S${season}E$episode'.toUpperCase();
-  final x = '${season}x${episode.toString().padLeft(2, '0')}'.toUpperCase();
-  final xNoZero = '${season}x$episode'.toUpperCase();
-
-  bool hasExactEpisodeMatch(String name) {
-    final u = name.toUpperCase();
-    return u.contains(s) || u.contains(sNoZero) || u.contains(x) ||
-        u.contains(xNoZero);
-  }
+  bool hasExactEpisodeMatch(String name) =>
+      nameHasExactEpisode(name, season, episode);
 
   bool packContainsSeason(Torrent t) {
     switch (t.coverageType) {

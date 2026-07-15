@@ -32,6 +32,16 @@ class TorrentFilterMatcher {
     return true;
   }
 
+  /// Bare "WEB" as its own word — catches dotted scene names like
+  /// `Show.S01E01.2160p.WEB.H265-GRP`, which none of the substring tokens
+  /// match ('web ' needs a trailing space). Checked LAST, after every other
+  /// family, so a name carrying any real rip token keeps its historical
+  /// classification (a title word "Web" must not steal
+  /// "Charlottes.Web.2006.DVDRip" from dvdrip). Accepted false positive: a
+  /// bare title word with NO other rip token reads as web instead of other.
+  /// Keep in sync with FormatTagDetector (see the note on `qualityTier`).
+  static final RegExp _bareWeb = RegExp(r'\bweb\b');
+
   static RipSourceCategory detectRipSource(String rawName) {
     final lower = rawName.toLowerCase();
     if (_matchesAny(lower, ['bluray', 'blu-ray', 'bdrip', 'brrip', 'remux'])) {
@@ -58,47 +68,79 @@ class TorrentFilterMatcher {
     if (RegExp(r'\b(cam|hdcam|camrip|telesync|ts|tc)\b').hasMatch(lower)) {
       return RipSourceCategory.cam;
     }
+    if (_bareWeb.hasMatch(lower)) {
+      return RipSourceCategory.web;
+    }
     return RipSourceCategory.other;
+  }
+
+  static const List<String> _multiAudioTokens = [
+    'multi-audio',
+    'multi audio',
+    'multiaudio',
+    'dual-audio',
+    'dual audio',
+    'dualaudio',
+    'multi-lang',
+    'multilang',
+  ];
+
+  /// One pattern per language, shared by [detectAudioLanguage] (first match
+  /// in [_languageDetectionOrder] wins — a single badge) and
+  /// [nameHasLanguage] (per-language membership — the quick-play ladder,
+  /// which must accept multi-tag lists like "ENG.LATINO.HINDI" for ANY of
+  /// the tagged languages).
+  static final Map<AudioLanguage, RegExp> _languagePatterns = {
+    AudioLanguage.hindi: RegExp(r'\b(hindi|hin)\b'),
+    AudioLanguage.spanish: RegExp(r'\b(spanish|spa|esp|latino|castellano)\b'),
+    AudioLanguage.french: RegExp(r'\b(french|fra|fre|vf|vff|vfq)\b'),
+    AudioLanguage.german: RegExp(r'\b(german|ger|deu)\b'),
+    AudioLanguage.russian: RegExp(r'\b(russian|rus)\b'),
+    AudioLanguage.chinese: RegExp(r'\b(chinese|chi|chs|cht|mandarin|cantonese)\b'),
+    AudioLanguage.japanese: RegExp(r'\b(japanese|jap|jpn)\b'),
+    AudioLanguage.korean: RegExp(r'\b(korean|kor)\b'),
+    AudioLanguage.italian: RegExp(r'\b(italian|ita)\b'),
+    AudioLanguage.portuguese: RegExp(r'\b(portuguese|por|pt-br)\b'),
+    AudioLanguage.arabic: RegExp(r'\b(arabic|ara)\b'),
+    AudioLanguage.english: RegExp(r'\b(english|eng)\b'),
+  };
+
+  /// Detection order for the single-badge classifier — must stay exactly the
+  /// historical if-chain order (english LAST) so badges don't change.
+  static const List<AudioLanguage> _languageDetectionOrder = [
+    AudioLanguage.hindi,
+    AudioLanguage.spanish,
+    AudioLanguage.french,
+    AudioLanguage.german,
+    AudioLanguage.russian,
+    AudioLanguage.chinese,
+    AudioLanguage.japanese,
+    AudioLanguage.korean,
+    AudioLanguage.italian,
+    AudioLanguage.portuguese,
+    AudioLanguage.arabic,
+    AudioLanguage.english,
+  ];
+
+  /// Whether the name carries an explicit multi/dual-audio tag.
+  static bool hasMultiAudioTag(String rawName) =>
+      _matchesAny(rawName.toLowerCase(), _multiAudioTokens);
+
+  /// Whether the name carries [language]'s token — independent of what
+  /// [detectAudioLanguage] would pick first.
+  static bool nameHasLanguage(String rawName, AudioLanguage language) {
+    if (language == AudioLanguage.multiAudio) return hasMultiAudioTag(rawName);
+    return _languagePatterns[language]!.hasMatch(rawName.toLowerCase());
   }
 
   static AudioLanguage? detectAudioLanguage(String rawName) {
     final lower = rawName.toLowerCase();
-    if (_matchesAny(lower, [
-      'multi-audio',
-      'multi audio',
-      'multiaudio',
-      'dual-audio',
-      'dual audio',
-      'dualaudio',
-      'multi-lang',
-      'multilang',
-    ])) {
+    if (_matchesAny(lower, _multiAudioTokens)) {
       return AudioLanguage.multiAudio;
     }
-    if (RegExp(r'\b(hindi|hin)\b').hasMatch(lower)) return AudioLanguage.hindi;
-    if (RegExp(r'\b(spanish|spa|esp|latino|castellano)\b').hasMatch(lower)) {
-      return AudioLanguage.spanish;
+    for (final language in _languageDetectionOrder) {
+      if (_languagePatterns[language]!.hasMatch(lower)) return language;
     }
-    if (RegExp(r'\b(french|fra|fre|vf|vff|vfq)\b').hasMatch(lower)) {
-      return AudioLanguage.french;
-    }
-    if (RegExp(r'\b(german|ger|deu)\b').hasMatch(lower)) {
-      return AudioLanguage.german;
-    }
-    if (RegExp(r'\b(russian|rus)\b').hasMatch(lower)) return AudioLanguage.russian;
-    if (RegExp(r'\b(chinese|chi|chs|cht|mandarin|cantonese)\b').hasMatch(lower)) {
-      return AudioLanguage.chinese;
-    }
-    if (RegExp(r'\b(japanese|jap|jpn)\b').hasMatch(lower)) {
-      return AudioLanguage.japanese;
-    }
-    if (RegExp(r'\b(korean|kor)\b').hasMatch(lower)) return AudioLanguage.korean;
-    if (RegExp(r'\b(italian|ita)\b').hasMatch(lower)) return AudioLanguage.italian;
-    if (RegExp(r'\b(portuguese|por|pt-br)\b').hasMatch(lower)) {
-      return AudioLanguage.portuguese;
-    }
-    if (RegExp(r'\b(arabic|ara)\b').hasMatch(lower)) return AudioLanguage.arabic;
-    if (RegExp(r'\b(english|eng)\b').hasMatch(lower)) return AudioLanguage.english;
     return null;
   }
 
