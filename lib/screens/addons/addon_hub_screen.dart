@@ -1300,7 +1300,49 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           child: _marketCompatNote(),
         ),
         Expanded(child: _buildMarketListBody()),
+        // Attribution required by the stremio-addons.net API terms — shown only
+        // on the Community list AND only when that source actually served the
+        // data (not the legacy fallback, which would be a misattribution).
+        if (_source == _AddonSource.community &&
+            _marketplace.communityFromNet)
+          _communityAttribution(),
       ],
+    );
+  }
+
+  /// Visible credit link back to stremio-addons.net, required by their API's
+  /// attribution terms when we display community-directory data.
+  Widget _communityAttribution() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+      child: GestureDetector(
+        onTap: () async {
+          final uri = Uri.parse('https://stremio-addons.net');
+          try {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } catch (_) {/* no browser — the label still credits the source */}
+        },
+        child: Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(text: 'Community addons from '),
+              TextSpan(
+                text: 'stremio-addons.net',
+                style: TextStyle(
+                  color: kSeeAllAccent,
+                  decoration: TextDecoration.underline,
+                  decorationColor: kSeeAllAccent.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11.5,
+            color: Colors.white.withValues(alpha: 0.4),
+          ),
+        ),
+      ),
     );
   }
 
