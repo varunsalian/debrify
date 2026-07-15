@@ -397,6 +397,13 @@ class CatalogSection {
   /// page), so we stop asking.
   bool exhausted;
 
+  /// The search query that produced these items, when this section is a
+  /// per-catalog SEARCH result (Search tab) rather than a browsed catalog
+  /// (home board). Null/empty for browse sections. Lets "See all" keep
+  /// *searching* the catalog instead of falling back to a plain browse (which
+  /// would mix in non-matching catalog items).
+  final String? query;
+
   CatalogSection({
     required this.title,
     required this.addon,
@@ -405,6 +412,7 @@ class CatalogSection {
     int? nextSkip,
     this.loadingMore = false,
     this.exhausted = false,
+    this.query,
   }) : nextSkip = nextSkip ?? items.length;
 }
 

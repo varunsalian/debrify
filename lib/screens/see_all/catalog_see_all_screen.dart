@@ -25,6 +25,13 @@ class CatalogSeeAllScreen extends StatefulWidget {
   final StremioAddon addon;
   final StremioAddonCatalog initialCatalog;
 
+  /// When set, this See-All is a SEARCH result: reload / load-more query the
+  /// catalog's `search=` endpoint (paged) instead of browsing it, so the grid
+  /// shows *all* matches for the query rather than getting muddied with
+  /// non-matching browse items. Filter changes stay in search mode — switching
+  /// Type/Catalog re-runs the query on the new catalog, Genre narrows it.
+  final String? query;
+
   /// Items already loaded on the rail — used to seed the grid without a refetch.
   final List<StremioMeta> seedItems;
 
@@ -55,6 +62,7 @@ class CatalogSeeAllScreen extends StatefulWidget {
     required this.addon,
     required this.initialCatalog,
     required this.onOpenItem,
+    this.query,
     this.seedItems = const [],
     this.seedNextSkip = 0,
     this.isTelevision = false,
@@ -76,6 +84,12 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   late String _type;
   late StremioAddonCatalog _catalog;
   String? _genre; // null = All genres
+
+  /// Active search query. Non-empty → search mode (see [CatalogSeeAllScreen.query]).
+  /// Fixed for the life of the screen; filter changes re-search rather than
+  /// clear it (browse mode is entered only when opened with no query).
+  late String _searchQuery;
+  bool get _searching => _searchQuery.isNotEmpty;
 
   // Client-side sort over the loaded items. 'default' preserves the addon's
   // own order (Popular/Trending etc.); the IMDb options re-order what's been
@@ -111,6 +125,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     super.initState();
     _type = widget.initialCatalog.type;
     _catalog = widget.initialCatalog;
+    _searchQuery = widget.query?.trim() ?? '';
     if (widget.seedItems.isNotEmpty) {
       _items.addAll(widget.seedItems);
       _nextSkip = widget.seedNextSkip;
@@ -139,19 +154,24 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
 
   // ── Derived options ────────────────────────────────────────────────────────
 
+  /// Only offer catalogs that work in the current mode: searchable ones while
+  /// searching (so switching Type/Catalog re-runs the search rather than
+  /// browsing a search-only catalog, which returns empty), browsable ones
+  /// otherwise. Keeps the current catalog present in its own dropdown too.
+  bool _usable(StremioAddonCatalog c) =>
+      _searching ? c.supportsSearch : c.isBrowsable;
+
   List<String> get _types {
     final seen = <String>{};
     final out = <String>[];
     for (final c in widget.addon.catalogs) {
-      // Only offer types that have a browsable catalog — a search-only catalog
-      // returns empty when browsed, and changing Type must never land on one.
-      if (c.isBrowsable && seen.add(c.type)) out.add(c.type);
+      if (_usable(c) && seen.add(c.type)) out.add(c.type);
     }
     return out;
   }
 
   List<StremioAddonCatalog> _catalogsForType(String type) => widget.addon.catalogs
-      .where((c) => c.type == type && c.isBrowsable)
+      .where((c) => c.type == type && _usable(c))
       .toList();
 
   /// Matches `search_screen._sectionTypeLabel` so the Type filter reads the same
@@ -175,6 +195,31 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
 
   // ── Fetch / paging ─────────────────────────────────────────────────────────
 
+  /// Fetch one page: the catalog's paged `search=` endpoint while [_searching],
+  /// otherwise a plain browse. Same shape either way so paging/dedup is shared.
+  Future<List<StremioMeta>> _fetchPage(
+    int skip,
+    void Function(int rawCount) onRawCount,
+  ) {
+    if (_searching) {
+      return _stremio.searchSingleCatalog(
+        widget.addon,
+        _catalog,
+        _searchQuery,
+        skip: skip,
+        genre: _genre,
+        onRawCount: onRawCount,
+      );
+    }
+    return _stremio.fetchCatalog(
+      widget.addon,
+      _catalog,
+      skip: skip,
+      genre: _genre,
+      onRawCount: onRawCount,
+    );
+  }
+
   /// [autoFocus] moves DPAD focus into the grid once the page loads — only the
   /// first (initial) load should; a filter-triggered reload must leave focus on
   /// the filter bar so the user can chain edits.
@@ -189,13 +234,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     });
     try {
       var rawCount = 0;
-      final page = await _stremio.fetchCatalog(
-        widget.addon,
-        _catalog,
-        skip: 0,
-        genre: _genre,
-        onRawCount: (c) => rawCount = c,
-      );
+      final page = await _fetchPage(0, (c) => rawCount = c);
       if (!mounted || token != _reqToken) return;
       setState(() {
         _items.addAll(page);
@@ -222,13 +261,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     setState(() => _loadingMore = true);
     try {
       var rawCount = 0;
-      final page = await _stremio.fetchCatalog(
-        widget.addon,
-        _catalog,
-        skip: _nextSkip,
-        genre: _genre,
-        onRawCount: (c) => rawCount = c,
-      );
+      final page = await _fetchPage(_nextSkip, (c) => rawCount = c);
       if (!mounted || token != _reqToken) return;
       if (page.isEmpty) {
         setState(() {
@@ -256,6 +289,10 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
+  // Filter changes stay in the current mode: while searching, switching
+  // Type/Catalog re-runs the query against the new (search-capable) catalog and
+  // Genre narrows the search; while browsing they browse. _reload → _fetchPage
+  // picks search vs browse off [_searching], so no mode flip is needed here.
   void _onTypeChanged(String type) {
     if (type == _type) return;
     setState(() {
@@ -362,7 +399,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
           children: [
             SeeAllHeader(
               title: widget.addon.name,
-              subtitle: 'Browse catalog',
+              subtitle: _searching ? 'Results for “$_searchQuery”' : 'Browse catalog',
               isTelevision: widget.isTelevision,
               backNode: _backNode,
               onFilterDown: () => _typeNode.requestFocus(),
@@ -456,7 +493,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                   size: 44, color: Colors.white.withValues(alpha: 0.25)),
               const SizedBox(height: 14),
               Text(
-                'Nothing in this catalog',
+                _searching ? 'No matches for “$_searchQuery”' : 'Nothing in this catalog',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 15,
@@ -465,10 +502,12 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                // fetchCatalog swallows errors and returns [], so an empty
-                // result can also be a transient failure — offer a retry rather
-                // than dead-ending (re-selecting the same filter is a no-op).
-                'This may be empty, or the addon failed to respond.',
+                // fetch swallows errors and returns [], so an empty result can
+                // also be a transient failure — offer a retry rather than
+                // dead-ending (re-selecting the same filter is a no-op).
+                _searching
+                    ? 'No results for this query — try another catalog or genre.'
+                    : 'This may be empty, or the addon failed to respond.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.4),

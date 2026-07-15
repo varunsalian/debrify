@@ -1778,23 +1778,44 @@ class StremioService {
     StremioAddon addon,
     StremioAddonCatalog catalog,
     String query, {
+    int skip = 0,
+    String? genre,
     bool throwOnError = false,
+    void Function(int rawCount)? onRawCount,
   }) async {
     if (query.trim().isEmpty || !catalog.supportsSearch) return [];
-    return _searchSingleCatalog(
+    final results = await _searchSingleCatalog(
         addon, catalog, Uri.encodeComponent(query.trim()),
-        throwOnError: throwOnError);
+        skip: skip, genre: genre, throwOnError: throwOnError, onRawCount: onRawCount);
+    // Tag with the originating addon, matching fetchCatalog — so a searched
+    // title carries its source (for the "source" label + episode-meta addon
+    // resolution) exactly like a browsed one. Scoped to this per-catalog path;
+    // the merged searchAddonCatalogs does its own best-addon tagging.
+    return results
+        .map((m) => m.sourceAddon == null ? m.withSourceAddon(addon) : m)
+        .toList();
   }
 
   Future<List<StremioMeta>> _searchSingleCatalog(
     StremioAddon addon,
     StremioAddonCatalog catalog,
     String encodedQuery, {
+    int skip = 0,
+    String? genre,
     bool throwOnError = false,
+    void Function(int rawCount)? onRawCount,
   }) async {
     // Build search URL: {baseUrl}/catalog/{type}/{id}/search={query}.json
+    // With genre/paging: /search={query}&genre={g}&skip={n}.json (addons that
+    // don't support paged search just re-return page 1, which the caller dedups
+    // → stop).
+    final extraParts = <String>['search=$encodedQuery'];
+    if (genre != null && genre.isNotEmpty) {
+      extraParts.add('genre=${Uri.encodeComponent(genre)}');
+    }
+    if (skip > 0) extraParts.add('skip=$skip');
     final url =
-        '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}/search=$encodedQuery.json';
+        '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}/${extraParts.join("&")}.json';
 
     debugPrint(
       'StremioService: Searching catalog ${addon.name}/${catalog.name}',
@@ -1827,6 +1848,7 @@ class StremioService {
 
         final Map<String, dynamic> data = json.decode(response.body);
         final metasRaw = data['metas'] as List<dynamic>?;
+        onRawCount?.call(metasRaw?.length ?? 0);
 
         if (metasRaw == null || metasRaw.isEmpty) {
           return [];

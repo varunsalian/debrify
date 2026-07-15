@@ -2154,12 +2154,14 @@ class _SearchScreenState extends State<SearchScreen> {
       var appliedFirst = false;
       final raw = await mapWithConcurrency(catalogTasks, (entry) async {
         List<StremioMeta> items;
+        var rawCount = 0;
         try {
           items = await _stremio.searchSingleCatalog(
             entry.addon,
             entry.catalog,
             query,
             throwOnError: true,
+            onRawCount: (c) => rawCount = c,
           );
         } catch (_) {
           // Source failed (not "no results") — count it for the status note.
@@ -2175,6 +2177,13 @@ class _SearchScreenState extends State<SearchScreen> {
           addon: entry.addon,
           catalog: entry.catalog,
           items: items,
+          // Carry the query so "See all" keeps searching this catalog rather
+          // than browsing it (which would muddy results with non-matches).
+          query: query,
+          // Seed the paging cursor with the RAW page-1 count (not the
+          // invalid-id-filtered items.length), so See All's first search
+          // load-more offsets correctly instead of re-fetching page 1.
+          nextSkip: rawCount > 0 ? rawCount : items.length,
         );
         // TV: just collect it (applied together after the loop, in stable addon
         // order). Non-TV: stream it into the board now.
@@ -6669,6 +6678,9 @@ class _SearchScreenState extends State<SearchScreen> {
               initialCatalog: section.catalog,
               seedItems: List<StremioMeta>.of(section.items),
               seedNextSkip: section.nextSkip,
+              // Search sections carry their query → See All keeps searching
+              // this catalog (paged) instead of browsing it.
+              query: section.query,
               isTelevision: widget.isTelevision,
               onOpenItem: (item) => _openItem(item, section.addon),
               onQuickPlay: _pikpakOnly
