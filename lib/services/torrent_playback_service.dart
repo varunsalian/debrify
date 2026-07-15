@@ -1131,15 +1131,16 @@ class TorrentPlaybackService {
     );
     void closeLoading() => overlay.dismiss();
 
+    Future<Map<String, dynamic>> search() => TorrentService.searchByImdbWithStremio(
+          id,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+          contentType: meta.contentType,
+        );
     Map<String, dynamic> res;
     try {
-      res = await TorrentService.searchByImdbWithStremio(
-        id,
-        isMovie: isMovie,
-        season: season,
-        episode: episode,
-        contentType: meta.contentType,
-      );
+      res = await search();
     } catch (e) {
       if (cancel.cancelled) return;
       closeLoading();
@@ -1151,10 +1152,49 @@ class TorrentPlaybackService {
       closeLoading();
       return;
     }
-    final torrents = (res['torrents'] as List).cast<Torrent>();
+    // Addon errors ride along keyed 'stremio:<addon name>' (timeouts and
+    // upstream 5xx land here, not as a thrown exception). Engine errors share
+    // the map on non-tt movie/series ids — only ADDON failures count here,
+    // else a flaky engine would misblame "didn't respond" on a title that
+    // simply has no stream.
+    Map<String, String> addonErrorsOf(Map<String, dynamic> r) {
+      final all = r['engineErrors'] as Map<String, String>? ?? const {};
+      return {
+        for (final e in all.entries)
+          if (e.key.startsWith('stremio:')) e.key: e.value,
+      };
+    }
+
+    var torrents = (res['torrents'] as List).cast<Torrent>();
+    var errors = addonErrorsOf(res);
+    // Empty ONLY because an addon errored is usually a transient upstream
+    // blip — retry once before giving up.
+    if (torrents.isEmpty && errors.isNotEmpty) {
+      try {
+        res = await search();
+        torrents = (res['torrents'] as List).cast<Torrent>();
+        errors = addonErrorsOf(res);
+      } catch (_) {
+        // Keep the first attempt's (empty) result — reported below.
+      }
+      if (cancel.cancelled) return;
+      if (!context.mounted) {
+        closeLoading();
+        return;
+      }
+    }
     if (torrents.isEmpty) {
       closeLoading();
-      _snack(context, 'No stream found for "$label".');
+      // An errored addon means "didn't respond", not "has no stream" — say
+      // so, since a retry will usually succeed.
+      if (errors.isNotEmpty) {
+        final failed = errors.keys
+            .map((k) => k.replaceFirst('stremio:', ''))
+            .join(', ');
+        _snack(context, '$failed didn\'t respond for "$label" — try again.');
+      } else {
+        _snack(context, 'No stream found for "$label".');
+      }
       return;
     }
     // Same filter ladder as the torrent path — addon streams rank by how
