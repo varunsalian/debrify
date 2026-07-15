@@ -1290,6 +1290,69 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildMarketList() {
+    // Compatibility note pinned above BOTH marketplaces (Official/Community):
+    // the catalogs list every Stremio addon, but only these four capability
+    // families do anything in Debrify.
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 14),
+          child: _marketCompatNote(),
+        ),
+        Expanded(child: _buildMarketListBody()),
+      ],
+    );
+  }
+
+  /// Slim accent-tinted banner: which addon capabilities Debrify supports.
+  Widget _marketCompatNote() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: kSeeAllAccent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kSeeAllAccent.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: 16,
+            color: kSeeAllAccent.withValues(alpha: 0.95),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Works with Debrify: ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                  const TextSpan(
+                    text: 'catalog, HTTP stream, torrent-scraping and '
+                        'subtitle addons. Other types install but add '
+                        'nothing here.',
+                  ),
+                ],
+              ),
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.35,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMarketListBody() {
     if (_marketLoading) {
       return const Center(
         child: CircularProgressIndicator(color: kSeeAllAccent, strokeWidth: 2),
