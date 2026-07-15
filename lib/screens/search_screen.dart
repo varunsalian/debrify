@@ -372,6 +372,10 @@ class _SearchScreenState extends State<SearchScreen> {
   DateTime _boardAppliedAt = DateTime.fromMillisecondsSinceEpoch(0);
   bool _catalogSearching = false;
   int _catalogSearchToken = 0;
+  // Catalogs that errored (timeout / HTTP / network) during the current
+  // catalog search — distinct from "returned no results". Drives the quiet
+  // "N sources didn't respond" note so failing addons don't just vanish.
+  int _catalogSearchFailures = 0;
 
   // Board infinite scroll. Every (addon, catalog) pair is enumerated up front in
   // [_boardRefs] (cheap — manifest metadata, no network), then fetched in batches
@@ -383,7 +387,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final ScrollController _boardScroll = ScrollController();
 
   /// Whether more board rows remain to lazily load (board mode only — never
-  /// during a catalog search, which fetches all its rows in one shot).
+  /// during a catalog search, which streams and appends its own rows).
   bool get _boardHasMore =>
       _catalogQuery.isEmpty &&
       !_catalogSearching &&
@@ -2026,11 +2030,23 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _catalogQuery = query;
       _catalogSearching = true;
+      _catalogSearchFailures = 0;
     });
+    // If DPAD focus is sitting on a result card from the PREVIOUS query, pull it
+    // back to the search field before we clear the board below — otherwise
+    // disposing that card's FocusNode strands focus. Only reachable on TV, and
+    // only when a keystroke's debounce fires after the user jumped down into the
+    // old results; the soft keyboard was already up from that keystroke, so this
+    // doesn't pop a new one.
+    if (widget.isTelevision && !_searchFocusNode.hasFocus) {
+      _searchFocusNode.requestFocus();
+    }
+    // Clear the previous query's rows + hero up front so results STREAM into a
+    // fresh board (spinner shows while it's empty) instead of blocking on the
+    // slowest addon before anything appears.
+    _applySections(const []);
     try {
-      final addons = (await _stremio.getBrowseableOrSearchableAddons())
-          .where((a) => a.hasSearchableCatalogs)
-          .toList();
+      final addons = await _stremio.getSearchableAddons();
       // One row PER searchable catalog (so Movies and Series land in separate
       // categorised rows, like Stremio) instead of one merged row per addon.
       final catalogTasks =
@@ -2042,36 +2058,50 @@ class _SearchScreenState extends State<SearchScreen> {
       }
       // Bound the fan-out: with many installed addons this could otherwise fire
       // hundreds of concurrent HTTP requests at once and exhaust sockets/memory
-      // on weak hardware (TVs). mapWithConcurrency preserves order.
-      final raw =
-          await mapWithConcurrency(catalogTasks, (entry) async {
+      // on weak hardware (TVs). Each catalog's row is appended AS IT ARRIVES
+      // (arrival order, like keyword search) — _appendSections grows the focus
+      // nodes without disposing existing ones, so DPAD focus never jumps when
+      // a late row lands below.
+      var appliedFirst = false;
+      await mapWithConcurrency(catalogTasks, (entry) async {
+        List<StremioMeta> items;
         try {
-          final items = await _stremio.searchSingleCatalog(
+          items = await _stremio.searchSingleCatalog(
             entry.addon,
             entry.catalog,
             query,
-          );
-          if (items.isEmpty) return null;
-          return CatalogSection(
-            title: '${entry.addon.name}: ${entry.catalog.name}',
-            addon: entry.addon,
-            catalog: entry.catalog,
-            items: items,
+            throwOnError: true,
           );
         } catch (_) {
+          // Source failed (not "no results") — count it for the status note.
+          if (mounted && token == _catalogSearchToken) {
+            setState(() => _catalogSearchFailures++);
+          }
           return null;
         }
+        if (!mounted || token != _catalogSearchToken) return null;
+        if (items.isEmpty) return null;
+        final section = CatalogSection(
+          title: '${entry.addon.name}: ${entry.catalog.name}',
+          addon: entry.addon,
+          catalog: entry.catalog,
+          items: items,
+        );
+        if (!appliedFirst) {
+          // First arrival: full apply so the hero seeds from it (the board is
+          // empty at this point, so nothing focused gets disposed).
+          appliedFirst = true;
+          _applySections([section]);
+        } else {
+          _appendSections([section]);
+        }
+        return null;
       });
       if (!mounted || token != _catalogSearchToken) return;
       setState(() => _catalogSearching = false);
-      _applySections(raw.whereType<CatalogSection>().toList());
     } catch (_) {
       if (!mounted || token != _catalogSearchToken) return;
       setState(() => _catalogSearching = false);
-      // Clear the previous query's rows + hero so a failed search doesn't leave
-      // stale results (and now a stale hero) mismatching the current query —
-      // same reset as a successful-but-empty search.
-      _applySections(const []);
     }
   }
 
@@ -2227,10 +2257,10 @@ class _SearchScreenState extends State<SearchScreen> {
         }
         return;
       }
-      // Only when results are actually mounted — not mid-search (the spinner is
-      // up and _rowNodes still holds the previous/stale set).
+      // Only when result rows are actually mounted. Mid-search is fine now:
+      // the board clears at search start and rows stream in, so a non-empty
+      // _rowNodes always belongs to the CURRENT query (never a stale set).
       if (_catalogQuery.isNotEmpty &&
-          !_catalogSearching &&
           _rowNodes.isNotEmpty &&
           _rowNodes.first.isNotEmpty) {
         _rowNodes.first.first.requestFocus();
@@ -2419,17 +2449,15 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _onQueryChanged(String value) {
     if (_mode != _Mode.catalog) return;
+    // Catalog search runs on SUBMIT (keyboard Enter / TV keyboard "Search"
+    // action) — see _onQuerySubmitted — not per keystroke. The only thing we do
+    // as the text changes is snap back to the prompt/board the moment the field
+    // is emptied, so clearing an active query doesn't leave stale results up.
+    // (Cheap, no network — so no debounce needed.)
     _catalogDebounce?.cancel();
-    _catalogDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      final q = value.trim();
-      if (q == _catalogQuery) return;
-      if (q.isEmpty) {
-        _restoreHome();
-      } else {
-        _runCatalogSearch(q);
-      }
-    });
+    if (value.trim().isEmpty && _catalogQuery.isNotEmpty) {
+      _restoreHome();
+    }
   }
 
   void _onQuerySubmitted(String value) {
@@ -4908,7 +4936,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildBody() {
     if (_mode == _Mode.keyword) return _buildKeyword();
-    if (_catalogSearching) {
+    // Full-screen spinner only until the FIRST result row streams in — after
+    // that the board renders and late rows append beneath it (a slim progress
+    // strip in _buildBoard signals the search is still running).
+    if (_catalogSearching && _sections.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     // Dedicated Search tab: blank prompt until there's a query (no hero/board).
@@ -6110,8 +6141,15 @@ class _SearchScreenState extends State<SearchScreen> {
         return _message(
           Icons.search_off_rounded,
           'No catalog matches',
-          'Nothing in your catalogs for "$_catalogQuery". Try different '
-              'keywords, or switch to Keyword to search torrents directly.',
+          _catalogSearchFailures > 0
+              ? 'Nothing in your catalogs for "$_catalogQuery" — and '
+                    '$_catalogSearchFailures source'
+                    '${_catalogSearchFailures == 1 ? '' : 's'} didn\'t '
+                    'respond, so there may be more. Try again, or switch to '
+                    'Keyword to search torrents directly.'
+              : 'Nothing in your catalogs for "$_catalogQuery". Try different '
+                    'keywords, or switch to Keyword to search torrents '
+                    'directly.',
         );
       }
       return _message(
@@ -6180,6 +6218,14 @@ class _SearchScreenState extends State<SearchScreen> {
                   );
                 },
               ),
+            // Slim, non-focusable status strip for a streaming catalog search:
+            // a hairline progress bar while rows are still arriving, then a
+            // quiet "N sources didn't respond" note if any catalog errored.
+            // Lives above the rows so it never takes DPAD focus and appends
+            // below never move it.
+            if (_catalogQuery.isNotEmpty &&
+                (_catalogSearching || _catalogSearchFailures > 0))
+              _buildSearchStatusStrip(),
             Expanded(
               child: Builder(
                 builder: (context) {
@@ -6251,6 +6297,37 @@ class _SearchScreenState extends State<SearchScreen> {
           ],
         );
       },
+    );
+  }
+
+  /// Status strip for a streaming catalog search (see the call site in
+  /// [_buildBoard]). Fixed height so the swap from "searching" bar to the
+  /// failure note doesn't reflow the rows under DPAD focus.
+  Widget _buildSearchStatusStrip() {
+    return SizedBox(
+      height: 16,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: _catalogSearching
+            ? const Center(
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  color: kStremioAccent,
+                  backgroundColor: Color(0x22FFFFFF),
+                ),
+              )
+            : Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '$_catalogSearchFailures source'
+                  '${_catalogSearchFailures == 1 ? '' : 's'} didn\'t respond',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.45),
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+      ),
     );
   }
 

@@ -1311,6 +1311,15 @@ class StremioService {
         .toList();
   }
 
+  /// Get all enabled addons with at least one search-capable catalog. Unlike
+  /// [getCatalogAddons] this doesn't require the manifest's `resources` to
+  /// contain 'catalog', so search-only addons that omit it are still included —
+  /// every search entry point should use this so they all agree on the set.
+  Future<List<StremioAddon>> getSearchableAddons() async {
+    final addons = await getEnabledAddons();
+    return addons.where((a) => a.hasSearchableCatalogs).toList();
+  }
+
   /// Get all available catalogs from all enabled catalog addons
   ///
   /// Returns a list of (addon, catalog) pairs for UI display
@@ -1667,10 +1676,13 @@ class StremioService {
     if (query.trim().isEmpty) return [];
 
     final encodedQuery = Uri.encodeComponent(query.trim());
-    final catalogAddons = await getCatalogAddons();
+    // getSearchableAddons (not getCatalogAddons) so this path queries the same
+    // addon set as the Search tab — including search-only addons whose
+    // manifest omits 'catalog' from `resources`.
+    final catalogAddons = await getSearchableAddons();
 
     if (catalogAddons.isEmpty) {
-      debugPrint('StremioService: No catalog addons found');
+      debugPrint('StremioService: No searchable addons found');
       return [];
     }
 
@@ -1758,21 +1770,28 @@ class StremioService {
   /// Public per-catalog search — lets callers group results per catalog (e.g.
   /// separate Movie / Series rows) instead of merging them like
   /// [searchAddonCatalogs]. Returns [] for a non-searchable catalog.
+  ///
+  /// With [throwOnError] a failed request (non-200 / timeout / network error)
+  /// throws instead of collapsing to [] — so callers can tell "no results"
+  /// apart from "source failed" and surface it.
   Future<List<StremioMeta>> searchSingleCatalog(
     StremioAddon addon,
     StremioAddonCatalog catalog,
-    String query,
-  ) async {
+    String query, {
+    bool throwOnError = false,
+  }) async {
     if (query.trim().isEmpty || !catalog.supportsSearch) return [];
     return _searchSingleCatalog(
-        addon, catalog, Uri.encodeComponent(query.trim()));
+        addon, catalog, Uri.encodeComponent(query.trim()),
+        throwOnError: throwOnError);
   }
 
   Future<List<StremioMeta>> _searchSingleCatalog(
     StremioAddon addon,
     StremioAddonCatalog catalog,
-    String encodedQuery,
-  ) async {
+    String encodedQuery, {
+    bool throwOnError = false,
+  }) async {
     // Build search URL: {baseUrl}/catalog/{type}/{id}/search={query}.json
     final url =
         '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}/search=$encodedQuery.json';
@@ -1797,6 +1816,12 @@ class StremioService {
           debugPrint(
             'StremioService: ${addon.name}/${catalog.name} search failed: HTTP ${response.statusCode}',
           );
+          if (throwOnError) {
+            throw http.ClientException(
+              'HTTP ${response.statusCode}',
+              Uri.parse(url),
+            );
+          }
           return [];
         }
 
@@ -1825,6 +1850,7 @@ class StremioService {
       debugPrint(
         'StremioService: ${addon.name}/${catalog.name} search error: $e',
       );
+      if (throwOnError) rethrow;
       return [];
     }
   }
