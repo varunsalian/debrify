@@ -2041,9 +2041,9 @@ class _SearchScreenState extends State<SearchScreen> {
     if (widget.isTelevision && !_searchFocusNode.hasFocus) {
       _searchFocusNode.requestFocus();
     }
-    // Clear the previous query's rows + hero up front so results STREAM into a
-    // fresh board (spinner shows while it's empty) instead of blocking on the
-    // slowest addon before anything appears.
+    // Clear the previous query's rows + hero up front. On phone/desktop results
+    // then STREAM into the fresh board as they arrive; on TV the board stays on
+    // its spinner until every catalog is in and lands in one shot (see below).
     _applySections(const []);
     try {
       final addons = await _stremio.getSearchableAddons();
@@ -2056,14 +2056,19 @@ class _SearchScreenState extends State<SearchScreen> {
           catalogTasks.add((addon: addon, catalog: catalog));
         }
       }
-      // Bound the fan-out: with many installed addons this could otherwise fire
-      // hundreds of concurrent HTTP requests at once and exhaust sockets/memory
-      // on weak hardware (TVs). Each catalog's row is appended AS IT ARRIVES
-      // (arrival order, like keyword search) — _appendSections grows the focus
-      // nodes without disposing existing ones, so DPAD focus never jumps when
-      // a late row lands below.
+      // On TV we deliberately DON'T lazy-stream rows in as they arrive: the
+      // incremental appends caused focus/scroll churn while surfing, so TV
+      // waits for every catalog and applies them in one shot below. Phone and
+      // desktop keep streaming — each row is applied AS IT ARRIVES.
+      // _appendSections grows the focus nodes without disposing existing ones,
+      // so streamed rows never jump focus.
+      //
+      // Bound the fan-out either way: with many installed addons this could
+      // otherwise fire hundreds of concurrent HTTP requests at once and exhaust
+      // sockets/memory on weak hardware.
+      final tv = widget.isTelevision;
       var appliedFirst = false;
-      await mapWithConcurrency(catalogTasks, (entry) async {
+      final raw = await mapWithConcurrency(catalogTasks, (entry) async {
         List<StremioMeta> items;
         try {
           items = await _stremio.searchSingleCatalog(
@@ -2087,17 +2092,26 @@ class _SearchScreenState extends State<SearchScreen> {
           catalog: entry.catalog,
           items: items,
         );
-        if (!appliedFirst) {
-          // First arrival: full apply so the hero seeds from it (the board is
-          // empty at this point, so nothing focused gets disposed).
-          appliedFirst = true;
-          _applySections([section]);
-        } else {
-          _appendSections([section]);
+        // TV: just collect it (applied together after the loop, in stable addon
+        // order). Non-TV: stream it into the board now.
+        if (!tv) {
+          if (!appliedFirst) {
+            // First arrival: full apply so the hero seeds from it (the board is
+            // empty at this point, so nothing focused gets disposed).
+            appliedFirst = true;
+            _applySections([section]);
+          } else {
+            _appendSections([section]);
+          }
         }
-        return null;
+        return section;
       });
       if (!mounted || token != _catalogSearchToken) return;
+      // TV: apply the whole result set at once (mapWithConcurrency preserves
+      // input order, so rows land in addon order, not completion order).
+      if (tv) {
+        _applySections(raw.whereType<CatalogSection>().toList());
+      }
       setState(() => _catalogSearching = false);
     } catch (_) {
       if (!mounted || token != _catalogSearchToken) return;
