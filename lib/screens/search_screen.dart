@@ -147,6 +147,7 @@ class _KwPreservedState {
   final Map<String, int> torrentCounts;
   final Set<String> selectedDirect;
   final Set<String> selectedTorrent;
+  final String? sourceTab;
   final double scrollOffset;
   const _KwPreservedState({
     required this.variant,
@@ -162,6 +163,7 @@ class _KwPreservedState {
     required this.torrentCounts,
     required this.selectedDirect,
     required this.selectedTorrent,
+    required this.sourceTab,
     required this.scrollOffset,
   });
 }
@@ -283,6 +285,38 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// Monotonic token so a slow earlier keyword search can't clobber a newer one.
   int _kwSearchToken = 0;
+
+  // ── Streaming keyword search (per-engine batches, Sources-list parity) ──
+  /// Raw per-engine batches accumulated this search; merged provisionally so
+  /// first rows paint as soon as the fastest engine answers.
+  final List<List<Torrent>> _kwBatches = [];
+
+  /// True while the awaited search is still in flight (drives the "still
+  /// searching" strip). Distinct from [_kwLoading], which only covers the
+  /// full-screen loader up to the FIRST batch.
+  bool _kwSearching = false;
+
+  /// Set on the first real user interaction (scroll drag, row DPAD nav, row
+  /// tap/long-press, toolbar use) — later arrivals then park in [_kwPending]
+  /// behind the "+N new results" pill instead of reshuffling the list.
+  bool _kwStreamFrozen = false;
+
+  /// Full (unfiltered) result set parked while frozen; adopted by the pill,
+  /// any toolbar action, or a source-tab tap.
+  List<Torrent>? _kwPending;
+
+  /// DPAD focus for the "+N new results" pill.
+  final FocusNode _kwPillFocus = FocusNode(debugLabel: 'kw_pill');
+
+  /// Source tab strip (All / per-source), single-select on top of the
+  /// Providers multi-select. Null = All.
+  String? _kwSourceTab;
+  final List<FocusNode> _kwTabNodes = [];
+
+  /// Provider-group keys ('d:src' / 't:src') already offered this search — a
+  /// NEW source auto-selects into the provider filter, but a source the user
+  /// unticked stays unticked when a later batch re-reports it.
+  final Set<String> _kwProviderSeen = {};
 
   /// Scroll controller for the keyword results list, so we can preserve/restore
   /// the scroll position across a tab switch (see [_KwPreservedState]).
@@ -706,22 +740,42 @@ class _SearchScreenState extends State<SearchScreen> {
     _kwTorrentCounts = snap.torrentCounts;
     _kwSelectedDirect = snap.selectedDirect;
     _kwSelectedTorrent = snap.selectedTorrent;
+    _kwSourceTab = snap.sourceTab;
     _searchController.text = snap.query;
     _disposeKwNodes();
     for (var i = 0; i < snap.results.length; i++) {
       _kwNodes.add(FocusNode(debugLabel: 'kw_$i'));
     }
+    _syncKwTabNodes();
     _pendingKwScroll = snap.scrollOffset;
     return true;
   }
 
   @override
   void dispose() {
-    // Preserve an in-progress keyword search so returning to this tab restores
+    // Preserve a COMPLETED keyword search so returning to this tab restores
     // results + scroll instead of the blank prompt (the nav rebuilds us fresh).
+    // A still-streaming search is NOT preserved: its batches die with this
+    // instance, so the snapshot would freeze a partial set that restores
+    // looking complete (no strip, no cache badges) — matching pre-streaming
+    // behavior, where a mid-flight switch preserved nothing.
     if (_mode == _Mode.keyword &&
         _kwQuery.isNotEmpty &&
-        _kwResults.isNotEmpty) {
+        _kwResults.isNotEmpty &&
+        !_kwSearching) {
+      // Fold a parked (pill) final set into the snapshot — pure field updates,
+      // safe in dispose — so restore doesn't resurrect a stale subset while
+      // silently dropping the authoritative result.
+      final pending = _kwPending;
+      if (pending != null) {
+        _kwPending = null;
+        _kwAll = pending;
+        if (_kwSourceTab != null &&
+            !pending.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
+          _kwSourceTab = null;
+        }
+        _computeKwProviders(pending);
+      }
       _kwPreserved = _KwPreservedState(
         variant: _variantKey,
         query: _kwQuery,
@@ -736,6 +790,7 @@ class _SearchScreenState extends State<SearchScreen> {
         torrentCounts: _kwTorrentCounts,
         selectedDirect: _kwSelectedDirect,
         selectedTorrent: _kwSelectedTorrent,
+        sourceTab: _kwSourceTab,
         scrollOffset: _kwLastScroll,
       );
     }
@@ -757,6 +812,11 @@ class _SearchScreenState extends State<SearchScreen> {
     _discSourceNode.dispose();
     _boardScroll.dispose();
     _kwScroll.dispose();
+    _kwPillFocus.dispose();
+    for (final n in _kwTabNodes) {
+      n.dispose();
+    }
+    _kwTabNodes.clear();
     _disposeNodes();
     _disposeKwNodes();
     for (final n in [
@@ -2453,9 +2513,21 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  Future<void> _runKeyword(String query) async {
+  /// One-shot: restore DPAD focus to the toolbar at the FIRST streamed paint
+  /// (set by _openKeywordSources, whose re-search unmounts the focused pill).
+  /// Consumed/cleared on present so a completion refocus can never yank the
+  /// remote off a row the user reached mid-stream.
+  bool _kwRefocusToolbar = false;
+
+  Future<void> _runKeyword(String query, {bool refocusToolbar = false}) async {
     if (query.isEmpty) return;
     final token = ++_kwSearchToken;
+    _kwBatches.clear();
+    _kwSearching = true;
+    _kwStreamFrozen = false;
+    _kwPending = null;
+    _kwProviderSeen.clear();
+    _kwRefocusToolbar = refocusToolbar;
     setState(() {
       _kwLoading = true;
       _kwError = null;
@@ -2468,16 +2540,38 @@ class _SearchScreenState extends State<SearchScreen> {
       _kwSelectedTorrent = {};
       _kwSelectionMode = false;
       _kwSelected.clear();
+      _kwSourceTab = null;
     });
     try {
-      final result = await TorrentService.searchAllEngines(query);
+      // Streaming: each engine's batch lands as soon as THAT engine finishes,
+      // so first rows show in seconds instead of after the slowest engine's
+      // timeout. Provisional merges use the same mergeSearchResults as the
+      // final result, so the list can never drift from what completion shows.
+      void onBatch(String source, List<Torrent> batch) {
+        if (!mounted || token != _kwSearchToken || batch.isEmpty) return;
+        // A timed-out engine's original future keeps running after the
+        // timeout fires — its late batch must not mutate the list after the
+        // awaited result already snapped it to the authoritative set.
+        if (!_kwSearching) return;
+        _kwBatches.add(batch);
+        _presentKwStreaming(
+          TorrentService.mergeSearchResults(_kwBatches),
+          token,
+        );
+      }
+
+      final result =
+          await TorrentService.searchAllEngines(query, onBatch: onBatch);
       // Drop stale results if a newer search started while this was in flight.
       if (!mounted || token != _kwSearchToken) return;
+      _kwSearching = false;
       final torrents = (result['torrents'] as List).cast<Torrent>();
       final engineErrors = result['engineErrors'];
       final engineCounts = result['engineCounts'];
       // No engine ran at all (empty counts AND errors) → the user has disabled
       // every source. Point them at Sources instead of a bare "No results".
+      // (Both empty-result checks below can only fire when no batch arrived,
+      // so the full-screen loader is still up — never an error over rows.)
       final noEngineRan = (engineCounts is! Map || engineCounts.isEmpty) &&
           (engineErrors is! Map || engineErrors.isEmpty);
       if (torrents.isEmpty && noEngineRan) {
@@ -2499,18 +2593,187 @@ class _SearchScreenState extends State<SearchScreen> {
         });
         return;
       }
-      _kwAll = torrents;
-      _computeKwProviders(_kwAll);
-      setState(() => _kwLoading = false);
-      _recomputeKeyword();
-      unawaited(_checkKeywordCache(_kwAll, token));
+      // The awaited result is authoritative — snap to it (or park it).
+      _presentKwStreaming(torrents, token);
+      _finishKeyword(token);
     } catch (e) {
       if (!mounted || token != _kwSearchToken) return;
+      _kwSearching = false;
       setState(() {
         _kwError = _friendlyKeywordError(e);
         _kwLoading = false;
       });
     }
+  }
+
+  /// Applies a (provisional or final) raw result set: recompute providers and
+  /// the filtered view, or — once the user has interacted ([_kwStreamFrozen])
+  /// — park it behind the "+N new results" pill so rows never reshuffle
+  /// mid-read.
+  void _presentKwStreaming(List<Torrent> raw, int token) {
+    if (!mounted || token != _kwSearchToken) return;
+    // The strip live-updates on every present (frozen or not), so if the
+    // remote is ON a tab, capture its source before indices shift.
+    final tabAnchor = _focusedKwTabSource();
+    if (_kwStreamFrozen) {
+      // The user has taken over focus — drop the pending toolbar refocus.
+      _kwRefocusToolbar = false;
+      _kwPending = raw;
+      _syncKwTabNodes(); // live tabs: nodes track the parked set's sources
+      setState(() {}); // pill count + tab strip update
+      _reanchorKwTab(tabAnchor);
+      return;
+    }
+    _kwAll = raw;
+    _computeKwProviders(raw);
+    _kwLoading = false; // first batch replaces the full-screen loader
+    _recomputeKeyword();
+    _reanchorKwTab(tabAnchor);
+    if (_kwRefocusToolbar) {
+      // The Sources-dialog re-search unmounted the focused toolbar; the
+      // toolbar just remounted with this first paint — put the remote back
+      // NOW, not at completion (rows are interactive from the first batch).
+      _kwRefocusToolbar = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _kwToolbarVisible) _kwToolbarNodes.first.requestFocus();
+      });
+    }
+  }
+
+  /// Completion-only steps: validate the source tab against the final set,
+  /// hide the searching strip, and run the cache-badge check.
+  void _finishKeyword(int token) {
+    if (!mounted || token != _kwSearchToken) return;
+    // Validate against the authoritative FULL set (pending included) — an
+    // early batch that merely hasn't delivered a source yet must not clear
+    // the user's tab mid-stream, so this check only runs here.
+    final full = _kwPending ?? _kwAll;
+    if (_kwSourceTab != null && !full.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
+      _kwSourceTab = null;
+      // Recompute over the DISPLAYED set even when arrivals are parked, so
+      // the strip ("All" active) and the visible list can't disagree.
+      _recomputeKeyword();
+    }
+    setState(() {}); // searching strip off
+    unawaited(_checkKeywordCache(full, token));
+  }
+
+  /// First real user interaction → stop live-reshuffling; buffer new arrivals
+  /// behind the pill instead.
+  void _kwFreeze() {
+    _kwStreamFrozen = true;
+  }
+
+  /// Freeze AND fold any parked arrivals in — used by toolbar/dialog/tab
+  /// actions, so the user always sorts/filters/selects over the complete set.
+  void _kwFreezeAndAdopt() {
+    _kwFreeze();
+    _kwAdoptPending();
+  }
+
+  /// Folds the parked result set into the list (pill tap / toolbar use) and
+  /// refreshes cache badges for the fresh rows.
+  void _kwAdoptPending() {
+    final p = _kwPending;
+    if (p == null) return;
+    _kwPending = null;
+    // Identity-preserving refocus (Sources-list parity): folding arrivals in
+    // can insert rows above the DPAD focus — keep the remote on the SAME
+    // torrent, not the same index. This also keeps a long-pressed row under
+    // its checkmark when _enterKwSelection adopts before toggling.
+    Torrent? focusedTorrent;
+    for (var i = 0; i < _kwNodes.length && i < _kwResults.length; i++) {
+      if (_kwNodes[i].hasFocus) {
+        focusedTorrent = _kwResults[i];
+        break;
+      }
+    }
+    _kwAll = p;
+    // A tab whose source lost every row to dedupe in the adopted set would
+    // otherwise stay "active" over an empty list with no highlighted pill.
+    if (_kwSourceTab != null &&
+        !p.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
+      _kwSourceTab = null;
+    }
+    _computeKwProviders(p);
+    _recomputeKeyword();
+    if (focusedTorrent != null) {
+      final key = _kwRowKey(focusedTorrent);
+      final idx = _kwResults.indexWhere((t) => _kwRowKey(t) == key);
+      if (idx >= 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && idx < _kwNodes.length) _kwNodes[idx].requestFocus();
+        });
+      }
+    }
+    unawaited(_checkKeywordCache(_kwAll, _kwSearchToken));
+  }
+
+  /// Identity key for pending-row diffing (infohash when real, else the
+  /// name+URL pair direct streams are distinguished by).
+  static String _kwRowKey(Torrent t) =>
+      t.hasRealInfoHash && t.infohash.isNotEmpty
+          ? 'h:${t.infohash.toLowerCase()}'
+          : 'n:${t.name}|${t.directUrl ?? ''}';
+
+  /// Rows waiting behind the pill (0 hides it) — a SET difference, not a
+  /// length delta, so dedupe-shrunk pending sets still count their new rows.
+  int get _kwPendingNewCount {
+    final p = _kwPending;
+    if (p == null) return 0;
+    final shown = {for (final t in _kwAll) _kwRowKey(t)};
+    var count = 0;
+    for (final t in p) {
+      if (!shown.contains(_kwRowKey(t))) count++;
+    }
+    return count;
+  }
+
+  /// A torrent's source-tab bucket ('unknown' for empty sources, matching the
+  /// provider-filter grouping).
+  static String _kwSourceOf(Torrent t) =>
+      t.source.isNotEmpty ? t.source : 'unknown';
+
+  /// The fullest known result set: parked arrivals when frozen, else the
+  /// displayed set. The tab strip derives from THIS so it live-updates
+  /// (counts tick, new source pills appear) even while the rows are frozen —
+  /// the strip sits above the list, so it never shifts what's being read.
+  List<Torrent> get _kwFullSet => _kwPending ?? _kwAll;
+
+  /// Distinct sources in [_kwFullSet], sorted — drives the tab strip.
+  List<String> get _kwSourceList {
+    final s = <String>{for (final t in _kwFullSet) _kwSourceOf(t)};
+    final l = s.toList()..sort();
+    return l;
+  }
+
+  /// The tab strip only earns its row when there's a real choice.
+  bool get _kwTabsVisible => _kwSourceList.length > 1;
+
+  /// Which SOURCE the focused tab points at ('' = the All tab, null = the
+  /// strip isn't focused). Captured BEFORE a strip rebuild so focus can be
+  /// re-anchored by identity — new sources insert alphabetically and shift
+  /// positional node indices under the remote.
+  String? _focusedKwTabSource() {
+    for (var i = 0; i < _kwTabNodes.length; i++) {
+      if (_kwTabNodes[i].hasFocus) {
+        if (i == 0) return '';
+        final sources = _kwSourceList;
+        return i - 1 < sources.length ? sources[i - 1] : '';
+      }
+    }
+    return null;
+  }
+
+  /// Post-frame counterpart of [_focusedKwTabSource]: refocus the tab that
+  /// carries [source] at its NEW index (All when it vanished).
+  void _reanchorKwTab(String? source) {
+    if (source == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final idx = source.isEmpty ? 0 : _kwSourceList.indexOf(source) + 1;
+      _focusKwTab(idx > 0 && idx < _kwTabNodes.length ? idx : 0);
+    });
   }
 
   /// Turn a raw search exception into a short, human-readable message — matches
@@ -2534,6 +2797,9 @@ class _SearchScreenState extends State<SearchScreen> {
       .toList();
 
   void _enterKwSelection() {
+    // Multi-select over a live-shifting list would let rows move under the
+    // checkmarks — freeze and fold parked arrivals in first.
+    _kwFreezeAndAdopt();
     // Entering selection swaps the toolbar to 3 pills; if DPAD focus was on the
     // now-gone "Select" pill (index 3), pull it back to the new first pill so
     // the remote doesn't lose focus.
@@ -2706,14 +2972,33 @@ class _SearchScreenState extends State<SearchScreen> {
     final direct = <String, int>{};
     final torrent = <String, int>{};
     for (final t in torrents) {
-      final src = t.source.isNotEmpty ? t.source : 'unknown';
+      final src = _kwSourceOf(t);
       final bucket = _kwIsDirect(t) ? direct : torrent;
       bucket[src] = (bucket[src] ?? 0) + 1;
     }
     _kwDirectCounts = direct;
     _kwTorrentCounts = torrent;
-    _kwSelectedDirect = direct.keys.toSet();
-    _kwSelectedTorrent = torrent.keys.toSet();
+    // Additive selection: a source never seen this search starts ticked, but
+    // one the user unticked stays unticked when a later engine's batch
+    // re-reports it — streaming recomputes must not wipe mid-search choices.
+    // ([_kwProviderSeen] resets per search, so the first call ticks all.)
+    for (final s in direct.keys) {
+      if (_kwProviderSeen.add('d:$s')) _kwSelectedDirect.add(s);
+    }
+    for (final s in torrent.keys) {
+      if (_kwProviderSeen.add('t:$s')) _kwSelectedTorrent.add(s);
+    }
+    // Prune sources that vanished from the merge (dedupe can reattribute a
+    // source's only row to a higher-seeded copy) — stale selections corrupt
+    // the Providers badge arithmetic and the dialog's All/None check. The
+    // seen-key goes too, so a source that REAPPEARS auto-ticks like new.
+    _kwSelectedDirect.removeWhere((s) => !direct.containsKey(s));
+    _kwSelectedTorrent.removeWhere((s) => !torrent.containsKey(s));
+    _kwProviderSeen.removeWhere(
+      (k) => k.startsWith('d:')
+          ? !direct.containsKey(k.substring(2))
+          : !torrent.containsKey(k.substring(2)),
+    );
   }
 
   /// TorBox-cached test used by the cached-only prefilter. Entries without a
@@ -2728,8 +3013,8 @@ class _SearchScreenState extends State<SearchScreen> {
     return labels != null && labels.contains('TB');
   }
 
-  /// Re-apply cached-only + provider + attribute filters and sort to the last
-  /// search's results, then rebuild focus nodes.
+  /// Re-apply cached-only + provider + tab + attribute filters and sort to the
+  /// last search's results, then sync focus nodes to the new length.
   void _recomputeKeyword() {
     Iterable<Torrent> base = _kwAll;
     // 1) TorBox cached-only prefilter (when active).
@@ -2740,21 +3025,71 @@ class _SearchScreenState extends State<SearchScreen> {
     //    group has no providers, so it imposes no constraint on its members.
     if (_kwDirectCounts.isNotEmpty || _kwTorrentCounts.isNotEmpty) {
       base = base.where((t) {
-        final src = t.source.isNotEmpty ? t.source : 'unknown';
+        final src = _kwSourceOf(t);
         if (_kwIsDirect(t)) {
           return _kwDirectCounts.isEmpty || _kwSelectedDirect.contains(src);
         }
         return _kwTorrentCounts.isEmpty || _kwSelectedTorrent.contains(src);
       });
     }
-    // 3) Quality / rip-source / language attribute filters.
+    // 3) Source tab (single-select) narrows on top of the multi-select.
+    final tab = _kwSourceTab;
+    if (tab != null) {
+      base = base.where((t) => _kwSourceOf(t) == tab);
+    }
+    // 4) Quality / rip-source / language attribute filters.
     final filtered = TorrentFilterMatcher.apply(base.toList(), _kwFilters);
     final sorted = _sortKeyword(filtered);
-    _disposeKwNodes();
-    for (var i = 0; i < sorted.length; i++) {
-      _kwNodes.add(FocusNode(debugLabel: 'kw_$i'));
-    }
+    _syncKwNodes(sorted.length);
+    _syncKwTabNodes();
     setState(() => _kwResults = sorted);
+  }
+
+  /// Grows/shrinks [_kwNodes] to the target length without ever disposing the
+  /// focused node unanchored. Removed nodes are disposed POST-FRAME — their
+  /// row widgets are still mounted this frame, and unmounting a Focus widget
+  /// whose node is already disposed asserts (same rule as the Sources list).
+  void _syncKwNodes(int length) {
+    while (_kwNodes.length < length) {
+      _kwNodes.add(FocusNode(debugLabel: 'kw_${_kwNodes.length}'));
+    }
+    if (_kwNodes.length > length) {
+      final removed = <FocusNode>[];
+      while (_kwNodes.length > length) {
+        final node = _kwNodes.removeLast();
+        if (node.hasFocus && _kwNodes.isNotEmpty) _kwNodes.last.requestFocus();
+        removed.add(node);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final node in removed) {
+          node.dispose();
+        }
+      });
+    }
+  }
+
+  /// Same grow/shrink discipline for the source-tab pills ("All" + one per
+  /// source in [_kwSourceList]).
+  void _syncKwTabNodes() {
+    final want = _kwSourceList.length + 1;
+    while (_kwTabNodes.length < want) {
+      _kwTabNodes.add(FocusNode(debugLabel: 'kw_tab_${_kwTabNodes.length}'));
+    }
+    if (_kwTabNodes.length > want) {
+      final removed = <FocusNode>[];
+      while (_kwTabNodes.length > want) {
+        final node = _kwTabNodes.removeLast();
+        if (node.hasFocus && _kwTabNodes.isNotEmpty) {
+          _kwTabNodes.last.requestFocus();
+        }
+        removed.add(node);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final node in removed) {
+          node.dispose();
+        }
+      });
+    }
   }
 
   List<Torrent> _sortKeyword(List<Torrent> list) {
@@ -2789,9 +3124,15 @@ class _SearchScreenState extends State<SearchScreen> {
   /// seeders/size/date read most/largest/newest first (descending).
   bool _naturalAscFor(String field) => field == 'name';
 
+  /// Generation counter for [_checkKeywordCache]: adopt-pending and completion
+  /// both launch checks under the SAME search token, and the earlier (partial
+  /// set) check can resolve last — only the newest launch may commit.
+  int _kwCacheGen = 0;
+
   /// Cache-check the results against TorBox/Premiumize (the only providers that
   /// support it) and stamp TB/PM badges onto the rows.
   Future<void> _checkKeywordCache(List<Torrent> torrents, int token) async {
+    final gen = ++_kwCacheGen;
     final hashes = torrents
         .map((t) => t.infohash.toLowerCase())
         .where((h) => h.isNotEmpty)
@@ -2844,8 +3185,10 @@ class _SearchScreenState extends State<SearchScreen> {
       final rdActive = rdEnabled && rdKey != null && rdKey.isNotEmpty;
       cachedOnly = !rdActive;
     }
-    // Drop badges from a superseded search.
-    if (!mounted || token != _kwSearchToken) return;
+    // Drop badges from a superseded search OR a superseded (older) check —
+    // a partial-set check launched by an adopt must not clobber the final
+    // set's map if its HTTP round trip resolves later.
+    if (!mounted || token != _kwSearchToken || gen != _kwCacheGen) return;
     _kwCache = map;
     if (cachedOnly != _kwCachedOnly) {
       // Cached-only mode toggles the visible set → full recompute.
@@ -2861,6 +3204,9 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _openKeywordFilters() async {
+    // Toolbar use is a deliberate reshuffle: stop live streaming updates and
+    // fold parked arrivals in, so the dialog operates on the complete set.
+    _kwFreezeAndAdopt();
     final result = await showDialog<TorrentFilterState>(
       context: context,
       builder: (_) => Dialog(
@@ -2929,6 +3275,8 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Direct and Torrent providers. Ported from the old screen's stream-type
   /// dropdowns, adapted to the new toolbar/dialog idiom.
   Future<void> _openKeywordProviders() async {
+    // Freeze + adopt so the provider counts reflect everything found so far.
+    _kwFreezeAndAdopt();
     await showDialog<void>(
       context: context,
       builder: (dialogCtx) {
@@ -3039,6 +3387,9 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _openKeywordSort() async {
+    // Sorting mid-stream over a shifting set would be meaningless — freeze
+    // and fold parked arrivals in first.
+    _kwFreezeAndAdopt();
     await showDialog<void>(
       context: context,
       builder: (dialogCtx) {
@@ -3123,19 +3474,18 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _openKeywordSources() async {
     // If the remote was on the toolbar, the re-search below unmounts it (loading
-    // spinner) and would strand DPAD focus — so restore it once results return.
+    // spinner) and would strand DPAD focus — restore it at the FIRST streamed
+    // paint (see _kwRefocusToolbar), when the toolbar remounts. A completion
+    // refocus would arrive seconds after rows became interactive and could
+    // yank the remote off a row the user had already navigated to.
     final fromToolbar = _kwToolbarNodes.any((n) => n.hasFocus);
     await showDialog<void>(
       context: context,
       builder: (_) => const _KeywordSourcesDialog(),
     );
     if (!mounted || _kwQuery.isEmpty) return;
-    await _runKeyword(_kwQuery); // re-search with the new enabled set
-    if (fromToolbar && mounted && _kwToolbarVisible) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _kwToolbarNodes.first.requestFocus();
-      });
-    }
+    // Re-search with the new enabled set.
+    await _runKeyword(_kwQuery, refocusToolbar: fromToolbar);
   }
 
   void _disposeKwNodes() {
@@ -4663,91 +5013,139 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     final content = Column(
       children: [
+        // Tabs are suppressed during multi-select: switching source mid-select
+        // would hide checked rows under the user while "Add · N" still counts
+        // them (matching the toolbar's own selection lock-out).
+        if (_kwTabsVisible && !_kwSelectionMode) _kwSourceTabs(),
         _buildKeywordToolbar(floatingSelect: narrow),
+        if (_kwSearching) _kwSearchingStrip(),
         if (_kwCachedOnly && _kwAll.isNotEmpty) _kwCachedOnlyNotice(),
         Expanded(
-          child: _kwResults.isEmpty
-              ? _message(
-                  Icons.search_off_rounded,
-                  _kwAll.isEmpty ? 'No results' : 'No matches',
-                  _kwAll.isEmpty
-                      ? 'Nothing found for "$_kwQuery". Try different keywords '
-                            'or enable more sources.'
-                      : 'No results match your filters. Adjust or clear them.',
-                )
-              : ListView.builder(
-                  controller: _kwScroll,
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  cacheExtent: 1200,
-                  itemCount: _kwResults.length,
-                  itemBuilder: (context, i) {
-                    final t = _kwResults[i];
-                    final selectable = !t.isDirectStream && !t.isExternalStream;
-                    return TorrentResultRow(
-                      key: ValueKey(
-                        '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: _kwResults.isEmpty
+                    ? _message(
+                        Icons.search_off_rounded,
+                        _kwAll.isEmpty ? 'No results' : 'No matches',
+                        _kwAll.isEmpty
+                            ? 'Nothing found for "$_kwQuery". Try different '
+                                  'keywords or enable more sources.'
+                            : 'No results match your filters. Adjust or clear them.',
+                      )
+                    : NotificationListener<ScrollNotification>(
+                        // A user drag (not programmatic scrolls) freezes live
+                        // reshuffling — arrivals park behind the pill instead.
+                        onNotification: (n) {
+                          if (n is ScrollStartNotification &&
+                              n.dragDetails != null) {
+                            _kwFreeze();
+                          }
+                          return false;
+                        },
+                        child: ListView.builder(
+                          controller: _kwScroll,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          cacheExtent: 1200,
+                          itemCount: _kwResults.length,
+                          itemBuilder: (context, i) {
+                            final t = _kwResults[i];
+                            final selectable =
+                                !t.isDirectStream && !t.isExternalStream;
+                            return TorrentResultRow(
+                              key: ValueKey(
+                                '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
+                              ),
+                              torrent: t,
+                              index: i,
+                              focusNode: _kwNodes[i],
+                              isTelevision: widget.isTelevision,
+                              qualityTier: t.qualityTier,
+                              cacheLabels:
+                                  _kwCache[t.infohash.toLowerCase()] ??
+                                  const [],
+                              isSelectionMode: _kwSelectionMode && selectable,
+                              isSelected: _kwSelected.contains(t.infohash),
+                              onTap: () {
+                                if (_kwSelectionMode && selectable) {
+                                  _toggleKwSelection(t);
+                                  return;
+                                }
+                                // Swallow a SELECT that leaks through as a toolbar
+                                // dialog (sort/filter/sources) closes on TV.
+                                if (DialogTapGuard.shouldIgnoreTap()) return;
+                                // Playing pushes the player — freeze so the list
+                                // is exactly as left when the user comes back.
+                                _kwFreeze();
+                                unawaited(
+                                  TorrentPlaybackService.activateTorrent(
+                                    context,
+                                    t,
+                                    // Pass the whole result set so the in-player Sources
+                                    // switcher can hop to any other keyword hit (parity
+                                    // with the old screen, which always passed _torrents).
+                                    sources: _kwResults,
+                                    sourceIndex: i,
+                                    searchKeyword: _kwQuery,
+                                  ),
+                                );
+                              },
+                              onLongPress: _kwSelectionMode
+                                  ? null
+                                  : selectable
+                                  ? () {
+                                      _enterKwSelection();
+                                      _toggleKwSelection(t);
+                                    }
+                                  // Direct/external streams aren't selectable — long
+                                  // press opens their Play/Copy/Download menu instead
+                                  // (parity with the old direct-stream action dialog).
+                                  : () {
+                                      _kwFreeze();
+                                      _showKwStreamMenu(t, i);
+                                    },
+                              onCopyMagnet: () => _copyKwMagnet(t),
+                              onNavigateUp: () {
+                                _kwFreeze();
+                                if (i > 0) {
+                                  _kwNodes[i - 1].requestFocus();
+                                } else if (_kwPendingNewCount > 0 &&
+                                    !_kwSelectionMode) {
+                                  // Parked arrivals: the pill is the row above
+                                  // (unmounted during multi-select, where UP
+                                  // must reach the selection toolbar instead).
+                                  _kwPillFocus.requestFocus();
+                                } else if (_kwToolbarVisible) {
+                                  // From the top row, Up lands on the toolbar (Sort…),
+                                  // not straight back to the search field.
+                                  _kwToolbarNodes.first.requestFocus();
+                                } else {
+                                  _searchFocusNode.requestFocus();
+                                }
+                              },
+                              onNavigateDown: () {
+                                _kwFreeze();
+                                if (i < _kwNodes.length - 1) {
+                                  _kwNodes[i + 1].requestFocus();
+                                }
+                              },
+                            );
+                          },
+                        ),
                       ),
-                      torrent: t,
-                      index: i,
-                      focusNode: _kwNodes[i],
-                      isTelevision: widget.isTelevision,
-                      qualityTier: t.qualityTier,
-                      cacheLabels:
-                          _kwCache[t.infohash.toLowerCase()] ?? const [],
-                      isSelectionMode: _kwSelectionMode && selectable,
-                      isSelected: _kwSelected.contains(t.infohash),
-                      onTap: () {
-                        if (_kwSelectionMode && selectable) {
-                          _toggleKwSelection(t);
-                          return;
-                        }
-                        // Swallow a SELECT that leaks through as a toolbar
-                        // dialog (sort/filter/sources) closes on TV.
-                        if (DialogTapGuard.shouldIgnoreTap()) return;
-                        unawaited(
-                          TorrentPlaybackService.activateTorrent(
-                            context,
-                            t,
-                            // Pass the whole result set so the in-player Sources
-                            // switcher can hop to any other keyword hit (parity
-                            // with the old screen, which always passed _torrents).
-                            sources: _kwResults,
-                            sourceIndex: i,
-                            searchKeyword: _kwQuery,
-                          ),
-                        );
-                      },
-                      onLongPress: _kwSelectionMode
-                          ? null
-                          : selectable
-                          ? () {
-                              _enterKwSelection();
-                              _toggleKwSelection(t);
-                            }
-                          // Direct/external streams aren't selectable — long
-                          // press opens their Play/Copy/Download menu instead
-                          // (parity with the old direct-stream action dialog).
-                          : () => _showKwStreamMenu(t, i),
-                      onCopyMagnet: () => _copyKwMagnet(t),
-                      onNavigateUp: () {
-                        if (i > 0) {
-                          _kwNodes[i - 1].requestFocus();
-                        } else if (_kwToolbarVisible) {
-                          // From the top row, Up lands on the toolbar (Sort…),
-                          // not straight back to the search field.
-                          _kwToolbarNodes.first.requestFocus();
-                        } else {
-                          _searchFocusNode.requestFocus();
-                        }
-                      },
-                      onNavigateDown: () {
-                        if (i < _kwNodes.length - 1) {
-                          _kwNodes[i + 1].requestFocus();
-                        }
-                      },
-                    );
-                  },
+              ),
+              // Frozen-mode arrivals wait behind this pill so the list never
+              // reshuffles under the user. Hidden during multi-select —
+              // adopting would renumber rows under the checkmarks.
+              if (_kwPendingNewCount > 0 && !_kwSelectionMode)
+                Positioned(
+                  top: 10,
+                  left: 0,
+                  right: 0,
+                  child: Center(child: _kwNewResultsPill()),
                 ),
+            ],
+          ),
         ),
       ],
     );
@@ -4797,6 +5195,294 @@ class _SearchScreenState extends State<SearchScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Display name for a source tab ('stremio:foo' → 'Foo').
+  static String _kwPrettySource(String s) {
+    final v = s.startsWith('stremio:') ? s.substring(8) : s;
+    return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
+  }
+
+  /// Horizontal source tabs (All / per-source with counts) above the toolbar —
+  /// the fast single-select layer on top of the Providers multi-select. Only
+  /// built when [_kwTabsVisible] (2+ sources). Derives from [_kwFullSet]:
+  /// counts tick and new source pills appear live even while the rows below
+  /// are frozen behind the pill (activating any tab folds the parked set in
+  /// first, so what a tab press shows is always the complete picture). DPAD:
+  /// left/right across tabs, up to the search field, down into the toolbar,
+  /// select to activate.
+  Widget _kwSourceTabs() {
+    const accent = Color(0xFF7B5CFF);
+    final dim = Colors.white.withValues(alpha: 0.55);
+    final sources = _kwSourceList;
+    final full = _kwFullSet;
+    final counts = <String, int>{};
+    for (final t in full) {
+      counts[_kwSourceOf(t)] = (counts[_kwSourceOf(t)] ?? 0) + 1;
+    }
+    final total = sources.length + 1;
+
+    Widget tab(int navIndex, String label, bool on, VoidCallback onTap) {
+      // Nodes are synced in _recomputeKeyword; a mid-build mismatch (e.g. the
+      // strip rebuilt by a non-recompute setState) must not range-crash.
+      final node = navIndex < _kwTabNodes.length ? _kwTabNodes[navIndex] : null;
+      Widget body(bool focused) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        decoration: BoxDecoration(
+          color: on ? accent : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(999),
+          // Always 2px so focus never shifts layout.
+          border: Border.all(
+            color: focused
+                ? Colors.white.withValues(alpha: 0.9)
+                : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: on ? Colors.white : dim,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+      final Widget tappable = node == null
+          ? Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(999),
+                child: body(false),
+              ),
+            )
+          : Focus(
+              focusNode: node,
+              onKeyEvent: (n, e) => _handleKwTabKey(navIndex, total, onTap, e),
+              child: Builder(
+                builder: (context) {
+                  final focused = Focus.of(context).hasFocus;
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onTap,
+                      borderRadius: BorderRadius.circular(999),
+                      canRequestFocus: false,
+                      child: body(focused),
+                    ),
+                  );
+                },
+              ),
+            );
+      return Padding(padding: const EdgeInsets.only(right: 6), child: tappable);
+    }
+
+    // SingleChildScrollView + Row (not a lazy ListView) so EVERY tab's
+    // FocusNode stays mounted — requestFocus on an unmounted node is a silent
+    // no-op that would strand DPAD at the viewport edge (same reason the
+    // keyword toolbar uses this shape).
+    return SizedBox(
+      height: 42,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Row(
+          children: [
+            tab(0, 'All · ${full.length}', _kwSourceTab == null,
+                () => _setKwSourceTab(null)),
+            for (var i = 0; i < sources.length; i++)
+              tab(
+                i + 1,
+                '${_kwPrettySource(sources[i])} · ${counts[sources[i]] ?? 0}',
+                _kwSourceTab == sources[i],
+                () => _setKwSourceTab(sources[i]),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Focus a source tab AND scroll the strip to reveal it — a bare
+  /// requestFocus doesn't scroll, so an off-screen tab would take focus
+  /// invisibly.
+  void _focusKwTab(int index) {
+    if (index < 0 || index >= _kwTabNodes.length) return;
+    final node = _kwTabNodes[index];
+    node.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = node.context;
+      if (mounted && ctx != null && ctx.mounted) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 120),
+        );
+      }
+    });
+  }
+
+  void _setKwSourceTab(String? source) {
+    final tabHadFocus = _kwTabNodes.any((n) => n.hasFocus);
+    // A deliberate reshuffle: fold parked arrivals in so the tab filters the
+    // complete set (also freezes further live updates).
+    _kwFreezeAndAdopt();
+    // The tapped source can vanish in the adopt (dedupe reattribution) — an
+    // active tab no longer in the strip would strand an empty list.
+    if (source != null && !_kwAll.any((t) => _kwSourceOf(t) == source)) {
+      source = null;
+    }
+    if (_kwSourceTab != source) {
+      _kwSourceTab = source;
+      _recomputeKeyword();
+    }
+    // Tab nodes are positional and the adopt can re-sort _kwSourceList —
+    // re-anchor DPAD focus onto the tab that was actually chosen.
+    if (tabHadFocus) {
+      final s = source;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final idx = s == null ? 0 : _kwSourceList.indexOf(s) + 1;
+        _focusKwTab(idx > 0 && idx < _kwTabNodes.length ? idx : 0);
+      });
+    }
+  }
+
+  /// DPAD/keyboard handling for a focused source tab: select activates,
+  /// left/right move between tabs (left edge escapes to the sidebar), up
+  /// returns to the search field, down drops into the toolbar pills.
+  KeyEventResult _handleKwTabKey(
+    int index,
+    int total,
+    VoidCallback onTap,
+    KeyEvent event,
+  ) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+      onTap();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _focusSearchFieldAtEnd();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _kwToolbarNodes.first.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (index > 0) {
+        _focusKwTab(index - 1);
+      } else {
+        MainPageBridge.focusTvSidebar?.call();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (index < total - 1) _focusKwTab(index + 1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Slim "still searching" strip under the toolbar while engines are in
+  /// flight — rows are already usable, this just says more may arrive.
+  Widget _kwSearchingStrip() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 11,
+            height: 11,
+            child: CircularProgressIndicator(strokeWidth: 1.6),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Still searching sources…',
+            style: TextStyle(
+              fontSize: 11.5,
+              color: Colors.white.withValues(alpha: 0.55),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The "+N new results" pill: tap (or OK on TV) folds the parked arrivals
+  /// into the list; DOWN returns to the rows, UP reaches the toolbar.
+  Widget _kwNewResultsPill() {
+    const accent = Color(0xFF7B5CFF);
+    final n = _kwPendingNewCount;
+    return Focus(
+      focusNode: _kwPillFocus,
+      onKeyEvent: (node, e) {
+        if (e is! KeyDownEvent) return KeyEventResult.ignored;
+        if (isActivateKey(e.logicalKey)) {
+          _kwAdoptPending();
+          if (_kwNodes.isNotEmpty) _kwNodes.first.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (e.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (_kwNodes.isNotEmpty) _kwNodes.first.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (e.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _kwToolbarNodes.first.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: ListenableBuilder(
+        listenable: _kwPillFocus,
+        builder: (context, _) {
+          final focused = _kwPillFocus.hasFocus;
+          return GestureDetector(
+            onTap: _kwAdoptPending,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: focused ? Colors.white : accent,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: focused ? Colors.white : Colors.transparent,
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.arrow_upward_rounded,
+                    size: 14,
+                    color: focused ? const Color(0xFF17131F) : Colors.white,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$n new result${n == 1 ? '' : 's'}',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: focused ? const Color(0xFF17131F) : Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -5011,11 +5697,27 @@ class _SearchScreenState extends State<SearchScreen> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
+      // Source tabs sit between the toolbar and the search field — land on
+      // the active tab so the strip context is obvious. Hidden during
+      // multi-select (the strip is suppressed then — see _buildKeyword).
+      if (!_kwSelectionMode && _kwTabsVisible && _kwTabNodes.isNotEmpty) {
+        final tabs = _kwSourceList;
+        final active =
+            _kwSourceTab == null ? 0 : tabs.indexOf(_kwSourceTab!) + 1;
+        _focusKwTab(active >= 0 && active < _kwTabNodes.length ? active : 0);
+        return KeyEventResult.handled;
+      }
       _focusSearchFieldAtEnd();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowDown) {
-      if (_kwNodes.isNotEmpty) _kwNodes.first.requestFocus();
+      if (_kwNodes.isNotEmpty) {
+        _kwNodes.first.requestFocus();
+      } else if (_kwPendingNewCount > 0 && !_kwSelectionMode) {
+        // Zero rows (e.g. a no-match filter) but arrivals parked behind the
+        // pill: the pill must stay reachable or it's visible-but-dead on TV.
+        _kwPillFocus.requestFocus();
+      }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
