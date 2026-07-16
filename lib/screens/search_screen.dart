@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' show lerpDouble;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -702,6 +703,12 @@ class _SearchScreenState extends State<SearchScreen> {
   /// failed / hero moved on) — drives the hero's little "Trailer" pill.
   final ValueNotifier<bool> _heroTrailerLoading = ValueNotifier<bool>(false);
 
+  /// True while trailer frames are actually on screen. The spotlight fades its
+  /// static backdrop image out on this signal (the video plays in the board
+  /// layer BENEATH the spotlight, so the image must yield to reveal it — the
+  /// crossfade the video's own opacity used to provide when it sat on top).
+  final ValueNotifier<bool> _heroTrailerShowing = ValueNotifier<bool>(false);
+
   /// Settings → Home Page toggles, read once per screen life (on TV a tab
   /// switch rebuilds the screen, so Settings changes are picked up on return).
   bool _heroTrailerEnabled = false;
@@ -953,6 +960,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroEnriched.dispose();
     _heroTrailer.dispose();
     _heroTrailerLoading.dispose();
+    _heroTrailerShowing.dispose();
     _heroTint.dispose();
     _searchController.dispose();
     _catalogSourcesHideTimer?.cancel();
@@ -2629,6 +2637,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final req = ++_heroTrailerReq;
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
+    if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
     _heroTrailerTimer = Timer(const Duration(milliseconds: 2400), () async {
       if (!mounted || req != _heroTrailerReq) return;
       // From here the attempt is committed — surface the pill. Every exit
@@ -2672,9 +2681,13 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// The hero backdrop's playing signal: frames on screen (true) or engine
-  /// teardown/error (false). Either way the loading pill's moment is over.
+  /// teardown/error (false). Ends the loading pill either way, and drives the
+  /// spotlight's image-yield crossfade.
   void _onHeroTrailerPlaying(bool playing) {
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
+    if (_heroTrailerShowing.value != playing) {
+      _heroTrailerShowing.value = playing;
+    }
   }
 
   /// Kill any pending/playing hero trailer (hero cleared, board reloading).
@@ -2683,6 +2696,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroTrailerReq++;
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
+    if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
   }
 
   // ── Dynamic per-title tint ────────────────────────────────────────────────
@@ -6695,7 +6709,27 @@ class _SearchScreenState extends State<SearchScreen> {
                   )
             : (width >= 900 ? 300.0 : 196.0);
 
-        return Column(
+        // The ambient trailer is hosted here — BEHIND the whole board, laid
+        // out full-screen from frame one and masked down to the hero rect —
+        // NOT inside the hero. That's what makes the 10s "they're watching"
+        // promotion glitch-free: expanding to fill the page only animates the
+        // mask; the video texture never moves, resizes or re-fits, so
+        // playback simply continues. The spotlight fades its own backdrop
+        // image out once frames arrive (see _HeroSpotlight.trailerShowing) to
+        // reveal the video underneath.
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (_heroTrailerActive)
+              Positioned.fill(
+                child: _HeroTrailerLayer(
+                  trailer: _heroTrailer,
+                  heroHeight: heroH,
+                  volume: _heroTrailerVolume,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                ),
+              ),
+            Column(
           children: [
             // The hero spotlight only changes as DPAD focus moves across tiles, so
             // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
@@ -6726,12 +6760,12 @@ class _SearchScreenState extends State<SearchScreen> {
                         isTelevision: tv,
                         height: heroH,
                         tint: _heroTint,
-                        trailer: _heroTrailerActive ? _heroTrailer : null,
                         trailerLoading: _heroTrailerActive
                             ? _heroTrailerLoading
                             : null,
-                        trailerVolume: _heroTrailerVolume,
-                        onTrailerPlayingChanged: _onHeroTrailerPlaying,
+                        trailerShowing: _heroTrailerActive
+                            ? _heroTrailerShowing
+                            : null,
                       );
                     },
                   );
@@ -6812,6 +6846,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   );
                 },
               ),
+            ),
+          ],
             ),
           ],
         );
@@ -7584,22 +7620,16 @@ class _HeroSpotlight extends StatefulWidget {
   /// on the title's mood. Null = neutral (no tint yet / colorless art).
   final ValueListenable<Color?>? tint;
 
-  /// Resolved ambient-trailer streams for the spotlighted title (host-resolved,
-  /// debounced until DPAD focus rests). Non-null only on the TV Home board.
-  /// While null/empty the hero is exactly the static spotlight; when streams
-  /// arrive the trailer crossfades in over the backdrop in place.
-  final ValueListenable<YoutubeResolvedStreams?>? trailer;
-
   /// Host-driven "a trailer is on its way" flag — shows the corner pill from
   /// resolve-start until frames land (or the attempt dies).
   final ValueListenable<bool>? trailerLoading;
 
-  /// Ambient volume (0–100) for the trailer; 0 = play silently.
-  final double trailerVolume;
-
-  /// Relay of [HeroTrailerBackdrop.onPlayingChanged] back to the host (it ends
-  /// the loading-pill state).
-  final ValueChanged<bool>? onTrailerPlayingChanged;
+  /// Host-driven "trailer frames are on screen" flag. The trailer video plays
+  /// in the board layer BENEATH this spotlight (see [_HeroTrailerLayer]), so
+  /// the static backdrop image fades out on this signal to reveal it — that
+  /// fade IS the image→video crossfade. The Ken Burns drift also freezes
+  /// while hidden (no point re-rasterising an invisible layer every frame).
+  final ValueListenable<bool>? trailerShowing;
 
   const _HeroSpotlight({
     required this.item,
@@ -7610,10 +7640,8 @@ class _HeroSpotlight extends StatefulWidget {
     this.rating,
     this.compact = false,
     this.tint,
-    this.trailer,
     this.trailerLoading,
-    this.trailerVolume = 0,
-    this.onTrailerPlayingChanged,
+    this.trailerShowing,
   });
 
   @override
@@ -7645,6 +7673,24 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   bool _motionOk = true;
 
   @override
+  void initState() {
+    super.initState();
+    widget.trailerShowing?.addListener(_onTrailerShowingChanged);
+  }
+
+  /// Freeze the Ken Burns drift while the trailer video covers the image —
+  /// its masked layer would otherwise keep re-rasterising every frame for
+  /// nothing — and resume it when the image comes back.
+  void _onTrailerShowingChanged() {
+    if (!mounted || !_motionOk) return;
+    if (widget.trailerShowing?.value == true) {
+      _ken.stop();
+    } else if (!_ken.isAnimating) {
+      _ken.repeat(reverse: true);
+    }
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Respect reduced-motion: hold the backdrop still, skip text cascades.
@@ -7652,7 +7698,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     if (!_motionOk) {
       _ken.stop();
       _textFx.value = 1.0;
-    } else if (!_ken.isAnimating) {
+    } else if (!_ken.isAnimating && widget.trailerShowing?.value != true) {
       _ken.repeat(reverse: true);
     }
   }
@@ -7660,6 +7706,10 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   @override
   void didUpdateWidget(_HeroSpotlight old) {
     super.didUpdateWidget(old);
+    if (!identical(old.trailerShowing, widget.trailerShowing)) {
+      old.trailerShowing?.removeListener(_onTrailerShowingChanged);
+      widget.trailerShowing?.addListener(_onTrailerShowingChanged);
+    }
     if (old.item.id != widget.item.id && _motionOk) {
       _textFx.forward(from: 0);
     }
@@ -7667,9 +7717,28 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
 
   @override
   void dispose() {
+    widget.trailerShowing?.removeListener(_onTrailerShowingChanged);
     _ken.dispose();
     _textFx.dispose();
     super.dispose();
+  }
+
+  /// The image→trailer crossfade (see the call site): fades the static
+  /// backdrop out while trailer frames are showing in the layer beneath.
+  /// No-op wrapper when the host runs no trailers on this surface.
+  Widget _maybeFadeForTrailer(Widget child) {
+    final showing = widget.trailerShowing;
+    if (showing == null) return child;
+    return ValueListenableBuilder<bool>(
+      valueListenable: showing,
+      builder: (context, on, kid) => AnimatedOpacity(
+        opacity: on ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 650),
+        curve: Curves.easeOut,
+        child: kid,
+      ),
+      child: child,
+    );
   }
 
   /// Wraps one text-block line in its slice of the cascade: a quick fade plus
@@ -7735,7 +7804,14 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
             // Stack.clipBehavior never catches — the Stack only clips overflow
             // it detects at layout time. Without this, the zoomed backdrop
             // smears above the hero into the search header (the "bleed").
-            RepaintBoundary(
+            //
+            // The outer fade is the image→trailer crossfade: the trailer video
+            // renders in the board layer BENEATH this spotlight, so when its
+            // frames arrive the image yields (fades out) to reveal it, and
+            // fades back the moment the trailer stops. Timing mirrors the
+            // 650ms crossfade HeroTrailerBackdrop uses internally.
+            _maybeFadeForTrailer(
+              RepaintBoundary(
               child: ClipRect(
               child: ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
@@ -7782,56 +7858,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
             ),
           ),
           ),
-          // Ambient trailer — layered over the static backdrop, under the
-          // scrims/text, wearing the SAME bottom-melt mask so the video fades
-          // into the board exactly like the image does. With imageUrl null the
-          // HeroTrailerBackdrop is a pure video layer: transparent until the
-          // trailer produces frames, then a slow crossfade in — the Ken Burns
-          // image simply stays underneath as the "before" state. The ValueKey
-          // remounts it per trailer so each title gets a fresh engine, and a
-          // null value unmounts it (decoder released) the instant the host
-          // clears the notifier on a hero change. Route pushes / app
-          // backgrounding / content-playback launches are already handled
-          // inside the widget itself.
-          if (widget.trailer != null)
-            ValueListenableBuilder<YoutubeResolvedStreams?>(
-              valueListenable: widget.trailer!,
-              builder: (context, streams, __) {
-                if (streams == null || !streams.hasPlayable) {
-                  return const SizedBox.shrink();
-                }
-                return RepaintBoundary(
-                  child: ClipRect(
-                    child: ShaderMask(
-                      shaderCallback: (rect) => const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.white, Colors.white, Colors.transparent],
-                        stops: [0.0, 0.55, 1.0],
-                      ).createShader(rect),
-                      blendMode: BlendMode.dstIn,
-                      child: HeroTrailerBackdrop(
-                        key: ValueKey('hero-trailer-${streams.playUrl}'),
-                        imageUrl: null,
-                        videoUrl: streams.playUrl,
-                        audioUrl: streams.audioUrl,
-                        enabled: true,
-                        // No blur layers: this hero is TV-only and a per-frame
-                        // filter pass over the video surface is what stutters
-                        // weak TV GPUs (same rationale as the detail page).
-                        imageBlurSigma: 0,
-                        videoBlurSigma: 0,
-                        // The host already debounced for focus-rest; keep just
-                        // enough delay to absorb an immediate focus move.
-                        startDelay: const Duration(milliseconds: 300),
-                        ambientVolume: widget.trailerVolume,
-                        onPlayingChanged: widget.onTrailerPlayingChanged,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+          ),
           // Top scrim — compact Search hero only. The hero sits directly under
           // the search bar, so even with the overflow clipped the backdrop's
           // top row starts at full brightness against the header. A short dark
@@ -8044,6 +8071,248 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
       ),
     ),
   );
+}
+
+/// Full-board ambient trailer layer (TV Home board only). Sits BEHIND the
+/// hero + rows, laid out full-screen from frame one, and masked down to the
+/// hero rect while ambient — visually identical to a hero-embedded trailer.
+/// Once the viewer has actually watched ~10s ([_promoteAfter]), it promotes:
+/// the mask animates open until the video fills the whole board behind the
+/// cards, with a scrim fading in over the lower region so rows stay legible.
+///
+/// The promotion is glitch-free BY CONSTRUCTION: the video's layout never
+/// changes (always full-screen, BoxFit.cover never re-fits) and the
+/// [HeroTrailerBackdrop] subtree is pinned by a [GlobalKey], so even the
+/// steady-state branch change (masked → bare, dropping the ClipRect/
+/// ShaderMask wrappers entirely once fully promoted) re-parents the SAME
+/// element — the texture, decoder and audio simply keep running.
+///
+/// Any hero change tears the trailer down (the host nulls the listenable →
+/// the video unmounts) and the promotion resets for the next title. A
+/// trailer that stops for content playback demotes on its own via
+/// [HeroTrailerBackdrop.onPlayingChanged](false).
+class _HeroTrailerLayer extends StatefulWidget {
+  final ValueListenable<YoutubeResolvedStreams?> trailer;
+
+  /// The hero spotlight's height — the ambient mask's shape.
+  final double heroHeight;
+
+  /// Ambient volume 0–100 (0 = play silently).
+  final double volume;
+
+  /// Relayed [HeroTrailerBackdrop.onPlayingChanged] (host pill + image fade).
+  final ValueChanged<bool>? onPlayingChanged;
+
+  const _HeroTrailerLayer({
+    required this.trailer,
+    required this.heroHeight,
+    required this.volume,
+    this.onPlayingChanged,
+  });
+
+  @override
+  State<_HeroTrailerLayer> createState() => _HeroTrailerLayerState();
+}
+
+class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
+    with SingleTickerProviderStateMixin {
+  /// Continuous watching required before the trailer takes over the board.
+  static const Duration _promoteAfter = Duration(seconds: 10);
+
+  /// 0 = ambient (hero-shaped mask) → 1 = promoted (full-board video).
+  late final AnimationController _promote = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+
+  Timer? _promoteTimer;
+
+  /// Pins the backdrop's element so state (engine/texture) survives the
+  /// masked↔bare branch swap. Replaced per trailer URL so each title still
+  /// gets a fresh engine.
+  GlobalKey _backdropKey = GlobalKey();
+  String? _backdropUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.trailer.addListener(_onTrailerChanged);
+  }
+
+  @override
+  void didUpdateWidget(_HeroTrailerLayer old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.trailer, widget.trailer)) {
+      old.trailer.removeListener(_onTrailerChanged);
+      widget.trailer.addListener(_onTrailerChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.trailer.removeListener(_onTrailerChanged);
+    _promoteTimer?.cancel();
+    _promote.dispose();
+    super.dispose();
+  }
+
+  void _onTrailerChanged() {
+    if (!mounted) return;
+    if (widget.trailer.value == null) {
+      // Hero moved on — the video is unmounting right now, so snap the mask
+      // state back for the next title (nothing visible to animate).
+      _promoteTimer?.cancel();
+      _promote.value = 0;
+    }
+  }
+
+  void _onPlaying(bool playing) {
+    widget.onPlayingChanged?.call(playing);
+    if (!mounted) return;
+    if (playing) {
+      _promoteTimer?.cancel();
+      _promoteTimer = Timer(_promoteAfter, () {
+        if (mounted && widget.trailer.value != null) {
+          _promote.forward();
+        }
+      });
+    } else {
+      // Stopped (content playback launched / engine died): don't take over
+      // the board with a dead surface — ease back to the hero shape.
+      _promoteTimer?.cancel();
+      if (_promote.value > 0) _promote.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<YoutubeResolvedStreams?>(
+      valueListenable: widget.trailer,
+      builder: (context, streams, _) {
+        if (streams == null || !streams.hasPlayable) {
+          return const SizedBox.shrink();
+        }
+        if (streams.playUrl != _backdropUrl) {
+          _backdropUrl = streams.playUrl;
+          _backdropKey = GlobalKey();
+        }
+        final video = HeroTrailerBackdrop(
+          key: _backdropKey,
+          imageUrl: null,
+          videoUrl: streams.playUrl,
+          audioUrl: streams.audioUrl,
+          enabled: true,
+          // No blur layers — a per-frame filter pass over the video surface
+          // is what stutters weak TV GPUs (same rationale as the detail page).
+          imageBlurSigma: 0,
+          videoBlurSigma: 0,
+          // The host already debounced for focus-rest; keep just enough
+          // delay to absorb an immediate focus move.
+          startDelay: const Duration(milliseconds: 300),
+          ambientVolume: widget.volume,
+          onPlayingChanged: _onPlaying,
+        );
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final boardH = constraints.maxHeight;
+            // Degenerate layout (mid-transition zero-height pass): the mask
+            // math below divides by boardH — bail rather than NaN a gradient.
+            if (!boardH.isFinite || boardH <= 0) {
+              return const SizedBox.shrink();
+            }
+            final heroH = widget.heroHeight.clamp(0.0, boardH);
+            return AnimatedBuilder(
+              animation: _promote,
+              child: video,
+              builder: (context, child) {
+                final t = Curves.easeInOutCubic.transform(_promote.value);
+                // Fully promoted steady state: bare video + scrim — no clip,
+                // no mask, no per-frame saveLayer. The GlobalKey carries the
+                // playing element across this branch swap untouched.
+                final Widget surface;
+                if (t >= 1.0) {
+                  surface = child!;
+                } else {
+                  // Ambient/transitional: clip to the (growing) visible slab
+                  // so the mask's saveLayer never costs more area than is
+                  // actually revealed, and melt the bottom edge exactly like
+                  // the hero image does (opaque to 55% of the slab, gone by
+                  // its end) — stops expressed against the full board height.
+                  final visibleH = lerpDouble(heroH, boardH, t)!;
+                  final opaqueTo = lerpDouble(0.55 * heroH / boardH, 1.0, t)!;
+                  final fadeTo = lerpDouble(heroH / boardH, 1.0, t)!;
+                  surface = ClipRect(
+                    clipper: _TopSliceClipper(visibleH),
+                    child: ShaderMask(
+                      shaderCallback: (rect) => LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: const [
+                          Colors.white,
+                          Colors.white,
+                          Colors.transparent,
+                        ],
+                        stops: [0.0, opaqueTo, fadeTo],
+                      ).createShader(rect),
+                      blendMode: BlendMode.dstIn,
+                      child: child,
+                    ),
+                  );
+                }
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RepaintBoundary(child: surface),
+                    // Readability scrim over the promoted video: barely-there
+                    // at the hero, deepening over the rows so posters, row
+                    // headers and focus rings keep their contrast. The fade-in
+                    // is baked into the gradient's alphas (NOT an Opacity
+                    // wrapper, whose mid values would force a full-screen
+                    // saveLayer every frame of the transition) — a plain
+                    // gradient fill, always layer-free.
+                    if (t > 0.001)
+                      IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                const Color(0xFF0D0B1A)
+                                    .withValues(alpha: 0.20 * t),
+                                const Color(0xFF0D0B1A)
+                                    .withValues(alpha: 0.60 * t),
+                                const Color(0xFF0D0B1A)
+                                    .withValues(alpha: 0.80 * t),
+                              ],
+                              stops: const [0.0, 0.55, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Clips to the top [height] logical pixels of the child — the "visible slab"
+/// of the full-screen trailer while it's ambient/animating open.
+class _TopSliceClipper extends CustomClipper<Rect> {
+  final double height;
+  const _TopSliceClipper(this.height);
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width, height);
+
+  @override
+  bool shouldReclip(_TopSliceClipper oldClipper) =>
+      oldClipper.height != height;
 }
 
 /// The hero's "trailer is on its way" chip: a small glass pill with a thin
