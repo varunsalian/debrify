@@ -2380,13 +2380,12 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// DPAD-up from the top row. On the dedicated Search tab the field sits above
-  /// the results, so land there; on the Home-New board there's nothing above, so
-  /// hand focus to the sidebar.
+  /// the results, so land there; on the Home-New board there's nothing above —
+  /// stay put. (This used to hand focus to the sidebar, but the sidebar policy
+  /// is now LEFT-only: no other direction may open it.)
   void _leaveBoardTop() {
     if (widget.searchMode) {
       _searchFocusNode.requestFocus();
-    } else {
-      MainPageBridge.focusTvSidebar?.call();
     }
   }
 
