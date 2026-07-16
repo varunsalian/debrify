@@ -95,8 +95,9 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.heroTag,
   });
 
-  /// See [ambientVolume].
-  static const double _defaultAmbientVolume = 75;
+  /// See [ambientVolume]. 70% — audible but under the UI, matching the Home
+  /// hero trailer's default volume so both ambient surfaces sit at one level.
+  static const double _defaultAmbientVolume = 70;
 
   @override
   State<HeroTrailerBackdrop> createState() => HeroTrailerBackdropState();

@@ -6,6 +6,7 @@ import 'debrid_service.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/webdav_item.dart';
+import '../utils/platform_util.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
@@ -379,15 +380,16 @@ class StorageService {
   }
 
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
-  /// metadata addon provides one. Default: ON everywhere, including Android TV
-  /// (the TV backdrop now decodes through native ExoPlayer, so it's light enough
-  /// for weak boxes). Once the user toggles it (Settings → Home Page) their
-  /// explicit choice is stored and the default no longer applies.
+  /// metadata addon provides one. Default: ON everywhere EXCEPT Android TV —
+  /// there the Home hero spotlight is the ambient-trailer surface
+  /// ([getHomeHeroTrailerEnabled]), and one living surface per platform is
+  /// enough. Once the user toggles it (Settings → Home Page) their explicit
+  /// choice is stored and the default no longer applies.
   static Future<bool> getDetailTrailerAutoplayEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getBool('detail_trailer_autoplay_enabled');
     if (stored != null) return stored;
-    return true;
+    return !(await PlatformUtil.isAndroidTV());
   }
 
   static Future<void> setDetailTrailerAutoplayEnabled(bool enabled) async {
@@ -396,11 +398,15 @@ class StorageService {
   }
 
   /// Ambient trailer in the Home board's hero spotlight (Android TV only —
-  /// the hero isn't rendered elsewhere). Default: ON, independent of the
-  /// detail-page toggle so users can keep either surface quiet.
+  /// the hero isn't rendered elsewhere). Default: ON on Android TV, OFF
+  /// elsewhere (the platform's ambient surface is the detail page instead —
+  /// [getDetailTrailerAutoplayEnabled] is its inverse). Independent toggles,
+  /// so users can still enable both or neither.
   static Future<bool> getHomeHeroTrailerEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('home_hero_trailer_enabled') ?? true;
+    final stored = prefs.getBool('home_hero_trailer_enabled');
+    if (stored != null) return stored;
+    return PlatformUtil.isAndroidTV();
   }
 
   static Future<void> setHomeHeroTrailerEnabled(bool enabled) async {
