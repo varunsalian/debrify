@@ -248,6 +248,13 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       }
     }
 
+    // Ambient volume retarget (the Home hero's takeover swell) — applied to
+    // the live engine without any restart. No-op while foregrounded (full
+    // volume) or user-muted; _applyVolume handles both.
+    if (widget.ambientVolume != old.ambientVolume && _engine != null) {
+      _applyVolume(foreground: widget.foreground);
+    }
+
     // Foreground promotion / demotion.
     if (widget.foreground != old.foreground) {
       if (widget.foreground && _engine != null) {

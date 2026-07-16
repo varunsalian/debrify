@@ -2412,8 +2412,32 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           left: 0,
                           top: 0,
                           bottom: 0,
-                          child: TvSidebarNav(
-                            key: _tvSidebarKey,
+                          // Hide the rail entirely while the Home board's
+                          // trailer takes over the screen
+                          // (MainPageBridge.tvChromeDim → 1): a cinema has no
+                          // menu. Fixed wrapper shape (Opacity 1.0 = no layer
+                          // at rest, 0.0 paints nothing) with a short
+                          // follower tween mirroring the board's soft
+                          // restore on an instant kill. The rail stays
+                          // FOCUSABLE while invisible: LEFT still lands on it,
+                          // which kills the trailer, so it's already fading
+                          // back in as it expands — the user never actually
+                          // sees an empty menu.
+                          child: ValueListenableBuilder<double>(
+                            valueListenable: MainPageBridge.tvChromeDim,
+                            builder: (context, target, child) =>
+                                TweenAnimationBuilder<double>(
+                              tween: Tween<double>(end: target),
+                              duration: const Duration(milliseconds: 240),
+                              curve: Curves.easeOut,
+                              child: child,
+                              builder: (context, t, kid) => Opacity(
+                                opacity: 1.0 - t.clamp(0.0, 1.0),
+                                child: kid,
+                              ),
+                            ),
+                            child: TvSidebarNav(
+                              key: _tvSidebarKey,
                             currentIndex: tvSelected == -1 ? 0 : tvSelected,
                             items: [
                               for (final index in tvIndices)
@@ -2441,6 +2465,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                 );
                               }
                             },
+                            ),
                           ),
                         ),
                       ],

@@ -357,6 +357,13 @@ class MainPageBridge {
     }
   }
 
+  /// Chrome dim level (0 = normal → 1 = cinema takeover), published by the
+  /// Home board while its ambient trailer recedes/takes over the screen.
+  /// main.dart's TV shell listens and dims the sidebar rail in lock-step with
+  /// the board content, so the WHOLE room goes dark, not just the page. The
+  /// publisher must reset it to 0 when it disposes.
+  static final ValueNotifier<double> tvChromeDim = ValueNotifier<double>(0);
+
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.
   /// Key is the tab index (0=Home, 1=Playlist, 2=Downloads, etc.)

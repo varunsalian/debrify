@@ -42,6 +42,7 @@ import '../utils/format_tag_detector.dart';
 import '../utils/torrent_curation.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
+import '../services/app_route_observer.dart';
 import '../services/youtube_service.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
@@ -52,6 +53,7 @@ import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
+import '../widgets/tv_sidebar_nav.dart';
 import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
@@ -221,11 +223,10 @@ class _EmptyFieldLeftAction extends Action<_SearchLeftIntent> {
   }
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // Which nav tab this instance backs, for the TV content-focus handler: the
   // dedicated Search tab (17) or the Home-New board (15).
-  int get _tabIndex =>
-      widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
+  int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
 
   final StremioService _stremio = StremioService.instance;
 
@@ -364,8 +365,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// DPAD focus for the catalog-mode "Sources" button (empty-prompt state) —
   /// its keyword-mode twin, for picking which searchable addons are queried.
-  final FocusNode _catalogSourcesBtnFocus =
-      FocusNode(debugLabel: 'catalog_sources_btn');
+  final FocusNode _catalogSourcesBtnFocus = FocusNode(
+    debugLabel: 'catalog_sources_btn',
+  );
 
   /// Whether the unified (non-TV) catalog Sources bar under the field is shown.
   /// Driven by search-field focus with a delayed hide (see
@@ -637,14 +639,13 @@ class _SearchScreenState extends State<SearchScreen> {
   /// checks (not `_cwRows`) since it's read on the per-card build hot path.
   bool get _cwVisible =>
       ((_cwEnabled &&
-                  ((_cwMovies.isNotEmpty &&
-                          !_homeDisabled.contains('cw:movies')) ||
-                      (_cwSeries.isNotEmpty &&
-                          !_homeDisabled.contains('cw:series')))) ||
-              (_traktMovies.isNotEmpty &&
-                  !_homeDisabled.contains('trakt:movies')) ||
-              (_traktSeries.isNotEmpty &&
-                  !_homeDisabled.contains('trakt:shows'))) &&
+              ((_cwMovies.isNotEmpty && !_homeDisabled.contains('cw:movies')) ||
+                  (_cwSeries.isNotEmpty &&
+                      !_homeDisabled.contains('cw:series')))) ||
+          (_traktMovies.isNotEmpty &&
+              !_homeDisabled.contains('trakt:movies')) ||
+          (_traktSeries.isNotEmpty &&
+              !_homeDisabled.contains('trakt:shows'))) &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
@@ -710,9 +711,18 @@ class _SearchScreenState extends State<SearchScreen> {
   final ValueNotifier<bool> _heroTrailerShowing = ValueNotifier<bool>(false);
 
   /// Takeover progress (0 ambient → 1 full-board), published by
-  /// [_HeroTrailerLayer] as its promote animation runs. The board content
-  /// listens and recedes (dim + drift + shrink) so the film takes the room.
+  /// [_HeroTrailerLayer] as its promote animation runs. The board content and
+  /// the sidebar rail fade fully OUT on it while the compact info overlay
+  /// fades in — the film takes the room.
   final ValueNotifier<double> _heroTrailerTakeover = ValueNotifier<double>(0);
+
+  /// Set when real content playback launches (any path — in-app route,
+  /// native TV activity, external app): the ambient trailer must not resume
+  /// behind or after the feature (the behavior ef5f555 shipped; the
+  /// backdrop's own per-instance latch dies with the widget when the route
+  /// cover kills the trailer, so the host has to remember). Cleared when a
+  /// NEW title takes the spotlight or the board reloads.
+  bool _heroTrailerSuppressed = false;
 
   /// Settings → Home Page toggles, read once per screen life (on TV a tab
   /// switch rebuilds the screen, so Settings changes are picked up on return).
@@ -751,6 +761,17 @@ class _SearchScreenState extends State<SearchScreen> {
       // the expanded rail. Kill it on sidebar enter; re-arm the current
       // spotlight on exit so browsing resumes its normal rest-to-play.
       MainPageBridge.addTvSidebarFocusListener(_onTvSidebarFocusChanged);
+      // Relay the takeover arc to the app shell so the sidebar rail hides in
+      // lock-step with the board.
+      _heroTrailerTakeover.addListener(_relayChromeDim);
+      // Real content playback (from a detail page, Quick Play, anywhere)
+      // suppresses the trailer for this spotlight — see _heroTrailerSuppressed.
+      MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunch);
+      // While the takeover owns the screen the board is invisible — ANY key
+      // must bring it back, even ones that don't change the hero (fav-row
+      // tiles, a same-title card in another row). Observe-only: the key still
+      // performs its normal action (SELECT opens the showcased title).
+      HardwareKeyboard.instance.addHandler(_onTakeoverKey);
       Future.wait([
         StorageService.getHomeHeroTrailerEnabled(),
         StorageService.getHomeHeroTrailerAudioEnabled(),
@@ -963,6 +984,21 @@ class _SearchScreenState extends State<SearchScreen> {
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
     MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
+    if (_heroTrailerActive) {
+      _heroTrailerTakeover.removeListener(_relayChromeDim);
+      MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunch);
+      HardwareKeyboard.instance.removeHandler(_onTakeoverKey);
+      appRouteObserver.unsubscribe(this);
+      // Reset the shell notifier AFTER this frame: dispose can run inside
+      // finalizeTree (tab switch mid-takeover) while the tree is locked, and
+      // a synchronous write would markNeedsBuild the sidebar's listener
+      // mid-unmount.
+      if (MainPageBridge.tvChromeDim.value != 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          MainPageBridge.tvChromeDim.value = 0;
+        });
+      }
+    }
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
     _heroTrailerTimer?.cancel();
@@ -1034,7 +1070,8 @@ class _SearchScreenState extends State<SearchScreen> {
     if (!mounted) return;
     final disabled = await StorageService.getHomeDisabledSections();
     if (!mounted) return;
-    final unchanged = disabled.length == _homeDisabled.length &&
+    final unchanged =
+        disabled.length == _homeDisabled.length &&
         disabled.containsAll(_homeDisabled);
     if (unchanged) return;
     setState(() => _homeDisabled = disabled);
@@ -2182,9 +2219,9 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     // The Trakt calls take a moment — the user may have already backed out of
     // the detail during the wait, so only pop while it's still the top route.
-    Navigator.of(context).popUntil(
-      (route) => route.settings.name != kCatalogDetailRouteName,
-    );
+    Navigator.of(
+      context,
+    ).popUntil((route) => route.settings.name != kCatalogDetailRouteName);
     _snack('Removed from Trakt Continue Watching');
     _loadTraktContinueWatching(refreshBound: false);
   }
@@ -2218,6 +2255,9 @@ class _SearchScreenState extends State<SearchScreen> {
         _updateHeroTint(first);
         // Billboard effect: the seeded spotlight starts its trailer too, so
         // opening Home settles into a living hero without any DPAD input.
+        // A board reload is a fresh visit — lift any after-the-feature
+        // suppression.
+        _heroTrailerSuppressed = false;
         _scheduleHeroTrailer(first);
       } else {
         _clearHeroTrailer();
@@ -2401,7 +2441,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
       final top = _topBoardFocusNode();
       if (top == null) return; // nothing focusable yet — retry on the next load
-      if (top == _autoFocusedNode) return; // already anchored to the current top
+      if (top == _autoFocusedNode) {
+        return; // already anchored to the current top
+      }
       top.requestFocus();
       _autoFocusedNode = top;
     });
@@ -2633,6 +2675,9 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroEnriched.value = null;
     _enrichHero(item);
     _updateHeroTint(item);
+    // A NEW title in the spotlight lifts the after-the-feature suppression —
+    // fresh context, fresh trailer.
+    _heroTrailerSuppressed = false;
     _scheduleHeroTrailer(item);
   }
 
@@ -2644,7 +2689,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// lookups (Cinemeta /meta for the YouTube id, then the stream resolve) are
   /// cached in their services, so re-resting on a recent card starts fast.
   void _scheduleHeroTrailer(StremioMeta item) {
-    if (!_heroTrailerActive || !_heroTrailerEnabled) return;
+    if (!_heroTrailerActive || !_heroTrailerEnabled || _heroTrailerSuppressed) {
+      return;
+    }
     _heroTrailerTimer?.cancel();
     final req = ++_heroTrailerReq;
     if (_heroTrailer.value != null) _heroTrailer.value = null;
@@ -2652,6 +2699,11 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
     _heroTrailerTimer = Timer(const Duration(milliseconds: 2400), () async {
       if (!mounted || req != _heroTrailerReq) return;
+      // Covered by ANY modal (bottom sheet, dialog — which never reach the
+      // PageRoute-only route observer) or a pushed page: a trailer must not
+      // start under it. The cover's dismissal path re-arms where relevant
+      // (didPopNext for pages); sheets simply wait for the next hero rest.
+      if (ModalRoute.of(context)?.isCurrent != true) return;
       // From here the attempt is committed — surface the pill. Every exit
       // below (no trailer, failed resolve, hero moved on) clears it; success
       // keeps it up until the backdrop reports frames (_onHeroTrailerPlaying).
@@ -2709,6 +2761,63 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
+  }
+
+  /// Mirror the takeover arc onto the app-shell notifier (sidebar rail hide).
+  void _relayChromeDim() {
+    MainPageBridge.tvChromeDim.value = _heroTrailerTakeover.value;
+  }
+
+  // ── Route awareness (Home board trailer only) ────────────────────────────
+  // The trailer schedule is time-driven, so without this a pushed route
+  // (detail page, player) would let the 2.4s debounce fire UNDER the cover
+  // and start a trailer behind it — the backdrop's own RouteAware pause can't
+  // help because it mounts after the cover was already pushed and never sees
+  // a didPushNext. Kill everything when covered; re-arm the spotlight when
+  // the cover pops so browsing resumes its normal rest-to-play.
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_heroTrailerActive) {
+      final route = ModalRoute.of(context);
+      if (route is PageRoute) appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPushNext() {
+    if (!_heroTrailerActive) return;
+    _clearHeroTrailer();
+  }
+
+  @override
+  void didPopNext() {
+    if (!_heroTrailerActive || !_heroTrailerEnabled) return;
+    final item = _heroItem.value;
+    if (item != null) _scheduleHeroTrailer(item);
+  }
+
+  /// Content playback launched (see the listener registration in
+  /// [initState]): kill the trailer NOW (native activity launches never push
+  /// a Flutter route, so RouteAware alone can't catch them all) and keep it
+  /// off for this spotlight — it must not resume behind or after the feature.
+  void _onContentPlayerLaunch() {
+    if (!_heroTrailerActive || !mounted) return;
+    _heroTrailerSuppressed = true;
+    _clearHeroTrailer();
+  }
+
+  /// Any key while the takeover owns the screen restores the board — the UI
+  /// is at opacity 0, so this can't be left to hero-change detection alone
+  /// (fav-row tiles and same-title cards never change the hero). Observe-only
+  /// (always returns false): the key still does its normal job, so SELECT
+  /// both restores the board and opens the showcased title.
+  bool _onTakeoverKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (_heroTrailerTakeover.value <= 0.02) return false;
+    _clearHeroTrailer();
+    return false;
   }
 
   /// Sidebar focus enter/exit (see the listener registration in [initState]).
@@ -2934,8 +3043,10 @@ class _SearchScreenState extends State<SearchScreen> {
       // load is harmless — its batches fail the token guard anyway).
       await _loadKwCacheConfig();
       if (!mounted || token != _kwSearchToken) return;
-      final result =
-          await TorrentService.searchAllEngines(query, onBatch: onBatch);
+      final result = await TorrentService.searchAllEngines(
+        query,
+        onBatch: onBatch,
+      );
       // Drop stale results if a newer search started while this was in flight.
       if (!mounted || token != _kwSearchToken) return;
       _kwSearching = false;
@@ -2946,11 +3057,13 @@ class _SearchScreenState extends State<SearchScreen> {
       // every source. Point them at Sources instead of a bare "No results".
       // (Both empty-result checks below can only fire when no batch arrived,
       // so the full-screen loader is still up — never an error over rows.)
-      final noEngineRan = (engineCounts is! Map || engineCounts.isEmpty) &&
+      final noEngineRan =
+          (engineCounts is! Map || engineCounts.isEmpty) &&
           (engineErrors is! Map || engineErrors.isEmpty);
       if (torrents.isEmpty && noEngineRan) {
         setState(() {
-          _kwError = 'No sources enabled. Turn on at least one source in '
+          _kwError =
+              'No sources enabled. Turn on at least one source in '
               'Sources, then try again.';
           _kwLoading = false;
         });
@@ -3022,7 +3135,8 @@ class _SearchScreenState extends State<SearchScreen> {
     // early batch that merely hasn't delivered a source yet must not clear
     // the user's tab mid-stream, so this check only runs here.
     final full = _kwPending ?? _kwAll;
-    if (_kwSourceTab != null && !full.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
+    if (_kwSourceTab != null &&
+        !full.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
       _kwSourceTab = null;
       // Recompute over the DISPLAYED set even when arrivals are parked, so
       // the strip ("All" active) and the visible list can't disagree.
@@ -3067,8 +3181,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _kwAll = p;
     // A tab whose source lost every row to dedupe in the adopted set would
     // otherwise stay "active" over an empty list with no highlighted pill.
-    if (_kwSourceTab != null &&
-        !p.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
+    if (_kwSourceTab != null && !p.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
       _kwSourceTab = null;
     }
     _computeKwProviders(p);
@@ -3089,8 +3202,8 @@ class _SearchScreenState extends State<SearchScreen> {
   /// name+URL pair direct streams are distinguished by).
   static String _kwRowKey(Torrent t) =>
       t.hasRealInfoHash && t.infohash.isNotEmpty
-          ? 'h:${t.infohash.toLowerCase()}'
-          : 'n:${t.name}|${t.directUrl ?? ''}';
+      ? 'h:${t.infohash.toLowerCase()}'
+      : 'n:${t.name}|${t.directUrl ?? ''}';
 
   /// Rows waiting behind the pill (0 hides it) — a SET difference, not a
   /// length delta, so dedupe-shrunk pending sets still count their new rows.
@@ -3278,8 +3391,10 @@ class _SearchScreenState extends State<SearchScreen> {
                 external ? Icons.open_in_new_rounded : Icons.play_arrow_rounded,
                 color: Colors.white,
               ),
-              title: Text(external ? 'Open externally' : 'Play now',
-                  style: const TextStyle(color: Colors.white)),
+              title: Text(
+                external ? 'Open externally' : 'Play now',
+                style: const TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
@@ -3296,8 +3411,10 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
-              title:
-                  const Text('Copy URL', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Copy URL',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () async {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
@@ -3311,15 +3428,20 @@ class _SearchScreenState extends State<SearchScreen> {
               },
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.download_rounded, color: Color(0xFF60A5FA)),
-              title: const Text('Download to device',
-                  style: TextStyle(color: Colors.white)),
+              leading: const Icon(
+                Icons.download_rounded,
+                color: Color(0xFF60A5FA),
+              ),
+              title: const Text(
+                'Download to device',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
                 unawaited(
-                    TorrentPlaybackService.downloadDirectStream(context, t));
+                  TorrentPlaybackService.downloadDirectStream(context, t),
+                );
               },
             ),
           ],
@@ -3484,11 +3606,13 @@ class _SearchScreenState extends State<SearchScreen> {
         l.sort((a, b) => dir * a.createdUnix.compareTo(b.createdUnix));
         break;
       case 'name':
-        l.sort((a, b) =>
-            dir *
-            a.displayTitle
-                .toLowerCase()
-                .compareTo(b.displayTitle.toLowerCase()));
+        l.sort(
+          (a, b) =>
+              dir *
+              a.displayTitle.toLowerCase().compareTo(
+                b.displayTitle.toLowerCase(),
+              ),
+        );
         break;
       default: // 'relevance' — keep the engine (seeder-deduped) order
         break;
@@ -3613,12 +3737,18 @@ class _SearchScreenState extends State<SearchScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF1E3A8A).withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+        border: Border.all(
+          color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFF38BDF8), size: 18),
+          const Icon(
+            Icons.info_outline_rounded,
+            color: Color(0xFF38BDF8),
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -3797,13 +3927,13 @@ class _SearchScreenState extends State<SearchScreen> {
             }
 
             Widget tile(String value, String label) => ListTile(
-                  dense: true,
-                  title: Text(label),
-                  trailing: _kwSort == value
-                      ? Icon(Icons.check_rounded, color: scheme.primary)
-                      : null,
-                  onTap: () => applyField(value),
-                );
+              dense: true,
+              title: Text(label),
+              trailing: _kwSort == value
+                  ? Icon(Icons.check_rounded, color: scheme.primary)
+                  : null,
+              onTap: () => applyField(value),
+            );
 
             final dirEnabled = _kwSort != 'relevance';
             return AlertDialog(
@@ -3828,11 +3958,14 @@ class _SearchScreenState extends State<SearchScreen> {
                           const Expanded(child: Text('Direction')),
                           ToggleButtons(
                             isSelected: [!_kwSortAsc, _kwSortAsc],
-                            onPressed:
-                                dirEnabled ? (i) => applyDir(i == 1) : null,
+                            onPressed: dirEnabled
+                                ? (i) => applyDir(i == 1)
+                                : null,
                             borderRadius: BorderRadius.circular(8),
                             constraints: const BoxConstraints(
-                                minHeight: 34, minWidth: 46),
+                              minHeight: 34,
+                              minWidth: 46,
+                            ),
                             children: const [
                               Icon(Icons.arrow_downward_rounded, size: 18),
                               Icon(Icons.arrow_upward_rounded, size: 18),
@@ -3972,8 +4105,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 showQuickPlay: !_pikpakOnly,
                 isTraktSource: isTraktSource,
                 heroTag: heroTag,
-                resumeInfoLoader: () =>
-                    _resolveResumeInfo(item, addon, isTraktSource: isTraktSource),
+                resumeInfoLoader: () => _resolveResumeInfo(
+                  item,
+                  addon,
+                  isTraktSource: isTraktSource,
+                ),
                 onResume: () => _onCatalogPlay(
                   item,
                   addon,
@@ -3982,8 +4118,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
                 // Movie only: the Sources (manual list) button.
                 onBrowse: item.type == 'movie'
-                    ? () => _onCatalogBrowse(item, addon,
-                        isTraktSource: isTraktSource)
+                    ? () => _onCatalogBrowse(
+                        item,
+                        addon,
+                        isTraktSource: isTraktSource,
+                      )
                     : null,
                 onItemSelected: _browseSelection,
                 onQuickPlay: _playSelection,
@@ -5103,14 +5242,14 @@ class _SearchScreenState extends State<SearchScreen> {
           child: widget.discoverMode
               ? _buildDiscover()
               : (widget.isTelevision && !widget.searchMode)
-                  ? _buildBoard()
-                  : Column(
-                      children: [
-                        _buildHeader(),
-                        _buildUnifiedCatalogSourcesBar(),
-                        Expanded(child: _buildBody()),
-                      ],
-                    ),
+              ? _buildBoard()
+              : Column(
+                  children: [
+                    _buildHeader(),
+                    _buildUnifiedCatalogSourcesBar(),
+                    Expanded(child: _buildBody()),
+                  ],
+                ),
         ),
       ),
     );
@@ -5129,14 +5268,11 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     } else {
       _catalogSourcesHideTimer?.cancel();
-      _catalogSourcesHideTimer = Timer(
-        const Duration(milliseconds: 250),
-        () {
-          if (mounted && _catalogSourcesBarShown) {
-            setState(() => _catalogSourcesBarShown = false);
-          }
-        },
-      );
+      _catalogSourcesHideTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted && _catalogSourcesBarShown) {
+          setState(() => _catalogSourcesBarShown = false);
+        }
+      });
     }
   }
 
@@ -5454,8 +5590,10 @@ class _SearchScreenState extends State<SearchScreen> {
               borderRadius: BorderRadius.circular(999),
               canRequestFocus: false,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(999),
@@ -5469,8 +5607,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.dns_rounded,
-                        size: 16, color: scheme.onSurfaceVariant),
+                    Icon(
+                      Icons.dns_rounded,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Sources',
@@ -5548,9 +5689,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _pendingKwScroll = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _kwScroll.hasClients) {
-          _kwScroll.jumpTo(
-            off.clamp(0.0, _kwScroll.position.maxScrollExtent),
-          );
+          _kwScroll.jumpTo(off.clamp(0.0, _kwScroll.position.maxScrollExtent));
         }
       });
     }
@@ -5615,8 +5754,9 @@ class _SearchScreenState extends State<SearchScreen> {
                               isTelevision: widget.isTelevision,
                               showPlayPill: widget.isTelevision,
                               formatTags: tags,
-                              cacheLabel:
-                                  labels.isEmpty ? null : labels.join(' | '),
+                              cacheLabel: labels.isEmpty
+                                  ? null
+                                  : labels.join(' | '),
                               streamBadge: t.isExternalStream
                                   ? 'External'
                                   : t.isDirectStream
@@ -5759,8 +5899,10 @@ class _SearchScreenState extends State<SearchScreen> {
               borderRadius: BorderRadius.circular(999),
               canRequestFocus: false,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(999),
@@ -5776,8 +5918,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.dns_rounded,
-                        size: 16, color: scheme.onSurfaceVariant),
+                    Icon(
+                      Icons.dns_rounded,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Sources',
@@ -5906,8 +6051,12 @@ class _SearchScreenState extends State<SearchScreen> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
         child: Row(
           children: [
-            tab(0, 'All · ${full.length}', _kwSourceTab == null,
-                () => _setKwSourceTab(null)),
+            tab(
+              0,
+              'All · ${full.length}',
+              _kwSourceTab == null,
+              () => _setKwSourceTab(null),
+            ),
             for (var i = 0; i < sources.length; i++)
               tab(
                 i + 1,
@@ -6317,8 +6466,9 @@ class _SearchScreenState extends State<SearchScreen> {
       // multi-select (the strip is suppressed then — see _buildKeyword).
       if (!_kwSelectionMode && _kwTabsVisible && _kwTabNodes.isNotEmpty) {
         final tabs = _kwSourceList;
-        final active =
-            _kwSourceTab == null ? 0 : tabs.indexOf(_kwSourceTab!) + 1;
+        final active = _kwSourceTab == null
+            ? 0
+            : tabs.indexOf(_kwSourceTab!) + 1;
         _focusKwTab(active >= 0 && active < _kwTabNodes.length ? active : 0);
         return KeyEventResult.handled;
       }
@@ -6607,9 +6757,9 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_discSource.startsWith(_discAddonPrefix)) {
       final addon = _addonsById[_discSource.substring(_discAddonPrefix.length)];
       final catalog = addon?.catalogs.cast<StremioAddonCatalog?>().firstWhere(
-            (c) => c != null && c.isBrowsable,
-            orElse: () => null,
-          );
+        (c) => c != null && c.isBrowsable,
+        orElse: () => null,
+      );
       if (addon != null && catalog != null) {
         return CatalogSeeAllScreen(
           key: ValueKey('disc_${addon.id}'),
@@ -6617,8 +6767,9 @@ class _SearchScreenState extends State<SearchScreen> {
           initialCatalog: catalog,
           isTelevision: widget.isTelevision,
           onOpenItem: (item) => _openItem(item, addon),
-          onQuickPlay:
-              _pikpakOnly ? null : (item) => _onCatalogPlay(item, addon),
+          onQuickPlay: _pikpakOnly
+              ? null
+              : (item) => _onCatalogPlay(item, addon),
           embedded: true,
           leading: source,
           leadingNode: _discSourceNode,
@@ -6726,10 +6877,7 @@ class _SearchScreenState extends State<SearchScreen> {
         // so the first result row isn't squeezed.
         final heroH = tv
             ? (constraints.maxHeight - _railRowH(context) - _railHeaderH * 2)
-                  .clamp(
-                    150.0,
-                    widget.searchMode ? 180.0 : 380.0,
-                  )
+                  .clamp(150.0, widget.searchMode ? 180.0 : 380.0)
             : (width >= 900 ? 300.0 : 196.0);
 
         // The ambient trailer is hosted here — BEHIND the whole board, laid
@@ -6755,145 +6903,157 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             _buildTrailerTakeoverRecede(
               Column(
-          children: [
-            // The hero spotlight only changes as DPAD focus moves across tiles, so
-            // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
-            // sit frozen on the first item and waste vertical space — hide it.
-            // On the dedicated Search tab it shows once there are results (to help
-            // disambiguate similarly-named titles) but stays hidden on the blank
-            // prompt. See [_heroActive].
-            if (_heroActive)
-              ValueListenableBuilder<StremioMeta?>(
-                valueListenable: _heroItem,
-                builder: (context, item, _) {
-                  if (item == null) return const SizedBox.shrink();
-                  return ValueListenableBuilder<StremioMeta?>(
-                    valueListenable: _heroEnriched,
-                    builder: (context, enriched, __) {
-                      return _HeroSpotlight(
-                        item: item,
-                        background: item.background?.isNotEmpty == true
-                            ? item.background
-                            : enriched?.background,
-                        description: item.description?.isNotEmpty == true
-                            ? item.description
-                            : enriched?.description,
-                        // Catalog list items usually omit the rating; fall back
-                        // to the enriched /meta details.
-                        rating: item.imdbRating ?? enriched?.imdbRating,
-                        compact: widget.searchMode,
-                        isTelevision: tv,
-                        height: heroH,
-                        tint: _heroTint,
-                        trailerLoading: _heroTrailerActive
-                            ? _heroTrailerLoading
-                            : null,
-                        trailerShowing: _heroTrailerActive
-                            ? _heroTrailerShowing
-                            : null,
-                      );
-                    },
-                  );
-                },
-              ),
-            // Slim, non-focusable status strip for a streaming catalog search:
-            // a hairline progress bar while rows are still arriving, then a
-            // quiet "N sources didn't respond" note if any catalog errored.
-            // Lives above the rows so it never takes DPAD focus and appends
-            // below never move it.
-            if (_catalogQuery.isNotEmpty &&
-                (_catalogSearching || _catalogSearchFailures > 0))
-              _buildSearchStatusStrip(),
-            Expanded(
-              child: Builder(
-                builder: (context) {
-                  // Leading board rows, in order: Continue Watching (local, then
-                  // Trakt), then the favourites rows (IPTV, Debrify TV, Stremio TV —
-                  // matching the Home screen); the catalog sections follow, offset by
-                  // the total leading row count.
-                  final cwRows = showCw ? _cwRows : const <_CwRow>[];
-                  final cwCount = cwRows.length;
-                  // Skeleton Trakt rows, held open in the Trakt slot (right after
-                  // the local Continue Watching rows) while the slow fetch is in
-                  // flight, so the real rows fill in place instead of inserting
-                  // and shoving everything below them down. Non-focusable — the
-                  // DPAD wiring skips straight over them (see `down`/`up` in
-                  // [_buildContinueWatchingRow]).
-                  final skelCount = _traktSkeletonRowCount;
-                  final favKinds = _favRowKinds;
-                  final favCount = favKinds.length;
-                  final leadingCount = cwCount + skelCount + favCount;
-                  // Footer spinner tracks the actual fetch, not just "more remain":
-                  // `_boardCursor` advances synchronously so the final in-flight batch
-                  // still shows it, and an idle board with more rows doesn't spin.
-                  final showFooter = _boardLoadingMore;
-                  return ListView.builder(
-                    controller: _boardScroll,
-                    padding: const EdgeInsets.only(top: 6, bottom: 32),
-                    cacheExtent: 800,
-                    itemCount:
-                        _sections.length + leadingCount + (showFooter ? 1 : 0),
-                    itemBuilder: (context, i) {
-                      Widget row;
-                      if (i < cwCount) {
-                        row = _buildContinueWatchingRow(
-                          cwRows[i],
-                          i,
-                          cwCount,
-                          favCount,
+                children: [
+                  // The hero spotlight only changes as DPAD focus moves across tiles, so
+                  // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
+                  // sit frozen on the first item and waste vertical space — hide it.
+                  // On the dedicated Search tab it shows once there are results (to help
+                  // disambiguate similarly-named titles) but stays hidden on the blank
+                  // prompt. See [_heroActive].
+                  if (_heroActive)
+                    ValueListenableBuilder<StremioMeta?>(
+                      valueListenable: _heroItem,
+                      builder: (context, item, _) {
+                        if (item == null) return const SizedBox.shrink();
+                        return ValueListenableBuilder<StremioMeta?>(
+                          valueListenable: _heroEnriched,
+                          builder: (context, enriched, __) {
+                            return _HeroSpotlight(
+                              item: item,
+                              background: item.background?.isNotEmpty == true
+                                  ? item.background
+                                  : enriched?.background,
+                              description: item.description?.isNotEmpty == true
+                                  ? item.description
+                                  : enriched?.description,
+                              // Catalog list items usually omit the rating; fall back
+                              // to the enriched /meta details.
+                              rating: item.imdbRating ?? enriched?.imdbRating,
+                              compact: widget.searchMode,
+                              isTelevision: tv,
+                              height: heroH,
+                              tint: _heroTint,
+                              trailerLoading: _heroTrailerActive
+                                  ? _heroTrailerLoading
+                                  : null,
+                              trailerShowing: _heroTrailerActive
+                                  ? _heroTrailerShowing
+                                  : null,
+                            );
+                          },
                         );
-                      } else if (i < cwCount + skelCount) {
-                        row = _buildTraktSkeletonRow(i - cwCount);
-                      } else if (i < leadingCount) {
-                        final favIndex = i - cwCount - skelCount;
-                        row = _buildFavRow(favKinds[favIndex], favIndex, cwCount);
-                      } else {
-                        final s = i - leadingCount;
-                        if (s >= _sections.length) return _buildBoardFooter();
-                        row = _buildRow(s);
-                      }
-                      // Staggered entrance for the first screenful of rows when a
-                      // fresh board lands (initial load / search swap): each row
-                      // fades in and rises a touch, offset per index, so the
-                      // board composes itself instead of popping. Rows built
-                      // later (scroll, appends) skip it — the key gates replay to
-                      // section swaps and the time window skips stale mounts.
-                      final fresh =
-                          DateTime.now().difference(_boardAppliedAt) <
-                          const Duration(milliseconds: 1800);
-                      return _EntranceReveal(
-                        key: ValueKey('board-reveal-$_boardGen-$i'),
-                        play: fresh && i < 6,
-                        delayMs: 60 * i,
-                        child: row,
-                      );
-                    },
-                  );
-                },
+                      },
+                    ),
+                  // Slim, non-focusable status strip for a streaming catalog search:
+                  // a hairline progress bar while rows are still arriving, then a
+                  // quiet "N sources didn't respond" note if any catalog errored.
+                  // Lives above the rows so it never takes DPAD focus and appends
+                  // below never move it.
+                  if (_catalogQuery.isNotEmpty &&
+                      (_catalogSearching || _catalogSearchFailures > 0))
+                    _buildSearchStatusStrip(),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        // Leading board rows, in order: Continue Watching (local, then
+                        // Trakt), then the favourites rows (IPTV, Debrify TV, Stremio TV —
+                        // matching the Home screen); the catalog sections follow, offset by
+                        // the total leading row count.
+                        final cwRows = showCw ? _cwRows : const <_CwRow>[];
+                        final cwCount = cwRows.length;
+                        // Skeleton Trakt rows, held open in the Trakt slot (right after
+                        // the local Continue Watching rows) while the slow fetch is in
+                        // flight, so the real rows fill in place instead of inserting
+                        // and shoving everything below them down. Non-focusable — the
+                        // DPAD wiring skips straight over them (see `down`/`up` in
+                        // [_buildContinueWatchingRow]).
+                        final skelCount = _traktSkeletonRowCount;
+                        final favKinds = _favRowKinds;
+                        final favCount = favKinds.length;
+                        final leadingCount = cwCount + skelCount + favCount;
+                        // Footer spinner tracks the actual fetch, not just "more remain":
+                        // `_boardCursor` advances synchronously so the final in-flight batch
+                        // still shows it, and an idle board with more rows doesn't spin.
+                        final showFooter = _boardLoadingMore;
+                        return ListView.builder(
+                          controller: _boardScroll,
+                          padding: const EdgeInsets.only(top: 6, bottom: 32),
+                          cacheExtent: 800,
+                          itemCount:
+                              _sections.length +
+                              leadingCount +
+                              (showFooter ? 1 : 0),
+                          itemBuilder: (context, i) {
+                            Widget row;
+                            if (i < cwCount) {
+                              row = _buildContinueWatchingRow(
+                                cwRows[i],
+                                i,
+                                cwCount,
+                                favCount,
+                              );
+                            } else if (i < cwCount + skelCount) {
+                              row = _buildTraktSkeletonRow(i - cwCount);
+                            } else if (i < leadingCount) {
+                              final favIndex = i - cwCount - skelCount;
+                              row = _buildFavRow(
+                                favKinds[favIndex],
+                                favIndex,
+                                cwCount,
+                              );
+                            } else {
+                              final s = i - leadingCount;
+                              if (s >= _sections.length) {
+                                return _buildBoardFooter();
+                              }
+                              row = _buildRow(s);
+                            }
+                            // Staggered entrance for the first screenful of rows when a
+                            // fresh board lands (initial load / search swap): each row
+                            // fades in and rises a touch, offset per index, so the
+                            // board composes itself instead of popping. Rows built
+                            // later (scroll, appends) skip it — the key gates replay to
+                            // section swaps and the time window skips stale mounts.
+                            final fresh =
+                                DateTime.now().difference(_boardAppliedAt) <
+                                const Duration(milliseconds: 1800);
+                            return _EntranceReveal(
+                              key: ValueKey('board-reveal-$_boardGen-$i'),
+                              play: fresh && i < 6,
+                              delayMs: 60 * i,
+                              child: row,
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-              ),
-            ),
+            // While the film owns the board, only the showcased title's
+            // name/plot remain on screen — small, top-left, fully readable.
+            if (_heroTrailerActive) _buildTakeoverInfoOverlay(),
           ],
         );
       },
     );
   }
 
-  /// The board content's "recede" as the trailer takes over: fade toward
-  /// barely-visible, drift down a touch and shrink ~2% — the film takes the
-  /// room, the UI politely steps back. GPU-frugal by design:
-  ///  • the wrapper tree shape is FIXED (Opacity + Transform always present),
-  ///    so the board subtree — focus nodes, list scroll state — is never
-  ///    re-parented when the takeover starts/ends;
-  ///  • Opacity at 1.0 paints with no layer at all, and while dimmed the
-  ///    static board subtree is raster-cache friendly (alpha changes don't
-  ///    re-record its pictures);
-  ///  • Transform is paint-time only — no relayout, DPAD/hit-testing intact.
+  /// Fades the board UI fully OUT as the trailer takes over — cards, rows and
+  /// hero block leave the stage entirely (the compact info overlay replaces
+  /// them). GPU-frugal by design:
+  ///  • the wrapper tree shape is FIXED (Opacity always present), so the
+  ///    board subtree — focus nodes, list scroll state — is never re-parented
+  ///    when the takeover starts/ends;
+  ///  • Opacity is layer-free at 1.0 and paints nothing at all at 0.0; the
+  ///    brief mid-fade is over static content (raster-cache friendly);
+  ///  • a TickerMode freezes the hidden board's animators (skeleton shimmers)
+  ///    so nothing re-records an invisible subtree per frame.
   /// A short follower tween smooths the driving value, so the instant kill
   /// (focus moved → takeover snaps to 0) eases the board back in ~240ms
-  /// instead of popping.
+  /// instead of popping. Focus stays on the hidden card: any arrow restores
+  /// the board, and SELECT opens the very title being showcased.
   Widget _buildTrailerTakeoverRecede(Widget board) {
     if (!_heroTrailerActive) return board;
     return ValueListenableBuilder<double>(
@@ -6906,30 +7066,137 @@ class _SearchScreenState extends State<SearchScreen> {
           curve: Curves.easeOut,
           child: child,
           builder: (context, t, kid) {
-            // Content starts receding slightly after the mask starts opening
-            // — the video leads, the UI follows.
-            final tt = const Interval(
-              0.12,
-              1.0,
-              curve: Curves.easeOut,
-            ).transform(t.clamp(0.0, 1.0));
+            final tt = t.clamp(0.0, 1.0);
             return Opacity(
-              opacity: 1.0 - 0.85 * tt,
-              child: Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..translate(0.0, 14.0 * tt)
-                  ..scale(1.0 - 0.02 * tt),
-                // Once the takeover has settled, freeze every ticker in the
-                // receded board (skeleton shimmers etc.) — a looping animator
-                // under the Opacity would re-record the subtree each frame,
-                // defeating the raster cache and paying a full-screen
-                // saveLayer per frame behind the film. Any DPAD press kills
-                // the takeover first, so nothing the user can see freezes.
-                child: TickerMode(enabled: tt < 0.95, child: kid!),
+              opacity: 1.0 - tt,
+              child: TickerMode(enabled: tt < 0.95, child: kid!),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// The takeover's compact spotlight card: while the film owns the board,
+  /// only the showcased title's name and plot remain — top-left, small and
+  /// fully READABLE (this is information, not chrome, so it never dims).
+  /// Fades/settles in during the second half of the mask-open so it never
+  /// overlaps the outgoing board UI. IgnorePointer + no focus nodes: purely
+  /// informational, DPAD behavior is unchanged.
+  Widget _buildTakeoverInfoOverlay() {
+    // Text subtree as the animation builder's CHILD: it rebuilds only when
+    // the hero item / enrichment change, never per animation frame — the
+    // per-frame work is just the Opacity/Transform wrappers (and the Opacity
+    // layer is bounded to the small text block, not the screen).
+    final Widget content = ValueListenableBuilder<StremioMeta?>(
+      valueListenable: _heroItem,
+      builder: (context, item, __) {
+        if (item == null) return const SizedBox.shrink();
+        return ValueListenableBuilder<StremioMeta?>(
+          valueListenable: _heroEnriched,
+          builder: (context, enriched, ___) {
+            final description = item.description?.isNotEmpty == true
+                ? item.description
+                : enriched?.description;
+            final metaParts = <String>[
+              if (item.year != null && item.year!.isNotEmpty) item.year!,
+              if (item.genres != null && item.genres!.isNotEmpty)
+                item.genres!.take(2).join(' · '),
+            ];
+            return ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      height: 1.15,
+                      letterSpacing: -0.2,
+                      color: Colors.white,
+                      shadows: const [
+                        Shadow(
+                          color: Colors.black87,
+                          blurRadius: 14,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (metaParts.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      metaParts.join('   ·   '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.78),
+                        shadows: const [
+                          Shadow(
+                            color: Colors.black87,
+                            blurRadius: 10,
+                            offset: Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (description != null && description.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      description,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.5,
+                        color: Colors.white.withValues(alpha: 0.88),
+                        shadows: const [
+                          Shadow(
+                            color: Colors.black87,
+                            blurRadius: 10,
+                            offset: Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             );
           },
+        );
+      },
+    );
+
+    return ValueListenableBuilder<double>(
+      valueListenable: _heroTrailerTakeover,
+      child: content,
+      builder: (context, takeover, kid) {
+        // Enter during the takeover's back half; gone instantly with it.
+        final t = ((takeover - 0.45) / 0.55).clamp(0.0, 1.0);
+        if (t <= 0.001) return const SizedBox.shrink();
+        return IgnorePointer(
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(48, 40, 48, 0),
+              child: Opacity(
+                opacity: t,
+                child: Transform.translate(
+                  offset: Offset(0, 10 * (1 - t)),
+                  child: kid,
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
@@ -7892,53 +8159,53 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
             // 650ms crossfade HeroTrailerBackdrop uses internally.
             _maybeFadeForTrailer(
               RepaintBoundary(
-              child: ClipRect(
-              child: ShaderMask(
-              shaderCallback: (rect) => const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.white, Colors.white, Colors.transparent],
-                stops: [0.0, 0.55, 1.0],
-              ).createShader(rect),
-              blendMode: BlendMode.dstIn,
-              child: AnimatedBuilder(
-                animation: _ken,
-                // The image is the (unchanging) child, so only the Transform's
-                // matrix recomputes each frame — no widget/image rebuild.
-                builder: (context, child) {
-                  final t = Curves.easeInOut.transform(_ken.value);
-                  // Pure slow zoom, no pan. Two things keep it glassy-smooth:
-                  //  • filterQuality: linear sampling — without it a slow
-                  //    transform snaps to whole pixels, which reads as jitter
-                  //    ("shaking") instead of a glide;
-                  //  • a single bottom-anchored scale — the origin never moves,
-                  //    so the bottom edge stays put (no bleed toward the cards)
-                  //    and there's no second motion to fight the first.
-                  return Transform.scale(
-                    scale: 1.0 + 0.06 * t,
-                    alignment: Alignment.bottomCenter,
-                    filterQuality: FilterQuality.low,
-                    child: child,
-                  );
-                },
-                child: CachedNetworkImage(
-                  imageUrl: bg,
-                  fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
-                  // Cap the hero backdrop decode so an oversized source doesn't
-                  // decode at native res, but keep it generous — it's a single
-                  // full-width image (crisp matters, and one instance is cheap;
-                  // the memory win is the many small rail posters, not this).
-                  memCacheWidth: isTelevision
-                      ? HomeTheme.heroBackdropCacheWidthTv
-                      : HomeTheme.heroBackdropCacheWidth,
-                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                child: ClipRect(
+                  child: ShaderMask(
+                    shaderCallback: (rect) => const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.white, Colors.white, Colors.transparent],
+                      stops: [0.0, 0.55, 1.0],
+                    ).createShader(rect),
+                    blendMode: BlendMode.dstIn,
+                    child: AnimatedBuilder(
+                      animation: _ken,
+                      // The image is the (unchanging) child, so only the Transform's
+                      // matrix recomputes each frame — no widget/image rebuild.
+                      builder: (context, child) {
+                        final t = Curves.easeInOut.transform(_ken.value);
+                        // Pure slow zoom, no pan. Two things keep it glassy-smooth:
+                        //  • filterQuality: linear sampling — without it a slow
+                        //    transform snaps to whole pixels, which reads as jitter
+                        //    ("shaking") instead of a glide;
+                        //  • a single bottom-anchored scale — the origin never moves,
+                        //    so the bottom edge stays put (no bleed toward the cards)
+                        //    and there's no second motion to fight the first.
+                        return Transform.scale(
+                          scale: 1.0 + 0.06 * t,
+                          alignment: Alignment.bottomCenter,
+                          filterQuality: FilterQuality.low,
+                          child: child,
+                        );
+                      },
+                      child: CachedNetworkImage(
+                        imageUrl: bg,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
+                        // Cap the hero backdrop decode so an oversized source doesn't
+                        // decode at native res, but keep it generous — it's a single
+                        // full-width image (crisp matters, and one instance is cheap;
+                        // the memory win is the many small rail posters, not this).
+                        memCacheWidth: isTelevision
+                            ? HomeTheme.heroBackdropCacheWidthTv
+                            : HomeTheme.heroBackdropCacheWidth,
+                        errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-          ),
-          ),
           // Top scrim — compact Search hero only. The hero sits directly under
           // the search bar, so even with the overflow clipped the backdrop's
           // top row starts at full brightness against the header. A short dark
@@ -8107,7 +8374,9 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                           maxLines: compact ? 1 : (isTelevision ? 3 : 2),
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: compact ? 12.5 : (isTelevision ? 14.5 : 13),
+                            fontSize: compact
+                                ? 12.5
+                                : (isTelevision ? 14.5 : 13),
                             height: compact ? 1.3 : 1.45,
                             color: Colors.white.withValues(alpha: 0.72),
                           ),
@@ -8204,18 +8473,17 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
   /// Continuous watching required before the trailer takes over the board.
   static const Duration _promoteAfter = Duration(seconds: 10);
 
-  /// 0 = ambient (hero-shaped mask) → 1 = promoted (full-board video).
+  /// 0 = ambient (hero-shaped mask) → 1 = promoted (full-board video). One
+  /// clean, unhurried crossfade — the mask opens while the host swaps the
+  /// board UI for the compact title overlay, all driven by this value.
   late final AnimationController _promote = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1400),
+    duration: const Duration(milliseconds: 1600),
   );
 
   Timer? _promoteTimer;
 
-  /// The shared easing for everything the takeover drives (mask, video
-  /// push-in, scrim, and — via [_HeroTrailerLayer.takeover] — the board's
-  /// recede), so all the motions read as ONE gesture.
-  double get _easedT => Curves.easeInOutCubic.transform(_promote.value);
+  double get _promoteT => Curves.easeInOutCubic.transform(_promote.value);
 
   /// Pins the backdrop's element so state (engine/texture) survives the
   /// masked↔bare branch swap. Replaced per trailer URL so each title still
@@ -8231,7 +8499,7 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
   }
 
   void _publishTakeover() {
-    widget.takeover?.value = _easedT;
+    widget.takeover?.value = _promoteT;
   }
 
   @override
@@ -8265,7 +8533,8 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
     if (!mounted) return;
     if (widget.trailer.value == null) {
       // Hero moved on — the video is unmounting right now, so snap the mask
-      // state back for the next title (nothing visible to animate).
+      // state back for the next title (nothing visible to animate; the host's
+      // follower tween eases the chrome back in).
       _promoteTimer?.cancel();
       _promote.value = 0;
     }
@@ -8277,13 +8546,17 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
     if (playing) {
       _promoteTimer?.cancel();
       _promoteTimer = Timer(_promoteAfter, () {
-        if (mounted && widget.trailer.value != null) {
-          _promote.forward();
-        }
+        if (!mounted || widget.trailer.value == null) return;
+        // A modal (sheet/dialog — invisible to the PageRoute-only route
+        // observer) may have opened over the board while the trailer kept
+        // playing: never take the screen over UNDER it.
+        if (ModalRoute.of(context)?.isCurrent != true) return;
+        _promote.forward();
       });
     } else {
-      // Stopped (content playback launched / engine died): don't take over
-      // the board with a dead surface — ease back to the hero shape.
+      // Paused/stopped (route pushed, content playback launched, engine
+      // died): don't hold an empty board over a dead surface — bring the UI
+      // back and ease the mask down to the hero shape.
       _promoteTimer?.cancel();
       if (_promote.value > 0) _promote.reverse();
     }
@@ -8320,35 +8593,44 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
         return LayoutBuilder(
           builder: (context, constraints) {
             final boardH = constraints.maxHeight;
+            final boardW = constraints.maxWidth;
             // Degenerate layout (mid-transition zero-height pass): the mask
             // math below divides by boardH — bail rather than NaN a gradient.
-            if (!boardH.isFinite || boardH <= 0) {
+            if (!boardH.isFinite ||
+                boardH <= 0 ||
+                !boardW.isFinite ||
+                boardW <= 0) {
               return const SizedBox.shrink();
             }
             final heroH = widget.heroHeight.clamp(0.0, boardH);
+            // The board is inset by the collapsed sidebar rail's width, so a
+            // board-sized video leaves a rail-wide strip of page background
+            // when the rail hides during the takeover. Lay the whole layer
+            // out that much WIDER, hanging out to the left UNDER the rail:
+            // invisible while ambient (the collapsed rail paints opaque), and
+            // when the rail fades the strip reveals video — true full-bleed,
+            // no seam, no relayout, nothing pops. Paint-overflow only; no
+            // ancestor between here and the screen edge clips.
+            final fullW = boardW + TvSidebarNav.collapsedWidth;
+            Widget fullBleed(Widget child) => OverflowBox(
+              alignment: Alignment.centerRight,
+              minWidth: fullW,
+              maxWidth: fullW,
+              minHeight: boardH,
+              maxHeight: boardH,
+              child: child,
+            );
             return AnimatedBuilder(
               animation: _promote,
               child: video,
-              builder: (context, rawChild) {
-                final t = _easedT;
-                // The cinematic push-in: the video slowly scales to 1.05 as
-                // it takes the board — the camera "leans in". A pure vertex
-                // transform (deliberately NO filterQuality: that flag turns
-                // the transform into a per-frame bitmap filter layer, while a
-                // Texture is already linearly sampled, so a plain matrix is
-                // free AND smooth), applied INSIDE the mask so the melt
-                // geometry stays screen-aligned while the picture moves
-                // beneath it. Ends at a static 1.05 — cover-fit just crops a
-                // sliver of edge, costing nothing.
-                final child = t <= 0.0
-                    ? rawChild!
-                    : Transform.scale(scale: 1.0 + 0.05 * t, child: rawChild);
+              builder: (context, child) {
+                final t = _promoteT;
                 // Fully promoted steady state: bare video + scrim — no clip,
                 // no mask, no per-frame saveLayer. The GlobalKey carries the
                 // playing element across this branch swap untouched.
                 final Widget surface;
                 if (t >= 1.0) {
-                  surface = child;
+                  surface = child!;
                 } else {
                   // Ambient/transitional: clip to the (growing) visible slab
                   // so the mask's saveLayer never costs more area than is
@@ -8376,15 +8658,16 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
                     ),
                   );
                 }
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    RepaintBoundary(child: surface),
-                    // Gentle vignette over the promoted video — the board
-                    // content dims itself now (the host's recede), so the
-                    // film stays bright and this only adds bottom-weighted
-                    // depth. Fade baked into the gradient's alphas (NOT an
-                    // Opacity wrapper, whose mid values would force a
+                return fullBleed(
+                  Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      RepaintBoundary(child: surface),
+                      // Legibility gradient over the promoted video — slightly
+                    // heavier at the top (the title/description overlay lives
+                    // there) and at the foot, light in the middle so the film
+                    // stays bright. Fade baked into the gradient's alphas
+                    // (NOT an Opacity wrapper, whose mid values would force a
                     // full-screen saveLayer every frame) — always layer-free.
                     if (t > 0.001)
                       IgnorePointer(
@@ -8394,19 +8677,23 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
-                                const Color(0xFF0D0B1A)
-                                    .withValues(alpha: 0.06 * t),
-                                const Color(0xFF0D0B1A)
-                                    .withValues(alpha: 0.22 * t),
-                                const Color(0xFF0D0B1A)
-                                    .withValues(alpha: 0.40 * t),
+                                const Color(
+                                  0xFF0D0B1A,
+                                ).withValues(alpha: 0.34 * t),
+                                const Color(
+                                  0xFF0D0B1A,
+                                ).withValues(alpha: 0.08 * t),
+                                const Color(
+                                  0xFF0D0B1A,
+                                ).withValues(alpha: 0.36 * t),
                               ],
-                              stops: const [0.0, 0.55, 1.0],
+                              stops: const [0.0, 0.45, 1.0],
                             ),
                           ),
                         ),
                       ),
-                  ],
+                    ],
+                  ),
                 );
               },
             );
@@ -8427,8 +8714,7 @@ class _TopSliceClipper extends CustomClipper<Rect> {
   Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width, height);
 
   @override
-  bool shouldReclip(_TopSliceClipper oldClipper) =>
-      oldClipper.height != height;
+  bool shouldReclip(_TopSliceClipper oldClipper) => oldClipper.height != height;
 }
 
 /// The hero's "trailer is on its way" chip: a small glass pill with a thin
@@ -8459,52 +8745,52 @@ class _HeroTrailerLoadingPill extends StatelessWidget {
           child: TickerMode(
             enabled: visible,
             child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xCC0D0B1A), // glassy HomeTheme.bg
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: HomeTheme.chromeAccent.withValues(alpha: 0.35),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 3),
-                      ),
-                      BoxShadow(
-                        color: HomeTheme.chromeAccent.withValues(alpha: 0.18),
-                        blurRadius: 18,
-                        spreadRadius: -4,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 11,
-                        height: 11,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.8,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            HomeTheme.chromeAccent,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Trailer',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
-                          color: Colors.white.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ],
-                  ),
+              padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+              decoration: BoxDecoration(
+                color: const Color(0xCC0D0B1A), // glassy HomeTheme.bg
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: HomeTheme.chromeAccent.withValues(alpha: 0.35),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                  BoxShadow(
+                    color: HomeTheme.chromeAccent.withValues(alpha: 0.18),
+                    blurRadius: 18,
+                    spreadRadius: -4,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 11,
+                    height: 11,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        HomeTheme.chromeAccent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Trailer',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -8951,8 +9237,9 @@ class _StremioCardState extends State<_StremioCard> {
                     // crossfade at once — a saveLayer each — which janks the weak
                     // GPU. Snapping them in reads as a clean, smooth reveal.
                     fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
-                    fadeOutDuration:
-                        HomeTheme.imageFadeOut(widget.isTelevision),
+                    fadeOutDuration: HomeTheme.imageFadeOut(
+                      widget.isTelevision,
+                    ),
                     placeholder: (_, __) => _placeholder(item.name),
                     errorWidget: (_, __, ___) => _placeholder(item.name),
                   )
@@ -9368,10 +9655,12 @@ class _ArtPosterState extends State<_ArtPoster> {
                       memCacheWidth: widget.isTelevision ? 320 : 480,
                       // TV: no per-image crossfade (saveLayer per poster janks
                       // the weak GPU when a grid fills in at once).
-                      fadeInDuration:
-                          HomeTheme.imageFadeIn(widget.isTelevision),
-                      fadeOutDuration:
-                          HomeTheme.imageFadeOut(widget.isTelevision),
+                      fadeInDuration: HomeTheme.imageFadeIn(
+                        widget.isTelevision,
+                      ),
+                      fadeOutDuration: HomeTheme.imageFadeOut(
+                        widget.isTelevision,
+                      ),
                       placeholder: (_, __) => _glyph(),
                       errorWidget: (_, __, ___) => _glyph(),
                     ),
@@ -10002,8 +10291,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               case 'singleEpisode':
                 // Keep only if the name resolves to the requested season.
                 final name = torrent.name.toUpperCase();
-                final seasonPadded =
-                    requestedSeason.toString().padLeft(2, '0');
+                final seasonPadded = requestedSeason.toString().padLeft(2, '0');
                 final seasonPatterns = [
                   'S$seasonPadded', // S04
                   'S$requestedSeason', // S4
@@ -10044,7 +10332,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     indexed.sort((a, b) {
       final c = a.$2.coveragePriority.compareTo(b.$2.coveragePriority);
       if (c != 0) return c;
-      final s = b.$2.seasonCount.compareTo(a.$2.seasonCount); // more seasons first
+      final s = b.$2.seasonCount.compareTo(
+        a.$2.seasonCount,
+      ); // more seasons first
       if (s != 0) return s;
       return a.$1.compareTo(b.$1); // stable → keeps seeders-desc within a tier
     });
@@ -10117,8 +10407,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               contentType: sel.contentType,
               // Known seasons (from the Season chip's meta fetch) scope the
               // smart-fallback probing to seasons that actually exist.
-              availableSeasons:
-                  _availableSeasons.isNotEmpty ? _availableSeasons : null,
+              availableSeasons: _availableSeasons.isNotEmpty
+                  ? _availableSeasons
+                  : null,
               onBatch: onBatch,
             );
       if (!mounted || token != _searchToken) return;
@@ -10303,10 +10594,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   /// Identity key for pending-row diffing (infohash when real, else the
   /// name+URL pair addon streams are distinguished by).
-  static String _rowKey(Torrent t) =>
-      t.hasRealInfoHash && t.infohash.isNotEmpty
-          ? 'h:${t.infohash.toLowerCase()}'
-          : 'n:${t.name}|${t.directUrl ?? ''}';
+  static String _rowKey(Torrent t) => t.hasRealInfoHash && t.infohash.isNotEmpty
+      ? 'h:${t.infohash.toLowerCase()}'
+      : 'n:${t.name}|${t.directUrl ?? ''}';
 
   /// Rows waiting behind the pill (0 hides it) — a SET difference, not a
   /// length delta: episode curation can shrink the pending set below the
@@ -10633,45 +10923,48 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                         return false;
                                       },
                                       child: ListView.builder(
-                                padding: EdgeInsets.symmetric(
-                                  vertical: 8,
-                                  horizontal: _redesign ? 10 : 0,
-                                ),
-                                cacheExtent: 1200,
-                                itemCount: _visible.length,
-                                itemBuilder: (context, i) {
-                                  final t = _visible[i];
-                                  if (_redesign) return _redesignRow(t, i);
-                                  return TorrentResultRow(
-                                    torrent: t,
-                                    index: i,
-                                    focusNode: _nodes[i],
-                                    isTelevision: widget.isTelevision,
-                                    qualityTier: t.qualityTier,
-                                    onTap: () {
-                                      if (widget.bindMode) {
-                                        unawaited(_pin(t));
-                                      } else {
-                                        _play(t, i);
-                                      }
-                                    },
-                                    onLongPress: () => _showRowMenu(t, i),
-                                    onNavigateUp: () {
-                                      _freezeStreaming();
-                                      if (i > 0) {
-                                        _nodes[i - 1].requestFocus();
-                                      } else if (_pendingNewCount > 0) {
-                                        _pillFocus.requestFocus();
-                                      }
-                                    },
-                                    onNavigateDown: () {
-                                      _freezeStreaming();
-                                      if (i < _nodes.length - 1) {
-                                        _nodes[i + 1].requestFocus();
-                                      }
-                                    },
-                                  );
-                                },
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 8,
+                                          horizontal: _redesign ? 10 : 0,
+                                        ),
+                                        cacheExtent: 1200,
+                                        itemCount: _visible.length,
+                                        itemBuilder: (context, i) {
+                                          final t = _visible[i];
+                                          if (_redesign) {
+                                            return _redesignRow(t, i);
+                                          }
+                                          return TorrentResultRow(
+                                            torrent: t,
+                                            index: i,
+                                            focusNode: _nodes[i],
+                                            isTelevision: widget.isTelevision,
+                                            qualityTier: t.qualityTier,
+                                            onTap: () {
+                                              if (widget.bindMode) {
+                                                unawaited(_pin(t));
+                                              } else {
+                                                _play(t, i);
+                                              }
+                                            },
+                                            onLongPress: () =>
+                                                _showRowMenu(t, i),
+                                            onNavigateUp: () {
+                                              _freezeStreaming();
+                                              if (i > 0) {
+                                                _nodes[i - 1].requestFocus();
+                                              } else if (_pendingNewCount > 0) {
+                                                _pillFocus.requestFocus();
+                                              }
+                                            },
+                                            onNavigateDown: () {
+                                              _freezeStreaming();
+                                              if (i < _nodes.length - 1) {
+                                                _nodes[i + 1].requestFocus();
+                                              }
+                                            },
+                                          );
+                                        },
                                       ),
                                     ),
                             ),
@@ -10815,7 +11108,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       int cmp(Torrent a, Torrent b) {
         switch (_sortBy) {
           case 'name':
-            return a.displayTitle.toLowerCase().compareTo(b.displayTitle.toLowerCase());
+            return a.displayTitle.toLowerCase().compareTo(
+              b.displayTitle.toLowerCase(),
+            );
           case 'size':
             return a.sizeBytes.compareTo(b.sizeBytes);
           case 'seeders':
@@ -10826,6 +11121,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             return 0;
         }
       }
+
       list.sort((a, b) => _sortAsc ? cmp(a, b) : cmp(b, a));
     }
     return list;
@@ -10873,7 +11169,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     final line = Colors.white.withValues(alpha: 0.08);
     final dim = Colors.white.withValues(alpha: 0.55);
 
-    final sources = <String>{for (final t in _torrents) if (t.source.isNotEmpty) t.source};
+    final sources = <String>{
+      for (final t in _torrents)
+        if (t.source.isNotEmpty) t.source,
+    };
     final sorted = sources.toList()..sort();
 
     Widget pill(String label, bool on, VoidCallback onTap) => Padding(
@@ -10947,15 +11246,20 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     _selectedSeason != null ? accent : line,
                     dim,
                     Text.rich(
-                      TextSpan(children: [
-                        TextSpan(text: 'Season  ', style: TextStyle(color: dim)),
-                        TextSpan(
-                          text: _selectedSeason == null
-                              ? 'All'
-                              : '$_selectedSeason',
-                          style: const TextStyle(color: Color(0xFFF1F1F6)),
-                        ),
-                      ]),
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'Season  ',
+                            style: TextStyle(color: dim),
+                          ),
+                          TextSpan(
+                            text: _selectedSeason == null
+                                ? 'All'
+                                : '$_selectedSeason',
+                            style: const TextStyle(color: Color(0xFFF1F1F6)),
+                          ),
+                        ],
+                      ),
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -10983,14 +11287,22 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   line,
                   dim,
                   Text.rich(
-                    TextSpan(children: [
-                      TextSpan(text: 'Sort  ', style: TextStyle(color: dim)),
-                      TextSpan(
-                        text: _sortLabel(_sortBy),
-                        style: const TextStyle(color: Color(0xFFF1F1F6)),
-                      ),
-                    ]),
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Sort  ',
+                          style: TextStyle(color: dim),
+                        ),
+                        TextSpan(
+                          text: _sortLabel(_sortBy),
+                          style: const TextStyle(color: Color(0xFFF1F1F6)),
+                        ),
+                      ],
+                    ),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -11005,7 +11317,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   child: _tbChip(
                     line,
                     dim,
-                    Icon(_sortAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 16, color: dim),
+                    Icon(
+                      _sortAsc
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
+                      size: 16,
+                      color: dim,
+                    ),
                   ),
                 ),
               const SizedBox(width: 6),
@@ -11040,9 +11358,20 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.filter_list_rounded, size: 16, color: tint),
+                            Icon(
+                              Icons.filter_list_rounded,
+                              size: 16,
+                              color: tint,
+                            ),
                             const SizedBox(width: 5),
-                            Text('Filter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tint)),
+                            Text(
+                              'Filter',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: tint,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -11089,14 +11418,28 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: Text(l, style: TextStyle(color: dim, fontSize: 10.5, fontWeight: FontWeight.w600)),
+              child: Text(
+                l,
+                style: TextStyle(
+                  color: dim,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           InkWell(
             onTap: () {
               _filters = const TorrentFilterState.empty();
               _rebuildVisible();
             },
-            child: Text('Clear', style: TextStyle(color: accent, fontSize: 10.5, fontWeight: FontWeight.w700)),
+            child: Text(
+              'Clear',
+              style: TextStyle(
+                color: accent,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -11122,8 +11465,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     final tbKey = r[2] as String?;
     final pmKey = r[5] as String?;
     if (!mounted) return;
-    _tbCacheOn = (r[0] as bool) && (r[1] as bool) && (tbKey?.isNotEmpty ?? false);
-    _pmCacheOn = (r[3] as bool) && (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
+    _tbCacheOn =
+        (r[0] as bool) && (r[1] as bool) && (tbKey?.isNotEmpty ?? false);
+    _pmCacheOn =
+        (r[3] as bool) && (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
     _tbKey = tbKey;
     _pmKey = pmKey;
     _maybeCheckCache();
@@ -11346,7 +11691,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       case 'multiSeasonPack':
         return 'Multi-Season';
       case 'seasonPack':
-        return t.seasonNumber != null ? 'Season ${t.seasonNumber}' : 'Season Pack';
+        return t.seasonNumber != null
+            ? 'Season ${t.seasonNumber}'
+            : 'Season Pack';
       case 'singleEpisode':
         return t.episodeIdentifier;
       default:
@@ -11659,7 +12006,9 @@ class _SrcToggleRowState extends State<_SrcToggleRow> {
                 child: Icon(
                   on ? Icons.check_circle_rounded : Icons.block_rounded,
                   size: 18,
-                  color: on ? kStremioAccent : Colors.white.withValues(alpha: 0.3),
+                  color: on
+                      ? kStremioAccent
+                      : Colors.white.withValues(alpha: 0.3),
                 ),
               ),
               const SizedBox(width: 12),
@@ -11822,94 +12171,97 @@ class _SrcDialogShell extends StatelessWidget {
           child: FocusTraversalGroup(
             policy: ReadingOrderTraversalPolicy(),
             child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF7B5CFF), Color(0xFF9B7BFF)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      child: const Icon(Icons.dns_rounded,
-                          color: Colors.white, size: 22),
-                    ),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            subtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5),
-                              fontSize: 12,
-                              height: 1.25,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (onEnableAll != null || onDisableAll != null)
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
                   child: Row(
                     children: [
-                      if (onEnableAll != null)
-                        _SrcActionChip(
-                          icon: Icons.done_all_rounded,
-                          label: 'Enable all',
-                          onTap: onEnableAll!,
+                      Container(
+                        width: 42,
+                        height: 42,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF7B5CFF), Color(0xFF9B7BFF)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(13),
                         ),
-                      if (onDisableAll != null) ...[
-                        const SizedBox(width: 8),
-                        _SrcActionChip(
-                          icon: Icons.remove_done_rounded,
-                          label: 'Disable all',
-                          onTap: onDisableAll!,
+                        child: const Icon(
+                          Icons.dns_rounded,
+                          color: Colors.white,
+                          size: 22,
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 13),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 12,
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              Flexible(child: body),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: _SrcActionChip(
-                    icon: Icons.check_rounded,
-                    label: 'Done',
-                    filled: true,
-                    onTap: () => Navigator.of(context).pop(),
+                if (onEnableAll != null || onDisableAll != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Row(
+                      children: [
+                        if (onEnableAll != null)
+                          _SrcActionChip(
+                            icon: Icons.done_all_rounded,
+                            label: 'Enable all',
+                            onTap: onEnableAll!,
+                          ),
+                        if (onDisableAll != null) ...[
+                          const SizedBox(width: 8),
+                          _SrcActionChip(
+                            icon: Icons.remove_done_rounded,
+                            label: 'Disable all',
+                            onTap: onDisableAll!,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                Flexible(child: body),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _SrcActionChip(
+                      icon: Icons.check_rounded,
+                      label: 'Done',
+                      filled: true,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
             ),
           ),
         ),
@@ -11919,17 +12271,17 @@ class _SrcDialogShell extends StatelessWidget {
 }
 
 Widget _srcDialogMessage(String text) => Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      child: Text(
-        text,
-        style: TextStyle(color: Colors.white.withValues(alpha: 0.6), height: 1.4),
-      ),
-    );
+  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+  child: Text(
+    text,
+    style: TextStyle(color: Colors.white.withValues(alpha: 0.6), height: 1.4),
+  ),
+);
 
 Widget _srcDialogLoading() => const SizedBox(
-      height: 120,
-      child: Center(child: CircularProgressIndicator(color: kStremioAccent)),
-    );
+  height: 120,
+  child: Center(child: CircularProgressIndicator(color: kStremioAccent)),
+);
 
 /// Enable/disable the search-capable Stremio addons queried by catalog search.
 /// Stores the DISABLED set (empty = all on) via StorageService so it sticks.
@@ -12002,8 +12354,7 @@ class _CatalogSourcesDialogState extends State<_CatalogSourcesDialog> {
         itemCount: _addons.length,
         itemBuilder: (context, i) {
           final a = _addons[i];
-          final searchable =
-              a.catalogs.where((c) => c.supportsSearch).length;
+          final searchable = a.catalogs.where((c) => c.supportsSearch).length;
           return _SrcToggleRow(
             label: a.name,
             subtitle: searchable > 1 ? '$searchable searchable catalogs' : null,
