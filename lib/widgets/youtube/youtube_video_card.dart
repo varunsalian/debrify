@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/youtube_service.dart';
 import '../browse/brand_accent.dart';
-import '../home/home_theme.dart';
+import '../see_all/see_all_theme.dart';
 import '../../utils/tv_keys.dart';
 
 /// Vertical grid card for a YouTube video: 16:9 thumbnail on top, then a
@@ -137,7 +137,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                         ),
                         if (_active)
                           BoxShadow(
-                            color: HomeTheme.focusGold.withValues(alpha: 0.45),
+                            color: kSeeAllAccent.withValues(alpha: 0.5),
                             blurRadius: 30,
                             spreadRadius: 1,
                           ),
@@ -191,7 +191,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: HomeTheme.focusGold,
+                                      color: kSeeAllAccent,
                                       width: 2.5,
                                     ),
                                   ),

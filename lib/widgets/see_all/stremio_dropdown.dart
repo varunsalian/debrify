@@ -27,6 +27,11 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
   final bool isTelevision;
   final FocusNode? focusNode;
 
+  /// TV navigation: called when DPAD-up is pressed on the pill (e.g. to return
+  /// focus to a search field above the filter row). Null on screens that don't
+  /// need it (the Discover filter bar).
+  final VoidCallback? onUpArrowPressed;
+
   const StremioDropdown({
     super.key,
     required this.value,
@@ -35,6 +40,7 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
     this.label,
     this.isTelevision = false,
     this.focusNode,
+    this.onUpArrowPressed,
   });
 
   @override
@@ -116,6 +122,11 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
     if (isActivateKey(event.logicalKey) ||
         event.logicalKey == LogicalKeyboardKey.space) {
       _open();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+        widget.onUpArrowPressed != null) {
+      widget.onUpArrowPressed!();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

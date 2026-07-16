@@ -6,6 +6,7 @@ import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/download_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../see_all/see_all_theme.dart';
 import 'youtube_filters.dart';
 import 'youtube_video_card.dart';
 import 'youtube_empty_state.dart';
@@ -302,7 +303,9 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
 
   Widget _buildContent() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(color: kSeeAllAccent),
+      );
     }
 
     if (_errorMessage != null && _videos.isEmpty) {
@@ -313,20 +316,24 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
             Icon(
               Icons.error_outline,
               size: 64,
-              color: Theme.of(context).colorScheme.error,
+              color: Colors.white.withValues(alpha: 0.55),
             ),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
                 _errorMessage!,
-                style: Theme.of(context).textTheme.bodyLarge,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: 16,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: _performSearch,
+              style: FilledButton.styleFrom(backgroundColor: kSeeAllAccent),
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
             ),
@@ -346,18 +353,23 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
             Icon(
               Icons.video_library_outlined,
               size: 64,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: Colors.white.withValues(alpha: 0.35),
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'No videos found',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Try a different search term',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 14,
               ),
             ),
           ],
@@ -424,7 +436,7 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
       padding: const EdgeInsets.all(16),
       alignment: Alignment.center,
       child: _isLoadingMore
-          ? const CircularProgressIndicator()
+          ? const CircularProgressIndicator(color: kSeeAllAccent)
           : const SizedBox.shrink(),
     );
   }

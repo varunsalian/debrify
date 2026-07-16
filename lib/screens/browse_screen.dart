@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/browse/browse_results_focus.dart';
 import '../widgets/browse/browse_search_header.dart';
+import '../widgets/see_all/see_all_theme.dart';
 
 /// Arguments handed to a [BrowseScreen.viewBuilder] to construct its result
 /// view. The builder must attach [resultKey] to the view (its state must
@@ -137,6 +138,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: kSeeAllBg,
       body: SafeArea(
         child: Column(
           children: [
