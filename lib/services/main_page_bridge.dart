@@ -204,8 +204,28 @@ class MainPageBridge {
     return message;
   }
 
-  static void notifyPlayerLaunching() {
+  static final Set<VoidCallback> _playerLaunchListeners = {};
+
+  /// Notified right before the real content player launches (movie/series),
+  /// on every path — in-app route, native TV activity, or external app.
+  static void addPlayerLaunchListener(VoidCallback listener) {
+    _playerLaunchListeners.add(listener);
+  }
+
+  static void removePlayerLaunchListener(VoidCallback listener) {
+    _playerLaunchListeners.remove(listener);
+  }
+
+  /// [isTrailer] true for a trailer launch: it still hides the auto-launch
+  /// overlay, but does NOT fire the content-launch listeners — watching a
+  /// trailer must not suppress the ambient trailer backdrop.
+  static void notifyPlayerLaunching({bool isTrailer = false}) {
     hideAutoLaunchOverlay?.call();
+    if (isTrailer) return;
+    // Copy so a listener removing itself mid-iteration can't break the loop.
+    for (final listener in List.of(_playerLaunchListeners)) {
+      listener();
+    }
   }
 
   /// Call right before returning from an external-activity playback launch

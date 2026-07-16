@@ -141,6 +141,14 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// so the ambient trailer stays off for the rest of this page visit.
   bool _stoppedForExternalPlayback = false;
 
+  /// The real content player (movie/series) was launched from this page. Keep
+  /// the ambient trailer off for the rest of *this* page visit so it doesn't
+  /// resume behind / after the feature — it plays again next time the page is
+  /// opened (fresh state resets this). Set from the central
+  /// [MainPageBridge.notifyPlayerLaunching] signal, which fires on every launch
+  /// path (in-app route, native TV activity, external app).
+  bool _stoppedForContentPlayback = false;
+
   // Foreground control state.
   bool _userMuted = false;
   bool _playing = true;
@@ -165,7 +173,8 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       widget.videoUrl != null &&
       widget.videoUrl!.isNotEmpty &&
       !_reduceMotion &&
-      !_stoppedForExternalPlayback;
+      !_stoppedForExternalPlayback &&
+      !_stoppedForContentPlayback;
 
   /// Whether the ambient trailer is live *with frames on screen* and can be
   /// brought forward. Requires [_videoVisible] so promotion never fades the page
@@ -189,6 +198,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     MainPageBridge.addExternalPlayerLaunchListener(_onExternalPlayerLaunched);
+    MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunching);
     _fg =
         AnimationController(
           vsync: this,
@@ -257,6 +267,16 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
     if (!desktop) return;
     _stoppedForExternalPlayback = true;
+    _teardownPlayer();
+  }
+
+  /// The real content player (movie/series) is launching from this page. Stop
+  /// the ambient trailer now (kill any lingering audio) and latch it off so the
+  /// route-pop resume (non-TV) and app-resume path (TV native activity) both
+  /// bail via [_canPlay]. Resets when the page is reopened with fresh state.
+  void _onContentPlayerLaunching() {
+    if (!mounted) return;
+    _stoppedForContentPlayback = true;
     _teardownPlayer();
   }
 
@@ -540,6 +560,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     MainPageBridge.removeExternalPlayerLaunchListener(
       _onExternalPlayerLaunched,
     );
+    MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunching);
     _startTimer?.cancel();
     _controlsTimer?.cancel();
     _playingSub?.cancel();

@@ -484,6 +484,7 @@ class VideoPlayerLauncher {
     BuildContext context,
     VideoPlayerLaunchArgs originalArgs, {
     Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
+    bool isTrailer = false,
   }) async {
     // If "Sync Catalog Items" is enabled and content has IMDB ID, enable scrobble
     var args = originalArgs;
@@ -600,7 +601,7 @@ class VideoPlayerLauncher {
       'platform': AptabaseService.currentPlatformLabel(),
     });
 
-    MainPageBridge.notifyPlayerLaunching();
+    MainPageBridge.notifyPlayerLaunching(isTrailer: isTrailer);
 
     // Log playlist entries to trace relativePath
     if (args.playlist != null && args.playlist!.isNotEmpty) {
@@ -641,6 +642,7 @@ class VideoPlayerLauncher {
       final launched = await _launchOnAndroidTv(
         args,
         onQuickPlayNextEpisode: onQuickPlayNextEpisode,
+        isTrailer: isTrailer,
       );
       if (launched) {
         MainPageBridge.notifyExternalPlayerLaunched();
@@ -1240,6 +1242,7 @@ class VideoPlayerLauncher {
   static Future<bool> _launchOnAndroidTv(
     VideoPlayerLaunchArgs args, {
     Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
+    bool isTrailer = false,
   }) async {
     // Route IPTV playlists to dedicated IPTV launcher
     if (args.iptvChannels != null && args.iptvChannels!.isNotEmpty) {
@@ -1274,7 +1277,7 @@ class VideoPlayerLauncher {
       debugPrint('VideoPlayerLauncher: Generated session ID: $sessionId');
 
       // Hide auto-launch overlay before launching player
-      MainPageBridge.notifyPlayerLaunching();
+      MainPageBridge.notifyPlayerLaunching(isTrailer: isTrailer);
 
       // Build stremio source resolver for Android TV (if stremio sources are available)
       // Uses a mutable sources holder so channel switches can update the source list

@@ -436,6 +436,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         title: '${_item.name} — Trailer',
         viewMode: PlaylistViewMode.sorted,
       ),
+      // Watching the trailer must not suppress the ambient trailer backdrop.
+      isTrailer: true,
     );
   }
 
