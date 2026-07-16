@@ -1926,6 +1926,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      */
     private fun fetchStremioSubtitles(item: PlaybackItem) {
         val model = payload ?: return
+
+        // High-res YouTube plays a MergingMediaSource (video-only + separate
+        // audio). Applying a Stremio subtitle re-prepares the player from
+        // currentMediaItem — which is only the merge's video child — silently
+        // dropping the audio track. The addon match is also spurious for
+        // YouTube (title-based IMDB lookup on arbitrary video titles), so skip
+        // addon subtitles entirely for these items.
+        if (!item.audioUrl.isNullOrEmpty()) {
+            stremioSubtitles.clear()
+            currentStremioSubtitleIndex = -1
+            clearStremioLoadingState()
+            return
+        }
+
         val isSeries = model.contentType.lowercase(Locale.US) == "series"
         val type = if (isSeries) "series" else "movie"
 
@@ -5199,6 +5213,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun loadStremioSubtitle(subtitle: StremioSubtitle) {
         val currentPlayer = player ?: return
         val currentItem = currentPlayer.currentMediaItem ?: return
+
+        // Guard the manual-selection path too: re-preparing merged YouTube
+        // playback (separate audio track) from currentMediaItem would drop the
+        // audio — see fetchStremioSubtitles.
+        if (!payload?.items?.getOrNull(currentIndex)?.audioUrl.isNullOrEmpty()) {
+            Toast.makeText(this, "Subtitles aren't available for YouTube videos", Toast.LENGTH_SHORT).show()
+            return
+        }
 
         // Check if a percent-based seek (Trakt or startAt) is still pending.
         // It depends on duration (only known at STATE_READY) so it's owned by the
