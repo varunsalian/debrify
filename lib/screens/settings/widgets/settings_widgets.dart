@@ -1401,6 +1401,7 @@ class SettingsToggleTile extends StatefulWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
   final FocusNode? focusNode;
+  final int subtitleMaxLines;
 
   const SettingsToggleTile({
     super.key,
@@ -1410,6 +1411,7 @@ class SettingsToggleTile extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.focusNode,
+    this.subtitleMaxLines = 1,
   });
 
   factory SettingsToggleTile.spec(
@@ -1418,6 +1420,7 @@ class SettingsToggleTile extends StatefulWidget {
     required bool value,
     required ValueChanged<bool> onChanged,
     FocusNode? focusNode,
+    int subtitleMaxLines = 1,
   }) {
     return SettingsToggleTile(
       key: key,
@@ -1427,6 +1430,7 @@ class SettingsToggleTile extends StatefulWidget {
       value: value,
       onChanged: onChanged,
       focusNode: focusNode,
+      subtitleMaxLines: subtitleMaxLines,
     );
   }
 
@@ -1485,14 +1489,21 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
                     const SizedBox(height: 3),
                     Text(
                       widget.subtitle,
-                      maxLines: 1,
+                      maxLines: widget.subtitleMaxLines,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 11.5, color: kSettingsDim),
                     ),
                   ],
                 ),
               ),
-              Switch.adaptive(value: widget.value, onChanged: widget.onChanged),
+              // The row's InkWell is the single DPAD stop; a focusable Switch
+              // would make every toggle cost two presses on TV.
+              ExcludeFocus(
+                child: Switch.adaptive(
+                  value: widget.value,
+                  onChanged: widget.onChanged,
+                ),
+              ),
             ],
           ),
         ),
@@ -1607,7 +1618,11 @@ class SettingsSelectDropdown extends StatelessWidget {
             padding: const EdgeInsets.only(left: 2),
             child: Text(
               selected!.subtitle!,
-              style: TextStyle(fontSize: 11.5, height: 1.4, color: kSettingsDim),
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.4,
+                color: kSettingsDim,
+              ),
             ),
           ),
         ],

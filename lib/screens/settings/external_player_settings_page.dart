@@ -8,6 +8,7 @@ import '../../services/android_native_downloader.dart';
 import '../../services/subtitle_font_service.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -87,6 +88,10 @@ class _ExternalPlayerSettingsPageState
   int _subtitleFontIndex = 0; // Default
   List<SubtitleFont> _allFonts =
       SubtitleFont.builtInOptions; // Built-in + custom fonts
+
+  // First interactive row ("Debrify Player" mode option) — receives entry
+  // focus on TV so DPAD users are never stranded on nothing.
+  final FocusNode _firstModeFocusNode = FocusNode();
 
   // Debrify Player FocusNodes for DPAD navigation
   final FocusNode _aspectFocusNode = FocusNode();
@@ -229,6 +234,7 @@ class _ExternalPlayerSettingsPageState
     _linuxCommandFocusNode.dispose();
     _windowsCommandController.dispose();
     _windowsCommandFocusNode.dispose();
+    _firstModeFocusNode.dispose();
     _screenTypeFocusNode.dispose();
     _stereoModeFocusNode.dispose();
     _autoDetectFocusNode.dispose();
@@ -390,6 +396,17 @@ class _ExternalPlayerSettingsPageState
       });
       // Load fonts (built-in + custom) separately (async)
       _loadFonts();
+      // Entry focus on TV: land DPAD on the first row once content builds.
+      if (PlatformUtil.isAndroidTvCached) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          // Only seed focus if nothing concrete is focused yet — a bare
+          // FocusScopeNode as primary focus means DPAD is stranded.
+          final primary = FocusManager.instance.primaryFocus;
+          if (primary != null && primary is! FocusScopeNode) return;
+          _firstModeFocusNode.requestFocus();
+        });
+      }
     } catch (e) {
       setState(() {
         _loading = false;
@@ -1270,93 +1287,132 @@ class _ExternalPlayerSettingsPageState
     required IconData icon,
     bool recommended = false,
     bool disabled = false,
+    FocusNode? focusNode,
   }) {
     final theme = Theme.of(context);
     final isSelected = _defaultPlayerMode == value;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: disabled ? null : () => _setDefaultPlayerMode(value),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? kSettingsPanel2 : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? kSettingsAccent : kSettingsLine,
-              width: isSelected ? 2 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Radio<String>(
-                value: value,
-                groupValue: _defaultPlayerMode,
-                onChanged: disabled ? null : (v) => _setDefaultPlayerMode(v!),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                icon,
-                size: 20,
-                color: isSelected
-                    ? kSettingsAccent
-                    : disabled
-                    ? kSettingsDim2
-                    : kSettingsDim,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          title,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: disabled ? kSettingsDim2 : null,
+      // Non-focusable wrapper only observes the InkWell's focus so the row
+      // can paint a DPAD focus ring (same idiom as the Night Mode rows).
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        child: Builder(
+          builder: (context) {
+            final isFocused = Focus.of(context).hasFocus;
+            return InkWell(
+              focusNode: focusNode,
+              canRequestFocus: !disabled,
+              onTap: disabled ? null : () => _setDefaultPlayerMode(value),
+              borderRadius: BorderRadius.circular(12),
+              // Snap, don't tween — per-keypress decoration lerps jank TVs.
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected || isFocused
+                      ? kSettingsPanel2
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isFocused || isSelected
+                        ? kSettingsAccent
+                        : kSettingsLine,
+                    width: isFocused || isSelected ? 2 : 1,
+                  ),
+                  boxShadow: isFocused
+                      ? [
+                          BoxShadow(
+                            color: kSettingsAccent.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
-                        ),
-                        if (recommended) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: kSettingsAccent.withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'Default',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: kSettingsAccent,
-                                fontWeight: FontWeight.w600,
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    // The row is the single focus stop — the inner Radio must
+                    // not add a second DPAD stop.
+                    ExcludeFocus(
+                      child: Radio<String>(
+                        value: value,
+                        groupValue: _defaultPlayerMode,
+                        onChanged: disabled
+                            ? null
+                            : (v) => _setDefaultPlayerMode(v!),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      icon,
+                      size: 20,
+                      color: isSelected
+                          ? kSettingsAccent
+                          : disabled
+                          ? kSettingsDim2
+                          : kSettingsDim,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                title,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: disabled ? kSettingsDim2 : null,
+                                ),
                               ),
+                              if (recommended) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: kSettingsAccent.withValues(
+                                      alpha: 0.16,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Default',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: kSettingsAccent,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          Text(
+                            subtitle,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: disabled ? kSettingsDim2 : kSettingsDim,
                             ),
                           ),
                         ],
-                      ],
-                    ),
-                    Text(
-                      subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: disabled ? kSettingsDim2 : kSettingsDim,
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -1382,13 +1438,15 @@ class _ExternalPlayerSettingsPageState
         actions: <Type, Action<Intent>>{
           NextFocusIntent: CallbackAction<NextFocusIntent>(
             onInvoke: (intent) {
-              FocusScope.of(context).nextFocus();
+              // Directional (non-wrapping): DOWN on the last row must not
+              // jump back to the top of the page.
+              FocusScope.of(context).focusInDirection(TraversalDirection.down);
               return null;
             },
           ),
           PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
             onInvoke: (intent) {
-              FocusScope.of(context).previousFocus();
+              FocusScope.of(context).focusInDirection(TraversalDirection.up);
               return null;
             },
           ),
@@ -1401,9 +1459,8 @@ class _ExternalPlayerSettingsPageState
             ),
             Expanded(
               flex: 3,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOutCubic,
+              // Snap, don't tween — animated focus decorations jank TVs.
+              child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: kSettingsPanel2,
@@ -1472,22 +1529,24 @@ class _ExternalPlayerSettingsPageState
         actions: <Type, Action<Intent>>{
           NextFocusIntent: CallbackAction<NextFocusIntent>(
             onInvoke: (intent) {
-              FocusScope.of(context).nextFocus();
+              // Directional (non-wrapping): DOWN on the last row must not
+              // jump back to the top of the page.
+              FocusScope.of(context).focusInDirection(TraversalDirection.down);
               return null;
             },
           ),
           PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
             onInvoke: (intent) {
-              FocusScope.of(context).previousFocus();
+              FocusScope.of(context).focusInDirection(TraversalDirection.up);
               return null;
             },
           ),
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
+        // Snap, don't tween — animated focus decorations jank TVs.
+        child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
+            color: isFocused ? kSettingsPanel2 : null,
             border: isFocused
                 ? Border.all(color: kSettingsAccent, width: 2)
                 : null,
@@ -1509,11 +1568,15 @@ class _ExternalPlayerSettingsPageState
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Checkbox(
-                    value: value,
-                    onChanged: (v) => onChanged(v ?? false),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
+                  // The row's InkWell is the single focus stop — the inner
+                  // Checkbox must not add a second DPAD stop.
+                  ExcludeFocus(
+                    child: Checkbox(
+                      value: value,
+                      onChanged: (v) => onChanged(v ?? false),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1564,13 +1627,15 @@ class _ExternalPlayerSettingsPageState
         actions: <Type, Action<Intent>>{
           NextFocusIntent: CallbackAction<NextFocusIntent>(
             onInvoke: (intent) {
-              FocusScope.of(context).nextFocus();
+              // Directional (non-wrapping): DOWN on the last row must not
+              // jump back to the top of the page.
+              FocusScope.of(context).focusInDirection(TraversalDirection.down);
               return null;
             },
           ),
           PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
             onInvoke: (intent) {
-              FocusScope.of(context).previousFocus();
+              FocusScope.of(context).focusInDirection(TraversalDirection.up);
               return null;
             },
           ),
@@ -1583,9 +1648,8 @@ class _ExternalPlayerSettingsPageState
             ),
             Expanded(
               flex: 3,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOutCubic,
+              // Snap, don't tween — animated focus decorations jank TVs.
+              child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: kSettingsPanel2,
@@ -1719,6 +1783,7 @@ class _ExternalPlayerSettingsPageState
                           subtitle: 'Use the built-in video player',
                           icon: Icons.play_circle_filled_rounded,
                           recommended: true,
+                          focusNode: _firstModeFocusNode,
                         ),
                         _buildPlayerModeOption(
                           context,
@@ -1920,6 +1985,24 @@ class _ExternalPlayerSettingsPageState
                               onPressed: _importCustomFont,
                               icon: const Icon(Icons.file_upload_outlined),
                               label: const Text('Import Custom Font (TTF/OTF)'),
+                              // Default focus overlay is too faint for TV —
+                              // paint an explicit accent ring + lit fill.
+                              style: ButtonStyle(
+                                backgroundColor:
+                                    WidgetStateProperty.resolveWith(
+                                      (s) => s.contains(WidgetState.focused)
+                                          ? kSettingsPanel2
+                                          : null,
+                                    ),
+                                side: WidgetStateProperty.resolveWith(
+                                  (s) => s.contains(WidgetState.focused)
+                                      ? const BorderSide(
+                                          color: kSettingsAccent,
+                                          width: 2,
+                                        )
+                                      : null,
+                                ),
+                              ),
                             ),
                           ),
 
@@ -1983,6 +2066,31 @@ class _ExternalPlayerSettingsPageState
                                             minHeight: 32,
                                           ),
                                           tooltip: 'Remove font',
+                                          // DPAD focus must be unmistakable.
+                                          style: ButtonStyle(
+                                            backgroundColor:
+                                                WidgetStateProperty.resolveWith(
+                                                  (s) =>
+                                                      s.contains(
+                                                        WidgetState.focused,
+                                                      )
+                                                      ? kSettingsPanel2
+                                                      : null,
+                                                ),
+                                            side:
+                                                WidgetStateProperty.resolveWith(
+                                                  (s) =>
+                                                      s.contains(
+                                                        WidgetState.focused,
+                                                      )
+                                                      ? const BorderSide(
+                                                          color:
+                                                              kSettingsAccent,
+                                                          width: 2,
+                                                        )
+                                                      : null,
+                                                ),
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -2070,6 +2178,11 @@ class _ExternalPlayerSettingsPageState
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: Focus(
+                                  // Observer only: the InkWell below is the
+                                  // focus stop; a focusable wrapper would make
+                                  // each row cost two DPAD presses.
+                                  canRequestFocus: false,
+                                  skipTraversal: true,
                                   onKeyEvent: (node, event) {
                                     if (event is KeyDownEvent) {
                                       if (isActivateKey(event.logicalKey)) {
@@ -2087,11 +2200,8 @@ class _ExternalPlayerSettingsPageState
                                       return InkWell(
                                         onTap: () => _setNightModeIndex(index),
                                         borderRadius: BorderRadius.circular(8),
-                                        child: AnimatedContainer(
-                                          duration: const Duration(
-                                            milliseconds: 160,
-                                          ),
-                                          curve: Curves.easeOutCubic,
+                                        // Snap, don't tween (TV GPU rule).
+                                        child: Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 12,
                                             vertical: 8,
@@ -2131,16 +2241,21 @@ class _ExternalPlayerSettingsPageState
                                           ),
                                           child: Row(
                                             children: [
-                                              Radio<int>(
-                                                value: index,
-                                                groupValue: _nightModeIndex,
-                                                onChanged: (v) =>
-                                                    _setNightModeIndex(v!),
-                                                materialTapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
-                                                visualDensity:
-                                                    VisualDensity.compact,
+                                              // Single focus stop per row —
+                                              // keep the Radio off the DPAD
+                                              // traversal order.
+                                              ExcludeFocus(
+                                                child: Radio<int>(
+                                                  value: index,
+                                                  groupValue: _nightModeIndex,
+                                                  onChanged: (v) =>
+                                                      _setNightModeIndex(v!),
+                                                  materialTapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                ),
                                               ),
                                               const SizedBox(width: 8),
                                               Text(
@@ -2289,9 +2404,7 @@ class _ExternalPlayerSettingsPageState
                             ),
                           ),
                           const SizedBox(height: 16),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 160),
-                            curve: Curves.easeOutCubic,
+                          Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
                               boxShadow: _iosSchemeFocused
@@ -2487,9 +2600,7 @@ class _ExternalPlayerSettingsPageState
                             ),
                           ),
                           const SizedBox(height: 16),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 160),
-                            curve: Curves.easeOutCubic,
+                          Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
                               boxShadow: _linuxCommandFocused
@@ -2688,9 +2799,7 @@ class _ExternalPlayerSettingsPageState
                             ),
                           ),
                           const SizedBox(height: 16),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 160),
-                            curve: Curves.easeOutCubic,
+                          Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
                               boxShadow: _windowsCommandFocused
@@ -2988,21 +3097,26 @@ class _ExternalPlayerSettingsPageState
                                 NextFocusIntent:
                                     CallbackAction<NextFocusIntent>(
                                       onInvoke: (intent) {
-                                        FocusScope.of(context).nextFocus();
+                                        // Directional (non-wrapping): DOWN on
+                                        // the last row must not jump back to
+                                        // the top of the page.
+                                        FocusScope.of(context).focusInDirection(
+                                          TraversalDirection.down,
+                                        );
                                         return null;
                                       },
                                     ),
                                 PreviousFocusIntent:
                                     CallbackAction<PreviousFocusIntent>(
                                       onInvoke: (intent) {
-                                        FocusScope.of(context).previousFocus();
+                                        FocusScope.of(context).focusInDirection(
+                                          TraversalDirection.up,
+                                        );
                                         return null;
                                       },
                                     ),
                               },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 160),
-                                curve: Curves.easeOutCubic,
+                              child: Container(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(14),
                                   border: _commandFocused

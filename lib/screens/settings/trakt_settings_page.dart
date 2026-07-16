@@ -8,6 +8,7 @@ import '../../services/aptabase_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_service.dart';
+import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 
 class TraktSettingsPage extends StatefulWidget {
@@ -33,6 +34,12 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   DateTime? _codeExpiresAt;
   Timer? _countdownTimer;
 
+  // DPAD focus anchors: the login/logout button (whichever is shown) and the
+  // Cancel button of the device-code card. Focus is handed between them as
+  // the card appears/disappears so TV users are never stranded on nothing.
+  final FocusNode _primaryButtonFocus = FocusNode(debugLabel: 'trakt-primary');
+  final FocusNode _cancelFocus = FocusNode(debugLabel: 'trakt-cancel');
+
   @override
   void initState() {
     super.initState();
@@ -43,7 +50,16 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   void dispose() {
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
+    _primaryButtonFocus.dispose();
+    _cancelFocus.dispose();
     super.dispose();
+  }
+
+  void _focusOnTv(FocusNode node) {
+    if (!PlatformUtil.isAndroidTvCached) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && node.context != null) node.requestFocus();
+    });
   }
 
   Future<void> _loadSettings() async {
@@ -59,6 +75,20 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
       _syncCatalogItems = syncCatalog;
       _loading = false;
     });
+    // TV entry focus: land DPAD users on the login/logout button — unless
+    // the user already focused something (e.g. the AppBar back button)
+    // while the async load ran. Reseeds elsewhere skip this guard on
+    // purpose: there the focused node just unmounted.
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final primary = FocusManager.instance.primaryFocus;
+        if (primary != null && primary is! FocusScopeNode) return;
+        if (_primaryButtonFocus.context != null) {
+          _primaryButtonFocus.requestFocus();
+        }
+      });
+    }
   }
 
   Future<void> _login() async {
@@ -71,6 +101,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
       if (result == null) {
         setState(() => _isConnecting = false);
         _showSnackBar('Failed to get device code from Trakt');
+        // Re-anchor DPAD focus on the (re-enabled) login button.
+        _focusOnTv(_primaryButtonFocus);
         return;
       }
 
@@ -86,10 +118,14 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
 
       _startCountdownTimer();
       _startPolling();
+      // The login button just disappeared under focus — move to Cancel.
+      _focusOnTv(_cancelFocus);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isConnecting = false);
       _showSnackBar('Failed to start login: $e');
+      // Re-anchor DPAD focus on the (re-enabled) login button.
+      _focusOnTv(_primaryButtonFocus);
     }
   }
 
@@ -127,6 +163,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         'method': 'device_code',
       });
       MainPageBridge.notifyIntegrationChanged();
+      // Device-code card (and its Cancel) just left the tree — refocus.
+      _focusOnTv(_primaryButtonFocus);
       _showSnackBar(
         'Connected to Trakt as ${username ?? 'unknown'}',
         isError: false,
@@ -178,6 +216,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         _isConnecting = false;
         _resetDeviceCodeState();
       });
+      // The device-code card (and its Cancel button) just left the tree.
+      _focusOnTv(_primaryButtonFocus);
     }
   }
 
@@ -297,16 +337,21 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                           if (!_isConnected)
                             _buildLoginSection()
                           else
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: _logout,
-                                icon: const Icon(Icons.logout),
-                                label: const Text('Logout'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: kSettingsRed,
-                                  side: BorderSide(
-                                    color: kSettingsRed.withValues(alpha: 0.4),
+                            _FocusRing(
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  focusNode: _primaryButtonFocus,
+                                  onPressed: _logout,
+                                  icon: const Icon(Icons.logout),
+                                  label: const Text('Logout'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: kSettingsRed,
+                                    side: BorderSide(
+                                      color: kSettingsRed.withValues(
+                                        alpha: 0.4,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -319,18 +364,22 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                   // Sync Catalog Items toggle (only when connected)
                   if (_isConnected) ...[
                     const SizedBox(height: 16),
-                    Card(
-                      child: SwitchListTile(
-                        title: const Text('Sync Catalog Items'),
-                        subtitle: Text(
-                          'Scrobble playback to Trakt for all content played from addons, not just Trakt items',
-                          style: TextStyle(fontSize: 12, color: kSettingsDim),
+                    // _FocusRing: SwitchListTile's built-in focus highlight is
+                    // too subtle for TV, so paint the accent ring around it.
+                    _FocusRing(
+                      child: Card(
+                        child: SwitchListTile(
+                          title: const Text('Sync Catalog Items'),
+                          subtitle: Text(
+                            'Scrobble playback to Trakt for all content played from addons, not just Trakt items',
+                            style: TextStyle(fontSize: 12, color: kSettingsDim),
+                          ),
+                          value: _syncCatalogItems,
+                          onChanged: (value) {
+                            setState(() => _syncCatalogItems = value);
+                            StorageService.setTraktSyncCatalogItems(value);
+                          },
                         ),
-                        value: _syncCatalogItems,
-                        onChanged: (value) {
-                          setState(() => _syncCatalogItems = value);
-                          StorageService.setTraktSyncCatalogItems(value);
-                        },
                       ),
                     ),
                   ],
@@ -359,21 +408,26 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
     }
 
     // Login button
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        onPressed: _isConnecting ? null : _login,
-        icon: _isConnecting
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.login),
-        label: Text(_isConnecting ? 'Getting code...' : 'Login with Trakt'),
+    return _FocusRing(
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          focusNode: _primaryButtonFocus,
+          // Busy no-op instead of disabling: a disabled button can't hold
+          // DPAD focus, which would strand TV users mid-login.
+          onPressed: _isConnecting ? () {} : _login,
+          icon: _isConnecting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.login),
+          label: Text(_isConnecting ? 'Getting code...' : 'Login with Trakt'),
+        ),
       ),
     );
   }
@@ -397,27 +451,39 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                 style: TextStyle(fontSize: 14, color: kSettingsDim),
               ),
               const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: _userCode!));
-                  _showSnackBar('Code copied to clipboard', isError: false);
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SelectableText(
-                      _userCode!,
-                      style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 4,
-                        fontFamily: 'monospace',
-                        color: Colors.white,
-                      ),
+              // InkWell (not GestureDetector) so the copy action is DPAD
+              // focusable; plain Text (not SelectableText) so arrow keys
+              // traverse instead of moving a text cursor.
+              _FocusRing(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: _userCode!));
+                    _showSnackBar('Code copied to clipboard', isError: false);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
                     ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.copy, size: 20, color: kSettingsDim),
-                  ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _userCode!,
+                          style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 4,
+                            fontFamily: 'monospace',
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.copy, size: 20, color: kSettingsDim),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -425,20 +491,26 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         ),
         const SizedBox(height: 16),
 
-        // Verification URL
-        GestureDetector(
-          onTap: () {
-            final url = _verificationUrl ?? 'https://trakt.tv/activate';
-            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-          },
-          child: Text(
-            'Go to ${_verificationUrl ?? 'https://trakt.tv/activate'}',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: kSettingsAccent2,
-              decoration: TextDecoration.underline,
-              decorationColor: kSettingsAccent2,
+        // Verification URL (focusable link)
+        _FocusRing(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () {
+              final url = _verificationUrl ?? 'https://trakt.tv/activate';
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              child: Text(
+                'Go to ${_verificationUrl ?? 'https://trakt.tv/activate'}',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: kSettingsAccent2,
+                  decoration: TextDecoration.underline,
+                  decorationColor: kSettingsAccent2,
+                ),
+              ),
             ),
           ),
         ),
@@ -457,14 +529,53 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         const SizedBox(height: 16),
 
         // Cancel button
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: _stopDeviceCodeFlow,
-            child: const Text('Cancel'),
+        _FocusRing(
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              focusNode: _cancelFocus,
+              onPressed: _stopDeviceCodeFlow,
+              child: const Text('Cancel'),
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Paints a snap accent ring around [child] while any descendant holds DPAD
+/// focus — Material's own focus overlay is too subtle for TV. Non-focusable
+/// itself, so it adds no traversal stop. Snap, don't tween (TV GPU rule).
+class _FocusRing extends StatefulWidget {
+  final Widget child;
+  const _FocusRing({required this.child});
+
+  @override
+  State<_FocusRing> createState() => _FocusRingState();
+}
+
+class _FocusRingState extends State<_FocusRing> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      skipTraversal: true,
+      canRequestFocus: false,
+      // hasFocus includes descendants, so this fires when the wrapped
+      // control receives DPAD focus.
+      onFocusChange: (f) => setState(() => _focused = f),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: _focused ? kSettingsAccent : Colors.transparent,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: widget.child,
+      ),
     );
   }
 }

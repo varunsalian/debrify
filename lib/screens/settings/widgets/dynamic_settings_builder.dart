@@ -1,10 +1,71 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../models/engine_config/engine_config.dart';
 import '../../../services/engine/settings_manager.dart';
 import '../../../services/engine/engine_registry.dart';
 import 'settings_widgets.dart';
+
+/// Discrete choices replacing a former slider's min..max range. Small ranges
+/// enumerate every value; large ones use a coarse ladder so the dropdown
+/// stays short. The currently-stored [current] is always included so the
+/// slider→dropdown swap can't silently change a saved setting.
+List<int> _sliderStepOptions(int min, int max, int current) {
+  final steps = <int>{};
+  if (max - min <= 20) {
+    for (int v = min; v <= max; v++) {
+      steps.add(v);
+    }
+  } else {
+    const ladder = [
+      1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50, 75, //
+      100, 150, 200, 250, 300, 350, 400, 450, 500,
+    ];
+    for (final v in ladder) {
+      if (v >= min && v <= max) steps.add(v);
+    }
+    steps
+      ..add(min)
+      ..add(max);
+  }
+  steps.add(current);
+  return steps.toList()..sort();
+}
+
+/// Shared numeric dropdown for the dynamic settings cards. Uses the themed
+/// InputDecoration so DPAD focus paints the accent focusedBorder — the old
+/// `InputBorder.none` idiom left focus invisible on TV.
+Widget _stepDropdown(
+  BuildContext context, {
+  required int value,
+  required List<int> options,
+  required ValueChanged<int> onChanged,
+  String Function(int value)? labelOf,
+}) {
+  return DropdownButtonFormField<int>(
+    value: value,
+    isExpanded: true,
+    decoration: const InputDecoration(),
+    onChanged: (v) {
+      if (v != null) onChanged(v);
+    },
+    items: [
+      for (final option in options)
+        DropdownMenuItem<int>(
+          value: option,
+          child: Text(
+            labelOf?.call(option) ?? '$option',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+    ],
+    style: Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(color: Colors.white),
+    dropdownColor: kSettingsPanel2,
+    borderRadius: BorderRadius.circular(14),
+    icon: Icon(Icons.arrow_drop_down, color: kSettingsDim),
+  );
+}
 
 /// Builds settings UI dynamically from engine configurations
 class DynamicSettingsBuilder extends StatefulWidget {
@@ -269,69 +330,75 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
         _settingValues[engineId]?[settingId] as bool? ??
         (setting.defaultValue as bool? ?? false);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: currentValue
-            ? kSettingsAccent.withValues(alpha: 0.1)
-            : kSettingsPanel2,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
+    // The Switch is the focusable; the ring goes on the row so DPAD focus is
+    // unmissable on TV.
+    return _FocusHighlight(
+      builder: (context, focused) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
           color: currentValue
-              ? kSettingsAccent.withValues(alpha: 0.3)
-              : kSettingsLine,
+              ? kSettingsAccent.withValues(alpha: 0.1)
+              : kSettingsPanel2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: focused
+                ? kSettingsAccent
+                : (currentValue
+                      ? kSettingsAccent.withValues(alpha: 0.3)
+                      : kSettingsLine),
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: currentValue
-                  ? kSettingsAccent.withValues(alpha: 0.2)
-                  : Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(6),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: currentValue
+                    ? kSettingsAccent.withValues(alpha: 0.2)
+                    : Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                _getIconForSetting(settingId),
+                size: 18,
+                color: currentValue ? kSettingsAccent2 : kSettingsDim,
+              ),
             ),
-            child: Icon(
-              _getIconForSetting(settingId),
-              size: 18,
-              color: currentValue ? kSettingsAccent2 : kSettingsDim,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  setting.label,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: currentValue ? kSettingsAccent2 : kSettingsDim,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    setting.label,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: currentValue ? kSettingsAccent2 : kSettingsDim,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  currentValue ? 'Enabled' : 'Disabled',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    currentValue ? 'Enabled' : 'Disabled',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Switch(
-            value: currentValue,
-            onChanged: (value) async {
-              await _settings.setValue<bool>(engineId, settingId, value);
-              setState(() {
-                _settingValues[engineId] ??= {};
-                _settingValues[engineId]![settingId] = value;
-              });
-              widget.onSettingsChanged?.call();
-            },
-          ),
-        ],
+            Switch(
+              value: currentValue,
+              onChanged: (value) async {
+                await _settings.setValue<bool>(engineId, settingId, value);
+                setState(() {
+                  _settingValues[engineId] ??= {};
+                  _settingValues[engineId]![settingId] = value;
+                });
+                widget.onSettingsChanged?.call();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -345,21 +412,30 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
         _settingValues[engineId]?[settingId] as int? ??
         (setting.defaultValue as int? ?? 50);
 
-    // Get options from setting config or use defaults. A config-supplied
-    // EMPTY list would make the reduce below throw, so fall back on that too.
-    var options =
-        setting.options ??
-        [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500];
+    // Get options from setting config or use defaults (a config-supplied
+    // EMPTY list falls back too). The stored value is inserted if missing so
+    // nothing silently changes.
+    var options = setting.options ?? const <int>[];
     if (options.isEmpty) {
-      options = [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500];
+      options = [
+        25,
+        50,
+        75,
+        100,
+        125,
+        150,
+        175,
+        200,
+        250,
+        300,
+        350,
+        400,
+        450,
+        500,
+      ];
     }
-
-    // Ensure current value is in options, or find closest
-    int validValue = currentValue;
     if (!options.contains(currentValue)) {
-      validValue = options.reduce(
-        (a, b) => (a - currentValue).abs() < (b - currentValue).abs() ? a : b,
-      );
+      options = [...options, currentValue]..sort();
     }
 
     return Container(
@@ -411,46 +487,19 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: kSettingsPanel2,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: kSettingsLine),
-            ),
-            child: DropdownButtonFormField<int>(
-              value: validValue,
-              onChanged: (newValue) async {
-                if (newValue != null) {
-                  await _settings.setValue<int>(engineId, settingId, newValue);
-                  setState(() {
-                    _settingValues[engineId] ??= {};
-                    _settingValues[engineId]![settingId] = newValue;
-                  });
-                  widget.onSettingsChanged?.call();
-                }
-              },
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-              ),
-              items: options.map((option) {
-                return DropdownMenuItem<int>(
-                  value: option,
-                  child: Text(
-                    '$option results',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                );
-              }).toList(),
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.white),
-              dropdownColor: kSettingsPanel2,
-              icon: Icon(Icons.arrow_drop_down, color: kSettingsDim),
-            ),
+          _stepDropdown(
+            context,
+            value: currentValue,
+            options: options,
+            labelOf: (v) => '$v results',
+            onChanged: (newValue) async {
+              await _settings.setValue<int>(engineId, settingId, newValue);
+              setState(() {
+                _settingValues[engineId] ??= {};
+                _settingValues[engineId]![settingId] = newValue;
+              });
+              widget.onSettingsChanged?.call();
+            },
           ),
         ],
       ),
@@ -463,12 +512,14 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
     SettingConfig setting,
   ) {
     final currentValue =
-        (_settingValues[engineId]?[settingId] as int? ??
-                (setting.defaultValue as int? ?? 50))
-            .toDouble();
+        _settingValues[engineId]?[settingId] as int? ??
+        (setting.defaultValue as int? ?? 50);
 
-    final min = (setting.min ?? 1).toDouble();
-    final max = (setting.max ?? 500).toDouble();
+    // Former slider — sliders trap DPAD focus on TV, so 'slider' settings
+    // render as a discrete dropdown over the same min..max range.
+    final min = setting.min ?? 1;
+    final max = setting.max ?? 500;
+    final options = _sliderStepOptions(min, max, currentValue);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -504,57 +555,21 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: kSettingsAccent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  currentValue.toInt().toString(),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: kSettingsAccent2,
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
-          _TvFriendlySlider(
-            value: currentValue.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: (max - min).toInt(),
+          _stepDropdown(
+            context,
+            value: currentValue,
+            options: options,
             onChanged: (value) async {
-              final intValue = value.toInt();
-              await _settings.setValue<int>(engineId, settingId, intValue);
+              await _settings.setValue<int>(engineId, settingId, value);
               setState(() {
                 _settingValues[engineId] ??= {};
-                _settingValues[engineId]![settingId] = intValue;
+                _settingValues[engineId]![settingId] = value;
               });
               widget.onSettingsChanged?.call();
             },
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                min.toInt().toString(),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
-              ),
-              Text(
-                max.toInt().toString(),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
-              ),
-            ],
           ),
         ],
       ),
@@ -632,6 +647,11 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
   final SettingsManager _settings = SettingsManager();
   bool _loading = true;
   List<EngineConfig> _tvEnabledEngines = [];
+
+  /// Whether the initial settings load has finished — the page's TV entry
+  /// focus seeding waits on this (before load the only focusable descendant
+  /// is the Reset button at the bottom).
+  bool get isLoaded => !_loading;
 
   // Global TV settings
   int _keywordThreshold = 5;
@@ -916,6 +936,10 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     required IconData icon,
     required Function(int) onChanged,
   }) {
+    // Former slider — sliders trap DPAD focus on TV, so the global limits
+    // render as discrete dropdowns over the same min..max range.
+    final options = _sliderStepOptions(min, max, value);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -957,51 +981,14 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: kSettingsAccent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  value.toString(),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: kSettingsAccent2,
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
-          _TvFriendlySlider(
-            value: value.toDouble().clamp(min.toDouble(), max.toDouble()),
-            min: min.toDouble(),
-            max: max.toDouble(),
-            divisions: max - min,
-            onChanged: (newValue) {
-              onChanged(newValue.toInt());
-            },
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                min.toString(),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
-              ),
-              Text(
-                max.toString(),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
-              ),
-            ],
+          _stepDropdown(
+            context,
+            value: value,
+            options: options,
+            onChanged: onChanged,
           ),
         ],
       ),
@@ -1015,54 +1002,64 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     required IconData icon,
     required Function(bool) onChanged,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: value ? kSettingsAccent.withValues(alpha: 0.1) : kSettingsPanel2,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: value ? kSettingsAccent.withValues(alpha: 0.3) : kSettingsLine,
+    // The Switch is the focusable; the ring goes on the row so DPAD focus is
+    // unmissable on TV.
+    return _FocusHighlight(
+      builder: (context, focused) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: value
+              ? kSettingsAccent.withValues(alpha: 0.1)
+              : kSettingsPanel2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: focused
+                ? kSettingsAccent
+                : (value
+                      ? kSettingsAccent.withValues(alpha: 0.3)
+                      : kSettingsLine),
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: value
-                  ? kSettingsAccent.withValues(alpha: 0.2)
-                  : Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(6),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: value
+                    ? kSettingsAccent.withValues(alpha: 0.2)
+                    : Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                icon,
+                size: 18,
+                color: value ? kSettingsAccent2 : kSettingsDim,
+              ),
             ),
-            child: Icon(
-              icon,
-              size: 18,
-              color: value ? kSettingsAccent2 : kSettingsDim,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: value ? kSettingsAccent2 : kSettingsDim,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: value ? kSettingsAccent2 : kSettingsDim,
+                    ),
                   ),
-                ),
-                Text(
-                  subtitle,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
-                ),
-              ],
+                  Text(
+                    subtitle,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Switch(value: value, onChanged: onChanged),
-        ],
+            Switch(value: value, onChanged: onChanged),
+          ],
+        ),
       ),
     );
   }
@@ -1127,15 +1124,28 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                     ],
                   ),
                 ),
-                Switch(
-                  value: isEnabled,
-                  onChanged: (value) async {
-                    await _settings.setTvEnabled(engineId, value);
-                    setState(() {
-                      _engineTvEnabled[engineId] = value;
-                    });
-                    widget.onSettingsChanged?.call();
-                  },
+                // No row container here to light up, so the focus ring wraps
+                // the Switch itself.
+                _FocusHighlight(
+                  builder: (context, focused) => Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: focused ? kSettingsAccent : Colors.transparent,
+                      ),
+                    ),
+                    child: Switch(
+                      value: isEnabled,
+                      onChanged: (value) async {
+                        await _settings.setTvEnabled(engineId, value);
+                        setState(() {
+                          _engineTvEnabled[engineId] = value;
+                        });
+                        widget.onSettingsChanged?.call();
+                      },
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1219,14 +1229,10 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     required int defaultValue,
     required Function(int) onChanged,
   }) {
-    final options = [10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
-
-    // Ensure current value is in options
-    int validValue = currentValue;
+    // The stored value is inserted if missing so nothing silently changes.
+    var options = [10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
     if (!options.contains(currentValue)) {
-      validValue = options.reduce(
-        (a, b) => (a - currentValue).abs() < (b - currentValue).abs() ? a : b,
-      );
+      options = [...options, currentValue]..sort();
     }
 
     return Container(
@@ -1265,41 +1271,12 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: kSettingsPanel2,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: kSettingsLine),
-            ),
-            child: DropdownButtonFormField<int>(
-              value: validValue,
-              onChanged: (newValue) {
-                if (newValue != null) {
-                  onChanged(newValue);
-                }
-              },
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-              ),
-              items: options.map((option) {
-                return DropdownMenuItem<int>(
-                  value: option,
-                  child: Text(
-                    '$option results',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                );
-              }).toList(),
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.white),
-              dropdownColor: kSettingsPanel2,
-              icon: Icon(Icons.arrow_drop_down, color: kSettingsDim),
-            ),
+          _stepDropdown(
+            context,
+            value: currentValue,
+            options: options,
+            labelOf: (v) => '$v results',
+            onChanged: onChanged,
           ),
         ],
       ),
@@ -1375,143 +1352,31 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
   }
 }
 
-/// A TV-friendly slider that allows escaping with arrow keys
-/// When at min value, up/left arrows navigate to previous focusable
-/// When at max value, down/right arrows navigate to next focusable
-class _TvFriendlySlider extends StatefulWidget {
-  const _TvFriendlySlider({
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.divisions,
-    required this.onChanged,
-  });
+/// Paints the settings focus ring around [builder]'s output whenever a
+/// descendant (e.g. a row's Switch) holds focus, so DPAD focus is visible on
+/// TV. The wrapper node itself never takes focus. Snap decoration — no
+/// tween — per the TV GPU rule.
+class _FocusHighlight extends StatefulWidget {
+  const _FocusHighlight({required this.builder});
 
-  final double value;
-  final double min;
-  final double max;
-  final int divisions;
-  final ValueChanged<double> onChanged;
+  final Widget Function(BuildContext context, bool focused) builder;
 
   @override
-  State<_TvFriendlySlider> createState() => _TvFriendlySliderState();
+  State<_FocusHighlight> createState() => _FocusHighlightState();
 }
 
-class _TvFriendlySliderState extends State<_TvFriendlySlider> {
-  final FocusNode _focusNode = FocusNode();
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(_handleFocusChange);
-  }
-
-  @override
-  void dispose() {
-    _focusNode.removeListener(_handleFocusChange);
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (mounted) {
-      setState(() {
-        _isFocused = _focusNode.hasFocus;
-      });
-    }
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final step = (widget.max - widget.min) / widget.divisions;
-    final isAtMin = widget.value <= widget.min;
-    final isAtMax = widget.value >= widget.max;
-
-    // Navigate up: allow if at min value
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isAtMin) {
-        final ctx = node.context;
-        if (ctx != null) {
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
-          return KeyEventResult.handled;
-        }
-      }
-    }
-
-    // Navigate down: allow if at max value
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (isAtMax) {
-        final ctx = node.context;
-        if (ctx != null) {
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
-          return KeyEventResult.handled;
-        }
-      }
-    }
-
-    // Left arrow: decrease value or navigate if at min
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (isAtMin) {
-        final ctx = node.context;
-        if (ctx != null) {
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
-          return KeyEventResult.handled;
-        }
-      } else {
-        widget.onChanged((widget.value - step).clamp(widget.min, widget.max));
-        return KeyEventResult.handled;
-      }
-    }
-
-    // Right arrow: increase value or navigate if at max
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if (isAtMax) {
-        final ctx = node.context;
-        if (ctx != null) {
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
-          return KeyEventResult.handled;
-        }
-      } else {
-        widget.onChanged((widget.value + step).clamp(widget.min, widget.max));
-        return KeyEventResult.handled;
-      }
-    }
-
-    return KeyEventResult.ignored;
-  }
+class _FocusHighlightState extends State<_FocusHighlight> {
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     return Focus(
-      focusNode: _focusNode,
-      onKeyEvent: _handleKeyEvent,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: _isFocused
-              ? Border.all(color: kSettingsAccent, width: 2)
-              : null,
-          color: _isFocused ? kSettingsAccent.withValues(alpha: 0.1) : null,
-        ),
-        child: SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 4,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-          ),
-          child: Slider(
-            value: widget.value,
-            min: widget.min,
-            max: widget.max,
-            divisions: widget.divisions,
-            onChanged: widget.onChanged,
-          ),
-        ),
-      ),
+      canRequestFocus: false,
+      skipTraversal: true,
+      // hasFocus includes descendants, so this fires when the child's
+      // Switch/dropdown receives DPAD focus.
+      onFocusChange: (f) => setState(() => _focused = f),
+      child: widget.builder(context, _focused),
     );
   }
 }

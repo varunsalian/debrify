@@ -6,6 +6,7 @@ import '../../services/iptv_service.dart';
 import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/m3u_parser.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -71,11 +72,43 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    // Rebuild on tab change so the inactive tabs' ExcludeFocus updates —
+    // otherwise DPAD traversal can wander into off-screen tab content.
+    _tabController.addListener(_onTabChanged);
     _loadSettings();
+  }
+
+  void _onTabChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// DOWN from a tab may select it first — the new tab's content is still
+  /// under `ExcludeFocus(excluding: true)` until the rebuild, so a same-frame
+  /// focus request is refused. Defer one frame.
+  void _focusContentAfterTabSwitch(FocusNode node) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusAndReveal(node);
+    });
+  }
+
+  /// House DPAD idiom: focus a node, then scroll it into view next frame.
+  void _focusAndReveal(FocusNode node) {
+    node.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = node.context;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.15,
+          duration: const Duration(milliseconds: 180),
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _nameController.dispose();
     _urlController.dispose();
@@ -126,9 +159,25 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _loading = false;
     });
     _ensureFocusNodes();
+
+    // TV entry focus: land on the first tab (not a TextField, so no keyboard
+    // pops) so DPAD users are never stranded on nothing.
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // Only a bare FocusScopeNode as primary focus means DPAD is
+        // stranded — don't steal focus the user already placed somewhere.
+        final primary = FocusManager.instance.primaryFocus;
+        if (primary != null && primary is! FocusScopeNode) return;
+        _urlTabFocusNode.requestFocus();
+      });
+    }
   }
 
   Future<void> _addPlaylist() async {
+    // The busy button is a no-op, but the fields' onSubmitted calls this
+    // directly — guard so an in-flight add can't run twice.
+    if (_isAdding) return;
     final name = _nameController.text.trim();
     final url = _urlController.text.trim();
 
@@ -309,6 +358,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   Future<void> _addXtreamCodes() async {
+    // Same double-submission guard as _addPlaylist (fields' onSubmitted).
+    if (_isXcAdding) return;
     final server = _xcServerController.text.trim();
     final username = _xcUsernameController.text.trim();
     final password = _xcPasswordController.text.trim();
@@ -417,6 +468,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   Future<void> _removePlaylist(IptvPlaylist playlist) async {
+    final removedIndex = _playlists.indexWhere((p) => p.id == playlist.id);
     final newPlaylists = _playlists.where((p) => p.id != playlist.id).toList();
     await StorageService.setIptvPlaylists(newPlaylists);
 
@@ -437,7 +489,25 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     await StorageService.removeIptvFavoritesByPlaylistId(playlist.id);
 
     setState(() => _playlists = newPlaylists);
+    // _ensureFocusNodes disposes the trailing nodes — including the one the
+    // focused delete button was using — so reseed DPAD focus on the same row
+    // slot of a surviving playlist (or the tab bar when the list empties).
     _ensureFocusNodes();
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_playlistFocusNodes.isEmpty) {
+          _focusAndReveal(switch (_tabController.index) {
+            1 => _fileTabFocusNode,
+            2 => _xcTabFocusNode,
+            _ => _urlTabFocusNode,
+          });
+        } else {
+          final row = removedIndex.clamp(0, _playlists.length - 1);
+          _focusAndReveal(_playlistFocusNodes[row * 3]);
+        }
+      });
+    }
     _showSnackBar('Removed "${playlist.name}"', isError: false);
   }
 
@@ -582,10 +652,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               icon: _isAdding ? Icons.hourglass_empty : Icons.add,
               label: _isAdding ? 'Adding...' : 'Add Playlist',
               onPressed: _isAdding ? () {} : _addPlaylist,
-              onUpArrow: () => _urlInputFocusNode.requestFocus(),
+              onUpArrow: () => _focusAndReveal(_urlInputFocusNode),
               onDownArrow:
                   _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
-                  ? () => _playlistFocusNodes[0].requestFocus()
+                  ? () => _focusAndReveal(_playlistFocusNodes[0])
                   : null,
             ),
           ),
@@ -617,9 +687,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             icon: Icons.file_open,
             label: 'Browse Files',
             onPressed: _importFromFile,
-            onUpArrow: () => _fileTabFocusNode.requestFocus(),
+            onUpArrow: () => _focusAndReveal(_fileTabFocusNode),
             onDownArrow: _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
-                ? () => _playlistFocusNodes[0].requestFocus()
+                ? () => _focusAndReveal(_playlistFocusNodes[0])
                 : null,
           ),
         ),
@@ -680,10 +750,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               icon: _isXcAdding ? Icons.hourglass_empty : Icons.login,
               label: _isXcAdding ? 'Logging in...' : 'Login & Add',
               onPressed: _isXcAdding ? () {} : _addXtreamCodes,
-              onUpArrow: () => _xcPasswordFocusNode.requestFocus(),
+              onUpArrow: () => _focusAndReveal(_xcPasswordFocusNode),
               onDownArrow:
                   _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
-                  ? () => _playlistFocusNodes[0].requestFocus()
+                  ? () => _focusAndReveal(_playlistFocusNodes[0])
                   : null,
             ),
           ),
@@ -705,7 +775,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       title: 'IPTV Playlists',
       leading: _TvFocusableBackButton(
         focusNode: _backButtonFocusNode,
-        onDownArrow: () => _urlTabFocusNode.requestFocus(),
+        // Land on the currently-selected tab, not always the first one.
+        onDownArrow: () => _focusAndReveal(switch (_tabController.index) {
+          1 => _fileTabFocusNode,
+          2 => _xcTabFocusNode,
+          _ => _urlTabFocusNode,
+        }),
       ),
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
@@ -731,10 +806,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               fileTabFocusNode: _fileTabFocusNode,
               xcTabFocusNode: _xcTabFocusNode,
               onUpArrow: () => _backButtonFocusNode.requestFocus(),
-              onDownArrowFromUrlTab: () => _nameInputFocusNode.requestFocus(),
+              onDownArrowFromUrlTab: () =>
+                  _focusContentAfterTabSwitch(_nameInputFocusNode),
               onDownArrowFromFileTab: () =>
-                  _importFileButtonFocusNode.requestFocus(),
-              onDownArrowFromXcTab: () => _xcServerFocusNode.requestFocus(),
+                  _focusContentAfterTabSwitch(_importFileButtonFocusNode),
+              onDownArrowFromXcTab: () =>
+                  _focusContentAfterTabSwitch(_xcServerFocusNode),
             ),
             const SizedBox(height: 16),
 
@@ -745,12 +822,21 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                 controller: _tabController,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  // Tab 1: From URL
-                  _buildUrlTabContent(),
-                  // Tab 2: From File
-                  _buildFileTabContent(),
-                  // Tab 3: Xtream Login
-                  _buildXcTabContent(),
+                  // Off-screen tab pages stay built by TabBarView, so exclude
+                  // them from focus or DPAD traversal can land on invisible
+                  // fields/buttons (a dead zone on TV).
+                  ExcludeFocus(
+                    excluding: _tabController.index != 0,
+                    child: _buildUrlTabContent(),
+                  ),
+                  ExcludeFocus(
+                    excluding: _tabController.index != 1,
+                    child: _buildFileTabContent(),
+                  ),
+                  ExcludeFocus(
+                    excluding: _tabController.index != 2,
+                    child: _buildXcTabContent(),
+                  ),
                 ],
               ),
             ),
@@ -915,8 +1001,8 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
     return Focus(
       onKeyEvent: _handleKeyEvent,
       skipTraversal: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
+      child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
@@ -954,8 +1040,6 @@ class _TvFocusableButton extends StatefulWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
-    this.onLeftArrow,
-    this.onRightArrow,
     this.onUpArrow,
     this.onDownArrow,
   });
@@ -964,8 +1048,6 @@ class _TvFocusableButton extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
-  final VoidCallback? onLeftArrow;
-  final VoidCallback? onRightArrow;
   final VoidCallback? onUpArrow;
   final VoidCallback? onDownArrow;
 
@@ -1015,18 +1097,6 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-            widget.onLeftArrow != null) {
-          widget.onLeftArrow!();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
-            widget.onRightArrow != null) {
-          widget.onRightArrow!();
-          return KeyEventResult.handled;
-        }
-
         if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
             widget.onUpArrow != null) {
           widget.onUpArrow!();
@@ -1041,8 +1111,8 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
 
         return KeyEventResult.ignored;
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
+      child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
@@ -1189,8 +1259,8 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                     animation: widget.tabController,
                     builder: (context, child) {
                       final isSelected = widget.tabController.index == 0;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
+                      // Snap, don't tween — TV GPU rule.
+                      return Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: isSelected
@@ -1287,8 +1357,8 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                     animation: widget.tabController,
                     builder: (context, child) {
                       final isSelected = widget.tabController.index == 1;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
+                      // Snap, don't tween — TV GPU rule.
+                      return Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: isSelected
@@ -1380,8 +1450,8 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                       animation: widget.tabController,
                       builder: (context, child) {
                         final isSelected = widget.tabController.index == 2;
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
+                        // Snap, don't tween — TV GPU rule.
+                        return Container(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
                             color: isSelected
@@ -1438,136 +1508,6 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// TV-focusable outlined button with icon and label
-class _TvFocusableOutlinedButton extends StatefulWidget {
-  const _TvFocusableOutlinedButton({
-    required this.focusNode,
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.onLeftArrow,
-    this.onRightArrow,
-    this.onUpArrow,
-    this.onDownArrow,
-  });
-
-  final FocusNode focusNode;
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final VoidCallback? onLeftArrow;
-  final VoidCallback? onRightArrow;
-  final VoidCallback? onUpArrow;
-  final VoidCallback? onDownArrow;
-
-  @override
-  State<_TvFocusableOutlinedButton> createState() =>
-      _TvFocusableOutlinedButtonState();
-}
-
-class _TvFocusableOutlinedButtonState
-    extends State<_TvFocusableOutlinedButton> {
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_onFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TvFocusableOutlinedButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode.removeListener(_onFocusChange);
-      widget.focusNode.addListener(_onFocusChange);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocusChange);
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (mounted) {
-      setState(() => _isFocused = widget.focusNode.hasFocus);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-        if (isActivateKey(event.logicalKey)) {
-          widget.onPressed();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-            widget.onLeftArrow != null) {
-          widget.onLeftArrow!();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
-            widget.onRightArrow != null) {
-          widget.onRightArrow!();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-            widget.onUpArrow != null) {
-          widget.onUpArrow!();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-            widget.onDownArrow != null) {
-          widget.onDownArrow!();
-          return KeyEventResult.handled;
-        }
-
-        return KeyEventResult.ignored;
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: _isFocused
-              ? Border.all(color: kSettingsAccent, width: 2)
-              : null,
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: kSettingsAccent.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        child: OutlinedButton.icon(
-          onPressed: widget.onPressed,
-          icon: Icon(widget.icon),
-          label: Text(widget.label),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _isFocused ? kSettingsAccent2 : null,
-            side: BorderSide(
-              color: _isFocused ? kSettingsAccent : kSettingsLine,
-              width: _isFocused ? 2 : 1,
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -1681,8 +1621,8 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
     final isAnyFocused = _starFocused || _refreshFocused || _deleteFocused;
     final canRefresh = widget.onRefresh != null;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
+    // Snap, don't tween — TV GPU rule.
+    return Container(
       decoration: BoxDecoration(
         color: isAnyFocused ? kSettingsPanel2 : null,
         borderRadius: BorderRadius.circular(8),
@@ -1863,8 +1803,8 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
 
         return KeyEventResult.ignored;
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      // Snap, don't tween — TV GPU rule.
+      child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: _isFocused
@@ -1984,8 +1924,8 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
 
         return KeyEventResult.ignored;
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      // Snap, don't tween — TV GPU rule.
+      child: Container(
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -2039,14 +1979,20 @@ class _PlaylistNameDialog extends StatefulWidget {
 class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
   late final TextEditingController _controller;
   String? _errorText;
+  // Whether the default name was valid on open — decides which action button
+  // gets the TV autofocus (autofocus only counts on the first frame).
+  late final bool _initialNameValid;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.defaultName);
     _controller.addListener(_validateName);
-    // Validate initial value (in case default name is a duplicate)
-    WidgetsBinding.instance.addPostFrameCallback((_) => _validateName());
+    // Validate synchronously so the Import button's enabled state is right
+    // before the first frame — a post-frame validate could disable an
+    // already-autofocused Import, leaving nothing focused on TV.
+    _errorText = _errorFor(_controller.text);
+    _initialNameValid = _errorText == null;
   }
 
   @override
@@ -2055,17 +2001,17 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
     super.dispose();
   }
 
+  String? _errorFor(String raw) {
+    final name = raw.trim();
+    if (name.isEmpty) return 'Please enter a name';
+    if (widget.existingNames.contains(name)) {
+      return 'A playlist with this name already exists';
+    }
+    return null;
+  }
+
   void _validateName() {
-    final name = _controller.text.trim();
-    setState(() {
-      if (name.isEmpty) {
-        _errorText = 'Please enter a name';
-      } else if (widget.existingNames.contains(name)) {
-        _errorText = 'A playlist with this name already exists';
-      } else {
-        _errorText = null;
-      }
-    });
+    setState(() => _errorText = _errorFor(_controller.text));
   }
 
   void _submit() {
@@ -2104,29 +2050,84 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
             ),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Playlist Name',
-              hintText: 'Enter a name for this playlist',
-              errorText: _errorText,
-              prefixIcon: const Icon(Icons.label_outline),
+          // Let DPAD up/down escape the single-line field on TV instead of
+          // being swallowed by the text cursor.
+          Focus(
+            skipTraversal: true,
+            onKeyEvent: _handleFieldKeyEvent,
+            child: TextField(
+              controller: _controller,
+              // TV: autofocusing the field pops the soft keyboard the moment
+              // the dialog opens — seed the Import button instead (Select on
+              // the field still opens the keyboard).
+              autofocus: !PlatformUtil.isAndroidTvCached,
+              decoration: InputDecoration(
+                labelText: 'Playlist Name',
+                hintText: 'Enter a name for this playlist',
+                errorText: _errorText,
+                prefixIcon: const Icon(Icons.label_outline),
+              ),
+              onSubmitted: (_) => _submit(),
             ),
-            onSubmitted: (_) => _submit(),
           ),
         ],
       ),
       actions: [
         TextButton(
+          style: _dialogButtonFocusStyle,
+          // TV: when the default name is invalid Import opens disabled, so
+          // seed DPAD focus here instead.
+          autofocus: PlatformUtil.isAndroidTvCached && !_initialNameValid,
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         FilledButton(
+          style: _dialogButtonFocusStyle,
+          autofocus: PlatformUtil.isAndroidTvCached && _initialNameValid,
           onPressed: _errorText == null ? _submit : null,
           child: const Text('Import'),
         ),
       ],
     );
   }
+
+  KeyEventResult _handleFieldKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown) {
+      return KeyEventResult.ignored;
+    }
+    final text = _controller.text;
+    final selection = _controller.selection;
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final atStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final atEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == text.length &&
+            selection.extentOffset == text.length);
+    final ctx = node.context;
+    if (ctx == null) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.arrowUp && (text.isEmpty || atStart)) {
+      FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown && (text.isEmpty || atEnd)) {
+      FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
 }
+
+/// Snap accent border on DPAD focus for the dialog's action buttons — the
+/// stock Material focus overlay is too faint to spot on TV.
+final ButtonStyle _dialogButtonFocusStyle = ButtonStyle(
+  side: WidgetStateProperty.resolveWith(
+    (states) => states.contains(WidgetState.focused)
+        ? const BorderSide(color: kSettingsAccent, width: 2)
+        : null,
+  ),
+);

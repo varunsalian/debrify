@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/torrent_filter_state.dart';
 import '../../services/storage_service.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -101,6 +102,19 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         }
         _loading = false;
       });
+      // TV entry focus: land DPAD users on the first chip instead of nothing.
+      if (PlatformUtil.isAndroidTvCached) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          // Don't yank focus if it already landed on a real node (only the
+          // route's FocusScope holds focus while nothing is focused yet).
+          final primary = FocusManager.instance.primaryFocus;
+          if (primary != null && primary is! FocusScopeNode) return;
+          if (_qualityFocusNodes.isNotEmpty) {
+            _qualityFocusNodes.first.requestFocus();
+          }
+        });
+      }
     } catch (e) {
       setState(() => _loading = false);
     }
@@ -157,11 +171,22 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
   }
 
   Future<void> _clearAll() async {
+    // Clearing unmounts the AppBar "Clear All" button (it's only built while
+    // filters exist) — if it held DPAD/keyboard focus, hand focus to the
+    // first chip so the user isn't stranded on nothing.
+    final reseedFocus = _clearAllFocusNode.hasFocus;
     setState(() {
       _selectedQualities.clear();
       _selectedSources.clear();
       _selectedLanguages.clear();
     });
+    if (reseedFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _qualityFocusNodes.isNotEmpty) {
+          _qualityFocusNodes.first.requestFocus();
+        }
+      });
+    }
     await Future.wait([_saveQualities(), _saveSources(), _saveLanguages()]);
   }
 
@@ -202,9 +227,13 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
                     : null,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: TextButton(
-                onPressed: _clearAll,
-                child: const Text('Clear All'),
+              // ExcludeFocus: the outer Focus node handles DPAD; without it
+              // the button's own node makes this two traversal stops on TV.
+              child: ExcludeFocus(
+                child: TextButton(
+                  onPressed: _clearAll,
+                  child: const Text('Clear All'),
+                ),
               ),
             ),
           ),
@@ -252,8 +281,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
                       SettingsToggleTile(
                         icon: Icons.bolt_rounded,
                         title: 'Apply filters to Quick Play',
-                        subtitle:
-                            'Play prefers sources matching these filters',
+                        subtitle: 'Play prefers sources matching these filters',
                         value: _quickPlayHonors,
                         onChanged: _setQuickPlayHonors,
                       ),
@@ -406,27 +434,33 @@ class _DpadFilterChipState extends State<_DpadFilterChip> {
       },
       child: Container(
         decoration: BoxDecoration(
+          color: _isFocused ? kSettingsPanel2 : null,
           border: _isFocused
               ? Border.all(color: kSettingsAccent, width: 2)
               : null,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: FilterChip(
-          label: widget.subtitle != null
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(widget.label),
-                    Text(
-                      widget.subtitle!,
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  ],
-                )
-              : Text(widget.label),
-          selected: widget.selected,
-          onSelected: (_) => widget.onSelected(),
+        // ExcludeFocus: FilterChip is itself focusable, which would make each
+        // chip TWO DPAD stops (outer Focus + chip). The outer node owns focus
+        // and activation; the chip keeps touch/mouse taps.
+        child: ExcludeFocus(
+          child: FilterChip(
+            label: widget.subtitle != null
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(widget.label),
+                      Text(
+                        widget.subtitle!,
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    ],
+                  )
+                : Text(widget.label),
+            selected: widget.selected,
+            onSelected: (_) => widget.onSelected(),
+          ),
         ),
       ),
     );

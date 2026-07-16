@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/platform_util.dart';
 import 'indexer_managers_settings_page.dart';
 import 'widgets/dynamic_settings_builder.dart';
 import 'widgets/settings_widgets.dart';
@@ -11,6 +12,27 @@ class TorrentSettingsPage extends StatefulWidget {
 }
 
 class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
+  final FocusNode _firstTileFocus = FocusNode(
+    debugLabel: 'torrent-settings-first-tile',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    // On TV, land DPAD focus on the first row so users aren't stranded.
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _firstTileFocus.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _firstTileFocus.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return SettingsPageScaffold(
@@ -39,6 +61,7 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                       icon: Icons.manage_search_rounded,
                       title: 'Indexer Managers',
                       subtitle: 'Add Jackett or Prowlarr search sources',
+                      focusNode: _firstTileFocus,
                       onTap: () async {
                         await pushSettingsPage(
                           context,

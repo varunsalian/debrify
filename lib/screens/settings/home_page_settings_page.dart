@@ -15,6 +15,10 @@ class HomePageSettingsPage extends StatefulWidget {
 }
 
 class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
+  // First interactive row — gets DPAD focus on TV when the page opens.
+  final FocusNode _firstTileFocusNode = FocusNode(
+    debugLabel: 'homeSettings-first',
+  );
   bool _loading = true;
   String _selectedSourceType = 'all';
   String? _selectedAddonUrl;
@@ -33,6 +37,12 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   void initState() {
     super.initState();
     _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    _firstTileFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSettings() async {
@@ -85,14 +95,22 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _trailerAutoplayEnabled = trailerAutoplayEnabled;
         _heroTrailerEnabled = heroTrailerEnabled;
         _heroTrailerAudioEnabled = heroTrailerAudioEnabled;
-        // Snap to the dropdown's 10% steps — a value outside the item list
-        // would assert in DropdownButtonFormField.
-        _heroTrailerVolume = ((heroTrailerVolume / 10).round() * 10).clamp(
-          10,
-          100,
-        );
+        // Off-grid stored values are injected as an extra dropdown option
+        // (see _volumeOptions), so nothing silently changes on load.
+        _heroTrailerVolume = heroTrailerVolume;
         _loading = false;
       });
+      // TV: land DPAD focus on the first row so users aren't stranded.
+      if (PlatformUtil.isAndroidTvCached) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          // Don't yank focus if it already landed on a real node (only the
+          // route's FocusScope holds focus while nothing is focused yet).
+          final primary = FocusManager.instance.primaryFocus;
+          if (primary != null && primary is! FocusScopeNode) return;
+          _firstTileFocusNode.requestFocus();
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -211,10 +229,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   Future<void> _openHomeRowsManager() async {
     final tree = [
       for (final a in _addons)
-        (
-          addon: a,
-          catalogs: a.catalogs.where((c) => c.isBrowsable).toList(),
-        ),
+        (addon: a, catalogs: a.catalogs.where((c) => c.isBrowsable).toList()),
     ].where((e) => e.catalogs.isNotEmpty).toList();
     final disabled = await StorageService.getHomeDisabledSections();
     if (!mounted) return;
@@ -257,16 +272,18 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 const SizedBox(height: 24),
 
                 // Home Rows manager entry — hide/show individual Home rows.
-                Card(
-                  child: ListTile(
-                    leading:
-                        const Icon(Icons.dashboard_customize_rounded),
-                    title: const Text('Home Rows'),
-                    subtitle:
-                        const Text('Choose which rows appear on Home'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: _openHomeRowsManager,
-                  ),
+                // SettingsTile (not bare ListTile) so DPAD focus is visible.
+                SettingsSection(
+                  title: '',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.dashboard_customize_rounded,
+                      title: 'Home Rows',
+                      subtitle: 'Choose which rows appear on Home',
+                      onTap: _openHomeRowsManager,
+                      focusNode: _firstTileFocusNode,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
@@ -481,97 +498,123 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 const SizedBox(height: 16),
 
                 // Provider cards toggle
-                Card(
-                  child: SwitchListTile(
-                    secondary: const Icon(Icons.credit_card_off_rounded),
-                    title: const Text('Hide Provider Cards'),
-                    subtitle: const Text(
-                      'Hide debrid service status cards on the home screen',
+                SettingsSection(
+                  title: '',
+                  children: [
+                    SettingsToggleTile(
+                      icon: Icons.credit_card_off_rounded,
+                      title: 'Hide Provider Cards',
+                      subtitle:
+                          'Hide debrid service status cards on the home screen',
+                      value: _hideProviderCards,
+                      onChanged: (value) => _toggleHideProviderCards(value),
                     ),
-                    value: _hideProviderCards,
-                    onChanged: (value) => _toggleHideProviderCards(value),
-                  ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
                 // Continue Watching toggle
-                Card(
-                  child: SwitchListTile(
-                    secondary: const Icon(Icons.history_rounded),
-                    title: const Text('Continue Watching'),
-                    subtitle: const Text(
-                      'Show and track recently watched items on the home screen',
-                    ),
-                    value: _continueWatchingEnabled,
-                    onChanged: (value) async {
-                      try {
-                        await StorageService.setHomeContinueWatchingEnabled(
-                          value,
-                        );
-                        if (!mounted) return;
-                        setState(() => _continueWatchingEnabled = value);
-                        MainPageBridge.notifyHomeSettingsChanged();
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to save setting: $e'),
-                            ),
+                SettingsSection(
+                  title: '',
+                  children: [
+                    SettingsToggleTile(
+                      icon: Icons.history_rounded,
+                      title: 'Continue Watching',
+                      subtitle:
+                          'Show and track recently watched items on the home screen',
+                      value: _continueWatchingEnabled,
+                      onChanged: (value) async {
+                        try {
+                          await StorageService.setHomeContinueWatchingEnabled(
+                            value,
                           );
+                          if (!mounted) return;
+                          setState(() => _continueWatchingEnabled = value);
+                          MainPageBridge.notifyHomeSettingsChanged();
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save setting: $e'),
+                              ),
+                            );
+                          }
                         }
-                      }
-                    },
-                  ),
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
                 // Ambient trailers: the two surfaces are independent toggles —
                 // detail-page backdrop and (TV-only) the Home hero spotlight,
                 // which also owns the sound switch + volume below it.
-                Card(
-                  child: Column(
-                    children: [
-                      SwitchListTile(
-                        secondary: const Icon(Icons.movie_filter_rounded),
-                        title: const Text('Trailer on Detail Page'),
-                        subtitle: const Text(
+                SettingsSection(
+                  title: '',
+                  children: [
+                    SettingsToggleTile(
+                      icon: Icons.movie_filter_rounded,
+                      title: 'Trailer on Detail Page',
+                      subtitle:
                           'Play a trailer behind the movie/series detail page. '
                           'Falls back to the poster when off or unavailable.',
-                        ),
-                        value: _trailerAutoplayEnabled,
-                        onChanged: (value) async {
-                          try {
-                            await StorageService
-                                .setDetailTrailerAutoplayEnabled(value);
-                            if (!mounted) return;
-                            setState(() => _trailerAutoplayEnabled = value);
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Failed to save setting: $e'),
-                                ),
-                              );
-                            }
+                      subtitleMaxLines: 2,
+                      value: _trailerAutoplayEnabled,
+                      onChanged: (value) async {
+                        try {
+                          await StorageService.setDetailTrailerAutoplayEnabled(
+                            value,
+                          );
+                          if (!mounted) return;
+                          setState(() => _trailerAutoplayEnabled = value);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save setting: $e'),
+                              ),
+                            );
                           }
-                        },
-                      ),
-                      const Divider(height: 1, indent: 16, endIndent: 16),
-                      SwitchListTile(
-                        secondary: const Icon(Icons.smart_display_rounded),
-                        title: const Text('Trailer on Home Spotlight'),
-                        subtitle: const Text(
+                        }
+                      },
+                    ),
+                    SettingsToggleTile(
+                      icon: Icons.smart_display_rounded,
+                      title: 'Trailer on Home Spotlight',
+                      subtitle:
                           'Android TV: when you rest on a title, its trailer '
                           'plays in the hero at the top of Home.',
-                        ),
-                        value: _heroTrailerEnabled,
+                      subtitleMaxLines: 2,
+                      value: _heroTrailerEnabled,
+                      onChanged: (value) async {
+                        try {
+                          await StorageService.setHomeHeroTrailerEnabled(value);
+                          if (!mounted) return;
+                          setState(() => _heroTrailerEnabled = value);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save setting: $e'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    if (_heroTrailerEnabled) ...[
+                      SettingsToggleTile(
+                        icon: Icons.volume_up_rounded,
+                        title: 'Spotlight Trailer Sound',
+                        subtitle: 'Off plays the hero trailer silently.',
+                        value: _heroTrailerAudioEnabled,
                         onChanged: (value) async {
                           try {
-                            await StorageService.setHomeHeroTrailerEnabled(
+                            await StorageService.setHomeHeroTrailerAudioEnabled(
                               value,
                             );
                             if (!mounted) return;
-                            setState(() => _heroTrailerEnabled = value);
+                            setState(() => _heroTrailerAudioEnabled = value);
                           } catch (e) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -583,73 +626,46 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           }
                         },
                       ),
-                      if (_heroTrailerEnabled) ...[
-                        SwitchListTile(
-                          secondary: const Icon(Icons.volume_up_rounded),
-                          title: const Text('Spotlight Trailer Sound'),
-                          subtitle: const Text(
-                            'Off plays the hero trailer silently.',
-                          ),
-                          value: _heroTrailerAudioEnabled,
-                          onChanged: (value) async {
-                            try {
-                              await StorageService
-                                  .setHomeHeroTrailerAudioEnabled(value);
-                              if (!mounted) return;
-                              setState(() => _heroTrailerAudioEnabled = value);
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to save setting: $e'),
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                        if (_heroTrailerAudioEnabled)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            child: DropdownButtonFormField<int>(
-                              isExpanded: true,
-                              value: _heroTrailerVolume,
-                              decoration: const InputDecoration(
-                                labelText: 'Spotlight trailer volume',
-                                prefixIcon: Icon(Icons.tune_rounded),
-                              ),
-                              items: [
-                                for (int v = 10; v <= 100; v += 10)
-                                  DropdownMenuItem(
-                                    value: v,
-                                    child: Text('$v%'),
-                                  ),
-                              ],
-                              onChanged: (value) async {
-                                if (value == null) return;
-                                try {
-                                  await StorageService.setHomeHeroTrailerVolume(
-                                    value,
-                                  );
-                                  if (!mounted) return;
-                                  setState(() => _heroTrailerVolume = value);
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Failed to save setting: $e',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                }
-                              },
+                      if (_heroTrailerAudioEnabled)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: DropdownButtonFormField<int>(
+                            isExpanded: true,
+                            value: _heroTrailerVolume,
+                            decoration: const InputDecoration(
+                              labelText: 'Spotlight trailer volume',
+                              prefixIcon: Icon(Icons.tune_rounded),
                             ),
+                            items: [
+                              for (final v in _volumeOptions(
+                                _heroTrailerVolume,
+                              ))
+                                DropdownMenuItem(value: v, child: Text('$v%')),
+                            ],
+                            onChanged: (value) async {
+                              if (value == null) return;
+                              try {
+                                await StorageService.setHomeHeroTrailerVolume(
+                                  value,
+                                );
+                                if (!mounted) return;
+                                setState(() => _heroTrailerVolume = value);
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Failed to save setting: $e',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
                           ),
-                      ],
+                        ),
                     ],
-                  ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
@@ -663,6 +679,18 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         ),
       ),
     );
+  }
+
+  /// 10% steps plus the stored value (if it isn't one of them), so a
+  /// stale/custom pref doesn't silently change when the page opens.
+  List<int> _volumeOptions(int value) {
+    final options = [for (int v = 10; v <= 100; v += 10) v];
+    if (!options.contains(value)) {
+      options
+        ..add(value)
+        ..sort();
+    }
+    return options;
   }
 
   IconData _iconForSourceType(String type) {

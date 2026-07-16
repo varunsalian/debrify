@@ -5,8 +5,26 @@ import '../../models/webdav_item.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/webdav_service.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
+
+/// House DPAD idiom: focus the node, then scroll it into view — plain
+/// `requestFocus` from a key handler skips the traversal policy's
+/// ensure-visible step, leaving the focused row off-screen.
+void _focusAndReveal(FocusNode target) {
+  target.requestFocus();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final ctx = target.context;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.2,
+        duration: const Duration(milliseconds: 180),
+      );
+    }
+  });
+}
 
 class WebDavSettingsPage extends StatefulWidget {
   const WebDavSettingsPage({super.key});
@@ -80,6 +98,20 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       _showVideosOnly = showVideosOnly;
       _loading = false;
     });
+
+    // TV: land DPAD focus somewhere when the page opens so users aren't
+    // stranded. The Save button, not a TextField — autofocusing a field
+    // would pop the soft keyboard.
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // Bail if something already holds real focus (a scope node just
+        // means nothing on the page grabbed it yet).
+        final current = FocusManager.instance.primaryFocus;
+        if (current != null && current is! FocusScopeNode) return;
+        _saveFocusNode.requestFocus();
+      });
+    }
   }
 
   void _snack(String message, {bool error = false}) {
@@ -147,6 +179,13 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     });
     MainPageBridge.notifyIntegrationChanged();
     _snack('WebDAV server removed');
+    // Removing the last server unmounts the focused Disconnect button
+    // (_enabled goes false) — reseed DPAD focus on something that remains.
+    if (PlatformUtil.isAndroidTvCached && servers.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusAndReveal(_saveFocusNode);
+      });
+    }
   }
 
   void _editServer(WebDavConfig server) {
@@ -167,7 +206,13 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       _usernameController.clear();
       _passwordController.clear();
     });
-    _nameFocusNode.requestFocus();
+    // TV: don't focus the TextField directly (pops the soft keyboard) —
+    // land on the Save button instead; it still reveals the cleared form.
+    if (PlatformUtil.isAndroidTvCached) {
+      _focusAndReveal(_saveFocusNode);
+    } else {
+      _focusAndReveal(_nameFocusNode);
+    }
   }
 
   Future<void> _setEnabled(bool value) async {
@@ -260,21 +305,25 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                     CallbackShortcuts(
                       bindings: {
                         const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
-                            _passwordFocusNode.requestFocus(),
+                            _focusAndReveal(_passwordFocusNode),
                       },
-                      child: FilledButton.icon(
-                        focusNode: _saveFocusNode,
-                        onPressed: _saving ? null : _save,
-                        icon: _saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.cloud_done_rounded),
-                        label: Text(_saving ? 'Testing...' : 'Save and Test'),
+                      child: _FocusRing(
+                        child: FilledButton.icon(
+                          focusNode: _saveFocusNode,
+                          // Keep enabled with a no-op while saving: disabling
+                          // the focused button drops DPAD focus mid-save.
+                          onPressed: _saving ? () {} : _save,
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.cloud_done_rounded),
+                          label: Text(_saving ? 'Testing...' : 'Save and Test'),
+                        ),
                       ),
                     ),
                   ],
@@ -284,11 +333,38 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                   _section(
                     children: [
                       for (final server in _servers)
-                        ListTile(
-                          leading: Radio<String>(
-                            value: server.id,
-                            groupValue: _editingId,
-                            onChanged: (_) async {
+                        _FocusRing(
+                          child: ListTile(
+                            // Static indicator, not a Radio: the row's onTap
+                            // already selects, and a focusable Radio was an
+                            // extra DPAD stop with no visible focus state.
+                            leading: Icon(
+                              server.id == _editingId
+                                  ? Icons.radio_button_checked_rounded
+                                  : Icons.radio_button_unchecked_rounded,
+                              color: server.id == _editingId
+                                  ? kSettingsAccent2
+                                  : kSettingsDim,
+                            ),
+                            title: Text(server.name),
+                            subtitle: Text(server.baseUrl),
+                            trailing: IconButton(
+                              onPressed: () => _editServer(server),
+                              icon: const Icon(Icons.edit_rounded),
+                              // Visible DPAD focus for the bare icon action.
+                              style: ButtonStyle(
+                                backgroundColor:
+                                    WidgetStateProperty.resolveWith(
+                                      (states) =>
+                                          states.contains(WidgetState.focused)
+                                          ? kSettingsAccent.withValues(
+                                              alpha: 0.35,
+                                            )
+                                          : null,
+                                    ),
+                              ),
+                            ),
+                            onTap: () async {
                               await StorageService.setSelectedWebDavServerId(
                                 server.id,
                               );
@@ -296,25 +372,14 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                               MainPageBridge.notifyIntegrationChanged();
                             },
                           ),
-                          title: Text(server.name),
-                          subtitle: Text(server.baseUrl),
-                          trailing: IconButton(
-                            onPressed: () => _editServer(server),
-                            icon: const Icon(Icons.edit_rounded),
-                          ),
-                          onTap: () async {
-                            await StorageService.setSelectedWebDavServerId(
-                              server.id,
-                            );
-                            _editServer(server);
-                            MainPageBridge.notifyIntegrationChanged();
-                          },
                         ),
                       const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: _newServer,
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text('Add another server'),
+                      _FocusRing(
+                        child: OutlinedButton.icon(
+                          onPressed: _newServer,
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('Add another server'),
+                        ),
                       ),
                     ],
                   ),
@@ -322,43 +387,51 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                 const SizedBox(height: 16),
                 _section(
                   children: [
-                    SwitchListTile(
-                      value: _enabled,
-                      onChanged: _servers.isEmpty ? null : _setEnabled,
-                      title: const Text('Enable WebDAV'),
-                      subtitle: const Text('Show WebDAV features in the app'),
-                    ),
-                    SwitchListTile(
-                      value: _hiddenFromNav,
-                      onChanged: _enabled ? _setHidden : null,
-                      title: const Text('Hide from navigation'),
-                      subtitle: const Text(
-                        'Keep configured but remove the tab',
+                    _FocusRing(
+                      child: SwitchListTile(
+                        value: _enabled,
+                        onChanged: _servers.isEmpty ? null : _setEnabled,
+                        title: const Text('Enable WebDAV'),
+                        subtitle: const Text('Show WebDAV features in the app'),
                       ),
                     ),
-                    SwitchListTile(
-                      value: _showVideosOnly,
-                      onChanged: _setShowVideosOnly,
-                      title: const Text('Show videos only'),
-                      subtitle: const Text(
-                        'Hide non-video files while browsing',
+                    _FocusRing(
+                      child: SwitchListTile(
+                        value: _hiddenFromNav,
+                        onChanged: _enabled ? _setHidden : null,
+                        title: const Text('Hide from navigation'),
+                        subtitle: const Text(
+                          'Keep configured but remove the tab',
+                        ),
+                      ),
+                    ),
+                    _FocusRing(
+                      child: SwitchListTile(
+                        value: _showVideosOnly,
+                        onChanged: _setShowVideosOnly,
+                        title: const Text('Show videos only'),
+                        subtitle: const Text(
+                          'Hide non-video files while browsing',
+                        ),
                       ),
                     ),
                   ],
                 ),
                 if (_enabled) ...[
                   const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    focusNode: _disconnectFocusNode,
-                    onPressed: _disconnect,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: kSettingsRed,
-                      side: BorderSide(
-                        color: kSettingsRed.withValues(alpha: 0.5),
+                  _FocusRing(
+                    child: OutlinedButton.icon(
+                      focusNode: _disconnectFocusNode,
+                      onPressed: _disconnect,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kSettingsRed,
+                        side: BorderSide(
+                          color: kSettingsRed.withValues(alpha: 0.5),
+                        ),
                       ),
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('Disconnect WebDAV'),
                     ),
-                    icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Disconnect WebDAV'),
                   ),
                 ],
               ],
@@ -378,6 +451,44 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
         border: Border.all(color: kSettingsLine),
       ),
       child: Column(children: children),
+    );
+  }
+}
+
+/// Paints the house focus ring (accent border + lit panel fill) around a
+/// child whose inner control takes DPAD focus (SwitchListTile, ListTile,
+/// buttons). The wrapper node is not focusable itself — it just observes
+/// descendants. Snap decoration, no tween — per the TV GPU rule.
+class _FocusRing extends StatefulWidget {
+  const _FocusRing({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_FocusRing> createState() => _FocusRingState();
+}
+
+class _FocusRingState extends State<_FocusRing> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      skipTraversal: true,
+      canRequestFocus: false,
+      // hasFocus includes descendants, so this fires when the wrapped
+      // control receives DPAD focus (same pattern as ConnectionCard).
+      onFocusChange: (f) => setState(() => _focused = f),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _focused ? kSettingsPanel2 : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _focused ? kSettingsAccent : Colors.transparent,
+          ),
+        ),
+        child: widget.child,
+      ),
     );
   }
 }
@@ -464,26 +575,30 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
     if (key == LogicalKeyboardKey.arrowUp &&
         (isTextEmpty || isAtStart) &&
         widget.previousFocusNode != null) {
-      widget.previousFocusNode!.requestFocus();
+      _focusAndReveal(widget.previousFocusNode!);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowDown &&
         (isTextEmpty || isAtEnd) &&
         widget.nextFocusNode != null) {
-      widget.nextFocusNode!.requestFocus();
+      _focusAndReveal(widget.nextFocusNode!);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight &&
         (isTextEmpty || isAtEnd) &&
         widget.rightFocusNode != null) {
-      widget.rightFocusNode!.requestFocus();
+      _focusAndReveal(widget.rightFocusNode!);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.browserBack) {
-      widget.previousFocusNode?.requestFocus();
-      return KeyEventResult.handled;
+      if (widget.previousFocusNode != null) {
+        _focusAndReveal(widget.previousFocusNode!);
+        return KeyEventResult.handled;
+      }
+      // No previous field: let BACK bubble up so it pops the page.
+      return KeyEventResult.ignored;
     }
 
     return KeyEventResult.ignored;
@@ -495,8 +610,8 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
     return Focus(
       onKeyEvent: _handleKeyEvent,
       skipTraversal: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
+      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
+      child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _focused ? Border.all(color: primary, width: 2) : null,
@@ -559,11 +674,11 @@ class _PasswordVisibilityButton extends StatelessWidget {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final key = event.logicalKey;
         if (key == LogicalKeyboardKey.arrowLeft) {
-          passwordFocusNode.requestFocus();
+          _focusAndReveal(passwordFocusNode);
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.arrowDown) {
-          saveFocusNode.requestFocus();
+          _focusAndReveal(saveFocusNode);
           return KeyEventResult.handled;
         }
         if (isActivateKey(key) || key == LogicalKeyboardKey.space) {

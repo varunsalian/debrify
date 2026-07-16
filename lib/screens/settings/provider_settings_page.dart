@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -115,17 +116,33 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
         _selectedProvider = currentProvider;
         _loading = false;
       });
+      // TV entry focus: land DPAD users on the first option instead of nothing.
+      if (PlatformUtil.isAndroidTvCached) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          // Don't yank focus if it already landed on a real node (only the
+          // route's FocusScope holds focus while nothing is focused yet).
+          final primary = FocusManager.instance.primaryFocus;
+          if (primary != null && primary is! FocusScopeNode) return;
+          if (_providerFocusNodes.isNotEmpty) {
+            _providerFocusNodes.first.requestFocus();
+          }
+        });
+      }
     }
   }
 
   void _onFocusChange(int index) {
-    if (mounted) {
-      setState(() {
-        _focusedIndex = _providerFocusNodes[index].hasFocus
-            ? index
-            : _focusedIndex;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      if (_providerFocusNodes[index].hasFocus) {
+        _focusedIndex = index;
+      } else if (_focusedIndex == index) {
+        // Focus left this row and no sibling claimed the ring — clear it so
+        // no ghost accent ring lingers when focus leaves the group.
+        _focusedIndex = -1;
+      }
+    });
   }
 
   Future<void> _selectProvider(String provider) async {
@@ -411,8 +428,8 @@ class _ProviderOption extends StatelessWidget {
         }
         return KeyEventResult.ignored;
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
+      child: Container(
         decoration: BoxDecoration(
           color: selected
               ? kSettingsAccent.withValues(alpha: 0.15)
@@ -431,6 +448,9 @@ class _ProviderOption extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onSelected,
+            // The outer Focus node owns DPAD focus/activation; a focusable
+            // InkWell here would make each option two traversal stops.
+            canRequestFocus: false,
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.all(16),

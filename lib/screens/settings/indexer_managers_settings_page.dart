@@ -5,7 +5,21 @@ import '../../models/indexer_manager_config.dart';
 import '../../services/indexer_manager_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/torrent_service.dart';
+import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+
+/// Focused IconButtons get the accent outline + lit fill — the stock
+/// Material focus overlay is invisible on the dark settings theme (TV DPAD).
+final ButtonStyle _focusableIconStyle = ButtonStyle(
+  backgroundColor: WidgetStateProperty.resolveWith(
+    (states) => states.contains(WidgetState.focused) ? kSettingsPanel2 : null,
+  ),
+  side: WidgetStateProperty.resolveWith(
+    (states) => states.contains(WidgetState.focused)
+        ? const BorderSide(color: kSettingsAccent)
+        : null,
+  ),
+);
 
 class IndexerManagersSettingsPage extends StatefulWidget {
   const IndexerManagersSettingsPage({super.key});
@@ -19,11 +33,20 @@ class _IndexerManagersSettingsPageState
     extends State<IndexerManagersSettingsPage> {
   List<IndexerManagerConfig> _configs = [];
   bool _loading = true;
+  final FocusNode _addButtonFocus = FocusNode(debugLabel: 'indexer-add-button');
+  final FocusNode _firstRowFocus = FocusNode(debugLabel: 'indexer-first-row');
 
   @override
   void initState() {
     super.initState();
     _loadConfigs();
+  }
+
+  @override
+  void dispose() {
+    _addButtonFocus.dispose();
+    _firstRowFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _loadConfigs() async {
@@ -33,6 +56,19 @@ class _IndexerManagersSettingsPageState
       _configs = configs;
       _loading = false;
     });
+    // On TV, land DPAD focus on the first interactive element so users
+    // aren't stranded (the first row's switch, or Add when the list is
+    // empty).
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // Only a bare FocusScopeNode as primary focus means DPAD is
+        // stranded — don't steal focus the user already placed somewhere.
+        final primary = FocusManager.instance.primaryFocus;
+        if (primary != null && primary is! FocusScopeNode) return;
+        (_configs.isEmpty ? _addButtonFocus : _firstRowFocus).requestFocus();
+      });
+    }
   }
 
   Future<void> _saveConfigs(List<IndexerManagerConfig> configs) async {
@@ -61,19 +97,35 @@ class _IndexerManagersSettingsPageState
         title: const Text('Delete Engine'),
         content: Text('Remove ${config.displayName} from torrent search?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+          _FocusRing(
+            borderRadius: 12,
+            child: TextButton(
+              // TV: seed DPAD focus inside the dialog (BACK still dismisses).
+              autofocus: PlatformUtil.isAndroidTvCached,
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+          _FocusRing(
+            borderRadius: 12,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
           ),
         ],
       ),
     );
     if (shouldDelete != true) return;
     await _saveConfigs(_configs.where((item) => item.id != config.id).toList());
+    // The deleted row unmounted under the focused Delete button — reseed
+    // DPAD focus on a surviving row (or Add when the list empties).
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        (_configs.isEmpty ? _addButtonFocus : _firstRowFocus).requestFocus();
+      });
+    }
   }
 
   Future<void> _openEditor([IndexerManagerConfig? config]) async {
@@ -113,6 +165,8 @@ class _IndexerManagersSettingsPageState
       title: 'Indexer Managers',
       actions: [
         IconButton(
+          focusNode: _addButtonFocus,
+          style: _focusableIconStyle,
           onPressed: _loading ? null : () => _openEditor(),
           icon: const Icon(Icons.add_rounded),
           tooltip: 'Add engine',
@@ -150,12 +204,18 @@ class _IndexerManagersSettingsPageState
 
     if (isCompact) return null;
 
-    return FloatingActionButton.extended(
-      onPressed: () => _openEditor(),
-      backgroundColor: kSettingsAccent,
-      foregroundColor: Colors.white,
-      icon: const Icon(Icons.add_rounded),
-      label: const Text('Add Engine'),
+    // Snap white ring — an accent ring (and the stock focus overlay) is
+    // invisible on the accent-filled FAB (TV DPAD).
+    return _FocusRing(
+      borderRadius: 16,
+      color: Colors.white,
+      child: FloatingActionButton.extended(
+        onPressed: () => _openEditor(),
+        backgroundColor: kSettingsAccent,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add Engine'),
+      ),
     );
   }
 
@@ -198,6 +258,7 @@ class _IndexerManagersSettingsPageState
 
   Widget _buildConfigTile(IndexerManagerConfig config) {
     final theme = Theme.of(context);
+    final bool isFirst = _configs.isNotEmpty && config.id == _configs.first.id;
     final icon = Icon(
       config.type == IndexerManagerType.prowlarr
           ? Icons.hub_rounded
@@ -228,24 +289,32 @@ class _IndexerManagersSettingsPageState
       spacing: 2,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Switch(
-          value: config.enabled,
-          onChanged: (value) => _toggleEnabled(config, value),
+        // Snap accent ring so DPAD focus on the switch is visible on TV.
+        _FocusRing(
+          borderRadius: 20,
+          child: Switch(
+            focusNode: isFirst ? _firstRowFocus : null,
+            value: config.enabled,
+            onChanged: (value) => _toggleEnabled(config, value),
+          ),
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
+          style: _focusableIconStyle,
           onPressed: () => _testConfig(config),
           icon: const Icon(Icons.network_check_rounded),
           tooltip: 'Test connection',
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
+          style: _focusableIconStyle,
           onPressed: () => _openEditor(config),
           icon: const Icon(Icons.edit_rounded),
           tooltip: 'Edit',
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
+          style: _focusableIconStyle,
           onPressed: () => _deleteConfig(config),
           icon: const Icon(Icons.delete_outline_rounded),
           tooltip: 'Delete',
@@ -430,6 +499,9 @@ class _IndexerManagerEditorDialogState
                     children: [
                       DropdownButtonFormField<IndexerManagerType>(
                         value: _type,
+                        // TV: seed DPAD focus on the first control (not a
+                        // text field — that would pop the soft keyboard).
+                        autofocus: PlatformUtil.isAndroidTvCached,
                         decoration: const InputDecoration(labelText: 'Type'),
                         isExpanded: true,
                         items: IndexerManagerType.values
@@ -544,11 +616,17 @@ class _IndexerManagerEditorDialogState
                         onFieldSubmitted: (_) => _save(),
                       ),
                       const SizedBox(height: 8),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Enabled'),
-                        value: _enabled,
-                        onChanged: (value) => setState(() => _enabled = value),
+                      // Snap accent ring so DPAD focus on the switch row is
+                      // visible on TV.
+                      _FocusRing(
+                        borderRadius: 12,
+                        child: SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Enabled'),
+                          value: _enabled,
+                          onChanged: (value) =>
+                              setState(() => _enabled = value),
+                        ),
                       ),
                     ],
                   ),
@@ -562,13 +640,19 @@ class _IndexerManagerEditorDialogState
                 spacing: 12,
                 runSpacing: 8,
                 children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                  _FocusRing(
+                    borderRadius: 12,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
                   ),
-                  FilledButton(
-                    onPressed: _save,
-                    child: Text(widget.config == null ? 'Add' : 'Save'),
+                  _FocusRing(
+                    borderRadius: 12,
+                    child: FilledButton(
+                      onPressed: _save,
+                      child: Text(widget.config == null ? 'Add' : 'Save'),
+                    ),
                   ),
                 ],
               ),
@@ -706,8 +790,8 @@ class _TvFriendlyTextFormFieldState extends State<_TvFriendlyTextFormField> {
     return Focus(
       onKeyEvent: _handleKeyEvent,
       skipTraversal: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
+      child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           boxShadow: _isFocused
@@ -730,6 +814,48 @@ class _TvFriendlyTextFormFieldState extends State<_TvFriendlyTextFormField> {
           validator: widget.validator,
           onFieldSubmitted: widget.onFieldSubmitted,
         ),
+      ),
+    );
+  }
+}
+
+/// Snap accent ring painted while the wrapped control (Switch etc.) holds
+/// focus — the stock Material focus overlay is invisible on the dark
+/// settings theme. The wrapper node itself never takes focus.
+class _FocusRing extends StatefulWidget {
+  const _FocusRing({
+    required this.child,
+    required this.borderRadius,
+    this.color = kSettingsAccent,
+  });
+
+  final Widget child;
+  final double borderRadius;
+  final Color color;
+
+  @override
+  State<_FocusRing> createState() => _FocusRingState();
+}
+
+class _FocusRingState extends State<_FocusRing> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      // hasFocus includes descendants, so this fires when the child control
+      // receives DPAD focus.
+      onFocusChange: (f) => setState(() => _focused = f),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+          border: Border.all(
+            color: _focused ? widget.color : Colors.transparent,
+          ),
+        ),
+        child: widget.child,
       ),
     );
   }

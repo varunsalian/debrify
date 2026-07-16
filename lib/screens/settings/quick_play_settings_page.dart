@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/storage_service.dart';
+import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Quick Play settings page for configuring torrent search quick play behavior.
@@ -28,10 +29,24 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   // Default provider (to hide cache fallback for PikPak)
   String _defaultProvider = 'none';
 
+  // Non-focusable marker around the first card; used on TV to hand entry
+  // focus to its first focusable descendant (the timeout dropdown).
+  final FocusNode _firstCardMarker = FocusNode(
+    debugLabel: 'quick-play-first-card',
+    skipTraversal: true,
+    canRequestFocus: false,
+  );
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    _firstCardMarker.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSettings() async {
@@ -55,6 +70,18 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
       _autoBindSeriesPacks = autoBindSeriesPacks;
       _loading = false;
     });
+    // TV entry focus: land DPAD users on the first field instead of nothing.
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // Don't yank focus if it already landed on a real node (only the
+        // route's FocusScope holds focus while nothing is focused yet).
+        final primary = FocusManager.instance.primaryFocus;
+        if (primary != null && primary is! FocusScopeNode) return;
+        final target = _firstCardMarker.traversalDescendants.firstOrNull;
+        target?.requestFocus();
+      });
+    }
   }
 
   Future<void> _setAutoBindSeriesPacks(bool enabled) async {
@@ -93,7 +120,12 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               children: [
                 _buildHeader(context),
                 const SizedBox(height: 24),
-                _buildSearchTimeoutSection(context),
+                Focus(
+                  focusNode: _firstCardMarker,
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  child: _buildSearchTimeoutSection(context),
+                ),
                 const SizedBox(height: 24),
                 _buildSourcesTimeoutSection(context),
                 const SizedBox(height: 24),
@@ -198,75 +230,33 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
             ),
           ),
-          InkWell(
-            onTap: () async {
-              final selected = await showDialog<int>(
-                context: context,
-                builder: (ctx) => SimpleDialog(
-                  title: Text(title),
-                  children: options
-                      .map(
-                        (s) => SimpleDialogOption(
-                          onPressed: () => Navigator.of(ctx).pop(s),
-                          child: Row(
-                            children: [
-                              if (s == value)
-                                const Icon(
-                                  Icons.check,
-                                  size: 18,
-                                  color: kSettingsAccent2,
-                                )
-                              else
-                                const SizedBox(width: 18),
-                              const SizedBox(width: 12),
-                              Text('$s seconds'),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              );
-              if (selected != null) {
-                onSelected(selected);
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Timeout',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kSettingsAccent.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${value}s',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: kSettingsAccent2,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          // Dropdown instead of the old tap-row + SimpleDialog picker: the
+          // closed field is one focusable node with the themed focus ring,
+          // and the open menu's items take DPAD focus natively.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: SettingsSelectDropdown(
+              options: [
+                for (final s in _withCurrent(options, value))
+                  SettingsSelectOption('$s', '$s seconds'),
+              ],
+              value: '$value',
+              onChanged: (v) {
+                final parsed = int.tryParse(v);
+                if (parsed != null) onSelected(parsed);
+              },
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Discrete steps plus the stored value (if it isn't one of them), so a
+  /// stale/custom pref doesn't silently change when the page opens.
+  List<int> _withCurrent(List<int> options, int value) {
+    if (options.contains(value)) return options;
+    return [...options, value]..sort();
   }
 
   Widget _buildSeriesAutoPinSection(BuildContext context) {
@@ -382,85 +372,46 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             onChanged: _setTryMultipleTorrents,
           ),
 
-          // Max retries (only visible when try multiple is enabled)
+          // Max retries (only visible when try multiple is enabled).
+          // Dropdown instead of the old tap-row + SimpleDialog picker — see
+          // the timeout cards for the DPAD rationale.
           if (_tryMultipleTorrents) ...[
             Divider(height: 1, color: kSettingsLine),
-            InkWell(
-              onTap: () async {
-                final selected = await showDialog<int>(
-                  context: context,
-                  builder: (ctx) => SimpleDialog(
-                    title: const Text('Max torrents to try'),
-                    children: List.generate(9, (i) => i + 2)
-                        .map(
-                          (n) => SimpleDialogOption(
-                            onPressed: () => Navigator.of(ctx).pop(n),
-                            child: Row(
-                              children: [
-                                if (n == _maxRetries)
-                                  const Icon(
-                                    Icons.check,
-                                    size: 18,
-                                    color: kSettingsAccent2,
-                                  )
-                                else
-                                  const SizedBox(width: 18),
-                                const SizedBox(width: 12),
-                                Text('$n torrents'),
-                              ],
-                            ),
-                          ),
-                        )
-                        .toList(),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Max torrents to try',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
                   ),
-                );
-                if (selected != null) {
-                  _setMaxRetries(selected);
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Max torrents to try',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Higher values increase chance of finding cached content',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: kSettingsDim,
-                          ),
-                        ),
-                      ],
+                  const SizedBox(height: 2),
+                  Text(
+                    'Higher values increase chance of finding cached content',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: kSettingsDim,
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kSettingsAccent.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '$_maxRetries',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: kSettingsAccent2,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 10),
+                  SettingsSelectDropdown(
+                    options: [
+                      for (final n in _withCurrent(
+                        List.generate(9, (i) => i + 2),
+                        _maxRetries,
+                      ))
+                        SettingsSelectOption('$n', '$n torrents'),
+                    ],
+                    value: '$_maxRetries',
+                    onChanged: (v) {
+                      final parsed = int.tryParse(v);
+                      if (parsed != null) _setMaxRetries(parsed);
+                    },
+                  ),
+                ],
               ),
             ),
           ],
@@ -476,42 +427,90 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     required bool value,
     required Function(bool) onChanged,
   }) {
-    final theme = Theme.of(context);
+    return _FocusableCheckboxTile(
+      title: title,
+      subtitle: subtitle,
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+}
 
-    return InkWell(
-      onTap: () => onChanged(!value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Checkbox(
-              value: value,
-              onChanged: (v) => onChanged(v ?? false),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: kSettingsDim,
-                    ),
-                  ),
-                ],
+/// Checkbox row with an unmistakable DPAD focus state (accent ring + lit
+/// fill, like SettingsTile). One traversal stop: the row's InkWell owns
+/// focus and activation; the Checkbox is excluded.
+class _FocusableCheckboxTile extends StatefulWidget {
+  final String title;
+  final String subtitle;
+  final bool value;
+  final Function(bool) onChanged;
+
+  const _FocusableCheckboxTile({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  State<_FocusableCheckboxTile> createState() => _FocusableCheckboxTileState();
+}
+
+class _FocusableCheckboxTileState extends State<_FocusableCheckboxTile> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Snap, don't tween — per-keypress decoration lerps add cost on TV.
+    return Container(
+      decoration: BoxDecoration(
+        color: _focused ? kSettingsPanel2 : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _focused ? kSettingsAccent : Colors.transparent,
+          width: 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: () => widget.onChanged(!widget.value),
+        onFocusChange: (f) => setState(() => _focused = f),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              ExcludeFocus(
+                child: Checkbox(
+                  value: widget.value,
+                  onChanged: (v) => widget.onChanged(v ?? false),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      widget.subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: kSettingsDim,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
