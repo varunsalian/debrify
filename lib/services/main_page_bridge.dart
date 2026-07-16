@@ -329,6 +329,13 @@ class MainPageBridge {
   /// stepped out to the sidebar while that content was still loading.
   static bool Function()? isTvSidebarFocused;
 
+  /// TV only, set by main.dart: perform a directional-LEFT focus move with the
+  /// sidebar as the left-edge fallback (the sidebar's own nodes skip focus
+  /// traversal, so a plain `focusInDirection(left)` can never reach it). Use
+  /// this instead of `focusInDirection(TraversalDirection.left)` for
+  /// programmatic navigation (e.g. the phone-remote fallback path); null off-TV.
+  static VoidCallback? tvDirectionalLeft;
+
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.
   /// Key is the tab index (0=Home, 1=Playlist, 2=Downloads, etc.)

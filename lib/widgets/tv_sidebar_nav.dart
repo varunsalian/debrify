@@ -81,7 +81,14 @@ class TvSidebarNavState extends State<TvSidebarNav>
     _focusNodes.clear();
     for (int i = 0; i < widget.items.length; i++) {
       final capturedIndex = i;
-      final node = FocusNode(debugLabel: 'tv-nav-item-$i');
+      // skipTraversal: the rail must NEVER be reachable by Flutter's directional
+      // focus search — otherwise a stray DPAD press at a content edge (e.g. DOWN
+      // from a search bar while its results grid can't take focus) lands here and
+      // pops the sidebar open. Entry is explicit only: requestFocus() below,
+      // driven by MainPageBridge.focusTvSidebar (LEFT at the content's left
+      // edge). Internal UP/DOWN navigation uses explicit requestFocus too, so
+      // skipping traversal changes nothing inside the rail.
+      final node = FocusNode(debugLabel: 'tv-nav-item-$i', skipTraversal: true);
       node.addListener(() => _handleFocusChange(capturedIndex, node.hasFocus));
       _focusNodes.add(node);
     }
@@ -199,7 +206,12 @@ class TvSidebarNavState extends State<TvSidebarNav>
   bool get hasFocus => _hasSidebarFocus;
 
   KeyEventResult _handleKeyEvent(int index, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // Repeats (held DPAD) must be handled here too: the rail's nodes skip
+    // focus traversal, so a repeat that fell through would be resolved by
+    // geometric search against CONTENT nodes and yank focus out of the rail.
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowUp:
         if (index > 0) _focusNodes[index - 1].requestFocus();
@@ -210,7 +222,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
         }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowRight:
-        _moveToContent();
+        // One exit per press: the 100ms collapse→focus handoff in
+        // _moveToContent shouldn't be re-queued by key repeats.
+        if (event is KeyDownEvent) _moveToContent();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowLeft:
         return KeyEventResult.handled;
@@ -218,7 +232,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
       case LogicalKeyboardKey.enter:
       case LogicalKeyboardKey.numpadEnter:
       case LogicalKeyboardKey.gameButtonA:
-        _selectMenuItem(index);
+        // Activate only on the initial press — a held SELECT must not
+        // re-trigger tab switches — but still swallow the repeats.
+        if (event is KeyDownEvent) _selectMenuItem(index);
         return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;

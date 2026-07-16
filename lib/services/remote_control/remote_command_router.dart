@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'remote_constants.dart';
+import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/account_service.dart';
@@ -888,7 +889,7 @@ class RemoteCommandRouter {
         primaryFocus?.focusInDirection(TraversalDirection.down);
         break;
       case NavigateCommand.left:
-        primaryFocus?.focusInDirection(TraversalDirection.left);
+        _focusLeft(primaryFocus);
         break;
       case NavigateCommand.right:
         primaryFocus?.focusInDirection(TraversalDirection.right);
@@ -899,6 +900,19 @@ class RemoteCommandRouter {
       case NavigateCommand.back:
         _handleBack();
         break;
+    }
+  }
+
+  /// LEFT is special on TV: the sidebar's focus nodes skip traversal, so a
+  /// plain focusInDirection can never reach it. MainPageBridge exposes the
+  /// same left-edge-aware move the DPAD Actions override uses; off-TV (or
+  /// before main.dart wires it) it's null and we use plain traversal.
+  void _focusLeft(FocusNode? primaryFocus) {
+    final tvLeft = MainPageBridge.tvDirectionalLeft;
+    if (tvLeft != null) {
+      tvLeft();
+    } else {
+      primaryFocus?.focusInDirection(TraversalDirection.left);
     }
   }
 
@@ -968,7 +982,7 @@ class RemoteCommandRouter {
         primaryFocus?.focusInDirection(TraversalDirection.down);
         break;
       case NavigateCommand.left:
-        primaryFocus?.focusInDirection(TraversalDirection.left);
+        _focusLeft(primaryFocus);
         break;
       case NavigateCommand.right:
         primaryFocus?.focusInDirection(TraversalDirection.right);

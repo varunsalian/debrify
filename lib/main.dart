@@ -618,6 +618,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // subtree rebuild of a ~3000-line screen) just to fade a scrim. The
   // notifier scopes that to the scrim's ValueListenableBuilder alone.
   final ValueNotifier<bool> _tvSidebarExpanded = ValueNotifier<bool>(false);
+  // Content-side DPAD policy (see _TvContentDirectionalFocusAction). One
+  // stable instance + map so rebuilds don't re-register the Actions element.
+  final _TvContentDirectionalFocusAction _tvDirectionalFocusAction =
+      _TvContentDirectionalFocusAction();
+  late final Map<Type, Action<Intent>> _tvContentActions =
+      <Type, Action<Intent>>{
+        DirectionalFocusIntent: _tvDirectionalFocusAction,
+      };
+  bool _tvFocusRecoveryInstalled = false;
 
   // Remote control state
   bool _remoteControlEnabled = true;
@@ -888,6 +897,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         };
         MainPageBridge.isTvSidebarFocused = () =>
             _tvSidebarKey.currentState?.hasFocus ?? false;
+        MainPageBridge.tvDirectionalLeft =
+            _tvDirectionalFocusAction.handleLeft;
+        // The sidebar's nodes skip traversal, so if focus ever dies (a tab
+        // with nothing focusable, or the focused widget got disposed and the
+        // scope has no traversable descendants left) no DPAD press could
+        // recover it — previously a stray arrow landed on the rail. Restore
+        // that last-resort recovery explicitly.
+        if (!_tvFocusRecoveryInstalled) {
+          _tvFocusRecoveryInstalled = true;
+          HardwareKeyboard.instance.addHandler(_tvDeadFocusRecovery);
+        }
       }
 
       if (!_hasTrackedInitialTab) {
@@ -921,12 +941,44 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openCloudProvider = null;
     MainPageBridge.focusTvSidebar = null;
     MainPageBridge.isTvSidebarFocused = null;
+    MainPageBridge.tvDirectionalLeft = null;
+    if (_tvFocusRecoveryInstalled) {
+      HardwareKeyboard.instance.removeHandler(_tvDeadFocusRecovery);
+    }
     _animationController.dispose();
     _tvSidebarExpanded.dispose();
     DeepLinkService().dispose();
     RemoteControlState().stop();
     _autoUpdateDownloadSub?.cancel();
     super.dispose();
+  }
+
+  /// TV last-resort DPAD recovery: only when NOTHING real holds focus (primary
+  /// focus fell back to a bare scope) AND that scope has no traversable
+  /// descendants for stock traversal to recover into — i.e. the remote would
+  /// otherwise be completely dead — an arrow press focuses the sidebar. Never
+  /// fires while a widget has focus, while stock traversal has any candidate,
+  /// while the sidebar already has focus, or while another route (dialog,
+  /// player, pushed screen) covers MainPage.
+  bool _tvDeadFocusRecovery(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (!_isAndroidTv) return false;
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown &&
+        key != LogicalKeyboardKey.arrowLeft &&
+        key != LogicalKeyboardKey.arrowRight) {
+      return false;
+    }
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary is! FocusScopeNode) return false;
+    if (primary.traversalDescendants.isNotEmpty) return false;
+    final sidebar = _tvSidebarKey.currentState;
+    if (sidebar == null || sidebar.hasFocus) return false;
+    final ctx = _tvSidebarKey.currentContext;
+    if (ctx == null || !(ModalRoute.of(ctx)?.isCurrent ?? false)) return false;
+    sidebar.requestFocus();
+    return true;
   }
 
   /// Initialize remote control based on device type
@@ -2309,6 +2361,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   MainPageBridge.setActiveTvTab(_selectedIndex);
                   final tvIndices = _sidebarOrderedIndices(visibleIndices);
                   final tvSelected = tvIndices.indexOf(_selectedIndex);
+                  // The scope regular tab content lives in — the left-edge
+                  // guard in _TvContentDirectionalFocusAction compares against
+                  // it so nested focus-trap scopes stay trapped.
+                  _tvDirectionalFocusAction.contentScope =
+                      FocusScope.of(context);
                   return Scaffold(
                     backgroundColor: Colors.transparent,
                     // Sidebar is OVERLAID (Stack), not a Row sibling. The content
@@ -2321,7 +2378,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           left: TvSidebarNav.collapsedWidth,
                           child: SafeArea(
                             left: false,
-                            child: _buildAnimatedPage(),
+                            // The sidebar's nodes are skipTraversal, so DPAD can
+                            // never wander into it; this override is the single,
+                            // global way in: LEFT that finds nothing inside the
+                            // content (= left edge) focuses the rail.
+                            child: Actions(
+                              actions: _tvContentActions,
+                              child: _buildAnimatedPage(),
+                            ),
                           ),
                         ),
                         // Dim the content while the sidebar overlay is open —
@@ -2511,5 +2575,49 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         ),
       ],
     );
+  }
+}
+
+/// TV-only directional focus for the content area (installed above
+/// [_MainPageState._buildAnimatedPage]).
+///
+/// The sidebar's focus nodes are `skipTraversal`, making it unreachable by
+/// Flutter's geometric directional search — that's what used to let a stray
+/// DOWN/UP/RIGHT at a content edge land on the rail and pop it open. With that
+/// closed off, this action provides the one deliberate entry: when LEFT finds
+/// no candidate inside the content (the focused widget is at the content's
+/// left edge), focus the sidebar. Screens that already intercept LEFT and call
+/// [MainPageBridge.focusTvSidebar] themselves handle the key before it ever
+/// reaches this action, so their behavior is unchanged; text fields resolve
+/// arrow keys to their own editing actions first, so typing is unaffected.
+class _TvContentDirectionalFocusAction extends DirectionalFocusAction {
+  /// The scope all regular tab content lives in (the MainPage route's scope),
+  /// captured each TV build. A failed LEFT search only means "at the content's
+  /// left edge" when the focused node belongs to THIS scope — inside a nested
+  /// [FocusScope] (the focus-trap pattern used by panels/dropdowns, e.g.
+  /// addon_hub_screen / search_source_dropdown) a failed search must stay a
+  /// silent no-op, exactly as it was before this action existed.
+  FocusScopeNode? contentScope;
+
+  /// The LEFT move with sidebar fallback. Also exposed through
+  /// [MainPageBridge.tvDirectionalLeft] so programmatic navigation (the
+  /// phone-remote fallback, which calls focusInDirection directly and never
+  /// enters the Shortcuts/Actions pipeline) gets identical behavior.
+  void handleLeft() {
+    final FocusNode? primary = FocusManager.instance.primaryFocus;
+    if (primary == null) return;
+    if (primary.focusInDirection(TraversalDirection.left)) return;
+    final FocusScopeNode? scope = contentScope;
+    if (scope != null && primary.nearestScope != scope) return;
+    MainPageBridge.focusTvSidebar?.call();
+  }
+
+  @override
+  void invoke(DirectionalFocusIntent intent) {
+    if (intent.direction == TraversalDirection.left) {
+      handleLeft();
+      return;
+    }
+    super.invoke(intent);
   }
 }
