@@ -24,6 +24,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
   bool _trailerAutoplayEnabled = false;
+  bool _heroTrailerEnabled = true;
+  bool _heroTrailerAudioEnabled = true;
+  int _heroTrailerVolume = 70;
   List<StremioAddon> _addons = [];
 
   @override
@@ -45,6 +48,11 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           await StorageService.getHomeContinueWatchingEnabled();
       final trailerAutoplayEnabled =
           await StorageService.getDetailTrailerAutoplayEnabled();
+      final heroTrailerEnabled =
+          await StorageService.getHomeHeroTrailerEnabled();
+      final heroTrailerAudioEnabled =
+          await StorageService.getHomeHeroTrailerAudioEnabled();
+      final heroTrailerVolume = await StorageService.getHomeHeroTrailerVolume();
       final traktListType = await StorageService.getHomeDefaultTraktListType();
       final traktContentType =
           await StorageService.getHomeDefaultTraktContentType();
@@ -75,6 +83,14 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _hideProviderCards = hideProviderCards;
         _continueWatchingEnabled = continueWatchingEnabled;
         _trailerAutoplayEnabled = trailerAutoplayEnabled;
+        _heroTrailerEnabled = heroTrailerEnabled;
+        _heroTrailerAudioEnabled = heroTrailerAudioEnabled;
+        // Snap to the dropdown's 10% steps — a value outside the item list
+        // would assert in DropdownButtonFormField.
+        _heroTrailerVolume = ((heroTrailerVolume / 10).round() * 10).clamp(
+          10,
+          100,
+        );
         _loading = false;
       });
     } catch (e) {
@@ -509,34 +525,130 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Trailer autoplay toggle
+                // Ambient trailers: the two surfaces are independent toggles —
+                // detail-page backdrop and (TV-only) the Home hero spotlight,
+                // which also owns the sound switch + volume below it.
                 Card(
-                  child: SwitchListTile(
-                    secondary: const Icon(Icons.movie_filter_rounded),
-                    title: const Text('Autoplay Trailers'),
-                    subtitle: const Text(
-                      'Play a trailer (with sound) behind the movie/series detail '
-                      'page. '
-                      'Falls back to the poster when off or unavailable.',
-                    ),
-                    value: _trailerAutoplayEnabled,
-                    onChanged: (value) async {
-                      try {
-                        await StorageService.setDetailTrailerAutoplayEnabled(
-                          value,
-                        );
-                        if (!mounted) return;
-                        setState(() => _trailerAutoplayEnabled = value);
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to save setting: $e'),
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        secondary: const Icon(Icons.movie_filter_rounded),
+                        title: const Text('Trailer on Detail Page'),
+                        subtitle: const Text(
+                          'Play a trailer behind the movie/series detail page. '
+                          'Falls back to the poster when off or unavailable.',
+                        ),
+                        value: _trailerAutoplayEnabled,
+                        onChanged: (value) async {
+                          try {
+                            await StorageService
+                                .setDetailTrailerAutoplayEnabled(value);
+                            if (!mounted) return;
+                            setState(() => _trailerAutoplayEnabled = value);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to save setting: $e'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      const Divider(height: 1, indent: 16, endIndent: 16),
+                      SwitchListTile(
+                        secondary: const Icon(Icons.smart_display_rounded),
+                        title: const Text('Trailer on Home Spotlight'),
+                        subtitle: const Text(
+                          'Android TV: when you rest on a title, its trailer '
+                          'plays in the hero at the top of Home.',
+                        ),
+                        value: _heroTrailerEnabled,
+                        onChanged: (value) async {
+                          try {
+                            await StorageService.setHomeHeroTrailerEnabled(
+                              value,
+                            );
+                            if (!mounted) return;
+                            setState(() => _heroTrailerEnabled = value);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to save setting: $e'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      if (_heroTrailerEnabled) ...[
+                        SwitchListTile(
+                          secondary: const Icon(Icons.volume_up_rounded),
+                          title: const Text('Spotlight Trailer Sound'),
+                          subtitle: const Text(
+                            'Off plays the hero trailer silently.',
+                          ),
+                          value: _heroTrailerAudioEnabled,
+                          onChanged: (value) async {
+                            try {
+                              await StorageService
+                                  .setHomeHeroTrailerAudioEnabled(value);
+                              if (!mounted) return;
+                              setState(() => _heroTrailerAudioEnabled = value);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to save setting: $e'),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                        if (_heroTrailerAudioEnabled)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: DropdownButtonFormField<int>(
+                              isExpanded: true,
+                              value: _heroTrailerVolume,
+                              decoration: const InputDecoration(
+                                labelText: 'Spotlight trailer volume',
+                                prefixIcon: Icon(Icons.tune_rounded),
+                              ),
+                              items: [
+                                for (int v = 10; v <= 100; v += 10)
+                                  DropdownMenuItem(
+                                    value: v,
+                                    child: Text('$v%'),
+                                  ),
+                              ],
+                              onChanged: (value) async {
+                                if (value == null) return;
+                                try {
+                                  await StorageService.setHomeHeroTrailerVolume(
+                                    value,
+                                  );
+                                  if (!mounted) return;
+                                  setState(() => _heroTrailerVolume = value);
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Failed to save setting: $e',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
                             ),
-                          );
-                        }
-                      }
-                    },
+                          ),
+                      ],
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),

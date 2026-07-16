@@ -395,6 +395,43 @@ class StorageService {
     await prefs.setBool('detail_trailer_autoplay_enabled', enabled);
   }
 
+  /// Ambient trailer in the Home board's hero spotlight (Android TV only —
+  /// the hero isn't rendered elsewhere). Default: ON, independent of the
+  /// detail-page toggle so users can keep either surface quiet.
+  static Future<bool> getHomeHeroTrailerEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('home_hero_trailer_enabled') ?? true;
+  }
+
+  static Future<void> setHomeHeroTrailerEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('home_hero_trailer_enabled', enabled);
+  }
+
+  /// Whether the Home hero trailer plays sound (false = video only).
+  static Future<bool> getHomeHeroTrailerAudioEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('home_hero_trailer_audio_enabled') ?? true;
+  }
+
+  static Future<void> setHomeHeroTrailerAudioEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('home_hero_trailer_audio_enabled', enabled);
+  }
+
+  /// Home hero trailer volume, percent 10–100. Default 70 — under the UI, a
+  /// notch quieter than the detail page's ambient loop.
+  static Future<int> getHomeHeroTrailerVolume() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getInt('home_hero_trailer_volume') ?? 70;
+    return v.clamp(10, 100);
+  }
+
+  static Future<void> setHomeHeroTrailerVolume(int percent) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('home_hero_trailer_volume', percent.clamp(10, 100));
+  }
+
   static Future<bool> getTorboxCacheCheckEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_torboxCacheCheckPref) ?? false;

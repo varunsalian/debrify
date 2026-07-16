@@ -41,8 +41,10 @@ import '../utils/format_tag_detector.dart';
 import '../utils/torrent_curation.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
+import '../services/youtube_service.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
+import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
@@ -685,6 +687,35 @@ class _SearchScreenState extends State<SearchScreen> {
   int _heroReqId = 0;
   Timer? _heroTimer;
 
+  // Hero ambient trailer (Home board, TV only): once DPAD focus RESTS on a
+  // card, its trailer crossfades into the hero backdrop — same living-backdrop
+  // treatment (and the same HeroTrailerBackdrop machinery: single decoder,
+  // route/background pausing) as the detail page. Notifier-driven so a trailer
+  // arriving rebuilds only the hero's video layer, never the board.
+  final ValueNotifier<YoutubeResolvedStreams?> _heroTrailer =
+      ValueNotifier<YoutubeResolvedStreams?>(null);
+  Timer? _heroTrailerTimer;
+  int _heroTrailerReq = 0;
+
+  /// True from the moment the rest-debounce commits to loading a trailer until
+  /// either frames are on screen or the attempt dies (no trailer / resolve
+  /// failed / hero moved on) — drives the hero's little "Trailer" pill.
+  final ValueNotifier<bool> _heroTrailerLoading = ValueNotifier<bool>(false);
+
+  /// Settings → Home Page toggles, read once per screen life (on TV a tab
+  /// switch rebuilds the screen, so Settings changes are picked up on return).
+  bool _heroTrailerEnabled = false;
+
+  /// Ambient volume (0–100) for the hero trailer; 0 when the sound toggle is
+  /// off. Applied at engine open, so it's also read once per screen life.
+  double _heroTrailerVolume = 0;
+
+  /// Trailers only on the TV Home board's full spotlight — never the Search
+  /// tab's compact strip (too small, and results should dominate) or off-TV
+  /// (the hero itself isn't rendered there).
+  bool get _heroTrailerActive =>
+      widget.isTelevision && !widget.searchMode && !widget.discoverMode;
+
   // Discover tab: the active source key ('cw' | 'trakt' | 'a:{addonId}') + its
   // DPAD focus node (the "Source" dropdown is the leading filter of whichever
   // embedded See-All panel is shown). [_discAddons] is the browsable addon list
@@ -699,6 +730,25 @@ class _SearchScreenState extends State<SearchScreen> {
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
+    }
+    // Ambient hero trailer gates (Home board TV only) — read before the board
+    // loads so the seeded first spotlight can already schedule its trailer.
+    if (_heroTrailerActive) {
+      Future.wait([
+        StorageService.getHomeHeroTrailerEnabled(),
+        StorageService.getHomeHeroTrailerAudioEnabled(),
+        StorageService.getHomeHeroTrailerVolume(),
+      ]).then((values) {
+        if (!mounted || !(values[0] as bool)) return;
+        _heroTrailerEnabled = true;
+        _heroTrailerVolume = (values[1] as bool)
+            ? (values[2] as int).toDouble()
+            : 0;
+        // The board usually seeds the hero before this read lands — kick the
+        // current spotlight so the billboard still starts on cold open.
+        final current = _heroItem.value;
+        if (current != null) _scheduleHeroTrailer(current);
+      });
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     // Home board only: live-refresh when the Home Rows manager changes which
@@ -897,9 +947,12 @@ class _SearchScreenState extends State<SearchScreen> {
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
+    _heroTrailerTimer?.cancel();
     _tintTimer?.cancel();
     _heroItem.dispose();
     _heroEnriched.dispose();
+    _heroTrailer.dispose();
+    _heroTrailerLoading.dispose();
     _heroTint.dispose();
     _searchController.dispose();
     _catalogSourcesHideTimer?.cancel();
@@ -2143,6 +2196,11 @@ class _SearchScreenState extends State<SearchScreen> {
       if (first != null) {
         _enrichHero(first);
         _updateHeroTint(first);
+        // Billboard effect: the seeded spotlight starts its trailer too, so
+        // opening Home settles into a living hero without any DPAD input.
+        _scheduleHeroTrailer(first);
+      } else {
+        _clearHeroTrailer();
       }
     }
   }
@@ -2555,6 +2613,76 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroEnriched.value = null;
     _enrichHero(item);
     _updateHeroTint(item);
+    _scheduleHeroTrailer(item);
+  }
+
+  /// Debounced ambient-trailer load for the spotlighted title. The previous
+  /// trailer is torn down IMMEDIATELY on any hero change (a playing trailer
+  /// under the wrong title is worse than the static backdrop), then a new one
+  /// only starts once focus has RESTED on the card — flying across a row costs
+  /// nothing but a timer reset, never a resolve or a decoder spin-up. Both
+  /// lookups (Cinemeta /meta for the YouTube id, then the stream resolve) are
+  /// cached in their services, so re-resting on a recent card starts fast.
+  void _scheduleHeroTrailer(StremioMeta item) {
+    if (!_heroTrailerActive || !_heroTrailerEnabled) return;
+    _heroTrailerTimer?.cancel();
+    final req = ++_heroTrailerReq;
+    if (_heroTrailer.value != null) _heroTrailer.value = null;
+    if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
+    _heroTrailerTimer = Timer(const Duration(milliseconds: 2400), () async {
+      if (!mounted || req != _heroTrailerReq) return;
+      // From here the attempt is committed — surface the pill. Every exit
+      // below (no trailer, failed resolve, hero moved on) clears it; success
+      // keeps it up until the backdrop reports frames (_onHeroTrailerPlaying).
+      _heroTrailerLoading.value = true;
+      void fail() {
+        if (mounted && req == _heroTrailerReq) {
+          _heroTrailerLoading.value = false;
+        }
+      }
+
+      // YouTube id: catalog rows rarely carry it, so fall back to the /meta
+      // details (the same fetch — and cache — the hero enrichment uses).
+      String? ytId = item.trailerYtId;
+      if (ytId == null || ytId.isEmpty) {
+        final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
+        if (imdb == null) return fail();
+        try {
+          final full = await _stremio.fetchMetaDetails(
+            imdbId: imdb,
+            type: item.type,
+          );
+          ytId = full?.trailerYtId;
+        } catch (_) {
+          return fail(); // silent: the static backdrop simply stays
+        }
+      }
+      if (!mounted || req != _heroTrailerReq) return;
+      if (ytId == null || ytId.isEmpty) return fail();
+      final streams = await YoutubeService.resolveStreams(ytId);
+      if (!mounted || req != _heroTrailerReq) return;
+      if (streams == null || !streams.hasPlayable) return fail();
+      _heroTrailer.value = streams;
+      // Failsafe: a dead/bot-blocked stream can error inside the engine
+      // before ever producing a frame, in which case onPlayingChanged never
+      // fires (it only reports real transitions) — don't let the pill spin
+      // forever on a trailer that will never come.
+      Timer(const Duration(seconds: 15), fail);
+    });
+  }
+
+  /// The hero backdrop's playing signal: frames on screen (true) or engine
+  /// teardown/error (false). Either way the loading pill's moment is over.
+  void _onHeroTrailerPlaying(bool playing) {
+    if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
+  }
+
+  /// Kill any pending/playing hero trailer (hero cleared, board reloading).
+  void _clearHeroTrailer() {
+    _heroTrailerTimer?.cancel();
+    _heroTrailerReq++;
+    if (_heroTrailer.value != null) _heroTrailer.value = null;
+    if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
   }
 
   // ── Dynamic per-title tint ────────────────────────────────────────────────
@@ -6598,6 +6726,12 @@ class _SearchScreenState extends State<SearchScreen> {
                         isTelevision: tv,
                         height: heroH,
                         tint: _heroTint,
+                        trailer: _heroTrailerActive ? _heroTrailer : null,
+                        trailerLoading: _heroTrailerActive
+                            ? _heroTrailerLoading
+                            : null,
+                        trailerVolume: _heroTrailerVolume,
+                        onTrailerPlayingChanged: _onHeroTrailerPlaying,
                       );
                     },
                   );
@@ -7450,6 +7584,23 @@ class _HeroSpotlight extends StatefulWidget {
   /// on the title's mood. Null = neutral (no tint yet / colorless art).
   final ValueListenable<Color?>? tint;
 
+  /// Resolved ambient-trailer streams for the spotlighted title (host-resolved,
+  /// debounced until DPAD focus rests). Non-null only on the TV Home board.
+  /// While null/empty the hero is exactly the static spotlight; when streams
+  /// arrive the trailer crossfades in over the backdrop in place.
+  final ValueListenable<YoutubeResolvedStreams?>? trailer;
+
+  /// Host-driven "a trailer is on its way" flag — shows the corner pill from
+  /// resolve-start until frames land (or the attempt dies).
+  final ValueListenable<bool>? trailerLoading;
+
+  /// Ambient volume (0–100) for the trailer; 0 = play silently.
+  final double trailerVolume;
+
+  /// Relay of [HeroTrailerBackdrop.onPlayingChanged] back to the host (it ends
+  /// the loading-pill state).
+  final ValueChanged<bool>? onTrailerPlayingChanged;
+
   const _HeroSpotlight({
     required this.item,
     required this.background,
@@ -7459,6 +7610,10 @@ class _HeroSpotlight extends StatefulWidget {
     this.rating,
     this.compact = false,
     this.tint,
+    this.trailer,
+    this.trailerLoading,
+    this.trailerVolume = 0,
+    this.onTrailerPlayingChanged,
   });
 
   @override
@@ -7627,6 +7782,56 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
             ),
           ),
           ),
+          // Ambient trailer — layered over the static backdrop, under the
+          // scrims/text, wearing the SAME bottom-melt mask so the video fades
+          // into the board exactly like the image does. With imageUrl null the
+          // HeroTrailerBackdrop is a pure video layer: transparent until the
+          // trailer produces frames, then a slow crossfade in — the Ken Burns
+          // image simply stays underneath as the "before" state. The ValueKey
+          // remounts it per trailer so each title gets a fresh engine, and a
+          // null value unmounts it (decoder released) the instant the host
+          // clears the notifier on a hero change. Route pushes / app
+          // backgrounding / content-playback launches are already handled
+          // inside the widget itself.
+          if (widget.trailer != null)
+            ValueListenableBuilder<YoutubeResolvedStreams?>(
+              valueListenable: widget.trailer!,
+              builder: (context, streams, __) {
+                if (streams == null || !streams.hasPlayable) {
+                  return const SizedBox.shrink();
+                }
+                return RepaintBoundary(
+                  child: ClipRect(
+                    child: ShaderMask(
+                      shaderCallback: (rect) => const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.white, Colors.white, Colors.transparent],
+                        stops: [0.0, 0.55, 1.0],
+                      ).createShader(rect),
+                      blendMode: BlendMode.dstIn,
+                      child: HeroTrailerBackdrop(
+                        key: ValueKey('hero-trailer-${streams.playUrl}'),
+                        imageUrl: null,
+                        videoUrl: streams.playUrl,
+                        audioUrl: streams.audioUrl,
+                        enabled: true,
+                        // No blur layers: this hero is TV-only and a per-frame
+                        // filter pass over the video surface is what stutters
+                        // weak TV GPUs (same rationale as the detail page).
+                        imageBlurSigma: 0,
+                        videoBlurSigma: 0,
+                        // The host already debounced for focus-rest; keep just
+                        // enough delay to absorb an immediate focus move.
+                        startDelay: const Duration(milliseconds: 300),
+                        ambientVolume: widget.trailerVolume,
+                        onPlayingChanged: widget.onTrailerPlayingChanged,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           // Top scrim — compact Search hero only. The hero sits directly under
           // the search bar, so even with the overflow clipped the backdrop's
           // top row starts at full brightness against the header. A short dark
@@ -7809,6 +8014,20 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               ),
             ),
           ),
+          // "Trailer loading" pill — top-right, above the scrims so it reads
+          // against any backdrop. Purely informational (never focusable), and
+          // rendered only while the host is actually fetching/starting a
+          // trailer, so idle browsing shows nothing.
+          if (widget.trailerLoading != null)
+            Positioned(
+              top: 18,
+              right: 22,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: widget.trailerLoading!,
+                builder: (context, loading, __) =>
+                    _HeroTrailerLoadingPill(visible: loading),
+              ),
+            ),
         ],
       ),
     );
@@ -7825,6 +8044,87 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
       ),
     ),
   );
+}
+
+/// The hero's "trailer is on its way" chip: a small glass pill with a thin
+/// accent spinner and a whispered label, fading/drifting in while a trailer
+/// resolves and buffers, gone the instant frames land (the host flips
+/// [visible]). Deliberately quiet — it must read as a status whisper, not a
+/// control — and cheap: no blur (weak-TV rule), one AnimatedOpacity +
+/// AnimatedSlide pair, and when hidden it paints nothing at all.
+class _HeroTrailerLoadingPill extends StatelessWidget {
+  final bool visible;
+
+  const _HeroTrailerLoadingPill({required this.visible});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedSlide(
+        offset: visible ? Offset.zero : const Offset(0, -0.25),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOut,
+          // TickerMode (not a subtree swap, which would cut the fade-out
+          // short): the spinner's ticker only runs while visible, so the
+          // pill costs nothing during the 99% of browsing it spends hidden.
+          child: TickerMode(
+            enabled: visible,
+            child: Container(
+                  padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xCC0D0B1A), // glassy HomeTheme.bg
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: HomeTheme.chromeAccent.withValues(alpha: 0.35),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
+                      ),
+                      BoxShadow(
+                        color: HomeTheme.chromeAccent.withValues(alpha: 0.18),
+                        blurRadius: 18,
+                        spreadRadius: -4,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            HomeTheme.chromeAccent,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Trailer',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// One-shot entrance for a board row: fade in + rise ~10px, started after

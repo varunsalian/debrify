@@ -67,6 +67,12 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// thrash the decoder and the poster is seen first. Also masks resolve latency.
   final Duration startDelay;
 
+  /// Ambient loop volume (0–100). The default sits a notch below full so the
+  /// background trailer plays under the UI rather than over it; 0 = muted
+  /// ambient (the Home hero's "trailer sound off" setting). Foreground
+  /// promotion always raises to full regardless.
+  final double ambientVolume;
+
   /// Shared-element tag: when set, the static image layer is the destination
   /// Hero for the board poster that opened this page (the poster grows into
   /// this full-bleed backdrop). Only the still image participates — the video
@@ -85,8 +91,12 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.imageBlurSigma = 42,
     this.videoBlurSigma = 8,
     this.startDelay = const Duration(milliseconds: 1400),
+    this.ambientVolume = _defaultAmbientVolume,
     this.heroTag,
   });
+
+  /// See [ambientVolume].
+  static const double _defaultAmbientVolume = 75;
 
   @override
   State<HeroTrailerBackdrop> createState() => HeroTrailerBackdropState();
@@ -94,9 +104,8 @@ class HeroTrailerBackdrop extends StatefulWidget {
 
 class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     with RouteAware, WidgetsBindingObserver, TickerProviderStateMixin {
-  /// Ambient loop volume — a notch below full so the background trailer sits
-  /// under the UI rather than over it. Promotion raises it to [_foregroundVolume].
-  static const double _ambientVolume = 75;
+  /// Foreground (promoted fullscreen) volume — always full; the ambient level
+  /// comes from [HeroTrailerBackdrop.ambientVolume].
   static const double _foregroundVolume = 100;
 
   /// Trailers almost always open on a distributor/rating card — skip past it so
@@ -357,7 +366,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         // video-only — mux the separate audio track in for sound (the same
         // path the main player uses for high-res YouTube).
         audioUrl: widget.audioUrl,
-        volume: _userMuted ? 0 : _ambientVolume,
+        volume: _userMuted ? 0 : widget.ambientVolume,
         loop: true,
       );
       if (_engine != engine) return;
@@ -450,7 +459,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// Muted → 0; foreground → full; ambient → deliberately low.
   void _applyVolume({required bool foreground}) {
     _engine?.setVolume(
-      _userMuted ? 0 : (foreground ? _foregroundVolume : _ambientVolume),
+      _userMuted ? 0 : (foreground ? _foregroundVolume : widget.ambientVolume),
     );
   }
 
