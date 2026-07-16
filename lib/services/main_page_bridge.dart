@@ -336,6 +336,27 @@ class MainPageBridge {
   /// programmatic navigation (e.g. the phone-remote fallback path); null off-TV.
   static VoidCallback? tvDirectionalLeft;
 
+  /// TV sidebar focus enter/exit (true = the rail holds focus / is expanded).
+  /// Fired by main.dart from the rail's expand signal. Screens with ambient
+  /// surfaces (the Home hero trailer) listen to stop them while the user is
+  /// in the menu — the hero doesn't change when focus leaves the board, so
+  /// they can't infer it from their own focus events.
+  static final List<ValueChanged<bool>> _tvSidebarFocusListeners = [];
+
+  static void addTvSidebarFocusListener(ValueChanged<bool> listener) {
+    _tvSidebarFocusListeners.add(listener);
+  }
+
+  static void removeTvSidebarFocusListener(ValueChanged<bool> listener) {
+    _tvSidebarFocusListeners.remove(listener);
+  }
+
+  static void notifyTvSidebarFocusChanged(bool focused) {
+    for (final listener in List.of(_tvSidebarFocusListeners)) {
+      listener(focused);
+    }
+  }
+
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.
   /// Key is the tab index (0=Home, 1=Playlist, 2=Downloads, etc.)

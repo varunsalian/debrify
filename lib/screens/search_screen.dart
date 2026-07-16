@@ -709,6 +709,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// crossfade the video's own opacity used to provide when it sat on top).
   final ValueNotifier<bool> _heroTrailerShowing = ValueNotifier<bool>(false);
 
+  /// Takeover progress (0 ambient → 1 full-board), published by
+  /// [_HeroTrailerLayer] as its promote animation runs. The board content
+  /// listens and recedes (dim + drift + shrink) so the film takes the room.
+  final ValueNotifier<double> _heroTrailerTakeover = ValueNotifier<double>(0);
+
   /// Settings → Home Page toggles, read once per screen life (on TV a tab
   /// switch rebuilds the screen, so Settings changes are picked up on return).
   bool _heroTrailerEnabled = false;
@@ -741,6 +746,11 @@ class _SearchScreenState extends State<SearchScreen> {
     // Ambient hero trailer gates (Home board TV only) — read before the board
     // loads so the seeded first spotlight can already schedule its trailer.
     if (_heroTrailerActive) {
+      // The hero doesn't change when the user steps out to the SIDEBAR, so
+      // the rest-debounce (or a playing trailer) would happily continue under
+      // the expanded rail. Kill it on sidebar enter; re-arm the current
+      // spotlight on exit so browsing resumes its normal rest-to-play.
+      MainPageBridge.addTvSidebarFocusListener(_onTvSidebarFocusChanged);
       Future.wait([
         StorageService.getHomeHeroTrailerEnabled(),
         StorageService.getHomeHeroTrailerAudioEnabled(),
@@ -952,6 +962,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
+    MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
     _heroTrailerTimer?.cancel();
@@ -961,6 +972,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroTrailer.dispose();
     _heroTrailerLoading.dispose();
     _heroTrailerShowing.dispose();
+    _heroTrailerTakeover.dispose();
     _heroTint.dispose();
     _searchController.dispose();
     _catalogSourcesHideTimer?.cancel();
@@ -2697,6 +2709,17 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
+  }
+
+  /// Sidebar focus enter/exit (see the listener registration in [initState]).
+  void _onTvSidebarFocusChanged(bool focused) {
+    if (!_heroTrailerActive || !_heroTrailerEnabled || !mounted) return;
+    if (focused) {
+      _clearHeroTrailer();
+    } else {
+      final item = _heroItem.value;
+      if (item != null) _scheduleHeroTrailer(item);
+    }
   }
 
   // ── Dynamic per-title tint ────────────────────────────────────────────────
@@ -6727,9 +6750,11 @@ class _SearchScreenState extends State<SearchScreen> {
                   heroHeight: heroH,
                   volume: _heroTrailerVolume,
                   onPlayingChanged: _onHeroTrailerPlaying,
+                  takeover: _heroTrailerTakeover,
                 ),
               ),
-            Column(
+            _buildTrailerTakeoverRecede(
+              Column(
           children: [
             // The hero spotlight only changes as DPAD focus moves across tiles, so
             // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
@@ -6848,8 +6873,63 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
           ],
+              ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  /// The board content's "recede" as the trailer takes over: fade toward
+  /// barely-visible, drift down a touch and shrink ~2% — the film takes the
+  /// room, the UI politely steps back. GPU-frugal by design:
+  ///  • the wrapper tree shape is FIXED (Opacity + Transform always present),
+  ///    so the board subtree — focus nodes, list scroll state — is never
+  ///    re-parented when the takeover starts/ends;
+  ///  • Opacity at 1.0 paints with no layer at all, and while dimmed the
+  ///    static board subtree is raster-cache friendly (alpha changes don't
+  ///    re-record its pictures);
+  ///  • Transform is paint-time only — no relayout, DPAD/hit-testing intact.
+  /// A short follower tween smooths the driving value, so the instant kill
+  /// (focus moved → takeover snaps to 0) eases the board back in ~240ms
+  /// instead of popping.
+  Widget _buildTrailerTakeoverRecede(Widget board) {
+    if (!_heroTrailerActive) return board;
+    return ValueListenableBuilder<double>(
+      valueListenable: _heroTrailerTakeover,
+      child: board,
+      builder: (context, target, child) {
+        return TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: target),
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOut,
+          child: child,
+          builder: (context, t, kid) {
+            // Content starts receding slightly after the mask starts opening
+            // — the video leads, the UI follows.
+            final tt = const Interval(
+              0.12,
+              1.0,
+              curve: Curves.easeOut,
+            ).transform(t.clamp(0.0, 1.0));
+            return Opacity(
+              opacity: 1.0 - 0.85 * tt,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..translate(0.0, 14.0 * tt)
+                  ..scale(1.0 - 0.02 * tt),
+                // Once the takeover has settled, freeze every ticker in the
+                // receded board (skeleton shimmers etc.) — a looping animator
+                // under the Opacity would re-record the subtree each frame,
+                // defeating the raster cache and paying a full-screen
+                // saveLayer per frame behind the film. Any DPAD press kills
+                // the takeover first, so nothing the user can see freezes.
+                child: TickerMode(enabled: tt < 0.95, child: kid!),
+              ),
+            );
+          },
         );
       },
     );
@@ -8103,11 +8183,16 @@ class _HeroTrailerLayer extends StatefulWidget {
   /// Relayed [HeroTrailerBackdrop.onPlayingChanged] (host pill + image fade).
   final ValueChanged<bool>? onPlayingChanged;
 
+  /// Published takeover progress (the eased 0→1 of the promote animation).
+  /// The host's board content listens and recedes in sync.
+  final ValueNotifier<double>? takeover;
+
   const _HeroTrailerLayer({
     required this.trailer,
     required this.heroHeight,
     required this.volume,
     this.onPlayingChanged,
+    this.takeover,
   });
 
   @override
@@ -8122,10 +8207,15 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
   /// 0 = ambient (hero-shaped mask) → 1 = promoted (full-board video).
   late final AnimationController _promote = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    duration: const Duration(milliseconds: 1400),
   );
 
   Timer? _promoteTimer;
+
+  /// The shared easing for everything the takeover drives (mask, video
+  /// push-in, scrim, and — via [_HeroTrailerLayer.takeover] — the board's
+  /// recede), so all the motions read as ONE gesture.
+  double get _easedT => Curves.easeInOutCubic.transform(_promote.value);
 
   /// Pins the backdrop's element so state (engine/texture) survives the
   /// masked↔bare branch swap. Replaced per trailer URL so each title still
@@ -8137,6 +8227,11 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
   void initState() {
     super.initState();
     widget.trailer.addListener(_onTrailerChanged);
+    _promote.addListener(_publishTakeover);
+  }
+
+  void _publishTakeover() {
+    widget.takeover?.value = _easedT;
   }
 
   @override
@@ -8145,6 +8240,16 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
     if (!identical(old.trailer, widget.trailer)) {
       old.trailer.removeListener(_onTrailerChanged);
       widget.trailer.addListener(_onTrailerChanged);
+    }
+    if (!identical(old.takeover, widget.takeover)) {
+      // didUpdateWidget runs during build — a synchronous notifier write here
+      // would mark listeners dirty mid-build. Defer to the frame's end. (In
+      // practice the host notifier is stable, so this path is theoretical.)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        old.takeover?.value = 0;
+        _publishTakeover();
+      });
     }
   }
 
@@ -8224,14 +8329,26 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
             return AnimatedBuilder(
               animation: _promote,
               child: video,
-              builder: (context, child) {
-                final t = Curves.easeInOutCubic.transform(_promote.value);
+              builder: (context, rawChild) {
+                final t = _easedT;
+                // The cinematic push-in: the video slowly scales to 1.05 as
+                // it takes the board — the camera "leans in". A pure vertex
+                // transform (deliberately NO filterQuality: that flag turns
+                // the transform into a per-frame bitmap filter layer, while a
+                // Texture is already linearly sampled, so a plain matrix is
+                // free AND smooth), applied INSIDE the mask so the melt
+                // geometry stays screen-aligned while the picture moves
+                // beneath it. Ends at a static 1.05 — cover-fit just crops a
+                // sliver of edge, costing nothing.
+                final child = t <= 0.0
+                    ? rawChild!
+                    : Transform.scale(scale: 1.0 + 0.05 * t, child: rawChild);
                 // Fully promoted steady state: bare video + scrim — no clip,
                 // no mask, no per-frame saveLayer. The GlobalKey carries the
                 // playing element across this branch swap untouched.
                 final Widget surface;
                 if (t >= 1.0) {
-                  surface = child!;
+                  surface = child;
                 } else {
                   // Ambient/transitional: clip to the (growing) visible slab
                   // so the mask's saveLayer never costs more area than is
@@ -8263,13 +8380,12 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
                   fit: StackFit.expand,
                   children: [
                     RepaintBoundary(child: surface),
-                    // Readability scrim over the promoted video: barely-there
-                    // at the hero, deepening over the rows so posters, row
-                    // headers and focus rings keep their contrast. The fade-in
-                    // is baked into the gradient's alphas (NOT an Opacity
-                    // wrapper, whose mid values would force a full-screen
-                    // saveLayer every frame of the transition) — a plain
-                    // gradient fill, always layer-free.
+                    // Gentle vignette over the promoted video — the board
+                    // content dims itself now (the host's recede), so the
+                    // film stays bright and this only adds bottom-weighted
+                    // depth. Fade baked into the gradient's alphas (NOT an
+                    // Opacity wrapper, whose mid values would force a
+                    // full-screen saveLayer every frame) — always layer-free.
                     if (t > 0.001)
                       IgnorePointer(
                         child: DecoratedBox(
@@ -8279,11 +8395,11 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
                               end: Alignment.bottomCenter,
                               colors: [
                                 const Color(0xFF0D0B1A)
-                                    .withValues(alpha: 0.20 * t),
+                                    .withValues(alpha: 0.06 * t),
                                 const Color(0xFF0D0B1A)
-                                    .withValues(alpha: 0.60 * t),
+                                    .withValues(alpha: 0.22 * t),
                                 const Color(0xFF0D0B1A)
-                                    .withValues(alpha: 0.80 * t),
+                                    .withValues(alpha: 0.40 * t),
                               ],
                               stops: const [0.0, 0.55, 1.0],
                             ),

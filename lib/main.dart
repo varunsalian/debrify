@@ -2436,6 +2436,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               // No setState — see _tvSidebarExpanded's comment.
                               if (mounted) {
                                 _tvSidebarExpanded.value = expanded;
+                                MainPageBridge.notifyTvSidebarFocusChanged(
+                                  expanded,
+                                );
                               }
                             },
                           ),
