@@ -2537,13 +2537,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
 
     try {
-      await _player.open(mk.Media(url), play: true);
+      // For YouTube each quality is a video-only track sharing one audio stream
+      // (widget.audioUrl). Mirror the initial-launch ordering: open PAUSED,
+      // attach the external audio, seek, then play — so both tracks load in sync
+      // (attaching audio mid-play makes mpv resync and drift). Sources without a
+      // separate audio track (torrents) keep the plain open-and-play path.
+      final hasExternalAudio =
+          widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
+      await _player.open(mk.Media(url), play: !hasExternalAudio);
       // Wait for the new media to load before seeking
       await _waitForVideoReady();
       if (!mounted) return;
+      if (hasExternalAudio) {
+        await _setExternalAudioTrack(widget.audioUrl!);
+      }
       // Seek to the position from the previous source
       if (resumePosition > Duration.zero) {
         await _player.seek(resumePosition);
+      }
+      if (hasExternalAudio) {
+        await _player.play();
       }
     } catch (e) {
       debugPrint('Player: Stremio source switch failed: $e');

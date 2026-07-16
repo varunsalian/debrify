@@ -1900,6 +1900,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    // Merge an arbitrary video-only URL with a separate audio URL — used on a
+    // YouTube quality switch, where only the video changes and the audio stays
+    // the same. Null on error so the caller falls back to the single URL.
+    private fun buildMergedSource(videoUrl: String, audioUrl: String): MergingMediaSource? {
+        return try {
+            val httpFactory = DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true)
+            val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
+            val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(videoUrl))
+            val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(audioUrl))
+            MergingMediaSource(true, true, videoSource, audioSource)
+        } catch (e: Exception) {
+            android.util.Log.w("AndroidTvPlayer", "switch merge build failed, using single url", e)
+            null
+        }
+    }
+
     /**
      * Fetch external subtitles from Stremio addons for the current item.
      * For series: uses payload.imdbId
@@ -6088,9 +6107,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Cancel any ongoing PikPak retry before switching
         cancelPikPakRetry()
 
-        // Switch ExoPlayer source, preserving position
-        val mediaItem = MediaItem.fromUri(url)
-        player?.setMediaItem(mediaItem)
+        // Switch ExoPlayer source, preserving position. For high-res YouTube the
+        // current item carries a separate audio track that ALL qualities share,
+        // so merge the newly picked (video-only) url with that audio — otherwise
+        // switching to a video-only quality would go silent. Non-YouTube sources
+        // (no separate audio) use the single url as-is.
+        val currentAudioUrl = payload?.items?.getOrNull(currentIndex)?.audioUrl
+        val mergedSource = if (!currentAudioUrl.isNullOrEmpty()) {
+            buildMergedSource(url, currentAudioUrl)
+        } else {
+            null
+        }
+        if (mergedSource != null) {
+            player?.setMediaSource(mergedSource)
+        } else {
+            player?.setMediaItem(MediaItem.fromUri(url))
+        }
         player?.prepare()
         if (currentPos > 0) {
             player?.seekTo(currentPos)

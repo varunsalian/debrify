@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/playlist_view_mode.dart';
+import '../../models/torrent.dart';
 import '../browse/browse_results_focus.dart';
 import '../../services/youtube_service.dart';
 import '../../services/storage_service.dart';
@@ -228,6 +229,40 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
       return;
     }
 
+    // Offer every available resolution as an in-player switchable "source".
+    // Only in the separate-audio path: each source is a video-only track that
+    // shares streams.audioUrl, which the player re-muxes on switch (so audio is
+    // preserved across a quality change on both media_kit and Android TV).
+    List<Torrent>? sources;
+    int? currentSourceIndex;
+    Future<String?> Function(Torrent)? resolveSource;
+    final qualities = streams?.qualities ?? const <YoutubeQuality>[];
+    final hasAudio = streams?.audioUrl?.isNotEmpty ?? false;
+    if (hasAudio && qualities.length > 1) {
+      sources = [
+        for (final q in qualities)
+          Torrent(
+            rowid: 0,
+            infohash: '',
+            name: q.label,
+            sizeBytes: 0,
+            createdUnix: 0,
+            seeders: 0,
+            leechers: 0,
+            completed: 0,
+            scrapedDate: 0,
+            source: 'youtube',
+            streamType: StreamType.directUrl,
+            directUrl: q.videoUrl,
+            hasRealInfoHash: false,
+          ),
+      ];
+      // Default-select the quality we're actually launching (the capped pick).
+      final def = qualities.indexWhere((q) => q.videoUrl == playUrl);
+      currentSourceIndex = def >= 0 ? def : 0;
+      resolveSource = (t) async => t.directUrl;
+    }
+
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -237,6 +272,9 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
         title: streams?.title ?? video.title,
         subtitle: video.author,
         viewMode: PlaylistViewMode.sorted,
+        stremioSources: sources,
+        stremioCurrentSourceIndex: currentSourceIndex,
+        resolveStremioSource: resolveSource,
       ),
     );
   }

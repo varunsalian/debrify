@@ -45,6 +45,17 @@ class YoutubeSearchResult {
   const YoutubeSearchResult({required this.videos, this.hasMore = false});
 }
 
+/// One selectable video quality (an H.264 video-only track). All qualities of a
+/// video share the same separate [YoutubeResolvedStreams.audioUrl], so switching
+/// quality only swaps the video URL — the player re-muxes the same audio.
+class YoutubeQuality {
+  final int height;
+  final String videoUrl;
+  const YoutubeQuality({required this.height, required this.videoUrl});
+
+  String get label => '${height}p';
+}
+
 /// Resolved playable/downloadable URLs for a single YouTube video.
 class YoutubeResolvedStreams {
   /// Video stream to play. When [audioUrl] is set this is a *video-only*
@@ -62,6 +73,11 @@ class YoutubeResolvedStreams {
   final String? thumbnailUrl;
   final int? durationSeconds;
 
+  /// All H.264 video-only qualities available (highest first), for in-player
+  /// quality switching. Populated only in the separate-audio path (each entry
+  /// pairs with the shared [audioUrl]); empty when only a muxed stream exists.
+  final List<YoutubeQuality> qualities;
+
   const YoutubeResolvedStreams({
     this.playUrl,
     this.audioUrl,
@@ -69,6 +85,7 @@ class YoutubeResolvedStreams {
     this.title,
     this.thumbnailUrl,
     this.durationSeconds,
+    this.qualities = const [],
   });
 
   bool get hasPlayable => playUrl != null && playUrl!.isNotEmpty;
@@ -361,6 +378,7 @@ class YoutubeService {
       // 360p stream below (also H.264).
       String? playUrl;
       String? audioUrl;
+      final qualities = <YoutubeQuality>[];
       final videoOnly = manifest.videoOnly
           .where((s) => s.videoCodec.toLowerCase().contains('avc'))
           .toList();
@@ -370,13 +388,26 @@ class YoutubeService {
       if (videoOnly.isNotEmpty && audioStreams.isNotEmpty) {
         videoOnly.sort(
             (a, b) => b.videoResolution.height.compareTo(a.videoResolution.height));
-        // Highest H.264 stream at or below the preferred height; if none exist
-        // that low, fall back to the lowest available (videoOnly is sorted
-        // descending, so .last is the smallest).
+
+        // Expose every distinct height (highest first) as a switchable quality —
+        // the whole point of in-player switching is to override the launch cap,
+        // so the list is NOT filtered to maxHeight (only the default pick below
+        // is). YouTube can list several bitrates per height; keep the first.
+        final seenHeights = <int>{};
+        for (final s in videoOnly) {
+          final h = s.videoResolution.height;
+          if (!seenHeights.add(h)) continue;
+          qualities.add(YoutubeQuality(height: h, videoUrl: s.url.toString()));
+        }
+
+        // Default pick = highest quality at or below the preferred height; if
+        // none that low, the lowest available. Chosen FROM the deduped list so
+        // [playUrl] is always one of [qualities] (the in-player "now playing"
+        // highlight matches by URL).
         final atOrBelow =
-            videoOnly.where((s) => s.videoResolution.height <= maxHeight).toList();
-        final chosenVideo = atOrBelow.isNotEmpty ? atOrBelow.first : videoOnly.last;
-        playUrl = chosenVideo.url.toString();
+            qualities.where((q) => q.height <= maxHeight).toList();
+        final chosen = atOrBelow.isNotEmpty ? atOrBelow.first : qualities.last;
+        playUrl = chosen.videoUrl;
 
         audioStreams.sort(
             (a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
@@ -409,6 +440,7 @@ class YoutubeService {
         title: title,
         thumbnailUrl: thumb,
         durationSeconds: duration,
+        qualities: qualities,
       );
     } finally {
       // Guarded: a close() failure must not replace a valid return value (or a
