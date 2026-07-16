@@ -286,6 +286,52 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Monotonic token so a slow earlier keyword search can't clobber a newer one.
   int _kwSearchToken = 0;
 
+  /// Infohashes already dispatched to a provider cache-check for the current
+  /// keyword search. Lets each streaming batch check only its fresh hashes.
+  final Set<String> _kwCacheChecked = {};
+
+  /// Whether a TorBox cache-check has successfully run this keyword search —
+  /// the precondition for cached-only mode (never hide rows on a thrown check).
+  bool _kwTbRan = false;
+
+  /// In-flight per-batch cache-check futures for the current search. The
+  /// completion sweep awaits these so cached-only mode is decided only once
+  /// every batch's badges have landed.
+  final List<Future<void>> _kwPendingChecks = [];
+
+  // Cache-check config, resolved ONCE per keyword search (freshly re-read each
+  // search, then reused across its streaming batches — no per-batch storage
+  // reads). Same gating as Home: pref on AND integration on AND key present.
+  bool _kwTbOn = false;
+  bool _kwPmOn = false;
+  String? _kwTbKey;
+  String? _kwPmKey;
+  bool _kwRdActive = false;
+
+  /// Reads the TorBox/Premiumize cache-check gating (+ RD-active, for cached-
+  /// only mode) into the `_kw*` fields. Awaited at the top of each search so
+  /// the streaming batch checks see up-to-date settings.
+  Future<void> _loadKwCacheConfig() async {
+    final r = await Future.wait([
+      StorageService.getTorboxCacheCheckEnabled(),
+      StorageService.getTorboxIntegrationEnabled(),
+      StorageService.getTorboxApiKey(),
+      StorageService.getPremiumizeCacheCheckEnabled(),
+      StorageService.getPremiumizeIntegrationEnabled(),
+      StorageService.getPremiumizeApiKey(),
+      StorageService.getApiKey(),
+      StorageService.getRealDebridIntegrationEnabled(),
+    ]);
+    final tbKey = r[2] as String?;
+    final pmKey = r[5] as String?;
+    final rdKey = r[6] as String?;
+    _kwTbOn = (r[0] as bool) && (r[1] as bool) && (tbKey?.isNotEmpty ?? false);
+    _kwPmOn = (r[3] as bool) && (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
+    _kwTbKey = tbKey;
+    _kwPmKey = pmKey;
+    _kwRdActive = (r[7] as bool) && (rdKey?.isNotEmpty ?? false);
+  }
+
   // ── Streaming keyword search (per-engine batches, Sources-list parity) ──
   /// Raw per-engine batches accumulated this search; merged provisionally so
   /// first rows paint as soon as the fastest engine answers.
@@ -2679,6 +2725,9 @@ class _SearchScreenState extends State<SearchScreen> {
     _kwStreamFrozen = false;
     _kwPending = null;
     _kwProviderSeen.clear();
+    _kwCacheChecked.clear();
+    _kwPendingChecks.clear();
+    _kwTbRan = false;
     _kwRefocusToolbar = refocusToolbar;
     setState(() {
       _kwLoading = true;
@@ -2710,8 +2759,17 @@ class _SearchScreenState extends State<SearchScreen> {
           TorrentService.mergeSearchResults(_kwBatches),
           token,
         );
+        // Stamp TB/PM badges on this engine's rows as they land, and record the
+        // future so the completion sweep can await it before deciding cached-
+        // only mode (settling it mid-stream would flicker rows in/out).
+        _kwPendingChecks.add(_checkKeywordCache(batch, token));
       }
 
+      // Resolve cache-check gating BEFORE the search starts so streaming
+      // batches badge against fresh settings (a superseded search's config
+      // load is harmless — its batches fail the token guard anyway).
+      await _loadKwCacheConfig();
+      if (!mounted || token != _kwSearchToken) return;
       final result =
           await TorrentService.searchAllEngines(query, onBatch: onBatch);
       // Drop stale results if a newer search started while this was in flight.
@@ -2807,7 +2865,9 @@ class _SearchScreenState extends State<SearchScreen> {
       _recomputeKeyword();
     }
     setState(() {}); // searching strip off
-    unawaited(_checkKeywordCache(full, token));
+    // Completion: await in-flight batch checks, sweep stragglers, then settle
+    // cached-only mode over the authoritative full set.
+    unawaited(_finalizeKeywordCache(full, token));
   }
 
   /// First real user interaction → stop live-reshuffling; buffer new arrivals
@@ -3276,72 +3336,81 @@ class _SearchScreenState extends State<SearchScreen> {
   /// seeders/size/date read most/largest/newest first (descending).
   bool _naturalAscFor(String field) => field == 'name';
 
-  /// Generation counter for [_checkKeywordCache]: adopt-pending and completion
-  /// both launch checks under the SAME search token, and the earlier (partial
-  /// set) check can resolve last — only the newest launch may commit.
-  int _kwCacheGen = 0;
-
-  /// Cache-check the results against TorBox/Premiumize (the only providers that
-  /// support it) and stamp TB/PM badges onto the rows.
+  /// Additive cache-check against TorBox/Premiumize (the only providers that
+  /// support it), stamping TB/PM badges onto [torrents]' rows. Called per
+  /// streaming batch and once as a completion sweep (via [_finalizeKeywordCache]).
+  ///
+  /// Results MERGE into [_kwCache] so earlier batches' badges survive. A hash is
+  /// added to [_kwCacheChecked] ONLY after every enabled provider resolved for
+  /// it — a thrown check leaves it un-memoized so a later batch or the finalize
+  /// sweep re-queries it (a transient failure must not permanently drop rows).
+  /// Cached-only mode is NOT decided here — see [_finalizeKeywordCache].
   Future<void> _checkKeywordCache(List<Torrent> torrents, int token) async {
-    final gen = ++_kwCacheGen;
-    final hashes = torrents
-        .map((t) => t.infohash.toLowerCase())
-        .where((h) => h.isNotEmpty)
-        .toList();
+    final hashes = <String>[];
+    for (final t in torrents) {
+      final h = t.infohash.toLowerCase();
+      // contains (not add): dispatch every not-yet-confirmed hash; memoization
+      // happens post-success below, so a failed hash stays retryable.
+      if (h.isEmpty || _kwCacheChecked.contains(h)) continue;
+      hashes.add(h);
+    }
     if (hashes.isEmpty) return;
-    final map = <String, List<String>>{};
-    // Tracks whether a TorBox cache-check actually ran (integration on, cache
-    // check on, key present) — the precondition for cached-only mode below.
-    bool torboxCacheActive = false;
-    // Only check a provider when the user has cache-checking enabled AND the
-    // integration is on AND a key is saved (matches Home's gating).
-    try {
-      final tb = await StorageService.getTorboxApiKey();
-      final enabled =
-          await StorageService.getTorboxCacheCheckEnabled() &&
-          await StorageService.getTorboxIntegrationEnabled();
-      if (enabled && tb != null && tb.isNotEmpty) {
+    final add = <String, List<String>>{};
+    // A provider is "done" for these hashes when it's not enabled (nothing to
+    // do) OR its check succeeded. Only when BOTH are done do we memoize.
+    bool tbDone = !(_kwTbOn && _kwTbKey != null);
+    bool pmDone = !(_kwPmOn && _kwPmKey != null);
+    bool tbOk = false;
+    if (_kwTbOn && _kwTbKey != null) {
+      try {
         final cached = await TorboxService.checkCachedTorrents(
-          apiKey: tb,
+          apiKey: _kwTbKey!,
           infoHashes: hashes,
         );
-        // Only now (a successful check) treat cached-only as viable — matching
-        // the old screen's `torboxCacheMap != null` guard. A thrown check must
-        // NOT hide every result.
-        torboxCacheActive = true;
+        tbDone = true;
+        tbOk = true;
         for (final h in cached) {
-          (map[h] ??= <String>[]).add('TB');
+          (add[h] ??= <String>[]).add('TB');
         }
-      }
-    } catch (_) {}
-    try {
-      final pm = await StorageService.getPremiumizeApiKey();
-      final enabled =
-          await StorageService.getPremiumizeCacheCheckEnabled() &&
-          await StorageService.getPremiumizeIntegrationEnabled();
-      if (enabled && pm != null && pm.isNotEmpty) {
-        final res = await PremiumizeService.checkCache(pm, hashes);
-        for (var i = 0; i < hashes.length && i < res.length; i++) {
-          if (res[i]) (map[hashes[i]] ??= <String>[]).add('PM');
-        }
-      }
-    } catch (_) {}
-    // Cached-only mode mirrors the old screen: when TorBox cache-checking is
-    // active and Real-Debrid is NOT configured, narrow the list to TorBox-cached
-    // torrents. RD users keep the full list (RD auto-adds uncached).
-    bool cachedOnly = false;
-    if (torboxCacheActive) {
-      final rdKey = await StorageService.getApiKey();
-      final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
-      final rdActive = rdEnabled && rdKey != null && rdKey.isNotEmpty;
-      cachedOnly = !rdActive;
+      } catch (_) {}
     }
-    // Drop badges from a superseded search OR a superseded (older) check —
-    // a partial-set check launched by an adopt must not clobber the final
-    // set's map if its HTTP round trip resolves later.
-    if (!mounted || token != _kwSearchToken || gen != _kwCacheGen) return;
-    _kwCache = map;
+    if (_kwPmOn && _kwPmKey != null) {
+      try {
+        final res = await PremiumizeService.checkCache(_kwPmKey!, hashes);
+        pmDone = true;
+        for (var i = 0; i < hashes.length && i < res.length; i++) {
+          if (res[i]) (add[hashes[i]] ??= <String>[]).add('PM');
+        }
+      } catch (_) {}
+    }
+    // Guard BEFORE mutating any shared state so a superseded search's late
+    // batch can't stamp badges, flip _kwTbRan, or memoize hashes for the new one.
+    if (!mounted || token != _kwSearchToken) return;
+    // A successful TorBox check is the precondition for cached-only mode (a
+    // thrown check must NOT hide every result).
+    if (tbOk) _kwTbRan = true;
+    _kwCache.addAll(add);
+    if (tbDone && pmDone) _kwCacheChecked.addAll(hashes);
+    setState(() {});
+  }
+
+  /// Completion: wait for every in-flight batch check so [_kwCache] and
+  /// [_kwTbRan] reflect the whole result set, sweep any hash a batch missed or
+  /// whose check failed, THEN settle cached-only mode. Deferring the decision
+  /// until the checks resolve is what prevents cached rows from being hidden by
+  /// a not-yet-returned batch — the failure mode of settling it mid-flight.
+  Future<void> _finalizeKeywordCache(List<Torrent> full, int token) async {
+    try {
+      await Future.wait(List<Future<void>>.from(_kwPendingChecks));
+    } catch (_) {}
+    if (!mounted || token != _kwSearchToken) return;
+    // Retry any hash still un-memoized (never dispatched, or a failed check).
+    await _checkKeywordCache(full, token);
+    if (!mounted || token != _kwSearchToken) return;
+    // Cached-only mode mirrors the old screen: when a TorBox cache-check ran
+    // this search and Real-Debrid is NOT configured, narrow the list to
+    // TorBox-cached torrents. RD users keep the full list (RD auto-adds uncached).
+    final cachedOnly = _kwTbRan && !_kwRdActive;
     if (cachedOnly != _kwCachedOnly) {
       // Cached-only mode toggles the visible set → full recompute.
       _kwCachedOnly = cachedOnly;
@@ -9037,6 +9106,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   Map<String, bool>? _pmCache;
   int _cacheToken = 0;
 
+  /// Infohashes already dispatched to a provider cache-check for the current
+  /// [_cacheToken] generation. Streaming batches accumulate cumulatively, so
+  /// this lets each batch check only the hashes an earlier batch hasn't —
+  /// no provider hash is ever queried twice per search.
+  final Set<String> _cacheChecked = {};
+
   // --- streaming search: rows appear per engine as each one finishes, instead
   // of waiting for the slowest engine's timeout. ---
   /// Raw per-source batches accumulated for the CURRENT search token; merged
@@ -9299,6 +9374,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   Future<void> _runSearch() async {
     final token = ++_searchToken;
     _streamBatches.clear();
+    // New search → reset the cache generation: drop the previous set's badges
+    // and checked-hash memo so streaming batches re-check from scratch. The
+    // bumped token also invalidates any still-in-flight check from the old set.
+    _cacheToken++;
+    _cacheChecked.clear();
+    _tbCache = null;
+    _pmCache = null;
     _searching = true;
     _streamFrozen = false;
     _pendingTorrents = null;
@@ -9330,6 +9412,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           TorrentService.mergeSearchResults(_streamBatches),
           token,
         );
+        // Badge THIS engine's new rows as soon as it lands — additive, so the
+        // final sweep in _finishSearch only mops up any hash no batch carried.
+        _maybeCheckCache(batch);
       }
 
       // Match Home's Sources list: the Stremio-aware search returns BOTH torrents
@@ -9497,10 +9582,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         _syncStreamNodes();
       }
     }
-    // Invalidate any in-flight cache check — this is the final result set —
-    // then re-check (non-blocking) for the ⚡ badges. Keep interim maps so
-    // badges already shown don't flicker off while the re-check runs.
-    _cacheToken++;
+    // Final result set: sweep any hash not yet dispatched by a streaming batch
+    // (non-blocking). In-flight batch checks share this generation and merge as
+    // they land, so already-shown badges never flicker off.
     setState(() {
       _loading = false;
     });
@@ -9561,7 +9645,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (p == null) return;
     _pendingTorrents = null;
     _applyStreamingResults(p);
-    _cacheToken++;
+    // Parked rows were already badged as their batches streamed in; this is a
+    // cheap additive mop-up for any straggler hash (skips already-checked).
     _maybeCheckCache();
   }
 
@@ -10081,7 +10166,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (_pendingTorrents != null) {
       _torrents = _pendingTorrents!;
       _pendingTorrents = null;
-      _cacheToken++;
       _maybeCheckCache();
     }
     final old = List<FocusNode>.from(_nodes);
@@ -10361,27 +10445,37 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     _maybeCheckCache();
   }
 
-  /// Kick a cache check iff the redesign is on, a provider is checkable, and
-  /// results are present. Called from every path that could complete last
-  /// (config load, flag load, search) — self-guarded, so it runs exactly once
-  /// the prerequisites are met.
-  void _maybeCheckCache() {
-    if (!_redesign || (!_tbCacheOn && !_pmCacheOn) || _torrents.isEmpty) return;
-    unawaited(_runCacheCheck());
+  /// Kick an additive cache check iff the redesign is on and a provider is
+  /// checkable. [rows] scopes the check to a specific set (a streaming batch);
+  /// null sweeps the whole current list. Called from every path that adds rows
+  /// (each batch, search completion, adopt) — [_runCacheCheck] skips hashes an
+  /// earlier call already dispatched, so it's cheap to over-call.
+  void _maybeCheckCache([List<Torrent>? rows]) {
+    if (!_redesign || (!_tbCacheOn && !_pmCacheOn)) return;
+    unawaited(_runCacheCheck(rows ?? _torrents));
   }
 
-  /// Non-blocking: results are already rendered; this fills the cache maps and
-  /// setStates to add the ⚡ badges. A token guards against a stale search's
-  /// check applying to newer results.
-  Future<void> _runCacheCheck() async {
+  /// Non-blocking: results are already rendered; this fills the cache maps for
+  /// the not-yet-confirmed hashes in [rows] and setStates to add the ⚡ badges.
+  /// MERGES into the maps (never replaces) so earlier batches' badges survive;
+  /// the [_cacheToken] generation guards against a stale search applying. A hash
+  /// enters [_cacheChecked] only after every enabled provider resolved for it,
+  /// so a thrown check leaves it retryable by a later batch or the finish sweep.
+  Future<void> _runCacheCheck(List<Torrent> rows) async {
     final token = _cacheToken;
-    final hashes = <String>{
-      for (final t in _torrents)
-        if (t.hasRealInfoHash) t.infohash.trim().toLowerCase(),
-    }..remove('');
-    if (hashes.isEmpty) return;
-    final list = hashes.toList();
+    final list = <String>[];
+    for (final t in rows) {
+      if (!t.hasRealInfoHash) continue;
+      final h = t.infohash.trim().toLowerCase();
+      // contains (not add): memoize post-success below, not on dispatch.
+      if (h.isEmpty || _cacheChecked.contains(h)) continue;
+      list.add(h);
+    }
+    if (list.isEmpty) return;
 
+    // "Done" = provider not enabled (nothing to do) OR its check succeeded.
+    bool tbDone = !(_tbCacheOn && _tbKey != null);
+    bool pmDone = !(_pmCacheOn && _pmKey != null);
     if (_tbCacheOn && _tbKey != null) {
       try {
         final cached = await TorboxService.checkCachedTorrents(
@@ -10389,19 +10483,24 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           infoHashes: list,
         );
         if (!mounted || token != _cacheToken) return;
-        _tbCache = {for (final h in list) h: cached.contains(h)};
+        (_tbCache ??= {}).addAll({for (final h in list) h: cached.contains(h)});
+        tbDone = true;
       } catch (_) {}
     }
     if (_pmCacheOn && _pmKey != null) {
       try {
         final res = await PremiumizeService.checkCache(_pmKey!, list);
         if (!mounted || token != _cacheToken) return;
-        _pmCache = {
+        (_pmCache ??= {}).addAll({
           for (var i = 0; i < list.length; i++)
             list[i]: i < res.length && res[i],
-        };
+        });
+        pmDone = true;
       } catch (_) {}
     }
+    // Only memoize hashes every enabled provider resolved; a failed provider
+    // leaves them out so the finish sweep re-queries them.
+    if (tbDone && pmDone) _cacheChecked.addAll(list);
     if (mounted && token == _cacheToken) setState(() {});
   }
 
