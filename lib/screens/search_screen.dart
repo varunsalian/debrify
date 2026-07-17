@@ -6929,6 +6929,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               // Catalog list items usually omit the rating; fall back
                               // to the enriched /meta details.
                               rating: item.imdbRating ?? enriched?.imdbRating,
+                              runtime:
+                                  item.runtimeDisplay ??
+                                  enriched?.runtimeDisplay,
                               compact: widget.searchMode,
                               isTelevision: tv,
                               height: heroH,
@@ -7077,130 +7080,232 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  /// The takeover's compact spotlight card: while the film owns the board,
-  /// only the showcased title's name and plot remain — top-left, small and
-  /// fully READABLE (this is information, not chrome, so it never dims).
-  /// Fades/settles in during the second half of the mask-open so it never
-  /// overlaps the outgoing board UI. IgnorePointer + no focus nodes: purely
-  /// informational, DPAD behavior is unchanged.
+  /// The takeover's kinetic lower-third: while the film owns the board its
+  /// identity sits bottom-left — a growing accent bar, then a whispered kicker,
+  /// a big uppercase title, a `year · runtime · ★rating` line and the genres,
+  /// each rising in a staggered cascade timed to the mask-open. Purely
+  /// informational (IgnorePointer, no focus nodes); every field degrades to
+  /// nothing when absent. The text subtrees are built only when the hero item /
+  /// enrichment changes and captured as locals — the per-frame builder just
+  /// wraps them in cheap Opacity/Transform, never a full-screen save layer.
   Widget _buildTakeoverInfoOverlay() {
-    // Text subtree as the animation builder's CHILD: it rebuilds only when
-    // the hero item / enrichment change, never per animation frame — the
-    // per-frame work is just the Opacity/Transform wrappers (and the Opacity
-    // layer is bounded to the small text block, not the screen).
-    final Widget content = ValueListenableBuilder<StremioMeta?>(
+    const accentLight = Color(0xFFC4B5FD);
+    return ValueListenableBuilder<StremioMeta?>(
       valueListenable: _heroItem,
       builder: (context, item, __) {
         if (item == null) return const SizedBox.shrink();
         return ValueListenableBuilder<StremioMeta?>(
           valueListenable: _heroEnriched,
           builder: (context, enriched, ___) {
-            final description = item.description?.isNotEmpty == true
-                ? item.description
-                : enriched?.description;
-            final metaParts = <String>[
-              if (item.year != null && item.year!.isNotEmpty) item.year!,
-              if (item.genres != null && item.genres!.isNotEmpty)
-                item.genres!.take(2).join(' · '),
-            ];
-            return ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
-                      letterSpacing: -0.2,
-                      color: Colors.white,
-                      shadows: const [
-                        Shadow(
-                          color: Colors.black87,
-                          blurRadius: 14,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
+            final rating = item.imdbRating ?? enriched?.imdbRating;
+            final runtime = item.runtimeDisplay ?? enriched?.runtimeDisplay;
+            final genres = item.genres?.isNotEmpty == true
+                ? item.genres
+                : enriched?.genres;
+
+            // year · runtime · ★rating — assembled once per item change.
+            final meta = <Widget>[];
+            void sep() {
+              if (meta.isNotEmpty) meta.add(_takeoverMetaDot());
+            }
+
+            if (item.year != null && item.year!.isNotEmpty) {
+              meta.add(_takeoverMetaText(item.year!));
+            }
+            if (runtime != null && runtime.isNotEmpty) {
+              sep();
+              meta.add(_takeoverMetaText(runtime));
+            }
+            if (rating != null) {
+              sep();
+              meta.add(
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.star_rounded,
+                      size: 17,
+                      color: HomeTheme.focusGold,
                     ),
+                    const SizedBox(width: 4),
+                    _takeoverMetaText(rating.toStringAsFixed(1)),
+                  ],
+                ),
+              );
+            }
+
+            final kicker = Text(
+              'NOW PLAYING  ·  OFFICIAL TRAILER',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 4,
+                color: accentLight,
+                shadows: [Shadow(color: Colors.black87, blurRadius: 8)],
+              ),
+            );
+            final title = Text(
+              item.name.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                fontSize: 46,
+                fontWeight: FontWeight.w800,
+                height: 0.98,
+                letterSpacing: -0.5,
+                color: Colors.white,
+                shadows: const [
+                  Shadow(
+                    color: Colors.black87,
+                    blurRadius: 18,
+                    offset: Offset(0, 3),
                   ),
-                  if (metaParts.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      metaParts.join('   ·   '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withValues(alpha: 0.78),
-                        shadows: const [
-                          Shadow(
-                            color: Colors.black87,
-                            blurRadius: 10,
-                            offset: Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (description != null && description.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      description,
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.5,
-                        color: Colors.white.withValues(alpha: 0.88),
-                        shadows: const [
-                          Shadow(
-                            color: Colors.black87,
-                            blurRadius: 10,
-                            offset: Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ),
+            );
+            final metaRow = Row(mainAxisSize: MainAxisSize.min, children: meta);
+            final genresLine = (genres == null || genres.isEmpty)
+                ? const SizedBox.shrink()
+                : Text(
+                    genres.take(3).join('   •   ').toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 3,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      shadows: const [
+                        Shadow(color: Colors.black87, blurRadius: 8),
+                      ],
+                    ),
+                  );
+
+            return ValueListenableBuilder<double>(
+              valueListenable: _heroTrailerTakeover,
+              builder: (context, takeover, ____) {
+                if (takeover <= 0.001) return const SizedBox.shrink();
+                double seg(double a, double b) =>
+                    ((takeover - a) / (b - a)).clamp(0.0, 1.0);
+                double eo(double x) {
+                  final u = 1 - x;
+                  return 1 - u * u * u;
+                }
+
+                // Each element rises + fades over its own window of the arc.
+                Widget rise(Widget w, double a, double b, {double dist = 14}) {
+                  final p = seg(a, b);
+                  return Opacity(
+                    opacity: p,
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - eo(p)) * dist),
+                      child: w,
+                    ),
+                  );
+                }
+
+                final accentP = eo(seg(0.42, 0.72));
+                final slideP = eo(seg(0.42, 0.78));
+
+                return IgnorePointer(
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(52, 0, 48, 54),
+                      child: IntrinsicHeight(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Accent bar grows up from the foot of the block.
+                            Transform(
+                              alignment: Alignment.bottomCenter,
+                              transform: Matrix4.diagonal3Values(1, accentP, 1),
+                              child: Container(
+                                width: 5,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      HomeTheme.chromeAccent,
+                                      accentLight,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            // The whole text block slides in from the left.
+                            Transform.translate(
+                              offset: Offset(-46 * (1 - slideP), 0),
+                              child: Opacity(
+                                opacity: seg(0.42, 0.6),
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 720,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      rise(kicker, 0.44, 0.6, dist: 8),
+                                      const SizedBox(height: 12),
+                                      rise(title, 0.5, 0.8),
+                                      if (meta.isNotEmpty) ...[
+                                        const SizedBox(height: 14),
+                                        rise(metaRow, 0.66, 0.9, dist: 12),
+                                      ],
+                                      if (genres != null &&
+                                          genres.isNotEmpty) ...[
+                                        const SizedBox(height: 10),
+                                        rise(genresLine, 0.76, 1.0, dist: 10),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             );
           },
         );
       },
     );
-
-    return ValueListenableBuilder<double>(
-      valueListenable: _heroTrailerTakeover,
-      child: content,
-      builder: (context, takeover, kid) {
-        // Enter during the takeover's back half; gone instantly with it.
-        final t = ((takeover - 0.45) / 0.55).clamp(0.0, 1.0);
-        if (t <= 0.001) return const SizedBox.shrink();
-        return IgnorePointer(
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(48, 40, 48, 0),
-              child: Opacity(
-                opacity: t,
-                child: Transform.translate(
-                  offset: Offset(0, 10 * (1 - t)),
-                  child: kid,
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
+
+  /// A metadata token in the takeover's lower-third meta line.
+  Widget _takeoverMetaText(String s) => Text(
+    s,
+    style: TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+      color: Colors.white.withValues(alpha: 0.9),
+      shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
+    ),
+  );
+
+  /// The dot separator between takeover meta tokens.
+  Widget _takeoverMetaDot() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    child: Container(
+      width: 4,
+      height: 4,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.45),
+        shape: BoxShape.circle,
+      ),
+    ),
+  );
 
   /// Status strip for a streaming catalog search (see the call site in
   /// [_buildBoard]). Fixed height so the swap from "searching" bar to the
@@ -7957,6 +8062,10 @@ class _HeroSpotlight extends StatefulWidget {
   /// or its enriched /meta details, since catalog list items often omit it).
   final double? rating;
 
+  /// Runtime label ("2h 47m") for the meta line — resolved by the host from the
+  /// item or its enriched /meta details (catalog rows usually omit it).
+  final String? runtime;
+
   /// Compact layout for the Search tab: smaller title, single-line plot and
   /// tighter spacing so the whole spotlight fits a short strip without pushing
   /// the results off-screen.
@@ -7985,6 +8094,7 @@ class _HeroSpotlight extends StatefulWidget {
     required this.isTelevision,
     required this.height,
     this.rating,
+    this.runtime,
     this.compact = false,
     this.tint,
     this.trailerLoading,
@@ -8121,8 +8231,10 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     final bg = (background != null && background.isNotEmpty)
         ? background
         : (item.poster ?? '');
+    final runtime = widget.runtime;
     final metaParts = <String>[
       if (item.year != null && item.year!.isNotEmpty) item.year!,
+      if (runtime != null && runtime.isNotEmpty) runtime,
       if (item.genres != null && item.genres!.isNotEmpty)
         item.genres!.take(2).join(' · '),
     ];
@@ -8491,11 +8603,27 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
   GlobalKey _backdropKey = GlobalKey();
   String? _backdropUrl;
 
+  /// The streams actually being rendered. Normally mirrors `widget.trailer`,
+  /// but during a graceful dismiss it OUTLIVES a null from the host so the
+  /// video keeps playing while the mask eases back down to the hero shape —
+  /// unmounted only once that collapse lands. A new trailer replaces it at once.
+  YoutubeResolvedStreams? _held;
+
+  /// True while easing the mask down after the trailer was cleared mid-takeover
+  /// — the cue to unmount [_held] when the reverse reaches the hero shape.
+  bool _collapsing = false;
+
+  /// The graceful dismiss is quicker than the 10s promote-in — a deliberate,
+  /// readable settle rather than a snap.
+  static const Duration _collapseDuration = Duration(milliseconds: 900);
+
   @override
   void initState() {
     super.initState();
+    _held = widget.trailer.value;
     widget.trailer.addListener(_onTrailerChanged);
     _promote.addListener(_publishTakeover);
+    _promote.addStatusListener(_onPromoteStatus);
   }
 
   void _publishTakeover() {
@@ -8508,6 +8636,11 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
     if (!identical(old.trailer, widget.trailer)) {
       old.trailer.removeListener(_onTrailerChanged);
       widget.trailer.addListener(_onTrailerChanged);
+      // We render from _held (not the listenable directly), so re-sync it to
+      // the new notifier's current value — the rebuild from didUpdateWidget
+      // then reflects it without waiting for the next fire.
+      _collapsing = false;
+      _held = widget.trailer.value;
     }
     if (!identical(old.takeover, widget.takeover)) {
       // didUpdateWidget runs during build — a synchronous notifier write here
@@ -8531,12 +8664,38 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
 
   void _onTrailerChanged() {
     if (!mounted) return;
-    if (widget.trailer.value == null) {
-      // Hero moved on — the video is unmounting right now, so snap the mask
-      // state back for the next title (nothing visible to animate; the host's
-      // follower tween eases the chrome back in).
-      _promoteTimer?.cancel();
+    final next = widget.trailer.value;
+    if (next != null) {
+      // A trailer arrived — the first resolve, or a fresh one for a new hero.
+      // Adopt it now (its own URL/key mounts a fresh engine); any pending
+      // collapse is moot, the new video simply plays ambient.
+      _collapsing = false;
+      setState(() => _held = next);
+      return;
+    }
+    // Cleared (hero moved on, a key press, content launched). If the film is
+    // filling the board, DON'T snap the video away — keep it playing and ease
+    // the mask gracefully back down to the hero shape, unmounting only once it
+    // lands (see [_onPromoteStatus]). From the ambient state there's nothing
+    // to animate, so drop it immediately.
+    _promoteTimer?.cancel();
+    if (_promote.value > 0) {
+      _collapsing = true;
+      _promote.animateBack(0.0, duration: _collapseDuration);
+    } else {
       _promote.value = 0;
+      setState(() => _held = null);
+    }
+  }
+
+  /// The collapse landed: the mask is back at the hero shape, so drop the held
+  /// video (unmount + dispose its engine) — unless a new trailer arrived first.
+  void _onPromoteStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && _collapsing) {
+      _collapsing = false;
+      if (mounted && widget.trailer.value == null) {
+        setState(() => _held = null);
+      }
     }
   }
 
@@ -8564,138 +8723,137 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<YoutubeResolvedStreams?>(
-      valueListenable: widget.trailer,
-      builder: (context, streams, _) {
-        if (streams == null || !streams.hasPlayable) {
+    // Render from _held (not widget.trailer directly) so the video survives a
+    // mid-takeover clear for the length of the collapse — setState on _held
+    // drives the rebuilds.
+    final streams = _held;
+    if (streams == null || !streams.hasPlayable) {
+      return const SizedBox.shrink();
+    }
+    if (streams.playUrl != _backdropUrl) {
+      _backdropUrl = streams.playUrl;
+      _backdropKey = GlobalKey();
+    }
+    final video = HeroTrailerBackdrop(
+      key: _backdropKey,
+      imageUrl: null,
+      videoUrl: streams.playUrl,
+      audioUrl: streams.audioUrl,
+      enabled: true,
+      // No blur layers — a per-frame filter pass over the video surface
+      // is what stutters weak TV GPUs (same rationale as the detail page).
+      imageBlurSigma: 0,
+      videoBlurSigma: 0,
+      // The host already debounced for focus-rest; keep just enough
+      // delay to absorb an immediate focus move.
+      startDelay: const Duration(milliseconds: 300),
+      ambientVolume: widget.volume,
+      onPlayingChanged: _onPlaying,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final boardH = constraints.maxHeight;
+        final boardW = constraints.maxWidth;
+        // Degenerate layout (mid-transition zero-height pass): the mask
+        // math below divides by boardH — bail rather than NaN a gradient.
+        if (!boardH.isFinite ||
+            boardH <= 0 ||
+            !boardW.isFinite ||
+            boardW <= 0) {
           return const SizedBox.shrink();
         }
-        if (streams.playUrl != _backdropUrl) {
-          _backdropUrl = streams.playUrl;
-          _backdropKey = GlobalKey();
-        }
-        final video = HeroTrailerBackdrop(
-          key: _backdropKey,
-          imageUrl: null,
-          videoUrl: streams.playUrl,
-          audioUrl: streams.audioUrl,
-          enabled: true,
-          // No blur layers — a per-frame filter pass over the video surface
-          // is what stutters weak TV GPUs (same rationale as the detail page).
-          imageBlurSigma: 0,
-          videoBlurSigma: 0,
-          // The host already debounced for focus-rest; keep just enough
-          // delay to absorb an immediate focus move.
-          startDelay: const Duration(milliseconds: 300),
-          ambientVolume: widget.volume,
-          onPlayingChanged: _onPlaying,
+        final heroH = widget.heroHeight.clamp(0.0, boardH);
+        // The board is inset by the collapsed sidebar rail's width, so a
+        // board-sized video leaves a rail-wide strip of page background
+        // when the rail hides during the takeover. Lay the whole layer
+        // out that much WIDER, hanging out to the left UNDER the rail:
+        // invisible while ambient (the collapsed rail paints opaque), and
+        // when the rail fades the strip reveals video — true full-bleed,
+        // no seam, no relayout, nothing pops. Paint-overflow only; no
+        // ancestor between here and the screen edge clips.
+        final fullW = boardW + TvSidebarNav.collapsedWidth;
+        Widget fullBleed(Widget child) => OverflowBox(
+          alignment: Alignment.centerRight,
+          minWidth: fullW,
+          maxWidth: fullW,
+          minHeight: boardH,
+          maxHeight: boardH,
+          child: child,
         );
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final boardH = constraints.maxHeight;
-            final boardW = constraints.maxWidth;
-            // Degenerate layout (mid-transition zero-height pass): the mask
-            // math below divides by boardH — bail rather than NaN a gradient.
-            if (!boardH.isFinite ||
-                boardH <= 0 ||
-                !boardW.isFinite ||
-                boardW <= 0) {
-              return const SizedBox.shrink();
+        return AnimatedBuilder(
+          animation: _promote,
+          child: video,
+          builder: (context, child) {
+            final t = _promoteT;
+            // Fully promoted steady state: bare video + scrim — no clip,
+            // no mask, no per-frame saveLayer. The GlobalKey carries the
+            // playing element across this branch swap untouched.
+            final Widget surface;
+            if (t >= 1.0) {
+              surface = child!;
+            } else {
+              // Ambient/transitional: clip to the (growing) visible slab
+              // so the mask's saveLayer never costs more area than is
+              // actually revealed, and melt the bottom edge exactly like
+              // the hero image does (opaque to 55% of the slab, gone by
+              // its end) — stops expressed against the full board height.
+              final visibleH = lerpDouble(heroH, boardH, t)!;
+              final opaqueTo = lerpDouble(0.55 * heroH / boardH, 1.0, t)!;
+              final fadeTo = lerpDouble(heroH / boardH, 1.0, t)!;
+              surface = ClipRect(
+                clipper: _TopSliceClipper(visibleH),
+                child: ShaderMask(
+                  shaderCallback: (rect) => LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: const [
+                      Colors.white,
+                      Colors.white,
+                      Colors.transparent,
+                    ],
+                    stops: [0.0, opaqueTo, fadeTo],
+                  ).createShader(rect),
+                  blendMode: BlendMode.dstIn,
+                  child: child,
+                ),
+              );
             }
-            final heroH = widget.heroHeight.clamp(0.0, boardH);
-            // The board is inset by the collapsed sidebar rail's width, so a
-            // board-sized video leaves a rail-wide strip of page background
-            // when the rail hides during the takeover. Lay the whole layer
-            // out that much WIDER, hanging out to the left UNDER the rail:
-            // invisible while ambient (the collapsed rail paints opaque), and
-            // when the rail fades the strip reveals video — true full-bleed,
-            // no seam, no relayout, nothing pops. Paint-overflow only; no
-            // ancestor between here and the screen edge clips.
-            final fullW = boardW + TvSidebarNav.collapsedWidth;
-            Widget fullBleed(Widget child) => OverflowBox(
-              alignment: Alignment.centerRight,
-              minWidth: fullW,
-              maxWidth: fullW,
-              minHeight: boardH,
-              maxHeight: boardH,
-              child: child,
-            );
-            return AnimatedBuilder(
-              animation: _promote,
-              child: video,
-              builder: (context, child) {
-                final t = _promoteT;
-                // Fully promoted steady state: bare video + scrim — no clip,
-                // no mask, no per-frame saveLayer. The GlobalKey carries the
-                // playing element across this branch swap untouched.
-                final Widget surface;
-                if (t >= 1.0) {
-                  surface = child!;
-                } else {
-                  // Ambient/transitional: clip to the (growing) visible slab
-                  // so the mask's saveLayer never costs more area than is
-                  // actually revealed, and melt the bottom edge exactly like
-                  // the hero image does (opaque to 55% of the slab, gone by
-                  // its end) — stops expressed against the full board height.
-                  final visibleH = lerpDouble(heroH, boardH, t)!;
-                  final opaqueTo = lerpDouble(0.55 * heroH / boardH, 1.0, t)!;
-                  final fadeTo = lerpDouble(heroH / boardH, 1.0, t)!;
-                  surface = ClipRect(
-                    clipper: _TopSliceClipper(visibleH),
-                    child: ShaderMask(
-                      shaderCallback: (rect) => LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: const [
-                          Colors.white,
-                          Colors.white,
-                          Colors.transparent,
-                        ],
-                        stops: [0.0, opaqueTo, fadeTo],
-                      ).createShader(rect),
-                      blendMode: BlendMode.dstIn,
-                      child: child,
-                    ),
-                  );
-                }
-                return fullBleed(
-                  Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      RepaintBoundary(child: surface),
-                      // Legibility gradient over the promoted video — slightly
-                    // heavier at the top (the title/description overlay lives
-                    // there) and at the foot, light in the middle so the film
-                    // stays bright. Fade baked into the gradient's alphas
-                    // (NOT an Opacity wrapper, whose mid values would force a
-                    // full-screen saveLayer every frame) — always layer-free.
-                    if (t > 0.001)
-                      IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                const Color(
-                                  0xFF0D0B1A,
-                                ).withValues(alpha: 0.34 * t),
-                                const Color(
-                                  0xFF0D0B1A,
-                                ).withValues(alpha: 0.08 * t),
-                                const Color(
-                                  0xFF0D0B1A,
-                                ).withValues(alpha: 0.36 * t),
-                              ],
-                              stops: const [0.0, 0.45, 1.0],
-                            ),
+            return fullBleed(
+              Stack(
+                fit: StackFit.expand,
+                children: [
+                  RepaintBoundary(child: surface),
+                  // Legibility gradient over the promoted video — slightly
+                  // heavier at the top (the title/description overlay lives
+                  // there) and at the foot, light in the middle so the film
+                  // stays bright. Fade baked into the gradient's alphas
+                  // (NOT an Opacity wrapper, whose mid values would force a
+                  // full-screen saveLayer every frame) — always layer-free.
+                  if (t > 0.001)
+                    IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              const Color(
+                                0xFF0D0B1A,
+                              ).withValues(alpha: 0.34 * t),
+                              const Color(
+                                0xFF0D0B1A,
+                              ).withValues(alpha: 0.08 * t),
+                              const Color(
+                                0xFF0D0B1A,
+                              ).withValues(alpha: 0.36 * t),
+                            ],
+                            stops: const [0.0, 0.45, 1.0],
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                );
-              },
+                    ),
+                ],
+              ),
             );
           },
         );

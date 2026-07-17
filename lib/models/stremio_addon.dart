@@ -166,6 +166,12 @@ class StremioMeta {
   /// Genres
   final List<String>? genres;
 
+  /// Runtime string exactly as the metadata addon provides it — Cinemeta gives
+  /// e.g. "167 min". Frequently absent on catalog list items (like the rating),
+  /// so it's resolved from the enriched /meta details. See [runtimeDisplay] for
+  /// the "2h 47m" form used in the UI.
+  final String? runtime;
+
   /// The addon this result came from (set during aggregated search)
   final StremioAddon? sourceAddon;
 
@@ -185,6 +191,7 @@ class StremioMeta {
     this.year,
     this.imdbRating,
     this.genres,
+    this.runtime,
     this.sourceAddon,
     this.trailerYtId,
   });
@@ -201,6 +208,7 @@ class StremioMeta {
     year: year,
     imdbRating: imdbRating,
     genres: genres,
+    runtime: runtime,
     sourceAddon: addon,
     trailerYtId: trailerYtId,
   );
@@ -232,6 +240,15 @@ class StremioMeta {
       }
       if (firstSource != null) return firstSource;
     }
+    return null;
+  }
+
+  /// Normalise a raw runtime value to a display string. Cinemeta sends a string
+  /// like "167 min"; some addons send a bare minute count. Anything else is
+  /// kept verbatim so we never lose information we can't interpret.
+  static String? _parseRuntime(dynamic raw) {
+    if (raw is String && raw.trim().isNotEmpty) return raw.trim();
+    if (raw is num && raw > 0) return '${raw.toInt()} min';
     return null;
   }
 
@@ -327,12 +344,31 @@ class StremioMeta {
       year: year,
       imdbRating: rating,
       genres: (json['genres'] as List<dynamic>?)?.cast<String>(),
+      runtime: _parseRuntime(json['runtime']),
       sourceAddon: _parseSourceAddon(
         json['source_addon'] ?? json['sourceAddon'],
       ),
-      trailerYtId:
-          json['trailer_yt_id'] as String? ?? _parseTrailerYtId(json),
+      trailerYtId: json['trailer_yt_id'] as String? ?? _parseTrailerYtId(json),
     );
+  }
+
+  /// Human "2h 47m" form of [runtime]. Parses the leading minute count from
+  /// Cinemeta's "167 min"; falls back to the raw string when it isn't
+  /// minute-shaped, and null when there's no runtime at all.
+  String? get runtimeDisplay {
+    final raw = runtime?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    // Already carries an hour marker (e.g. "2h 47m") — trust it rather than
+    // mis-reading the leading "2" as a minute count.
+    if (raw.contains('h') || raw.contains('H')) return raw;
+    final m = RegExp(r'^(\d+)').firstMatch(raw);
+    if (m == null) return raw;
+    final mins = int.parse(m.group(1)!);
+    if (mins <= 0) return null;
+    final h = mins ~/ 60, mm = mins % 60;
+    if (h == 0) return '${mm}m';
+    if (mm == 0) return '${h}h';
+    return '${h}h ${mm}m';
   }
 
   /// Check if this has a resolved IMDB ID (either from id or imdb_id/links)
@@ -361,6 +397,7 @@ class StremioMeta {
       if (year != null) 'year': year,
       if (imdbRating != null) 'rating': imdbRating,
       if (genres != null && genres!.isNotEmpty) 'genres': genres,
+      if (runtime != null) 'runtime': runtime,
       if (sourceAddonJson != null) 'source_addon': sourceAddonJson,
       if (trailerYtId != null) 'trailer_yt_id': trailerYtId,
     };
