@@ -44,6 +44,9 @@ class ContinueWatchingSeeAllScreen extends StatefulWidget {
   final Future<List<StremioMeta>> Function()? onReload;
 
   final void Function(StremioMeta item)? onQuickPlay;
+
+  /// Fires when a grid tile gains focus — drives the Discover detail rail.
+  final void Function(StremioMeta item)? onItemFocused;
   final bool Function(StremioMeta item)? isBound;
   final bool isTelevision;
 
@@ -63,6 +66,7 @@ class ContinueWatchingSeeAllScreen extends StatefulWidget {
     this.initialCategory = 'all',
     this.onReload,
     this.onQuickPlay,
+    this.onItemFocused,
     this.isBound,
     this.isTelevision = false,
     this.embedded = false,
@@ -389,6 +393,9 @@ class _ContinueWatchingSeeAllScreenState
       exhausted: true, // finite, in-memory list — no paging
       onOpen: widget.onOpen,
       onQuickPlay: widget.onQuickPlay,
+      onItemFocused: widget.onItemFocused,
+      // Discover on TV has the detail rail naming the type — drop the badge there.
+      showTypeBadge: !(widget.embedded && widget.isTelevision),
       progressOf: widget.progressOf,
       isBound: widget.isBound,
       onLoadMore: () {},

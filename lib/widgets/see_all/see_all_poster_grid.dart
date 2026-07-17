@@ -93,6 +93,14 @@ class SeeAllPosterGrid extends StatefulWidget {
   /// Optional long-press / Quick Play straight from the grid.
   final void Function(StremioMeta item)? onQuickPlay;
 
+  /// Fires when a tile gains focus — carries the focused item up to the host
+  /// (the Discover two-pane detail rail listens to this).
+  final void Function(StremioMeta item)? onItemFocused;
+
+  /// Forwarded to each tile — false drops the MOVIE/SERIES badge (Discover TV,
+  /// where the detail rail already names the type). Defaults to showing it.
+  final bool showTypeBadge;
+
   /// Optional resume progress (0..1) per item — draws the red bar.
   final double? Function(StremioMeta item)? progressOf;
 
@@ -117,6 +125,8 @@ class SeeAllPosterGrid extends StatefulWidget {
     required this.onOpen,
     required this.onLoadMore,
     this.onQuickPlay,
+    this.onItemFocused,
+    this.showTypeBadge = true,
     this.progressOf,
     this.isBound,
     this.onExitTop,
@@ -290,8 +300,12 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                           onLongPress: widget.onQuickPlay == null
                               ? null
                               : () => widget.onQuickPlay!(item),
+                          onFocused: widget.onItemFocused == null
+                              ? null
+                              : () => widget.onItemFocused!(item),
                           progress: widget.progressOf?.call(item),
                           showInlineTitle: false,
+                          showTypeBadge: widget.showTypeBadge,
                         ),
                       ),
                       const SizedBox(height: titleGap),

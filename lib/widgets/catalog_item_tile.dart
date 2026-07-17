@@ -23,6 +23,11 @@ class CatalogItemTile extends StatefulWidget {
   /// Optional long-press action (Quick Play). When null, long-press is a no-op.
   final VoidCallback? onLongPress;
 
+  /// Fires when this tile *gains* DPAD/hover focus — the hook the Discover
+  /// two-pane detail rail uses to know which item to preview. Not called on
+  /// blur (the rail keeps showing the last-focused title, Plex-style).
+  final VoidCallback? onFocused;
+
   /// Optional watch progress (0..1). When > 0 a slim bar is pinned to the
   /// bottom of the poster — used by the Trakt "continue watching" grid.
   final double? progress;
@@ -32,6 +37,12 @@ class CatalogItemTile extends StatefulWidget {
   /// (the See-All grid), so the two don't stack.
   final bool showInlineTitle;
 
+  /// When false the MOVIE/SERIES glass badge is dropped — used by the Discover
+  /// two-pane on TV, where the detail rail already names the type, so the badge
+  /// is redundant clutter. Left on everywhere else (Home board, search, Trakt
+  /// results) so mixed-type grids keep their at-a-glance type label.
+  final bool showTypeBadge;
+
   const CatalogItemTile({
     super.key,
     required this.item,
@@ -40,8 +51,10 @@ class CatalogItemTile extends StatefulWidget {
     required this.hasBoundSource,
     required this.onOpen,
     this.onLongPress,
+    this.onFocused,
     this.progress,
     this.showInlineTitle = true,
+    this.showTypeBadge = true,
   });
 
   @override
@@ -157,11 +170,12 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                   ),
                 ),
 
-              Positioned(
-                top: 10,
-                left: 10,
-                child: _GlassChip(label: typeLabel),
-              ),
+              if (widget.showTypeBadge)
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: _GlassChip(label: typeLabel),
+                ),
 
               if (rating != null)
                 Positioned(
@@ -268,6 +282,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
           _keyDownReceived = false;
         }
         if (f) {
+          widget.onFocused?.call();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             Scrollable.ensureVisible(

@@ -1,0 +1,620 @@
+import 'dart:async';
+import 'dart:ui' show lerpDouble;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../../models/stremio_addon.dart';
+import '../../services/youtube_service.dart';
+import '../hero_trailer_backdrop.dart';
+import '../home/home_theme.dart';
+import 'see_all_theme.dart';
+
+/// The full-screen ambient-trailer layer for the TV Discover two-pane. It sits
+/// ABOVE the two-pane and renders the trailer the rail resolved, positioned so
+/// it reads as a window inside the rail's backdrop box — then, after a few
+/// seconds of watching, it promotes to fullscreen (like the Home hero board
+/// takeover). Any key eases it back to the window, playback never stopping.
+///
+/// Glitch-free growth (the whole game on weak TV silicon): the video is laid
+/// out at the full stage size ONCE and never re-fitted. A [FittedBox] scales
+/// that fixed surface down into the rail rect while ambient and up to fullscreen
+/// on promote — a paint-time transform, not a platform-view resize. A
+/// [GlobalKey] pins the player element so the animation never remounts it.
+class DiscoverTrailerStage extends StatefulWidget {
+  /// The streams the rail resolved for the focused title; null → nothing plays.
+  final ValueListenable<YoutubeResolvedStreams?> trailer;
+
+  /// Shared loading flag — the rail sets it true while resolving; this layer
+  /// drops it the instant the trailer produces frames.
+  final ValueNotifier<bool> loading;
+
+  /// Ambient volume (0–100; 0 = silent). Read once at mount — the rail only
+  /// publishes streams after the settings load, so it's always current by then.
+  final ValueListenable<double> volume;
+
+  /// The enriched title behind the current trailer — drives the fullscreen
+  /// takeover's name/meta overlay.
+  final ValueListenable<StremioMeta?> meta;
+
+  /// The rail's backdrop-box rect in this layer's coordinate space — the shape
+  /// of the ambient window.
+  final Rect railRect;
+
+  /// Published promote progress (eased 0→1). The host recedes the two-pane with
+  /// it so the cards dim out as the trailer takes over.
+  final ValueNotifier<double>? takeover;
+
+  const DiscoverTrailerStage({
+    super.key,
+    required this.trailer,
+    required this.loading,
+    required this.volume,
+    required this.meta,
+    required this.railRect,
+    this.takeover,
+  });
+
+  @override
+  State<DiscoverTrailerStage> createState() => _DiscoverTrailerStageState();
+}
+
+class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
+    with SingleTickerProviderStateMixin {
+  /// Continuous watching before the trailer takes the screen over.
+  static const Duration _promoteAfter = Duration(seconds: 6);
+
+  /// Graceful settle back to the window — quicker than the promote-in.
+  static const Duration _collapseDuration = Duration(milliseconds: 900);
+
+  late final AnimationController _promote = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
+
+  double get _promoteT => Curves.easeInOutCubic.transform(_promote.value);
+
+  Timer? _promoteTimer;
+
+  /// The streams actually rendered. Normally mirrors [widget.trailer], but
+  /// outlives a null during a graceful collapse so the video keeps playing while
+  /// the window eases back — unmounted only once that collapse lands.
+  YoutubeResolvedStreams? _held;
+  bool _collapsing = false;
+
+  /// The takeover overlay's title — held alongside [_held] so it survives (and
+  /// fades out with) the graceful collapse rather than snapping away when the
+  /// rail nulls the shared notifier. Refreshed on late enrichment via
+  /// [_onMetaChanged]; cleared only when [_held] is.
+  StremioMeta? _heldMeta;
+
+  /// Set when the user pressed a key to minimize; blocks an immediate re-promote
+  /// of the same title (they asked for the window — don't fight them). Cleared
+  /// when a new trailer arrives.
+  bool _dismissed = false;
+
+  /// Pins the player element across rebuilds; replaced per URL so each title
+  /// still spins a fresh engine.
+  GlobalKey _backdropKey = GlobalKey();
+  String? _backdropUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _held = widget.trailer.value;
+    _heldMeta = widget.meta.value;
+    widget.trailer.addListener(_onTrailerChanged);
+    widget.meta.addListener(_onMetaChanged);
+    _promote.addListener(_publishTakeover);
+    _promote.addStatusListener(_onPromoteStatus);
+    HardwareKeyboard.instance.addHandler(_onTakeoverKey);
+    // A prior stage may have been torn down mid-takeover (e.g. a sub-threshold
+    // resize dropped the two-pane) leaving the shared takeover notifier non-zero
+    // — which would curtain the grid behind a dark scrim on remount. Publish a
+    // clean 0 once this frame settles (a synchronous write here would mark the
+    // already-built scrim dirty mid-build).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _promote.value == 0) _publishTakeover();
+    });
+  }
+
+  @override
+  void didUpdateWidget(DiscoverTrailerStage old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.trailer, widget.trailer)) {
+      old.trailer.removeListener(_onTrailerChanged);
+      widget.trailer.addListener(_onTrailerChanged);
+      _collapsing = false;
+      _held = widget.trailer.value;
+    }
+    if (!identical(old.meta, widget.meta)) {
+      old.meta.removeListener(_onMetaChanged);
+      widget.meta.addListener(_onMetaChanged);
+      _heldMeta = widget.meta.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.trailer.removeListener(_onTrailerChanged);
+    widget.meta.removeListener(_onMetaChanged);
+    HardwareKeyboard.instance.removeHandler(_onTakeoverKey);
+    _promoteTimer?.cancel();
+    _promote.dispose();
+    super.dispose();
+  }
+
+  void _publishTakeover() => widget.takeover?.value = _promoteT;
+
+  /// Adopt a non-null meta (new title, or a late enrichment for the current one).
+  /// Never clears here — the overlay must outlive the shared notifier's null
+  /// during a graceful collapse; [_heldMeta] drops only when [_held] does.
+  void _onMetaChanged() {
+    final m = widget.meta.value;
+    if (m != null && mounted) setState(() => _heldMeta = m);
+  }
+
+  void _onTrailerChanged() {
+    if (!mounted) return;
+    final next = widget.trailer.value;
+    if (next != null) {
+      _collapsing = false;
+      _dismissed = false;
+      setState(() => _held = next);
+      return;
+    }
+    // Cleared (focus moved, suppressed, playback launched). If we're promoted,
+    // don't snap — ease the window back down and unmount when it lands.
+    _promoteTimer?.cancel();
+    if (_promote.value > 0) {
+      // Keep _held AND _heldMeta through the collapse so the video and its
+      // title/meta overlay fade out together.
+      _collapsing = true;
+      _promote.animateBack(0.0, duration: _collapseDuration);
+    } else {
+      _promote.value = 0;
+      setState(() {
+        _held = null;
+        _heldMeta = null;
+      });
+    }
+  }
+
+  void _onPromoteStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && _collapsing) {
+      _collapsing = false;
+      if (mounted && widget.trailer.value == null) {
+        setState(() {
+          _held = null;
+          _heldMeta = null;
+        });
+      }
+    }
+  }
+
+  void _onPlaying(bool playing) {
+    if (!mounted) return;
+    if (playing) {
+      widget.loading.value = false; // frames are up — drop the pill
+      _promoteTimer?.cancel();
+      if (_dismissed) return; // user minimized this title; don't re-promote
+      _promoteTimer = Timer(_promoteAfter, () {
+        if (!mounted || widget.trailer.value == null || _dismissed) return;
+        // A sheet/dialog may sit over the board (the route observer only sees
+        // PageRoutes) — never take the screen over under one.
+        if (ModalRoute.of(context)?.isCurrent != true) return;
+        _promote.forward();
+      });
+    } else {
+      // Cancel a not-yet-fired promote so a stall before takeover doesn't promote
+      // a frozen frame. Do NOT reverse an active takeover: a transient buffer
+      // stall flips this false then true, and reversing would shrink the
+      // fullscreen video to the window and re-grow it on every hiccup. A real
+      // teardown clears the streams and collapses through _onTrailerChanged; a
+      // dead frozen takeover is always recoverable with any key.
+      _promoteTimer?.cancel();
+    }
+  }
+
+  /// Any key while promoted eases the trailer back into the window (still
+  /// playing) — observe-only, so the key also does its normal job (e.g. DPAD
+  /// still moves the grid). Mirrors the Home board's takeover-dismiss.
+  bool _onTakeoverKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (_promote.value <= 0.02) return false;
+    _dismissed = true;
+    _promoteTimer?.cancel();
+    _promote.animateBack(0.0, duration: _collapseDuration);
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final streams = _held;
+    if (streams == null || !streams.hasPlayable) return const SizedBox.shrink();
+    if (streams.playUrl != _backdropUrl) {
+      _backdropUrl = streams.playUrl;
+      _backdropKey = GlobalKey();
+    }
+    // imageUrl null: while resolving/buffering the rail's own still (underneath
+    // this layer) shows through the ambient window, and the video fades in over
+    // it — no second still, no hard pop.
+    final video = HeroTrailerBackdrop(
+      key: _backdropKey,
+      imageUrl: null,
+      videoUrl: streams.playUrl,
+      audioUrl: streams.audioUrl,
+      enabled: true,
+      imageBlurSigma: 0,
+      videoBlurSigma: 0,
+      startDelay: const Duration(milliseconds: 200),
+      ambientVolume: widget.volume.value,
+      onPlayingChanged: _onPlaying,
+    );
+
+    return IgnorePointer(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final fullW = constraints.maxWidth;
+          final fullH = constraints.maxHeight;
+          if (!fullW.isFinite || !fullH.isFinite || fullW <= 0 || fullH <= 0) {
+            return const SizedBox.shrink();
+          }
+          final fullRect = Offset.zero & Size(fullW, fullH);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              AnimatedBuilder(
+                animation: _promote,
+                child: video,
+                builder: (context, child) {
+                  final t = _promoteT;
+                  final rect = Rect.lerp(widget.railRect, fullRect, t)!;
+                  final radius = lerpDouble(14.0, 0.0, t)!;
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned.fromRect(
+                        rect: rect,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(radius),
+                          // Fixed full-size surface, scaled by the FittedBox —
+                          // the video never re-fits, only its paint transform
+                          // changes as the window grows.
+                          child: FittedBox(
+                            fit: BoxFit.cover,
+                            clipBehavior: Clip.hardEdge,
+                            child: SizedBox(
+                              width: fullW,
+                              height: fullH,
+                              child: child,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Legibility scrim over the promoted video — baked into a
+                      // gradient's alpha (never an Opacity layer) so it costs no
+                      // per-frame saveLayer on weak TV GPUs.
+                      if (t > 0.001)
+                        Positioned.fromRect(
+                          rect: rect,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  const Color(0xFF0D0B1A)
+                                      .withValues(alpha: 0.30 * t),
+                                  const Color(0xFF0D0B1A)
+                                      .withValues(alpha: 0.06 * t),
+                                  const Color(0xFF0D0B1A)
+                                      .withValues(alpha: 0.42 * t),
+                                ],
+                                stops: const [0.0, 0.5, 1.0],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              // "Trailer" loading pill — pinned to the ambient window's corner.
+              Positioned.fromRect(
+                rect: widget.railRect,
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: widget.loading,
+                      builder: (_, loading, __) =>
+                          _TrailerLoadingPill(visible: loading),
+                    ),
+                  ),
+                ),
+              ),
+              // Fullscreen takeover identity — the kinetic lower-third. Reads
+              // the held meta (not the raw notifier) so it survives and fades
+              // out with the graceful collapse.
+              if (_heldMeta != null)
+                _TakeoverInfo(item: _heldMeta!, promote: _promote),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The takeover's kinetic lower-third — an exact port of the Home board's
+/// [_buildTakeoverInfoOverlay]: while the film owns the screen its identity sits
+/// bottom-left — a growing accent bar, a whispered kicker, a big uppercase
+/// title, a `year · runtime · ★rating` line and the genres, each rising in a
+/// staggered cascade timed to the mask-open ([t] 0→1). Purely informational
+/// (IgnorePointer); every field degrades to nothing when absent.
+class _TakeoverInfo extends StatelessWidget {
+  final StremioMeta item;
+  final Animation<double> promote;
+  const _TakeoverInfo({required this.item, required this.promote});
+
+  static const Color _accentLight = Color(0xFFC4B5FD);
+
+  @override
+  Widget build(BuildContext context) {
+    // Everything below is built ONCE per title — the per-frame AnimatedBuilder
+    // at the end only wraps these in cheap Opacity/Transform, never rebuilds the
+    // text or a full-screen save layer (the Home board's rule for weak TV GPUs).
+    final rating = item.imdbRating;
+    final runtime = item.runtimeDisplay;
+    final genres = item.genres;
+
+    final meta = <Widget>[];
+    void sep() {
+      if (meta.isNotEmpty) meta.add(_metaDot());
+    }
+
+    if (item.year != null && item.year!.isNotEmpty) {
+      meta.add(_metaText(item.year!));
+    }
+    if (runtime != null && runtime.isNotEmpty) {
+      sep();
+      meta.add(_metaText(runtime));
+    }
+    if (rating != null) {
+      sep();
+      meta.add(Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, size: 17, color: HomeTheme.focusGold),
+          const SizedBox(width: 4),
+          _metaText(rating.toStringAsFixed(1)),
+        ],
+      ));
+    }
+
+    final kicker = Text(
+      'NOW PLAYING  ·  OFFICIAL TRAILER',
+      style: const TextStyle(
+        fontSize: 11.5,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 4,
+        color: _accentLight,
+        shadows: [Shadow(color: Colors.black87, blurRadius: 8)],
+      ),
+    );
+    final title = Text(
+      item.name.toUpperCase(),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: GoogleFonts.poppins(
+        fontSize: 46,
+        fontWeight: FontWeight.w800,
+        height: 0.98,
+        letterSpacing: -0.5,
+        color: Colors.white,
+        shadows: const [
+          Shadow(color: Colors.black87, blurRadius: 18, offset: Offset(0, 3)),
+        ],
+      ),
+    );
+    final genresLine = (genres == null || genres.isEmpty)
+        ? const SizedBox.shrink()
+        : Text(
+            genres.take(3).join('   •   ').toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 3,
+              color: Colors.white.withValues(alpha: 0.6),
+              shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
+            ),
+          );
+
+    final metaRow =
+        meta.isEmpty ? null : Row(mainAxisSize: MainAxisSize.min, children: meta);
+    final hasGenres = genres != null && genres.isNotEmpty;
+
+    return AnimatedBuilder(
+      animation: promote,
+      builder: (context, __) {
+        final t = Curves.easeInOutCubic.transform(promote.value);
+        if (t <= 0.001) return const SizedBox.shrink();
+        double seg(double a, double b) => ((t - a) / (b - a)).clamp(0.0, 1.0);
+        double eo(double x) {
+          final u = 1 - x;
+          return 1 - u * u * u;
+        }
+
+        Widget rise(Widget w, double a, double b, {double dist = 14}) {
+          final p = seg(a, b);
+          return Opacity(
+            opacity: p,
+            child: Transform.translate(
+              offset: Offset(0, (1 - eo(p)) * dist),
+              child: w,
+            ),
+          );
+        }
+
+        final accentP = eo(seg(0.42, 0.72));
+        final slideP = eo(seg(0.42, 0.78));
+
+        return IgnorePointer(
+          child: Align(
+            alignment: Alignment.bottomLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(52, 0, 48, 54),
+              child: IntrinsicHeight(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Transform(
+                      alignment: Alignment.bottomCenter,
+                      transform: Matrix4.diagonal3Values(1, accentP, 1),
+                      child: Container(
+                        width: 5,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [HomeTheme.chromeAccent, _accentLight],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    Transform.translate(
+                      offset: Offset(-46 * (1 - slideP), 0),
+                      child: Opacity(
+                        opacity: seg(0.42, 0.6),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 720),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              rise(kicker, 0.44, 0.6, dist: 8),
+                              const SizedBox(height: 12),
+                              rise(title, 0.5, 0.8),
+                              if (metaRow != null) ...[
+                                const SizedBox(height: 14),
+                                rise(metaRow, 0.66, 0.9, dist: 12),
+                              ],
+                              if (hasGenres) ...[
+                                const SizedBox(height: 10),
+                                rise(genresLine, 0.76, 1.0, dist: 10),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _metaText(String s) => Text(
+        s,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: 0.9),
+          shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
+        ),
+      );
+
+  Widget _metaDot() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Container(
+          width: 4,
+          height: 4,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.45),
+            shape: BoxShape.circle,
+          ),
+        ),
+      );
+}
+
+/// The Home hero's "Trailer" pill, themed to the rail's purple. Slides + fades
+/// in while a trailer resolves/buffers; a TickerMode keeps the spinner idle (no
+/// ticker) during the 99% of browsing it spends hidden.
+class _TrailerLoadingPill extends StatelessWidget {
+  final bool visible;
+  const _TrailerLoadingPill({required this.visible});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      offset: visible ? Offset.zero : const Offset(0, -0.25),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+        child: TickerMode(
+          enabled: visible,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(9, 5, 11, 5),
+            decoration: BoxDecoration(
+              color: const Color(0xCC0D0B1A),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: kSeeAllAccentBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+                BoxShadow(
+                  color: kSeeAllAccent.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  spreadRadius: -4,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 10,
+                  height: 10,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.8,
+                    valueColor: AlwaysStoppedAnimation<Color>(kSeeAllAccent2),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  'Trailer',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

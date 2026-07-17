@@ -44,6 +44,9 @@ class TraktSeeAllScreen extends StatefulWidget {
 
   final void Function(StremioMeta item) onOpen;
   final void Function(StremioMeta item)? onQuickPlay;
+
+  /// Fires when a grid tile gains focus — drives the Discover detail rail.
+  final void Function(StremioMeta item)? onItemFocused;
   final bool Function(StremioMeta item)? isBound;
   final bool isTelevision;
 
@@ -61,6 +64,7 @@ class TraktSeeAllScreen extends StatefulWidget {
     required this.onOpen,
     this.initialCategory = 'all',
     this.onQuickPlay,
+    this.onItemFocused,
     this.isBound,
     this.isTelevision = false,
     this.embedded = false,
@@ -561,6 +565,9 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       // fetched-list item isn't in that map, so the button would silently open
       // the detail instead of playing. Only offer it where it works.
       onQuickPlay: _isCw ? widget.onQuickPlay : null,
+      onItemFocused: widget.onItemFocused,
+      // Discover on TV has the detail rail naming the type — drop the badge there.
+      showTypeBadge: !(widget.embedded && widget.isTelevision),
       progressOf: _progressOf,
       isBound: widget.isBound,
       onLoadMore: () {},

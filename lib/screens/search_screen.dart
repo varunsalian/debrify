@@ -59,6 +59,8 @@ import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
 import 'see_all/trakt_see_all_screen.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
+import '../widgets/see_all/discover_detail_rail.dart';
+import '../widgets/see_all/discover_trailer_stage.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'merged_series_detail_screen.dart';
@@ -746,6 +748,30 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<StremioAddon> _discAddons = const [];
   final FocusNode _discSourceNode = FocusNode(debugLabel: 'disc_source');
 
+  // The grid tile the DPAD is currently on, mirrored into the two-pane detail
+  // rail (TV Discover). A ValueNotifier — not setState — so a focus move only
+  // rebuilds the rail, never the grid subtree.
+  final ValueNotifier<StremioMeta?> _discFocused = ValueNotifier(null);
+  void _onDiscFocused(StremioMeta item) => _discFocused.value = item;
+
+  // Discover ambient trailer, shared between the rail (which resolves + owns the
+  // single-decoder discipline, writing here) and the full-screen
+  // DiscoverTrailerStage (which renders the window and can promote it to a
+  // fullscreen takeover). See discover_trailer_stage.dart.
+  final ValueNotifier<YoutubeResolvedStreams?> _discTrailerStreams =
+      ValueNotifier(null);
+  final ValueNotifier<bool> _discTrailerLoading = ValueNotifier(false);
+  final ValueNotifier<double> _discTrailerVolume = ValueNotifier(0);
+  final ValueNotifier<double> _discTakeover = ValueNotifier(0);
+  // The playing trailer's (enriched) title — drives the fullscreen takeover's
+  // name/meta overlay. Written by the rail alongside its streams.
+  final ValueNotifier<StremioMeta?> _discTrailerMeta = ValueNotifier(null);
+
+  /// Relay the Discover takeover to the app shell so the TV sidebar hides in
+  /// lock-step (a cinema has no menu) — the same signal the Home board uses.
+  void _relayDiscoverChromeDim() =>
+      MainPageBridge.tvChromeDim.value = _discTakeover.value;
+
   @override
   void initState() {
     super.initState();
@@ -787,6 +813,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         final current = _heroItem.value;
         if (current != null) _scheduleHeroTrailer(current);
       });
+    }
+    // Discover on TV: relay the trailer takeover to the sidebar chrome-dim so
+    // the rail hides when the trailer goes fullscreen.
+    if (widget.discoverMode && widget.isTelevision) {
+      _discTakeover.addListener(_relayDiscoverChromeDim);
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     // Home board only: live-refresh when the Home Rows manager changes which
@@ -1017,6 +1048,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
     _discSourceNode.dispose();
+    _discFocused.dispose();
+    if (widget.discoverMode && widget.isTelevision) {
+      _discTakeover.removeListener(_relayDiscoverChromeDim);
+      // Never leave the sidebar hidden after Discover is torn down mid-takeover,
+      // but reset AFTER this frame: dispose can run inside finalizeTree (tab
+      // switch mid-takeover) while the tree is locked, and a synchronous write
+      // would markNeedsBuild the sidebar's listener mid-unmount (matches the
+      // Home path above).
+      if (MainPageBridge.tvChromeDim.value != 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          MainPageBridge.tvChromeDim.value = 0;
+        });
+      }
+    }
+    _discTrailerStreams.dispose();
+    _discTrailerLoading.dispose();
+    _discTrailerVolume.dispose();
+    _discTakeover.dispose();
+    _discTrailerMeta.dispose();
     _boardScroll.dispose();
     _kwScroll.dispose();
     _kwPillFocus.dispose();
@@ -6717,6 +6767,101 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// filter so DPAD walks Source → the panel's own filters → grid. All item
   /// open/play/bound wiring is this screen's existing board handlers.
   Widget _buildDiscover() {
+    final panel = _buildDiscoverPanel();
+    // Touch has no persistent focus, so a reactive detail rail has nothing to
+    // react to — keep the full-width grid there. TV gets the two-pane layout.
+    if (!widget.isTelevision) return panel;
+    return LayoutBuilder(
+      builder: (context, c) {
+        // Guard a degenerate canvas: too narrow leaves no room for a usable grid
+        // beside the rail; too short and the rail's fixed backdrop + header can't
+        // fit (its Expanded plot collapses and the column overflows). Either way,
+        // fall back to the full-width panel.
+        if (c.maxWidth < 720 || c.maxHeight < 420) {
+          // The trailer stage (which drives _discTakeover → sidebar chrome-dim)
+          // is unmounted in this branch. If a takeover was in progress, clear it
+          // post-frame so the sidebar doesn't stay stuck hidden.
+          if (_discTakeover.value != 0) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _discTakeover.value = 0;
+            });
+          }
+          return panel;
+        }
+        final railW = (c.maxWidth * 0.34).clamp(300.0, 460.0);
+        final panelW = c.maxWidth - railW;
+        final mq = MediaQuery.of(context);
+        // The rail's backdrop box within this Stack: rail padding (20 left,
+        // 18 top) + a 16:9 box. The trailer stage windows the video here while
+        // ambient, then grows it to fill.
+        final boxW = railW - 38;
+        final railRect = Rect.fromLTWH(20, 18, boxW, boxW * 9 / 16);
+        final twoPane = Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: railW,
+              child: ValueListenableBuilder<StremioMeta?>(
+                valueListenable: _discFocused,
+                builder: (_, item, __) => DiscoverDetailRail(
+                  item: item,
+                  trailerStreams: _discTrailerStreams,
+                  trailerLoading: _discTrailerLoading,
+                  trailerVolume: _discTrailerVolume,
+                  trailerMeta: _discTrailerMeta,
+                ),
+              ),
+            ),
+            // The grid derives its column count from MediaQuery width; report
+            // the panel's (narrower) width so it lays out for its real box
+            // instead of the full screen and overflowing.
+            SizedBox(
+              width: panelW,
+              child: MediaQuery(
+                data: mq.copyWith(size: Size(panelW, mq.size.height)),
+                child: panel,
+              ),
+            ),
+          ],
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            twoPane,
+            // Recede the two-pane as the trailer takes over — a baked scrim, not
+            // an Opacity layer (whose mid-values force a per-frame full-screen
+            // saveLayer on weak TV GPUs).
+            ValueListenableBuilder<double>(
+              valueListenable: _discTakeover,
+              builder: (_, t, __) => t <= 0.001
+                  ? const SizedBox.shrink()
+                  : IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0D0B1A)
+                              .withValues(alpha: 0.92 * t),
+                        ),
+                      ),
+                    ),
+            ),
+            // The full-screen trailer: windowed over [railRect] while ambient,
+            // promoting to fullscreen after a few seconds' watch. Non-interactive
+            // — DPAD keeps flowing to the grid underneath.
+            DiscoverTrailerStage(
+              trailer: _discTrailerStreams,
+              loading: _discTrailerLoading,
+              volume: _discTrailerVolume,
+              meta: _discTrailerMeta,
+              railRect: railRect,
+              takeover: _discTakeover,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDiscoverPanel() {
     final source = StremioDropdown<String>(
       label: 'Source',
       value: _discSource,
@@ -6730,6 +6875,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ],
       onSelected: (s) {
         if (s == _discSource) return;
+        // Swapping source re-mounts the grid and drops DPAD focus back onto the
+        // Source dropdown — clear the rail so it shows its prompt, not a stale
+        // title from the previous source, until a new tile is focused.
+        _discFocused.value = null;
         setState(() => _discSource = s);
         // The swap re-mounts the embedded panel (new ValueKey), which re-attaches
         // this shared node; pin the DPAD ring back on the Source dropdown so it
@@ -6749,6 +6898,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         cwProgress: _traktProgress,
         onOpen: _openTraktItem,
         onQuickPlay: _pikpakOnly ? null : _playTraktItem,
+        onItemFocused: _onDiscFocused,
         isBound: _isBound,
         isTelevision: widget.isTelevision,
         embedded: true,
@@ -6774,6 +6924,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           onQuickPlay: _pikpakOnly
               ? null
               : (item) => _onCatalogPlay(item, addon),
+          onItemFocused: _onDiscFocused,
           embedded: true,
           leading: source,
           leadingNode: _discSourceNode,
@@ -6790,6 +6941,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       progressOf: (m) => _cwProgress[m.imdbId],
       onOpen: _openContinueItem,
       onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
+      onItemFocused: _onDiscFocused,
       isBound: _isBound,
       isTelevision: widget.isTelevision,
       embedded: true,

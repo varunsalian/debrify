@@ -47,6 +47,9 @@ class CatalogSeeAllScreen extends StatefulWidget {
   /// Optional Quick Play (long-press) straight from the grid.
   final void Function(StremioMeta item)? onQuickPlay;
 
+  /// Fires when a grid tile gains focus — drives the Discover detail rail.
+  final void Function(StremioMeta item)? onItemFocused;
+
   /// Optional "has a pinned source" flag per item.
   final bool Function(StremioMeta item)? isBound;
 
@@ -67,6 +70,7 @@ class CatalogSeeAllScreen extends StatefulWidget {
     this.seedNextSkip = 0,
     this.isTelevision = false,
     this.onQuickPlay,
+    this.onItemFocused,
     this.isBound,
     this.embedded = false,
     this.leading,
@@ -556,6 +560,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       exhausted: _exhausted,
       onOpen: widget.onOpenItem,
       onQuickPlay: widget.onQuickPlay,
+      onItemFocused: widget.onItemFocused,
+      // Discover on TV has the detail rail naming the type — drop the badge there.
+      showTypeBadge: !(widget.embedded && widget.isTelevision),
       isBound: widget.isBound,
       onLoadMore: _loadMore,
       onExitTop: widget.isTelevision ? () => _typeNode.requestFocus() : null,
