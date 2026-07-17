@@ -4,6 +4,7 @@ import android.animation.ValueAnimator
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.animation.DecelerateInterpolator
 import android.os.Handler
@@ -19,6 +20,7 @@ import android.view.inputmethod.EditorInfo
 import androidx.core.content.ContextCompat
 import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ProgressBar
@@ -36,6 +38,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.text.Cue
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -56,7 +59,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
-import androidx.media3.common.MimeTypes
 import com.debrify.app.ActivityTracker
 import com.debrify.app.MainActivity
 import com.debrify.app.R
@@ -64,6 +66,8 @@ import com.debrify.app.subtitle.StremioSubtitle
 import com.debrify.app.subtitle.StremioSubtitleService
 import com.debrify.app.util.LanguageMapper
 import com.debrify.app.util.OffsetRenderersFactory
+import com.debrify.app.util.SubtitleCue
+import com.debrify.app.util.SubtitleCueCache
 import com.debrify.app.util.SubtitleFontManager
 import com.debrify.app.util.SubtitleSettings
 import kotlinx.coroutines.CoroutineScope
@@ -71,6 +75,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -276,6 +281,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var manualSubtitleDisplayLabel: String? = null
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    // Side-loaded external subtitle rendering. External (Stremio) subtitles are
+    // downloaded + parsed off-thread and fed straight to subtitleOverlay from a
+    // position ticker — the player source is never rebuilt, so switching
+    // subtitles never interrupts playback (and never touches the fragile
+    // resume/seek logic that a re-prepare would).
+    private var externalSubtitleCues: List<SubtitleCue> = emptyList()
+    private var externalSubtitleActive = false
+    private var externalSubtitleLoadToken = 0  // Guard against stale downloads (fast switching / content change)
+    private val externalSubtitleHandler = Handler(Looper.getMainLooper())
+    private var externalSubtitleTicker: Runnable? = null
+    private var lastExternalCueText: String? = null
+    private var subtitleLoadingPill: TextView? = null
+    private val subtitleLoadingPillHideRunnable = Runnable { hideSubtitleLoadingPill() }
+
     // Focus navigation state - prevents focus recovery from interfering with active navigation
     private var isNavigating = false
     private var navigationTargetPosition = -1
@@ -315,8 +334,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var hasEverBeenReady = false
     // Guards against falsely marking an item watched on Trakt. maxStableDurationMs
     // is the largest duration ExoPlayer has reported this item; lastRealPositionMs
-    // is the most recent genuine playback position. A subtitle reload re-prepares
-    // the source and can make ExoPlayer briefly report a short duration or fire a
+    // is the most recent genuine playback position. A source re-prepare (channel/
+    // source switch) can make ExoPlayer briefly report a short duration or fire a
     // spurious STATE_ENDED — either of which would otherwise inflate progress to
     // ~100% and scrobble the item as fully watched. Both reset per item.
     private var maxStableDurationMs: Long = 0L
@@ -981,6 +1000,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Connect subtitle output to custom view
         subtitleListener = object : Player.Listener {
             override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
+                // While an external subtitle is side-rendered, the overlay is
+                // owned by the ticker — ignore the player's (empty) cue events.
+                if (externalSubtitleActive) return
                 subtitleOverlay.setCues(cueGroup.cues)
             }
         }
@@ -1801,6 +1823,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun resetSubtitleState() {
+        stopExternalSubtitleRendering()
         stremioSubtitles.clear()
         currentStremioSubtitleIndex = -1
         isLoadingStremioSubtitles = false
@@ -1927,12 +1950,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun fetchStremioSubtitles(item: PlaybackItem) {
         val model = payload ?: return
 
-        // High-res YouTube plays a MergingMediaSource (video-only + separate
-        // audio). Applying a Stremio subtitle re-prepares the player from
-        // currentMediaItem — which is only the merge's video child — silently
-        // dropping the audio track. The addon match is also spurious for
-        // YouTube (title-based IMDB lookup on arbitrary video titles), so skip
-        // addon subtitles entirely for these items.
+        // The addon match is spurious for YouTube (title-based IMDB lookup on
+        // arbitrary video titles), so skip addon subtitle fetching for merged
+        // YouTube items. (Side-rendering no longer re-prepares the source, so
+        // the old merged-audio-drop hazard is gone — manually searched
+        // subtitles now work on YouTube too.)
         if (!item.audioUrl.isNullOrEmpty()) {
             stremioSubtitles.clear()
             currentStremioSubtitleIndex = -1
@@ -2042,12 +2064,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         subtitleScope.launch {
             try {
-                val subtitles = stremioSubtitleService?.fetchSubtitles(
+                val subtitles = (stremioSubtitleService?.fetchSubtitles(
                     type = type,
                     imdbId = imdbId,
                     season = if (type == "series") item.season else null,
                     episode = if (type == "series") item.episode else null
-                ) ?: emptyList()
+                ) ?: emptyList()).filter { isSideRenderableSubtitle(it.url) }
 
                 // Check if content changed during fetch
                 if (fetchToken != addonSubtitleFetchToken) {
@@ -2891,6 +2913,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             manualSubtitleSeason,
             manualSubtitleEpisode
         )
+
+        // Tear down any side-rendered subtitle before switching identity —
+        // otherwise its cues keep drawing while the panel shows nothing selected.
+        stopExternalSubtitleRendering()
 
         stremioSubtitles.clear()
         currentStremioSubtitleIndex = -1
@@ -5191,8 +5217,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // Clear Stremio subtitle selection
+        // Clear Stremio subtitle selection and stop any side-rendered subtitle
         currentStremioSubtitleIndex = -1
+        stopExternalSubtitleRendering()
 
         // Handle embedded subtitle selection
         val params = ts.parameters.buildUpon()
@@ -5207,111 +5234,229 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Load an external Stremio subtitle into ExoPlayer.
-     * This rebuilds the media item with the subtitle configuration and seeks to the current position.
+     * True if this subtitle URL is a format the on-device parser can render.
+     * TTML/DFXP were handled by ExoPlayer's decoder in the old re-prepare path
+     * but our SubtitleCueParser can't parse them (they'd yield zero cues and
+     * fail the load), so they're filtered out of the offered list entirely.
+     */
+    private fun isSideRenderableSubtitle(url: String): Boolean {
+        val path = url.substringBefore("?").lowercase()
+        return !path.endsWith(".ttml") && !path.endsWith(".dfxp")
+    }
+
+    /**
+     * Load an external Stremio subtitle by side-rendering it: the file is
+     * downloaded + parsed off-thread and cues are fed to subtitleOverlay from
+     * a position ticker. The player source is never rebuilt, so playback is
+     * never interrupted — no re-prepare, no rebuffer, no resume/seek juggling.
      */
     private fun loadStremioSubtitle(subtitle: StremioSubtitle) {
-        val currentPlayer = player ?: return
-        val currentItem = currentPlayer.currentMediaItem ?: return
+        val loadToken = ++externalSubtitleLoadToken
+        // Capture the currently-*rendering* external selection so a failed load
+        // can fall back to it instead of tearing down a working subtitle. At
+        // this point currentStremioSubtitleIndex still holds the previous value
+        // (callers overwrite it only after this returns), but only trust it when
+        // a subtitle is actually active — otherwise the previous pick was still
+        // downloading (and will be discarded by the token check), so there's
+        // nothing real to fall back to.
+        val previousStremioIndex = if (externalSubtitleActive) currentStremioSubtitleIndex else -1
+        showSubtitleLoadingPill("Loading ${subtitle.displayName}…")
 
-        // Guard the manual-selection path too: re-preparing merged YouTube
-        // playback (separate audio track) from currentMediaItem would drop the
-        // audio — see fetchStremioSubtitles.
-        if (!payload?.items?.getOrNull(currentIndex)?.audioUrl.isNullOrEmpty()) {
-            Toast.makeText(this, "Subtitles aren't available for YouTube videos", Toast.LENGTH_SHORT).show()
+        val cached = SubtitleCueCache.get(subtitle.url)
+        if (cached != null) {
+            onExternalSubtitleLoaded(subtitle, cached, previousStremioIndex)
             return
         }
 
-        // Check if a percent-based seek (Trakt or startAt) is still pending.
-        // It depends on duration (only known at STATE_READY) so it's owned by the
-        // main playbackListener. percentSeekApplied is false until that seek lands
-        // — which also covers the case where the player already reached STATE_READY
-        // once but the seek was skipped (duration not yet resolved). In all those
-        // cases the subtitle reload must NOT seek, or it would clobber the resume.
-        val hasPendingPercentSeek = !percentSeekApplied && (
-            ((payload?.traktProgressPercent ?: 0.0).let { it > 0 && it < 100 }) ||
-            ((payload?.startAtPercent ?: 0.0) > 0)
-        )
-
-        val targetPosition: Long
-        val subtitleShouldSeek: Boolean
-
-        if (pendingSeekMs > 0) {
-            // Absolute resume position is known — take ownership of the seek.
-            targetPosition = pendingSeekMs
-            pendingSeekMs = 0
-            subtitleShouldSeek = true
-        } else if (hasPendingPercentSeek) {
-            // A percent-based resume seek is still pending. Defer to the main
-            // playbackListener (it re-fires on the STATE_READY caused by prepare()
-            // below). Preserve any drift if playback already started; else start at 0.
-            targetPosition = if (hasEverBeenReady) currentPlayer.currentPosition else 0L
-            subtitleShouldSeek = false
-            android.util.Log.d("AndroidTvPlayer", "loadStremioSubtitle: deferring resume seek to main playbackListener (percent seek pending)")
-        } else {
-            targetPosition = currentPlayer.currentPosition
-            subtitleShouldSeek = true
+        subtitleScope.launch {
+            val parsed = withContext(Dispatchers.IO) { SubtitleCueCache.fetch(subtitle.url) }
+            // Stale if the user picked another subtitle or content changed meanwhile
+            if (loadToken != externalSubtitleLoadToken) return@launch
+            onExternalSubtitleLoaded(subtitle, parsed, previousStremioIndex)
         }
+    }
 
-        val wasPlaying = currentPlayer.isPlaying
-
-        // Extract path without query string for MIME type detection
-        val urlPath = subtitle.url.substringBefore("?").lowercase()
-
-        // Determine MIME type based on file extension in path (handles query strings)
-        val mimeType = when {
-            urlPath.contains(".srt") -> MimeTypes.APPLICATION_SUBRIP
-            urlPath.contains(".vtt") -> MimeTypes.TEXT_VTT
-            urlPath.contains(".ass") -> MimeTypes.TEXT_SSA
-            urlPath.contains(".ssa") -> MimeTypes.TEXT_SSA
-            urlPath.contains(".ttml") -> MimeTypes.APPLICATION_TTML
-            else -> MimeTypes.TEXT_VTT // Default to VTT for Stremio addons
-        }
-
-        // Build subtitle configuration
-        val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitle.url))
-            .setMimeType(mimeType)
-            .setLanguage(subtitle.lang)
-            .setLabel(subtitle.displayName)
-            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-            .build()
-
-        // Rebuild media item with subtitle configuration
-        val newMediaItem = currentItem.buildUpon()
-            .setSubtitleConfigurations(listOf(subtitleConfig))
-            .build()
-
-        currentPlayer.setMediaItem(newMediaItem, targetPosition)
-        currentPlayer.prepare()
-
-        if (subtitleShouldSeek) {
-            // Wait for player to be ready, then seek again to force subtitle sync.
-            // Skipped when a percent-based resume seek is pending — the main
-            // playbackListener owns that seek and this would override it.
-            currentPlayer.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY) {
-                        currentPlayer.seekTo(targetPosition)
-                        currentPlayer.removeListener(this)
-                    }
+    private fun onExternalSubtitleLoaded(
+        subtitle: StremioSubtitle,
+        cues: List<SubtitleCue>,
+        previousStremioIndex: Int
+    ) {
+        if (cues.isEmpty()) {
+            android.util.Log.w("StremioSubs", "Failed to load/parse external subtitle: ${subtitle.url}")
+            showSubtitleLoadingPillTransient("Couldn't load ${subtitle.displayName}")
+            // Keep whatever was rendering before — do NOT stopExternalSubtitleRendering()
+            // here (it would wipe a working subtitle and cancel the error pill).
+            // Just restore the selection state to the previously-good subtitle.
+            currentStremioSubtitleIndex = previousStremioIndex
+            if (previousStremioIndex < 0) {
+                // Nothing external was active before; the selecting caller already
+                // disabled embedded text tracks in anticipation. Re-enable so
+                // ExoPlayer can restore an embedded subtitle.
+                trackSelector?.let { ts ->
+                    ts.parameters = ts.parameters.buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        .build()
                 }
-            })
+            }
+            if (subtitleSettingsVisible) refreshSubtitlePanelForLoading()
+            return
         }
 
-        if (wasPlaying) {
-            currentPlayer.play()
-        }
-
-        // Enable subtitle track after loading
-        val ts = trackSelector
-        if (ts != null) {
-            val params = ts.parameters.buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+        // Disable embedded text tracks so they don't double-render under the
+        // side-loaded cues (covers the auto-select path, which doesn't go
+        // through applySelectedSubtitleTrack).
+        trackSelector?.let { ts ->
+            ts.parameters = ts.parameters.buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .build()
-            ts.parameters = params
         }
 
-        Toast.makeText(this, "Loading: ${subtitle.displayName}", Toast.LENGTH_SHORT).show()
+        externalSubtitleCues = cues
+        externalSubtitleActive = true
+        lastExternalCueText = null
+        // Clear immediately: disabling the embedded track fires onCues(empty),
+        // but that's now suppressed, and the first ticker render early-returns
+        // when no cue is active — without this a stale embedded line would
+        // freeze on screen until the next external cue.
+        if (::subtitleOverlay.isInitialized) subtitleOverlay.setCues(emptyList())
+        startExternalSubtitleTicker()
+        showSubtitleLoadingPillTransient("✓ ${subtitle.displayName}")
+        android.util.Log.d("StremioSubs", "Side-rendering ${cues.size} cues from ${subtitle.displayName}")
+    }
+
+    /** Stop side-rendering and give the overlay back to the player's onCues. */
+    private fun stopExternalSubtitleRendering() {
+        externalSubtitleLoadToken++
+        externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
+        externalSubtitleTicker = null
+        if (externalSubtitleActive || externalSubtitleCues.isNotEmpty()) {
+            externalSubtitleActive = false
+            externalSubtitleCues = emptyList()
+            lastExternalCueText = null
+            if (::subtitleOverlay.isInitialized) subtitleOverlay.setCues(emptyList())
+            // Re-enable the embedded text track type that onExternalSubtitleLoaded
+            // disabled — otherwise embedded-subtitle auto-selection stays dead for
+            // every subsequent item. Callers that want text off (Off selection)
+            // re-apply their own params right after this returns.
+            trackSelector?.let { ts ->
+                ts.parameters = ts.parameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .build()
+            }
+        }
+        hideSubtitleLoadingPill()
+    }
+
+    private fun startExternalSubtitleTicker() {
+        externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
+        val ticker = object : Runnable {
+            override fun run() {
+                if (!externalSubtitleActive) return
+                renderExternalSubtitleCue()
+                externalSubtitleHandler.postDelayed(this, EXTERNAL_SUBTITLE_TICK_MS)
+            }
+        }
+        externalSubtitleTicker = ticker
+        ticker.run()
+    }
+
+    private fun renderExternalSubtitleCue() {
+        val cues = externalSubtitleCues
+        if (cues.isEmpty()) return
+        // Same convention as the sync line picker: a positive offset means the
+        // subtitle text lags the audio, so we look up cues at (position - offset).
+        val effectiveMs = (player?.currentPosition ?: return) - SubtitleSettings.getSyncOffsetMs(this)
+
+        // Binary search for the last cue starting at or before effectiveMs,
+        // then collect all still-active overlapping cues. Cues are sorted only
+        // by start time, so a long-running cue (e.g. an anime sign/song event)
+        // can begin many entries before the current dialogue line — scan the
+        // whole prefix (cheap: a few thousand comparisons a few times a second).
+        var lo = 0
+        var hi = cues.size - 1
+        var last = -1
+        while (lo <= hi) {
+            val mid = (lo + hi) / 2
+            if (cues[mid].startMs <= effectiveMs) { last = mid; lo = mid + 1 } else hi = mid - 1
+        }
+
+        var text: String? = null
+        if (last >= 0) {
+            val active = StringBuilder()
+            for (i in 0..last) {
+                val cue = cues[i]
+                if (cue.startMs <= effectiveMs && effectiveMs < cue.endMs) {
+                    if (active.isNotEmpty()) active.append('\n')
+                    active.append(cue.text)
+                }
+            }
+            if (active.isNotEmpty()) text = active.toString()
+        }
+
+        if (text == lastExternalCueText) return
+        lastExternalCueText = text
+        subtitleOverlay.setCues(
+            if (text == null) emptyList()
+            else listOf(Cue.Builder().setText(text).build())
+        )
+    }
+
+    // ── Subtitle loading pill ────────────────────────────────────────────────
+    // Small bottom-center chip shown while an external subtitle downloads, so
+    // the user knows something is happening without playback being touched.
+
+    private fun ensureSubtitleLoadingPill(): TextView {
+        subtitleLoadingPill?.let { return it }
+        val pill = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            background = GradientDrawable().apply {
+                setColor(0xD9101014.toInt())
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), 0x33FFFFFF)
+            }
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            elevation = dp(240).toFloat()
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            ).also { it.bottomMargin = dp(48) }
+        }
+        findViewById<ViewGroup>(android.R.id.content).addView(pill)
+        subtitleLoadingPill = pill
+        return pill
+    }
+
+    private fun showSubtitleLoadingPill(message: String) {
+        externalSubtitleHandler.removeCallbacks(subtitleLoadingPillHideRunnable)
+        val pill = ensureSubtitleLoadingPill()
+        pill.text = message
+        if (pill.visibility != View.VISIBLE) {
+            pill.alpha = 0f
+            pill.visibility = View.VISIBLE
+        }
+        pill.animate().cancel()
+        pill.animate().alpha(1f).setDuration(180).start()
+    }
+
+    /** Show a short confirmation/error message, then fade the pill away. */
+    private fun showSubtitleLoadingPillTransient(message: String) {
+        showSubtitleLoadingPill(message)
+        externalSubtitleHandler.postDelayed(subtitleLoadingPillHideRunnable, 1400)
+    }
+
+    private fun hideSubtitleLoadingPill() {
+        externalSubtitleHandler.removeCallbacks(subtitleLoadingPillHideRunnable)
+        val pill = subtitleLoadingPill ?: return
+        if (pill.visibility != View.VISIBLE) return
+        pill.animate().cancel()
+        pill.animate().alpha(0f).setDuration(220).withEndAction {
+            pill.visibility = View.GONE
+        }.start()
     }
 
     private fun applySubtitleSettings() {
@@ -5324,7 +5469,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val newOffsetUs = SubtitleSettings.getSyncOffsetMs(this) * 1000L
         val oldOffsetUs = offsetRenderersFactory?.currentOffsetUs ?: 0L
         offsetRenderersFactory?.setOffsetUs(newOffsetUs)
-        if (newOffsetUs != oldOffsetUs) {
+        if (externalSubtitleActive) {
+            // Side-rendered subtitles pick the offset up at lookup time — just
+            // force an immediate re-render, no seek needed.
+            lastExternalCueText = null
+            renderExternalSubtitleCue()
+        } else if (newOffsetUs != oldOffsetUs) {
             // Debounce: rapid offset changes (line picker tap, arrow key hold)
             // would otherwise pile up seeks and confuse the text renderer.
             subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)
@@ -5443,8 +5593,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val model = payload ?: return
         val item = model.items[currentIndex]
         // Use the largest stable duration seen — ExoPlayer can briefly report a
-        // short duration right after a subtitle reload re-prepares the source, which
-        // would otherwise inflate progress% and scrobble a false watch on Trakt.
+        // short duration right after a source re-prepare, which would otherwise
+        // inflate progress% and scrobble a false watch on Trakt.
         val duration = maxOf(player?.duration ?: 0L, maxStableDurationMs)
         val position = if (completed) duration else player?.currentPosition ?: 0
 
@@ -6017,6 +6167,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (matched >= 0) {
                 targetIndex = matched
                 matchedSameContent = true
+            } else {
+                // The exact episode isn't in this source. Do NOT fall back to
+                // file 0 — in torrent order that's often an extras/bonus clip
+                // (a season pack may list "Extras/" or a featurette first).
+                // Land on the first REAL episode (skip season 0 / specials),
+                // and tell the user we couldn't find what they were watching.
+                val firstReal = newItems.indexOfFirst {
+                    val s = it.season
+                    s != null && s != 0 && it.episode != null
+                }
+                targetIndex = if (firstReal >= 0) firstReal else 0
+                Toast.makeText(
+                    this,
+                    "S${resumeSeason}E${resumeEpisode} not in this source — playing from the start",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         } else if (currentItem != null) {
             val byTitle = newItems.indexOfFirst {
@@ -6053,6 +6219,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Rebuild navigation maps for new items
         rebuildNavigationMaps(model, contentType)
 
+        // Point currentIndex at the item we're about to play BEFORE rebuilding
+        // the UI: setupSeasonTabs / buildList default the season tab and the
+        // active highlight off currentIndex. If it still held the OLD source's
+        // index (into a differently-ordered list), the now-playing episode could
+        // land outside the selected tab and be neither shown nor highlighted.
+        // playItem() re-affirms currentIndex = targetIndex momentarily later.
+        currentIndex = targetIndex
+
         // Rebuild playlist UI (without re-adding RecyclerView listeners)
         rebuildPlaylistContent()
 
@@ -6081,21 +6255,44 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun rebuildNavigationMaps(model: PlaybackPayload, contentType: String) {
         model.contentType = contentType
 
-        // Build sequential navigation maps for the new items
         val nextMap = mutableMapOf<Int, Int>()
         val prevMap = mutableMapOf<Int, Int>()
-        for (i in 0 until model.items.lastIndex) {
-            nextMap[i] = i + 1
+
+        // Determine the CHRONOLOGICAL order to chain next/prev through. Torrent
+        // file order is NOT necessarily episode order (a pack may list S01E05
+        // before S01E02), and the playlist adapter itself displays episodes
+        // sorted by season then episode. If we linked next/prev in raw file
+        // order, "next episode" / autoplay-next would jump to whatever file
+        // happens to sit next in the torrent — the wrong episode. So for series
+        // content, chain in (season, episode) order to match what the user sees.
+        // Collections (no season/episode) keep raw list order.
+        val isSeries = contentType == "series" &&
+            model.items.any { it.season != null && it.episode != null }
+        val order: List<Int> = if (isSeries) {
+            model.items.indices.sortedWith(
+                compareBy(
+                    { model.items[it].season ?: Int.MAX_VALUE },
+                    { model.items[it].episode ?: Int.MAX_VALUE },
+                    { it }, // stable tie-break on raw index
+                )
+            )
+        } else {
+            model.items.indices.toList()
         }
-        for (i in 1..model.items.lastIndex) {
-            prevMap[i] = i - 1
+
+        for (pos in 0 until order.lastIndex) {
+            nextMap[order[pos]] = order[pos + 1]
         }
+        for (pos in 1..order.lastIndex) {
+            prevMap[order[pos]] = order[pos - 1]
+        }
+
         model.nextEpisodeMap = nextMap
         model.prevEpisodeMap = prevMap
         model.collectionGroups = null
         model.perItemImdbIds.clear()
 
-        android.util.Log.d("AndroidTvPlayer", "rebuildNavigationMaps - contentType=$contentType, nextMap=${nextMap.size}, prevMap=${prevMap.size}")
+        android.util.Log.d("AndroidTvPlayer", "rebuildNavigationMaps - contentType=$contentType, isSeries=$isSeries, nextMap=${nextMap.size}, prevMap=${prevMap.size}")
     }
 
     private fun restoreFocusToStremioSource(sourceIndex: Int) {
@@ -6328,11 +6525,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         player?.play()
+        // Resume the side-rendered subtitle ticker paused in onStop.
+        if (externalSubtitleActive) startExternalSubtitleTicker()
     }
 
     override fun onStop() {
         super.onStop()
         player?.pause()
+        // Stop waking the main thread 4x/second while the activity isn't visible;
+        // state is preserved and onStart restarts the ticker.
+        externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
     }
 
     private fun setupBackPressHandler() {
@@ -6470,6 +6672,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         linePickerOverlay?.hide()
         linePickerOverlay = null
         subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)
+        externalSubtitleHandler.removeCallbacksAndMessages(null)
 
         // Clear adapters to release lambda references
         playlistView.adapter = null
@@ -6931,8 +7134,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Route the channel's slot-progress seek through the shared resume
         // machinery instead of an isolated inline listener. The main
-        // playbackListener applies the seek on STATE_READY, and loadStremioSubtitle
-        // defers to it — so a fast subtitle reload can't clobber the seek.
+        // playbackListener applies the seek on STATE_READY. (Subtitle loads are
+        // side-rendered and never seek, so they can't clobber it.)
         payload?.startAtPercent = startAtPercent
         percentSeekApplied = false
         pendingSeekMs = 0
@@ -7176,6 +7379,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val BACK_PRESS_INTERVAL_MS = 2000L  // 2 seconds
         private const val SEARCH_SUBTITLE_LABEL = "Search Movie/Show Subtitles"
         private const val SUBTITLE_LOADING_LABEL = "⏳ Loading external subtitles..."
+        private const val EXTERNAL_SUBTITLE_TICK_MS = 250L
         private const val EXTERNAL_SUBTITLE_PREFIX = "⬇"
 
         // PikPak cold storage retry constants

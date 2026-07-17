@@ -16,7 +16,7 @@ import android.widget.ScrollView
 import android.widget.Space
 import android.widget.TextView
 import com.debrify.app.util.SubtitleCue
-import com.debrify.app.util.SubtitleCueParser
+import com.debrify.app.util.SubtitleCueCache
 import com.debrify.app.util.SubtitleSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,8 +32,6 @@ class SubtitleLinePickerController(
 ) {
 
     companion object {
-        // Cache parsed cues per URL so reopening doesn't re-download.
-        private val cueCache = mutableMapOf<String, List<SubtitleCue>>()
         // Remember the cue start time the user explicitly synced to per URL,
         // so reopening restores their selection instead of jumping to whatever
         // cue is playing right now.
@@ -76,16 +74,15 @@ class SubtitleLinePickerController(
         overlayView = overlay
         isVisible = true
 
-        val cached = cueCache[subtitleUrl]
+        val cached = SubtitleCueCache.get(subtitleUrl)
         if (cached != null) {
             cues = cached
             onCuesReady()
         } else {
             CoroutineScope(Dispatchers.IO).launch {
-                val parsed = SubtitleCueParser.parseFromUrl(subtitleUrl)
+                val parsed = SubtitleCueCache.fetch(subtitleUrl)
                 withContext(Dispatchers.Main) {
                     if (!isVisible) return@withContext
-                    if (parsed.isNotEmpty()) cueCache[subtitleUrl] = parsed
                     cues = parsed
                     onCuesReady()
                 }

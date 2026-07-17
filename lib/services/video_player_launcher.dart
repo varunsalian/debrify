@@ -1306,6 +1306,9 @@ class VideoPlayerLauncher {
       sourcePlaylistResolverForTv;
       if (currentStremioSources.isNotEmpty && resolveSourceToPlaylist != null) {
         sourcePlaylistResolverForTv = (int sourceIndex) async {
+          // Claim a switch token up front so a slower, superseded resolve can't
+          // repoint the resolver at a stale source after a newer switch wins.
+          final switchToken = resolver.beginSwitch();
           if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
             debugPrint(
               'VideoPlayerLauncher: source playlist index out of range: $sourceIndex',
@@ -1324,18 +1327,38 @@ class VideoPlayerLauncher {
               ? SeriesPlaylist.fromPlaylistEntries(playlistEntries)
               : null;
           final episodes = seriesPlaylist?.allEpisodes;
-          // Only treat as series if ALL playlist entries were classified —
-          // when some files are dropped (no S##E## pattern), the index mapping
-          // breaks and season filtering hides the unclassified files.
           // Compare against non-sample count (fromPlaylistEntries excludes samples).
           final nonSampleCount = playlistEntries
               .where((e) => !SeriesParser.isSampleFile(e.title))
               .length;
-          final isSeries =
+          // Classify as a series in two cases:
+          //  (1) EVERY non-sample file classified — the original, strict rule,
+          //      kept verbatim so this change can't regress anything that
+          //      already worked.
+          //  (2) NEW, bounded relaxation: a large pack where the vast majority
+          //      classified but a few stray files didn't (a recap, a
+          //      "Superfan.Extended" cut, an oddly named release). Previously
+          //      one such file demoted the WHOLE season pack to a flat
+          //      collection, dropping season/episode off every item and
+          //      breaking "resume the same episode" on a source switch. The
+          //      index mapping is NOT at risk: items are built by iterating ALL
+          //      entries and looking up episodeByIndex[i], so entry[i].url
+          //      always pairs with entry[i]'s season/episode whether or not it
+          //      classified. The >=3 floor + 70% ratio keeps small movie
+          //      boxsets (e.g. 2 movies, one with a stray "E01" token) from
+          //      tipping into "series".
+          final classifiedAsSeries =
               seriesPlaylist != null &&
               seriesPlaylist.isSeries &&
               episodes != null &&
-              episodes.length >= nonSampleCount;
+              episodes.isNotEmpty;
+          final fullyClassified =
+              classifiedAsSeries && episodes.length >= nonSampleCount;
+          final mostlyClassified =
+              classifiedAsSeries &&
+              episodes.length >= 3 &&
+              episodes.length * 10 >= nonSampleCount * 7;
+          final isSeries = fullyClassified || mostlyClassified;
 
           // Fetch TVMaze metadata so items arrive pre-populated with artwork/descriptions
           if (isSeries) {
@@ -1369,6 +1392,10 @@ class VideoPlayerLauncher {
             final epInfo = episode?.episodeInfo;
             items.add({
               'id': '${entry.title}_$i',
+              // Mirror the resolver's own resumeId keying ('${title}_$i') so
+              // post-switch lazy stream resolution can match by string id, not
+              // positional index alone — the safety net the initial payload has.
+              'resumeId': '${entry.title}_$i',
               'title': episode?.displayTitle ?? entry.title,
               'url': entry.url,
               if (entry.hdVideoUrl != null) 'hdVideoUrl': entry.hdVideoUrl,
@@ -1392,8 +1419,16 @@ class VideoPlayerLauncher {
             'VideoPlayerLauncher: resolved ${items.length} items for source playlist (isSeries=$isSeries)',
           );
 
-          // Update the stream resolver so lazy loading works for the new playlist
-          resolver.replaceEntries(playlistEntries);
+          // Update the stream resolver so lazy loading works for the new
+          // playlist — but only if this switch is still the latest one.
+          if (!resolver.isLatestSwitch(switchToken)) {
+            debugPrint(
+              'VideoPlayerLauncher: source playlist $sourceIndex superseded '
+              'before apply — discarding stale resolve',
+            );
+            return null;
+          }
+          resolver.replaceEntries(playlistEntries, switchToken: switchToken);
 
           // Add metadata as the first entry with key '__meta__'
           // This tells Kotlin what content type to use for the new playlist
@@ -2562,13 +2597,33 @@ class _AndroidTvPlaylistResolver {
   List<_LauncherEntry> entries;
   final Future<String> Function(PlaylistEntry entry) resolveEntry;
 
+  // Monotonic token for in-flight source switches. The native side already
+  // discards stale playlist RESULTS via its own resolution token, but the Dart
+  // `replaceEntries` side effect was ungated: tap B then C quickly and, if B's
+  // torrent resolves slower, B's `replaceEntries` could run LAST and leave the
+  // lazy stream resolver pointing at B while the player shows C — wrong-torrent
+  // lazy resolution. Each switch captures a token via [beginSwitch]; a late
+  // [replaceEntries] whose token is no longer current is ignored.
+  int _switchSeq = 0;
+  int beginSwitch() => ++_switchSeq;
+  bool isLatestSwitch(int token) => token == _switchSeq;
+
   _AndroidTvPlaylistResolver({
     required this.entries,
     required this.resolveEntry,
   });
 
-  /// Replace entries with a new playlist (used during source switching)
-  void replaceEntries(List<PlaylistEntry> playlistEntries) {
+  /// Replace entries with a new playlist (used during source switching).
+  /// Pass the [switchToken] from [beginSwitch] so a stale (superseded) switch
+  /// that resolves late is skipped instead of overwriting a newer source.
+  void replaceEntries(List<PlaylistEntry> playlistEntries, {int? switchToken}) {
+    if (switchToken != null && switchToken != _switchSeq) {
+      debugPrint(
+        'AndroidTvPlaylistResolver: skipping stale replaceEntries '
+        '(token $switchToken != current $_switchSeq)',
+      );
+      return;
+    }
     // Clear cached URLs for old entries before replacing
     _clearResolvedStreams(entries.map((e) => e.resumeId));
 

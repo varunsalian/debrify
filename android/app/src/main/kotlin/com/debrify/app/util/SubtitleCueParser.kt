@@ -6,6 +6,82 @@ data class SubtitleCue(
     val text: String
 )
 
+/**
+ * Shared download+parse cache for external subtitle files, keyed by URL.
+ * Used by both the player's side-loaded subtitle renderer and the sync
+ * line picker, so a subtitle is only ever downloaded once per session.
+ */
+object SubtitleCueCache {
+
+    private val cache = mutableMapOf<String, List<SubtitleCue>>()
+
+    fun get(url: String): List<SubtitleCue>? = synchronized(cache) { cache[url] }
+
+    /**
+     * Blocking download + parse. Call from a background thread.
+     * Non-empty results are cached; failures return an empty list.
+     */
+    fun fetch(url: String): List<SubtitleCue> {
+        get(url)?.let { return it }
+        val content = try {
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            conn.instanceFollowRedirects = true
+            try {
+                decodeSubtitleBytes(conn.inputStream.use { it.readBytes() })
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: Exception) {
+            return emptyList()
+        }
+        val parsed = SubtitleCueParser.parseByUrl(url, content)
+        if (parsed.isNotEmpty()) {
+            synchronized(cache) { cache[url] = parsed }
+        }
+        return parsed
+    }
+
+    /**
+     * Decode raw subtitle bytes to text, honouring a byte-order mark and
+     * falling back gracefully. ExoPlayer's own parsers did this for us before
+     * subtitles were side-rendered; force-decoding as UTF-8 would break
+     * UTF-16 files (no line contains "-->") and mojibake Latin-1/Windows-1252.
+     */
+    private fun decodeSubtitleBytes(bytes: ByteArray): String {
+        // BOM sniffing
+        if (bytes.size >= 3 &&
+            bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()
+        ) {
+            return String(bytes, 3, bytes.size - 3, Charsets.UTF_8)
+        }
+        if (bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) {
+            return String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+        }
+        if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
+            return String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+        }
+
+        // No BOM: try strict UTF-8; on any malformed byte, fall back to
+        // Windows-1252 (a superset of Latin-1 with no undefined bytes), which
+        // is the most common legacy encoding for .srt files.
+        val strictUtf8 = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        return try {
+            strictUtf8.decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+        } catch (e: java.nio.charset.CharacterCodingException) {
+            val cp1252 = try {
+                java.nio.charset.Charset.forName("windows-1252")
+            } catch (e2: Exception) {
+                Charsets.ISO_8859_1
+            }
+            String(bytes, cp1252)
+        }
+    }
+}
+
 object SubtitleCueParser {
 
     fun parse(content: String, mimeType: String?): List<SubtitleCue> {
@@ -18,13 +94,9 @@ object SubtitleCueParser {
         }
     }
 
-    fun parseFromUrl(url: String): List<SubtitleCue> {
-        val lower = url.lowercase()
-        val content = try {
-            java.net.URL(url).readText()
-        } catch (e: Exception) {
-            return emptyList()
-        }
+    /** Dispatch on the file extension found in the URL path. */
+    fun parseByUrl(url: String, content: String): List<SubtitleCue> {
+        val lower = url.substringBefore("?").lowercase()
         return when {
             lower.contains(".srt") -> parseSrt(content)
             lower.contains(".vtt") -> parseVtt(content)

@@ -2490,14 +2490,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Resume the SAME episode from the new source (a season/complete pack would
     // otherwise restart at S1E1); _loadPlaylistIndex restores its saved
-    // position. Falls back to the first entry when the episode isn't found.
+    // position.
     var targetIndex = 0;
     if (se.season != null && se.episode != null) {
-      final idx = _seriesPlaylist
-              ?.findOriginalIndexBySeasonEpisode(se.season!, se.episode!) ??
-          -1;
-      if (idx >= 0) targetIndex = idx;
+      final sp = _seriesPlaylist;
+      final idx =
+          sp?.findOriginalIndexBySeasonEpisode(se.season!, se.episode!) ?? -1;
+      if (idx >= 0) {
+        targetIndex = idx;
+      } else {
+        // The exact episode isn't in this source. Don't fall back to raw entry
+        // 0 — in torrent order that's often an extras/bonus clip. Land on the
+        // first REAL episode (skips season 0 / specials) and warn the user.
+        final firstReal = sp?.getFirstEpisodeOriginalIndex() ?? -1;
+        if (firstReal >= 0) targetIndex = firstReal;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'S${se.season}E${se.episode} not in this source — playing from the start',
+              ),
+            ),
+          );
+        }
+      }
     }
+    // A source switch must resume the outgoing episode's position (saved above).
+    // Clear any lingering manual-selection state first: if the user had manually
+    // jumped to an episode within the last 30s, that stale flag makes
+    // `_maybeRestoreResume` bail out and the new source opens at 0:00 instead of
+    // resuming. The switch is not a "manual episode pick", so drop the flag.
+    _isManualEpisodeSelection = false;
+    _allowResumeForManualSelection = false;
     await _loadPlaylistIndex(targetIndex, autoplay: true, skipInitialSave: true);
     if (!mounted) return;
 
@@ -2536,14 +2560,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (!mounted) return;
 
+    // For YouTube each quality is a video-only track sharing one audio stream
+    // (widget.audioUrl). Mirror the initial-launch ordering: open PAUSED,
+    // attach the external audio, seek, then play — so both tracks load in sync
+    // (attaching audio mid-play makes mpv resync and drift). Sources without a
+    // separate audio track (torrents) keep the plain open-and-play path.
+    final hasExternalAudio =
+        widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
+
+    // For direct/torrent switches, `_player.open` discards the old media's
+    // subtitle tracks, so an active external/addon subtitle would silently
+    // vanish and the cached identifiers would dangle. Reset now (mirrors
+    // `_loadPlaylistIndex`) so the new media starts clean and addon-subtitle
+    // logic re-runs. Deliberately NOT done for the external-audio (YouTube)
+    // path — that flow is left exactly as before to avoid any regression.
+    if (!hasExternalAudio) {
+      _resetSubtitleState();
+    }
+
     try {
-      // For YouTube each quality is a video-only track sharing one audio stream
-      // (widget.audioUrl). Mirror the initial-launch ordering: open PAUSED,
-      // attach the external audio, seek, then play — so both tracks load in sync
-      // (attaching audio mid-play makes mpv resync and drift). Sources without a
-      // separate audio track (torrents) keep the plain open-and-play path.
-      final hasExternalAudio =
-          widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
       await _player.open(mk.Media(url), play: !hasExternalAudio);
       // Wait for the new media to load before seeking
       await _waitForVideoReady();
@@ -2557,6 +2592,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       if (hasExternalAudio) {
         await _player.play();
+      } else {
+        // Restore stored audio/subtitle track preferences for this content
+        // (same as the playlist path). Skipped for the external-audio (YouTube)
+        // case above, where the merged audio track is set explicitly and track
+        // preferences would fight it.
+        //
+        // Fire-and-forget: `_restoreTrackPreferences` awaits `_waitForSubtitleTracks`,
+        // which polls up to ~5s on media with no embedded subtitle tracks
+        // (common for direct MP4/torrent streams). Awaiting it here would hold
+        // the black transition overlay for that whole wait — a regression vs the
+        // old direct-switch path, which ended the transition right after the
+        // seek. Let it apply in the background; the overlay ends below on time.
+        unawaited(_restoreTrackPreferences());
       }
     } catch (e) {
       debugPrint('Player: Stremio source switch failed: $e');
@@ -3164,6 +3212,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// Tear down the black transition overlay when a load fails partway (bad
+  /// index, or no resolvable URL — e.g. a dead debrid/torbox link on the next
+  /// episode). Without this the UI stays stuck on the black transition
+  /// `Container` and the rainbow overlay never stops. The source-switch caller
+  /// clears transition state itself, so this only rescues the other callers
+  /// (`_goToNextEpisode`, shuffle). Safe to call redundantly.
+  void _clearTransitionOnFailure() {
+    _transitionStopTimer?.cancel();
+    _transitionPhaseTimer?.cancel();
+    _rainbowController.stop();
+    _transitionRunning = false;
+    _rainbowActive = false;
+    if (mounted) {
+      setState(() {
+        _isTransitioning = false;
+      });
+    } else {
+      _isTransitioning = false;
+    }
+  }
+
   Future<void> _loadPlaylistIndex(
     int index, {
     bool autoplay = false,
@@ -3171,8 +3240,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }) async {
     if (_activePlaylist == null ||
         index < 0 ||
-        index >= _activePlaylist!.length)
+        index >= _activePlaylist!.length) {
+      _clearTransitionOnFailure();
       return;
+    }
 
     print(
       'PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay',
@@ -3245,6 +3316,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           ),
         );
       }
+      _clearTransitionOnFailure();
       return;
     }
 
