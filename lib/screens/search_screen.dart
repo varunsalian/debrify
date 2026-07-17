@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:ui' show lerpDouble;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -53,7 +52,6 @@ import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
-import '../widgets/tv_sidebar_nav.dart';
 import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
@@ -6838,8 +6836,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   : IgnorePointer(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0D0B1A)
-                              .withValues(alpha: 0.92 * t),
+                          color: const Color(
+                            0xFF0D0B1A,
+                          ).withValues(alpha: 0.92 * t),
                         ),
                       ),
                     ),
@@ -7031,22 +7030,88 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // the search field above it already eats vertical space, and results —
         // not a cinematic hero — should dominate, so cap it well below the board's
         // so the first result row isn't squeezed.
+        // Fixed hero height, sized to leave a full card row visible below. It is
+        // deliberately NOT resized when the trailer plays: animating this band
+        // would relayout the rows ListView and re-fit the playing video texture
+        // every frame (weak-TV stutter), and would bounce the rows on every
+        // focus-rest/move as trailers start and stop. The full-bleed cover-crop
+        // of a 16:9 trailer into this wide-short band is accepted as inherent.
         final heroH = tv
             ? (constraints.maxHeight - _railRowH(context) - _railHeaderH * 2)
                   .clamp(150.0, widget.searchMode ? 180.0 : 380.0)
             : (width >= 900 ? 300.0 : 196.0);
 
-        // The ambient trailer is hosted here — BEHIND the whole board, laid
-        // out full-screen from frame one and masked down to the hero rect —
-        // NOT inside the hero. That's what makes the 10s "they're watching"
-        // promotion glitch-free: expanding to fill the page only animates the
-        // mask; the video texture never moves, resizes or re-fits, so
-        // playback simply continues. The spotlight fades its own backdrop
-        // image out once frames arrive (see _HeroSpotlight.trailerShowing) to
-        // reveal the video underneath.
+        // The ambient trailer is hosted BEHIND the spotlight, in the hero band
+        // only — a full-bleed frame that covers the band; the spotlight fades its
+        // still + text out on play. No fullscreen takeover; the video never
+        // moves, resizes or re-fits, so playback simply continues.
         return Stack(
           fit: StackFit.expand,
           children: [
+            // Ambient colour bleed: while the trailer plays, the focused title's
+            // dominant colour (see _heroTint) glows out of the hero's foot down
+            // into the rows and tints the board — the app "takes on" the film's
+            // colours. Behind everything; eases in with playback and between
+            // titles; IgnorePointer + no per-frame layer (a settled gradient).
+            if (_heroTrailerActive)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _heroTrailerShowing,
+                    builder: (context, showing, _) => AnimatedOpacity(
+                      opacity: showing ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 700),
+                      curve: Curves.easeOut,
+                      child: ValueListenableBuilder<Color?>(
+                        valueListenable: _heroTint,
+                        // Tween on the RAW tint (incl. → null): ColorTween eases a
+                        // cleared tint's alpha toward 0, and we scale the wash by
+                        // that alpha, so a title with no poster fades the colour
+                        // out instead of popping it away in one frame.
+                        builder: (context, tint, __) => TweenAnimationBuilder<Color?>(
+                          tween: ColorTween(end: tint),
+                          duration: const Duration(milliseconds: 700),
+                          curve: Curves.easeOut,
+                          builder: (context, eased, ___) {
+                            if (eased == null) {
+                              return const SizedBox.shrink();
+                            }
+                            // eased.a runs 1→0 as a cleared tint eases out; fold
+                            // it into the wash alphas so the fade rides along.
+                            final k = eased.a;
+                            final frac = (heroH / constraints.maxHeight).clamp(
+                              0.1,
+                              0.9,
+                            );
+                            return DecoratedBox(
+                              decoration: BoxDecoration(
+                                // Transparent through the hero (the video shows),
+                                // a bright glow right at the hero's foot, then a
+                                // soft tint carried to the bottom so the whole
+                                // rows area is bathed in the colour, not a band.
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    eased.withValues(alpha: 0.32 * k),
+                                    eased.withValues(alpha: 0.10 * k),
+                                  ],
+                                  stops: [
+                                    (frac - 0.14).clamp(0.0, 1.0),
+                                    frac,
+                                    1.0,
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             if (_heroTrailerActive)
               Positioned.fill(
                 child: _HeroTrailerLayer(
@@ -8503,157 +8568,167 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           // toward the focused title's dominant poster color (see [tint]) and
           // eases between titles, so the hero takes on each title's mood —
           // repaints only when the settled tint changes, never per frame.
-          ValueListenableBuilder<Color?>(
-            valueListenable:
-                widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
-            builder: (context, tintColor, _) {
-              return TweenAnimationBuilder<Color?>(
-                tween: ColorTween(end: tintColor ?? scheme.surface),
-                duration: const Duration(milliseconds: 450),
-                curve: Curves.easeOut,
-                builder: (context, eased, __) {
-                  // Blend gently — mood, not a paint job. Falls back to the
-                  // neutral surface while no tint is known.
-                  final base = Color.lerp(
-                    scheme.surface,
-                    eased ?? scheme.surface,
-                    0.22,
-                  )!;
-                  return DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [
-                          base.withValues(alpha: 0.92),
-                          base.withValues(alpha: 0.66),
-                          base.withValues(alpha: 0.10),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.34, 0.66, 1.0],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-          Align(
-            alignment: Alignment.bottomLeft,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(24, 0, 24, isTelevision ? 22 : 16),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: isTelevision ? 640 : 520),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _cascade(
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 4,
+          // Fades out with the text once the trailer covers the hero, so the
+          // full-bleed video reads clean (no purposeless left-darkening).
+          _maybeFadeForTrailer(
+            ValueListenableBuilder<Color?>(
+              valueListenable:
+                  widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
+              builder: (context, tintColor, _) {
+                return TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: tintColor ?? scheme.surface),
+                  duration: const Duration(milliseconds: 450),
+                  curve: Curves.easeOut,
+                  builder: (context, eased, __) {
+                    // Blend gently — mood, not a paint job. Falls back to the
+                    // neutral surface while no tint is known.
+                    final base = Color.lerp(
+                      scheme.surface,
+                      eased ?? scheme.surface,
+                      0.22,
+                    )!;
+                    return DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            base.withValues(alpha: 0.92),
+                            base.withValues(alpha: 0.66),
+                            base.withValues(alpha: 0.10),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.34, 0.66, 1.0],
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.14),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          // The whole identity block — badge, title, meta, plot — fades out once
+          // the trailer covers the hero, so a full-bleed trailer plays clean.
+          _maybeFadeForTrailer(
+            Align(
+              alignment: Alignment.bottomLeft,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(24, 0, 24, isTelevision ? 22 : 16),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: isTelevision ? 640 : 520,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _cascade(
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.14),
+                            ),
+                          ),
+                          child: Text(
+                            item.type == 'series' ? 'SERIES' : 'MOVIE',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
-                        child: Text(
-                          item.type == 'series' ? 'SERIES' : 'MOVIE',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
+                        0.0,
+                        0.6,
+                      ),
+                      SizedBox(height: compact ? 7 : 10),
+                      _cascade(
+                        Text(
+                          item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          // Poppins (rounded geometric) for the display title, airier
+                          // and lighter than Inter-w800/-1 tracking — closer to
+                          // Stremio's hero. Body/metadata stay on the Inter theme.
+                          style: GoogleFonts.poppins(
+                            fontSize: compact
+                                ? (isTelevision ? 24 : 20)
+                                : (isTelevision ? 38 : 26),
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0,
+                            height: 1.06,
                             color: Colors.white,
                           ),
                         ),
+                        0.08,
+                        0.72,
                       ),
-                      0.0,
-                      0.6,
-                    ),
-                    SizedBox(height: compact ? 7 : 10),
-                    _cascade(
-                      Text(
-                        item.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        // Poppins (rounded geometric) for the display title, airier
-                        // and lighter than Inter-w800/-1 tracking — closer to
-                        // Stremio's hero. Body/metadata stay on the Inter theme.
-                        style: GoogleFonts.poppins(
-                          fontSize: compact
-                              ? (isTelevision ? 24 : 20)
-                              : (isTelevision ? 38 : 26),
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0,
-                          height: 1.06,
-                          color: Colors.white,
-                        ),
-                      ),
-                      0.08,
-                      0.72,
-                    ),
-                    SizedBox(height: compact ? 6 : 8),
-                    _cascade(
-                      Row(
-                        children: [
-                          if (rating != null) ...[
-                            const Icon(
-                              Icons.star_rounded,
-                              size: 16,
-                              color: HomeTheme.focusGold,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              rating.toStringAsFixed(1),
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                            if (metaParts.isNotEmpty) _dot(),
-                          ],
-                          Flexible(
-                            child: Text(
-                              metaParts.join('   ·   '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white.withValues(alpha: 0.82),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      0.2,
-                      0.85,
-                    ),
-                    if (description != null && description.isNotEmpty) ...[
-                      SizedBox(height: compact ? 6 : 10),
+                      SizedBox(height: compact ? 6 : 8),
                       _cascade(
-                        Text(
-                          description,
-                          maxLines: compact ? 1 : (isTelevision ? 3 : 2),
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: compact
-                                ? 12.5
-                                : (isTelevision ? 14.5 : 13),
-                            height: compact ? 1.3 : 1.45,
-                            color: Colors.white.withValues(alpha: 0.72),
-                          ),
+                        Row(
+                          children: [
+                            if (rating != null) ...[
+                              const Icon(
+                                Icons.star_rounded,
+                                size: 16,
+                                color: HomeTheme.focusGold,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                rating.toStringAsFixed(1),
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              if (metaParts.isNotEmpty) _dot(),
+                            ],
+                            Flexible(
+                              child: Text(
+                                metaParts.join('   ·   '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white.withValues(alpha: 0.82),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        0.32,
-                        1.0,
+                        0.2,
+                        0.85,
                       ),
+                      if (description != null && description.isNotEmpty) ...[
+                        SizedBox(height: compact ? 6 : 10),
+                        _cascade(
+                          Text(
+                            description,
+                            maxLines: compact ? 1 : (isTelevision ? 3 : 2),
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: compact
+                                  ? 12.5
+                                  : (isTelevision ? 14.5 : 13),
+                              height: compact ? 1.3 : 1.45,
+                              color: Colors.white.withValues(alpha: 0.72),
+                            ),
+                          ),
+                          0.32,
+                          1.0,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -8738,18 +8813,13 @@ class _HeroTrailerLayer extends StatefulWidget {
 
 class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
     with SingleTickerProviderStateMixin {
-  /// Continuous watching required before the trailer takes over the board.
-  static const Duration _promoteAfter = Duration(seconds: 10);
-
-  /// 0 = ambient (hero-shaped mask) → 1 = promoted (full-board video). One
-  /// clean, unhurried crossfade — the mask opens while the host swaps the
-  /// board UI for the compact title overlay, all driven by this value.
+  /// Retained (pinned at 0) from the disabled full-board takeover — the host's
+  /// dormant takeover overlay/recede still listen to its published value. It is
+  /// never driven now: the trailer stays windowed (full-bleed) in the hero.
   late final AnimationController _promote = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1600),
   );
-
-  Timer? _promoteTimer;
 
   double get _promoteT => Curves.easeInOutCubic.transform(_promote.value);
 
@@ -8813,7 +8883,6 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
   @override
   void dispose() {
     widget.trailer.removeListener(_onTrailerChanged);
-    _promoteTimer?.cancel();
     _promote.dispose();
     super.dispose();
   }
@@ -8829,12 +8898,8 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
       setState(() => _held = next);
       return;
     }
-    // Cleared (hero moved on, a key press, content launched). If the film is
-    // filling the board, DON'T snap the video away — keep it playing and ease
-    // the mask gracefully back down to the hero shape, unmounting only once it
-    // lands (see [_onPromoteStatus]). From the ambient state there's nothing
-    // to animate, so drop it immediately.
-    _promoteTimer?.cancel();
+    // Cleared (hero moved on, a key press, content launched). Fullscreen
+    // takeover is disabled so _promote is always 0 — just drop the video.
     if (_promote.value > 0) {
       _collapsing = true;
       _promote.animateBack(0.0, duration: _collapseDuration);
@@ -8856,25 +8921,10 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
   }
 
   void _onPlaying(bool playing) {
+    // Relay to the host — drives the spotlight still-fade, the identity-block
+    // fade and the color bleed. Fullscreen takeover is disabled (the promote
+    // controller stays pinned at 0), so there's nothing else to do here.
     widget.onPlayingChanged?.call(playing);
-    if (!mounted) return;
-    if (playing) {
-      _promoteTimer?.cancel();
-      _promoteTimer = Timer(_promoteAfter, () {
-        if (!mounted || widget.trailer.value == null) return;
-        // A modal (sheet/dialog — invisible to the PageRoute-only route
-        // observer) may have opened over the board while the trailer kept
-        // playing: never take the screen over UNDER it.
-        if (ModalRoute.of(context)?.isCurrent != true) return;
-        _promote.forward();
-      });
-    } else {
-      // Paused/stopped (route pushed, content playback launched, engine
-      // died): don't hold an empty board over a dead surface — bring the UI
-      // back and ease the mask down to the hero shape.
-      _promoteTimer?.cancel();
-      if (_promote.value > 0) _promote.reverse();
-    }
   }
 
   @override
@@ -8890,28 +8940,10 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
       _backdropUrl = streams.playUrl;
       _backdropKey = GlobalKey();
     }
-    final video = HeroTrailerBackdrop(
-      key: _backdropKey,
-      imageUrl: null,
-      videoUrl: streams.playUrl,
-      audioUrl: streams.audioUrl,
-      enabled: true,
-      // No blur layers — a per-frame filter pass over the video surface
-      // is what stutters weak TV GPUs (same rationale as the detail page).
-      imageBlurSigma: 0,
-      videoBlurSigma: 0,
-      // The host already debounced for focus-rest; keep just enough
-      // delay to absorb an immediate focus move.
-      startDelay: const Duration(milliseconds: 300),
-      ambientVolume: widget.volume,
-      onPlayingChanged: _onPlaying,
-    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final boardH = constraints.maxHeight;
         final boardW = constraints.maxWidth;
-        // Degenerate layout (mid-transition zero-height pass): the mask
-        // math below divides by boardH — bail rather than NaN a gradient.
         if (!boardH.isFinite ||
             boardH <= 0 ||
             !boardW.isFinite ||
@@ -8919,116 +8951,59 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
           return const SizedBox.shrink();
         }
         final heroH = widget.heroHeight.clamp(0.0, boardH);
-        // The board is inset by the collapsed sidebar rail's width, so a
-        // board-sized video leaves a rail-wide strip of page background
-        // when the rail hides during the takeover. Lay the whole layer
-        // out that much WIDER, hanging out to the left UNDER the rail:
-        // invisible while ambient (the collapsed rail paints opaque), and
-        // when the rail fades the strip reveals video — true full-bleed,
-        // no seam, no relayout, nothing pops. Paint-overflow only; no
-        // ancestor between here and the screen edge clips.
-        final fullW = boardW + TvSidebarNav.collapsedWidth;
-        Widget fullBleed(Widget child) => OverflowBox(
-          alignment: Alignment.centerRight,
-          minWidth: fullW,
-          maxWidth: fullW,
-          minHeight: boardH,
-          maxHeight: boardH,
-          child: child,
-        );
-        return AnimatedBuilder(
-          animation: _promote,
-          child: video,
-          builder: (context, child) {
-            final t = _promoteT;
-            // Fully promoted steady state: bare video + scrim — no clip,
-            // no mask, no per-frame saveLayer. The GlobalKey carries the
-            // playing element across this branch swap untouched.
-            final Widget surface;
-            if (t >= 1.0) {
-              surface = child!;
-            } else {
-              // Ambient/transitional: clip to the (growing) visible slab
-              // so the mask's saveLayer never costs more area than is
-              // actually revealed, and melt the bottom edge exactly like
-              // the hero image does (opaque to 55% of the slab, gone by
-              // its end) — stops expressed against the full board height.
-              final visibleH = lerpDouble(heroH, boardH, t)!;
-              final opaqueTo = lerpDouble(0.55 * heroH / boardH, 1.0, t)!;
-              final fadeTo = lerpDouble(heroH / boardH, 1.0, t)!;
-              surface = ClipRect(
-                clipper: _TopSliceClipper(visibleH),
-                child: ShaderMask(
-                  shaderCallback: (rect) => LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: const [
-                      Colors.white,
-                      Colors.white,
-                      Colors.transparent,
-                    ],
-                    stops: [0.0, opaqueTo, fadeTo],
-                  ).createShader(rect),
-                  blendMode: BlendMode.dstIn,
-                  child: child,
+        // Full-bleed: the trailer COVERS the whole hero band (cropped to fill),
+        // the way the big OTT apps ship their hero. A bottom gradient melts it
+        // into the board and carries the title/meta that sit over it in the
+        // spotlight (the left edge is handled by the spotlight's tint scrim in
+        // front). RepaintBoundary isolates the texture's per-frame updates.
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            height: heroH,
+            width: double.infinity,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                RepaintBoundary(
+                  child: HeroTrailerBackdrop(
+                    key: _backdropKey,
+                    imageUrl: null,
+                    videoUrl: streams.playUrl,
+                    audioUrl: streams.audioUrl,
+                    enabled: true,
+                    imageBlurSigma: 0,
+                    videoBlurSigma: 0,
+                    startDelay: const Duration(milliseconds: 300),
+                    ambientVolume: widget.volume,
+                    onPlayingChanged: _onPlaying,
+                  ),
                 ),
-              );
-            }
-            return fullBleed(
-              Stack(
-                fit: StackFit.expand,
-                children: [
-                  RepaintBoundary(child: surface),
-                  // Legibility gradient over the promoted video — slightly
-                  // heavier at the top (the title/description overlay lives
-                  // there) and at the foot, light in the middle so the film
-                  // stays bright. Fade baked into the gradient's alphas
-                  // (NOT an Opacity wrapper, whose mid values would force a
-                  // full-screen saveLayer every frame) — always layer-free.
-                  if (t > 0.001)
-                    IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              const Color(
-                                0xFF0D0B1A,
-                              ).withValues(alpha: 0.34 * t),
-                              const Color(
-                                0xFF0D0B1A,
-                              ).withValues(alpha: 0.08 * t),
-                              const Color(
-                                0xFF0D0B1A,
-                              ).withValues(alpha: 0.36 * t),
-                            ],
-                            stops: const [0.0, 0.45, 1.0],
-                          ),
-                        ),
+                // Bottom scrim over the video: melts the hero into the board and
+                // keeps the title/meta (above, in the spotlight) legible. Baked
+                // gradient, no Opacity layer.
+                const IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Color(0xFF0D0B1A),
+                          Color(0xB30D0B1A),
+                          Colors.transparent,
+                        ],
+                        stops: [0.0, 0.28, 0.62],
                       ),
                     ),
-                ],
-              ),
-            );
-          },
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
   }
-}
-
-/// Clips to the top [height] logical pixels of the child — the "visible slab"
-/// of the full-screen trailer while it's ambient/animating open.
-class _TopSliceClipper extends CustomClipper<Rect> {
-  final double height;
-  const _TopSliceClipper(this.height);
-
-  @override
-  Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width, height);
-
-  @override
-  bool shouldReclip(_TopSliceClipper oldClipper) => oldClipper.height != height;
 }
 
 /// The hero's "trailer is on its way" chip: a small glass pill with a thin

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart';
@@ -63,8 +62,6 @@ class DiscoverTrailerStage extends StatefulWidget {
 
 class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
     with SingleTickerProviderStateMixin {
-  /// Continuous watching before the trailer takes the screen over.
-  static const Duration _promoteAfter = Duration(seconds: 6);
 
   /// Graceful settle back to the window — quicker than the promote-in.
   static const Duration _collapseDuration = Duration(milliseconds: 900);
@@ -75,8 +72,6 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
   );
 
   double get _promoteT => Curves.easeInOutCubic.transform(_promote.value);
-
-  Timer? _promoteTimer;
 
   /// The streams actually rendered. Normally mirrors [widget.trailer], but
   /// outlives a null during a graceful collapse so the video keeps playing while
@@ -89,11 +84,6 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
   /// rail nulls the shared notifier. Refreshed on late enrichment via
   /// [_onMetaChanged]; cleared only when [_held] is.
   StremioMeta? _heldMeta;
-
-  /// Set when the user pressed a key to minimize; blocks an immediate re-promote
-  /// of the same title (they asked for the window — don't fight them). Cleared
-  /// when a new trailer arrives.
-  bool _dismissed = false;
 
   /// Pins the player element across rebuilds; replaced per URL so each title
   /// still spins a fresh engine.
@@ -141,7 +131,6 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
     widget.trailer.removeListener(_onTrailerChanged);
     widget.meta.removeListener(_onMetaChanged);
     HardwareKeyboard.instance.removeHandler(_onTakeoverKey);
-    _promoteTimer?.cancel();
     _promote.dispose();
     super.dispose();
   }
@@ -161,13 +150,11 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
     final next = widget.trailer.value;
     if (next != null) {
       _collapsing = false;
-      _dismissed = false;
       setState(() => _held = next);
       return;
     }
-    // Cleared (focus moved, suppressed, playback launched). If we're promoted,
-    // don't snap — ease the window back down and unmount when it lands.
-    _promoteTimer?.cancel();
+    // Cleared (focus moved, suppressed, playback launched). Fullscreen takeover
+    // is disabled so _promote is always 0 — just drop the video + meta.
     if (_promote.value > 0) {
       // Keep _held AND _heldMeta through the collapse so the video and its
       // title/meta overlay fade out together.
@@ -196,26 +183,10 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
 
   void _onPlaying(bool playing) {
     if (!mounted) return;
-    if (playing) {
-      widget.loading.value = false; // frames are up — drop the pill
-      _promoteTimer?.cancel();
-      if (_dismissed) return; // user minimized this title; don't re-promote
-      _promoteTimer = Timer(_promoteAfter, () {
-        if (!mounted || widget.trailer.value == null || _dismissed) return;
-        // A sheet/dialog may sit over the board (the route observer only sees
-        // PageRoutes) — never take the screen over under one.
-        if (ModalRoute.of(context)?.isCurrent != true) return;
-        _promote.forward();
-      });
-    } else {
-      // Cancel a not-yet-fired promote so a stall before takeover doesn't promote
-      // a frozen frame. Do NOT reverse an active takeover: a transient buffer
-      // stall flips this false then true, and reversing would shrink the
-      // fullscreen video to the window and re-grow it on every hiccup. A real
-      // teardown clears the streams and collapses through _onTrailerChanged; a
-      // dead frozen takeover is always recoverable with any key.
-      _promoteTimer?.cancel();
-    }
+    // Fullscreen takeover is disabled — the trailer stays windowed in the rail.
+    // (The promote controller/overlay/scrim/chrome-dim remain wired but are
+    // never driven; _promote sits at 0.)
+    if (playing) widget.loading.value = false; // frames are up — drop the pill
   }
 
   /// Any key while promoted eases the trailer back into the window (still
@@ -224,8 +195,6 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
   bool _onTakeoverKey(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     if (_promote.value <= 0.02) return false;
-    _dismissed = true;
-    _promoteTimer?.cancel();
     _promote.animateBack(0.0, duration: _collapseDuration);
     return false;
   }
@@ -268,32 +237,38 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
             children: [
               AnimatedBuilder(
                 animation: _promote,
-                child: video,
+                // RepaintBoundary: each video frame invalidates only the
+                // texture's own layer, not the scrim/pill/overlay around it —
+                // and UI repaints never re-record the video. Matches the Home
+                // hero layer.
+                child: RepaintBoundary(child: video),
                 builder: (context, child) {
                   final t = _promoteT;
                   final rect = Rect.lerp(widget.railRect, fullRect, t)!;
                   final radius = lerpDouble(14.0, 0.0, t)!;
+                  // Windowed render: the fixed full-size surface scaled by the
+                  // FittedBox into the (rail-box) rect — the video never re-fits,
+                  // only its paint transform changes. (Fullscreen takeover is
+                  // disabled, so `t` stays 0 and `rect` is always the rail box.)
+                  final surface = Positioned.fromRect(
+                    rect: rect,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(radius),
+                      child: FittedBox(
+                        fit: BoxFit.cover,
+                        clipBehavior: Clip.hardEdge,
+                        child: SizedBox(
+                          width: fullW,
+                          height: fullH,
+                          child: child,
+                        ),
+                      ),
+                    ),
+                  );
                   return Stack(
                     fit: StackFit.expand,
                     children: [
-                      Positioned.fromRect(
-                        rect: rect,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(radius),
-                          // Fixed full-size surface, scaled by the FittedBox —
-                          // the video never re-fits, only its paint transform
-                          // changes as the window grows.
-                          child: FittedBox(
-                            fit: BoxFit.cover,
-                            clipBehavior: Clip.hardEdge,
-                            child: SizedBox(
-                              width: fullW,
-                              height: fullH,
-                              child: child,
-                            ),
-                          ),
-                        ),
-                      ),
+                      surface,
                       // Legibility scrim over the promoted video — baked into a
                       // gradient's alpha (never an Opacity layer) so it costs no
                       // per-frame saveLayer on weak TV GPUs.
