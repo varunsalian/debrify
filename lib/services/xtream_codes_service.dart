@@ -37,9 +37,10 @@ class XtreamCodesService {
   // few resident — the TTL alone never frees memory for distinct keys.
   static const _maxCachedResults = 3;
 
-  // Per-server probe result: true if the panel only serves the legacy
-  // un-prefixed live URL form instead of the standard /live/ one.
-  final Map<String, bool> _legacyLiveUrlCache = {};
+  // Per-server probe result: which live URL form this panel actually serves
+  // (standard /live/ vs legacy un-prefixed, HLS .m3u8 vs raw .ts — panels
+  // with HLS output disabled only route the .ts forms).
+  final Map<String, _LiveUrlForm> _liveUrlFormCache = {};
 
   String _baseUrl(String serverUrl, String username, String password) {
     final user = Uri.encodeQueryComponent(username);
@@ -64,7 +65,10 @@ class XtreamCodesService {
 
   /// Safely decode a JSON response body as a List, returning a user-friendly error
   /// if the server returns non-JSON or non-array data.
-  Future<(List<dynamic>?, String?)> _decodeJsonList(String body, String label) async {
+  Future<(List<dynamic>?, String?)> _decodeJsonList(
+    String body,
+    String label,
+  ) async {
     dynamic decoded;
     try {
       decoded = body.length > _computeDecodeThreshold
@@ -93,15 +97,18 @@ class XtreamCodesService {
   }
 
   /// Authenticate and return account info
-  Future<XcAuthResult> authenticate(String serverUrl, String username, String password) async {
+  Future<XcAuthResult> authenticate(
+    String serverUrl,
+    String username,
+    String password,
+  ) async {
     try {
       final url = _baseUrl(serverUrl, username, password);
       debugPrint('XtreamCodesService: Authenticating with $serverUrl');
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: _headers,
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(Uri.parse(url), headers: _headers)
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
         return XcAuthResult(
@@ -142,25 +149,34 @@ class XtreamCodesService {
         success: true,
         status: status,
         expDate: expDate,
-        maxConnections: int.tryParse(userInfo['max_connections']?.toString() ?? ''),
-        activeConnections: int.tryParse(userInfo['active_cons']?.toString() ?? ''),
+        maxConnections: int.tryParse(
+          userInfo['max_connections']?.toString() ?? '',
+        ),
+        activeConnections: int.tryParse(
+          userInfo['active_cons']?.toString() ?? '',
+        ),
       );
     } catch (e) {
       debugPrint('XtreamCodesService: Auth error: $e');
-      return XcAuthResult(
-        success: false,
-        error: 'Connection failed: $e',
-      );
+      return XcAuthResult(success: false, error: 'Connection failed: $e');
     }
   }
 
   /// Fetch live channels, converted to IptvChannel list + categories
-  Future<IptvParseResult> fetchLiveStreams(String serverUrl, String username, String password) {
+  Future<IptvParseResult> fetchLiveStreams(
+    String serverUrl,
+    String username,
+    String password,
+  ) {
     return _fetchStreams(serverUrl, username, password, contentType: 'live');
   }
 
   /// Fetch VOD items, converted to IptvChannel list + categories
-  Future<IptvParseResult> fetchVodStreams(String serverUrl, String username, String password) {
+  Future<IptvParseResult> fetchVodStreams(
+    String serverUrl,
+    String username,
+    String password,
+  ) {
     return _fetchStreams(serverUrl, username, password, contentType: 'vod');
   }
 
@@ -179,21 +195,27 @@ class XtreamCodesService {
     if (_cache.containsKey(cacheKey)) {
       final cached = _cache[cacheKey]!;
       if (DateTime.now().difference(cached.fetchedAt) < _cacheDuration) {
-        debugPrint('XtreamCodesService: Using cached $label streams for $serverUrl');
+        debugPrint(
+          'XtreamCodesService: Using cached $label streams for $serverUrl',
+        );
         return cached.result;
       }
     }
 
     try {
       final base = _baseUrl(serverUrl, username, password);
-      final categoriesAction = isLive ? 'get_live_categories' : 'get_vod_categories';
+      final categoriesAction = isLive
+          ? 'get_live_categories'
+          : 'get_vod_categories';
       final streamsAction = isLive ? 'get_live_streams' : 'get_vod_streams';
 
       // Kick off both requests in parallel, but only the stream list is
       // required: a category failure (network or malformed body) must not
       // take down the whole fetch.
-      final categoriesFuture =
-          _tryGet('$base&action=$categoriesAction', const Duration(seconds: 30));
+      final categoriesFuture = _tryGet(
+        '$base&action=$categoriesAction',
+        const Duration(seconds: 30),
+      );
       final streamsResponse = await http
           .get(Uri.parse('$base&action=$streamsAction'), headers: _headers)
           .timeout(const Duration(seconds: 60));
@@ -203,14 +225,21 @@ class XtreamCodesService {
         return IptvParseResult(
           channels: [],
           categories: [],
-          error: 'Failed to fetch $label streams: HTTP ${streamsResponse.statusCode}',
+          error:
+              'Failed to fetch $label streams: HTTP ${streamsResponse.statusCode}',
         );
       }
 
-      final (streamsData, streamsError) =
-          await _decodeJsonList(streamsResponse.body, 'streams');
+      final (streamsData, streamsError) = await _decodeJsonList(
+        streamsResponse.body,
+        'streams',
+      );
       if (streamsError != null) {
-        return IptvParseResult(channels: [], categories: [], error: streamsError);
+        return IptvParseResult(
+          channels: [],
+          categories: [],
+          error: streamsError,
+        );
       }
 
       // Build category ID -> name map; degrade to ungrouped channels (with a
@@ -219,13 +248,19 @@ class XtreamCodesService {
       final categoryMap = <String, String>{};
       final categoryNames = <String>[];
       if (categoriesResponse == null || categoriesResponse.statusCode != 200) {
-        warning = 'Could not load $label categories — showing channels ungrouped';
+        warning =
+            'Could not load $label categories — showing channels ungrouped';
       } else {
-        final (categoriesData, catError) =
-            await _decodeJsonList(categoriesResponse.body, 'categories');
+        final (categoriesData, catError) = await _decodeJsonList(
+          categoriesResponse.body,
+          'categories',
+        );
         if (categoriesData == null) {
-          warning = 'Could not load $label categories — showing channels ungrouped';
-          debugPrint('XtreamCodesService: Ignoring $label categories: $catError');
+          warning =
+              'Could not load $label categories — showing channels ungrouped';
+          debugPrint(
+            'XtreamCodesService: Ignoring $label categories: $catError',
+          );
         } else {
           for (final cat in categoriesData) {
             final id = cat['category_id']?.toString() ?? '';
@@ -241,16 +276,21 @@ class XtreamCodesService {
       final encodedUser = Uri.encodeComponent(username);
       final encodedPass = Uri.encodeComponent(password);
 
-      // Standard live URLs use the /live/ prefix, but some legacy panels only
-      // route the un-prefixed form; probe once per server and remember.
-      var useLegacyLiveUrls = false;
+      // Standard live URLs use the /live/ prefix and HLS (.m3u8), but some
+      // panels only route the legacy un-prefixed form, and HLS-off panels
+      // only serve raw MPEG-TS (.ts); probe once per server and remember.
+      var liveUrlForm = _LiveUrlForm.standardHls;
       if (isLive && streamsData!.isNotEmpty) {
         final sampleId = streamsData
             .map((s) => s['stream_id']?.toString() ?? '')
             .firstWhere((id) => id.isNotEmpty, orElse: () => '');
         if (sampleId.isNotEmpty) {
-          useLegacyLiveUrls = await _shouldUseLegacyLiveUrls(
-              serverUrl, encodedUser, encodedPass, sampleId);
+          liveUrlForm = await _detectLiveUrlForm(
+            serverUrl,
+            encodedUser,
+            encodedPass,
+            sampleId,
+          );
         }
       }
 
@@ -265,40 +305,51 @@ class XtreamCodesService {
         final group = categoryMap[categoryId];
 
         if (isLive) {
-          channels.add(IptvChannel(
-            name: name,
-            url: useLegacyLiveUrls
-                ? '$serverUrl/$encodedUser/$encodedPass/$streamId.m3u8'
-                : '$serverUrl/live/$encodedUser/$encodedPass/$streamId.m3u8',
-            logoUrl: stream['stream_icon']?.toString(),
-            group: group,
-            duration: -1, // live
-            contentType: 'live',
-            attributes: {
-              if (stream['epg_channel_id'] != null)
-                'tvg-id': stream['epg_channel_id'].toString(),
-              'stream_id': streamId,
-            },
-          ));
+          channels.add(
+            IptvChannel(
+              name: name,
+              url: _liveUrl(
+                serverUrl,
+                encodedUser,
+                encodedPass,
+                streamId,
+                liveUrlForm,
+              ),
+              logoUrl: stream['stream_icon']?.toString(),
+              group: group,
+              duration: -1, // live
+              contentType: 'live',
+              attributes: {
+                if (stream['epg_channel_id'] != null)
+                  'tvg-id': stream['epg_channel_id'].toString(),
+                'stream_id': streamId,
+              },
+            ),
+          );
         } else {
           final extension = stream['container_extension']?.toString() ?? 'mp4';
-          channels.add(IptvChannel(
-            name: name,
-            url: '$serverUrl/movie/$encodedUser/$encodedPass/$streamId.$extension',
-            logoUrl: stream['stream_icon']?.toString(),
-            group: group,
-            duration: null, // not live
-            contentType: 'vod',
-            attributes: {
-              if (stream['rating'] != null)
-                'rating': stream['rating'].toString(),
-              'stream_id': streamId,
-            },
-          ));
+          channels.add(
+            IptvChannel(
+              name: name,
+              url:
+                  '$serverUrl/movie/$encodedUser/$encodedPass/$streamId.$extension',
+              logoUrl: stream['stream_icon']?.toString(),
+              group: group,
+              duration: null, // not live
+              contentType: 'vod',
+              attributes: {
+                if (stream['rating'] != null)
+                  'rating': stream['rating'].toString(),
+                'stream_id': streamId,
+              },
+            ),
+          );
         }
       }
 
-      debugPrint('XtreamCodesService: Fetched ${channels.length} $label channels, ${categoryNames.length} categories');
+      debugPrint(
+        'XtreamCodesService: Fetched ${channels.length} $label channels, ${categoryNames.length} categories',
+      );
 
       // Cache without the warning so it surfaces once per fresh fetch rather
       // than on every cached load for the next 30 minutes.
@@ -322,37 +373,61 @@ class XtreamCodesService {
     }
   }
 
-  /// Probe whether this panel serves the standard /live/ URL form; fall back
-  /// to the legacy un-prefixed form when /live/ fails but the legacy form
-  /// works.
-  Future<bool> _shouldUseLegacyLiveUrls(
+  /// Build a live stream URL in the given panel-specific form.
+  String _liveUrl(
+    String serverUrl,
+    String encodedUser,
+    String encodedPass,
+    String streamId,
+    _LiveUrlForm form,
+  ) {
+    final creds = '$encodedUser/$encodedPass/$streamId';
+    return switch (form) {
+      _LiveUrlForm.standardHls => '$serverUrl/live/$creds.m3u8',
+      _LiveUrlForm.standardTs => '$serverUrl/live/$creds.ts',
+      _LiveUrlForm.legacyHls => '$serverUrl/$creds.m3u8',
+      _LiveUrlForm.legacyTs => '$serverUrl/$creds.ts',
+    };
+  }
+
+  /// Probe which live URL form this panel serves, in order of preference:
+  /// standard /live/ HLS, standard /live/ raw TS (HLS-off panels), then the
+  /// two legacy un-prefixed forms. First 2xx wins.
+  Future<_LiveUrlForm> _detectLiveUrlForm(
     String serverUrl,
     String encodedUser,
     String encodedPass,
     String sampleStreamId,
   ) async {
     final cacheKey = '$serverUrl:$encodedUser';
-    final cached = _legacyLiveUrlCache[cacheKey];
+    final cached = _liveUrlFormCache[cacheKey];
     if (cached != null) return cached;
 
-    final liveStatus = await _probeStatusCode(
-        '$serverUrl/live/$encodedUser/$encodedPass/$sampleStreamId.m3u8');
-    if (liveStatus == null) {
-      // Network failure — keep the standard form, but don't cache an
-      // undetermined verdict; the next fetch re-probes.
-      return false;
+    for (final form in _LiveUrlForm.values) {
+      final status = await _probeStatusCode(
+        _liveUrl(serverUrl, encodedUser, encodedPass, sampleStreamId, form),
+      );
+      if (status == null) {
+        // Network failure — the panel is likely unreachable, so probing the
+        // remaining forms would just stack timeouts. Keep the standard form
+        // and don't cache an undetermined verdict; the next fetch re-probes.
+        return _LiveUrlForm.standardHls;
+      }
+      if (status >= 200 && status < 300) {
+        _liveUrlFormCache[cacheKey] = form;
+        if (form != _LiveUrlForm.standardHls) {
+          debugPrint(
+            'XtreamCodesService: Panel $serverUrl uses ${form.name} live URLs',
+          );
+        }
+        return form;
+      }
     }
 
-    var useLegacy = false;
-    if (liveStatus < 200 || liveStatus >= 300) {
-      final legacyStatus = await _probeStatusCode(
-          '$serverUrl/$encodedUser/$encodedPass/$sampleStreamId.m3u8');
-      useLegacy =
-          legacyStatus != null && legacyStatus >= 200 && legacyStatus < 300;
-    }
-
-    _legacyLiveUrlCache[cacheKey] = useLegacy;
-    return useLegacy;
+    // Every form got a definitive non-2xx answer — nothing works. Cache the
+    // standard form so we don't re-probe all four on every fetch.
+    _liveUrlFormCache[cacheKey] = _LiveUrlForm.standardHls;
+    return _LiveUrlForm.standardHls;
   }
 
   /// Fetch only the status code of a URL without downloading the body: some
@@ -363,8 +438,9 @@ class XtreamCodesService {
     try {
       final request = http.Request('GET', Uri.parse(url));
       request.headers.addAll(_headers);
-      final response =
-          await client.send(request).timeout(const Duration(seconds: 10));
+      final response = await client
+          .send(request)
+          .timeout(const Duration(seconds: 10));
       // Cancel the body stream immediately; only the status matters.
       await response.stream.listen((_) {}).cancel();
       return response.statusCode;
@@ -380,10 +456,10 @@ class XtreamCodesService {
   void clearCache([String? serverUrl]) {
     if (serverUrl != null) {
       _cache.removeWhere((key, _) => key.startsWith(serverUrl));
-      _legacyLiveUrlCache.removeWhere((key, _) => key.startsWith(serverUrl));
+      _liveUrlFormCache.removeWhere((key, _) => key.startsWith(serverUrl));
     } else {
       _cache.clear();
-      _legacyLiveUrlCache.clear();
+      _liveUrlFormCache.clear();
     }
   }
 
@@ -411,3 +487,8 @@ class _CachedResult {
 
   _CachedResult({required this.result, required this.fetchedAt});
 }
+
+/// Live stream URL forms panels serve, in probe order. Standard panels route
+/// `/live/user/pass/id.m3u8`; HLS-off panels only serve raw .ts; some legacy
+/// panels only route the un-prefixed form.
+enum _LiveUrlForm { standardHls, standardTs, legacyHls, legacyTs }

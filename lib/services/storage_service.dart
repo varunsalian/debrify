@@ -19,8 +19,7 @@ class StorageService {
       'real_debrid_integration_enabled';
   static const String _realDebridHiddenFromNavKey =
       'real_debrid_hidden_from_nav';
-  static const String _rdSkipBlockedTorrentsKey =
-      'rd_skip_blocked_torrents';
+  static const String _rdSkipBlockedTorrentsKey = 'rd_skip_blocked_torrents';
   static const String _torboxIntegrationEnabledKey =
       'torbox_integration_enabled';
   static const String _torboxHiddenFromNavKey = 'torbox_hidden_from_nav';
@@ -38,8 +37,7 @@ class StorageService {
       'alldebrid_integration_enabled';
   static const String _allDebridPostTorrentActionKey =
       'alldebrid_post_torrent_action';
-  static const String _allDebridHiddenFromNavKey =
-      'alldebrid_hidden_from_nav';
+  static const String _allDebridHiddenFromNavKey = 'alldebrid_hidden_from_nav';
   static const String _pikpakHiddenFromNavKey = 'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
@@ -115,7 +113,8 @@ class StorageService {
   // Lemmy settings
   static const String _lemmyInstanceKey = 'lemmy_instance';
   static const String _lemmyAllowNsfwKey = 'lemmy_allow_nsfw';
-  static const String _lemmyFavoriteCommunitiesKey = 'lemmy_favorite_communities';
+  static const String _lemmyFavoriteCommunitiesKey =
+      'lemmy_favorite_communities';
   static const String _lemmyDefaultCommunityKey = 'lemmy_default_community';
   // YouTube settings
   static const String _youtubeMaxHeightKey = 'youtube_max_height';
@@ -223,8 +222,7 @@ class StorageService {
       'stremio_tv_catalog_repo_urls_v1';
   static const String _stremioTvHideNowPlayingKey =
       'stremio_tv_hide_now_playing';
-  static const String _stremioTvTorrentsFirstKey =
-      'stremio_tv_torrents_first';
+  static const String _stremioTvTorrentsFirstKey = 'stremio_tv_torrents_first';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -2024,8 +2022,7 @@ class StorageService {
     // Premiumize cloud-browser items are keyed by cloud item id (they have no
     // torrent hash, unlike items added from search).
     final dynamic premiumizeItemId = item['premiumizeItemId'];
-    if (premiumizeItemId != null &&
-        premiumizeItemId.toString().isNotEmpty) {
+    if (premiumizeItemId != null && premiumizeItemId.toString().isNotEmpty) {
       return '$provider|premiumize:item:${premiumizeItemId.toString().toLowerCase()}';
     }
     final dynamic premiumizeItemIds = item['premiumizeItemIds'];
@@ -2411,9 +2408,7 @@ class StorageService {
     }
 
     // Search by AllDebrid infohash if provided and not found yet.
-    if (itemIndex == -1 &&
-        allDebridHash != null &&
-        allDebridHash.isNotEmpty) {
+    if (itemIndex == -1 && allDebridHash != null && allDebridHash.isNotEmpty) {
       itemIndex = items.indexWhere(
         (item) =>
             ((item['provider'] as String?)?.toLowerCase() == 'alldebrid') &&
@@ -2525,9 +2520,7 @@ class StorageService {
       });
     }
 
-    if (itemIndex == -1 &&
-        allDebridHash != null &&
-        allDebridHash.isNotEmpty) {
+    if (itemIndex == -1 && allDebridHash != null && allDebridHash.isNotEmpty) {
       itemIndex = items.indexWhere(
         (item) =>
             ((item['provider'] as String?)?.toLowerCase() == 'alldebrid') &&
@@ -2720,8 +2713,8 @@ class StorageService {
 
   /// Canonical comparison key for an IPTV channel URL. Xtream Codes stream
   /// URL formats have changed over time (optional /live/ prefix,
-  /// percent-encoded credentials), so favorites are matched on a
-  /// format-insensitive key rather than the raw string.
+  /// percent-encoded credentials, .m3u8 vs .ts extension), so favorites are
+  /// matched on a format-insensitive key rather than the raw string.
   static String canonicalIptvChannelKey(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.host.isEmpty) return url;
@@ -2731,10 +2724,23 @@ class StorageService {
     // (.../live/<user>/<pass>/<numeric id>.<ext>) — not arbitrary /live/
     // paths, which belong to ordinary playlists where the segment is
     // significant.
+    final xtreamLeaf = RegExp(r'^\d+\.\w+$');
+    var isXtreamLive = false;
     if (segments.length >= 4 &&
         segments[segments.length - 4] == 'live' &&
-        RegExp(r'^\d+\.\w+$').hasMatch(segments.last)) {
+        xtreamLeaf.hasMatch(segments.last)) {
       segments.removeAt(segments.length - 4);
+      isXtreamLive = true;
+    } else if (segments.length == 3 && xtreamLeaf.hasMatch(segments.last)) {
+      // Legacy un-prefixed form: /<user>/<pass>/<numeric id>.<ext>.
+      isXtreamLive = true;
+    }
+    // For Xtream live URLs the extension is presentation, not identity: the
+    // same channel is served as .m3u8 on HLS panels and .ts on HLS-off ones
+    // (VOD /movie/ URLs keep theirs — the container is real there).
+    if (isXtreamLive) {
+      final leaf = segments.last;
+      segments[segments.length - 1] = leaf.substring(0, leaf.indexOf('.'));
     }
     final port = uri.hasPort ? ':${uri.port}' : '';
     // Keep the query: distinct channels can differ only by query params.
@@ -2746,7 +2752,9 @@ class StorageService {
   /// channel matches an existing favorite canonically but not literally
   /// (e.g. favorites saved before the Xtream /live/ URL fix). Keeps the
   /// Home favorites row playing working URLs.
-  static Future<void> reconcileIptvFavoriteUrls(List<IptvChannel> channels) async {
+  static Future<void> reconcileIptvFavoriteUrls(
+    List<IptvChannel> channels,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
     if (favoritesJson == null) return;
@@ -2777,8 +2785,9 @@ class StorageService {
       if (!favoriteHosts.any(channel.url.contains)) continue;
       // Consume the mapping so a second canonically-equal channel can't
       // re-move (and null out) an already-migrated entry.
-      final storedKey =
-          storedByCanonical.remove(canonicalIptvChannelKey(channel.url));
+      final storedKey = storedByCanonical.remove(
+        canonicalIptvChannelKey(channel.url),
+      );
       if (storedKey != null && storedKey != channel.url) {
         final metadata = favorites.remove(storedKey);
         if (metadata != null) {
@@ -3400,9 +3409,7 @@ class StorageService {
   static Future<String> getLemmyInstance() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getString(_lemmyInstanceKey);
-    return (value != null && value.isNotEmpty)
-        ? value
-        : 'https://lemmy.world';
+    return (value != null && value.isNotEmpty) ? value : 'https://lemmy.world';
   }
 
   static Future<void> setLemmyInstance(String instance) async {
