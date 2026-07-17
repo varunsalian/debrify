@@ -2874,7 +2874,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final needsBg = item.background == null || item.background!.isEmpty;
     final needsDesc = item.description == null || item.description!.isEmpty;
     final needsRating = item.imdbRating == null;
-    if (!needsBg && !needsDesc && !needsRating) return;
+    // Catalog list items almost never carry runtime, so without this the /meta
+    // fetch (its only source) would be skipped whenever bg+desc+rating are
+    // already present — and the hero/takeover runtime would stay blank.
+    final needsRuntime = item.runtime == null;
+    if (!needsBg && !needsDesc && !needsRating && !needsRuntime) return;
     final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (imdb == null) return;
     final reqId = ++_heroReqId;
