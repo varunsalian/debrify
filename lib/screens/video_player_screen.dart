@@ -582,6 +582,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentSourceIndex = widget.stremioCurrentSourceIndex ?? 0;
     _currentStremioTvChannelId = _findInitialStremioTvChannelId();
     _parseChannelDirectory();
+    // The sync offset is per-subtitle and session-scoped, but it lives in a
+    // process-wide singleton — clear it at the start of every player session so
+    // a previous video's offset can't leak in (mirrors the TV side's onCreate).
+    SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -2088,6 +2092,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (platform is mk.NativePlayer) {
       platform.setProperty('sub-delay', (ms / 1000.0).toStringAsFixed(3));
     }
+  }
+
+  /// Reset the sync offset to 0. The offset belongs to the specific subtitle it
+  /// was dialed in against, so it must reset whenever the subtitle or the
+  /// content changes. mpv's `sub-delay` is push-based, so zero it explicitly
+  /// rather than relying on a stale in-memory value carrying over.
+  void _resetSubtitleSyncOffset() {
+    SubtitleSettingsService.instance.resetSyncOffset();
+    // Keep the UI model in sync (no setState needed: the sync overlay is closed
+    // on these transitions and no style rendering depends on the offset).
+    _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: 0);
+    _applySubtitleSyncOffset(0);
   }
 
   void _showSyncOverlayPanel() {
@@ -6587,6 +6603,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
         await _persistTrackChoice(audioId, subtitleId);
       },
+      // Fires only on a genuine subtitle switch (not audio, not re-select, not a
+      // failed load): the sync offset was calibrated for the previous subtitle.
+      onSubtitleTrackChanged: _resetSubtitleSyncOffset,
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
       onSyncOverlayRequested: _showSyncOverlayPanel,
       contentImdbId: effectiveImdbId,
@@ -6632,6 +6651,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _cleanupTempSubtitleFilesSync();
     _activeExternalSubtitlePath = null;
     _showSyncOverlay = false;
+    // Content changed: the previous item's sync offset no longer applies.
+    _resetSubtitleSyncOffset();
   }
 
   /// Restore audio and subtitle track preferences

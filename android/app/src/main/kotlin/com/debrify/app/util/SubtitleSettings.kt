@@ -20,7 +20,6 @@ object SubtitleSettings {
     private const val KEY_BG_INDEX = "subtitle_bg_index"
     private const val KEY_OUTLINE_COLOR_INDEX = "subtitle_outline_color_index"
     private const val KEY_ELEVATION_INDEX = "subtitle_elevation_index"
-    private const val KEY_SYNC_OFFSET_MS = "subtitle_sync_offset_ms"
     private const val KEY_DEFAULT_SUBTITLE_LANGUAGE = "flutter.player_default_subtitle_language"
     private const val KEY_DEFAULT_AUDIO_LANGUAGE = "flutter.player_default_audio_language"
 
@@ -212,17 +211,73 @@ object SubtitleSettings {
     @JvmStatic
     fun getCurrentElevation(context: Context): ElevationOption = ELEVATION_OPTIONS[getElevationIndex(context).coerceIn(0, ELEVATION_OPTIONS.size - 1)]
 
+    // ── Subtitle sync offset ─────────────────────────────────────────────────
+    //
+    // The sync offset belongs to ONE subtitle — the exact file it was dialed in
+    // against — for the duration of a single playback session. A delay that
+    // lines up subtitle A with the audio is meaningless for a different subtitle
+    // (different authoring) or a different episode (different encode), so the
+    // offset is deliberately:
+    //   • in-memory (NOT persisted to disk — it must never survive a restart), and
+    //   • scoped to an "active subtitle identity" the player reports via a provider.
+    //
+    // Reads return the stored offset only while the subtitle it was set against
+    // is still the active one; the moment the player reports a different identity
+    // (subtitle switch, next episode, subtitles off) the offset reads back as 0.
+    // This makes "reset on change" hold BY CONSTRUCTION — no reset call is needed
+    // at any of the many subtitle-switch seams, so none can be forgotten.
+    private var syncOffsetOwnerIdentity: String? = null
+    private var syncOffsetMs: Long = 0L
+    private var activeSubtitleIdentityProvider: (() -> String?)? = null
+    private var identityProviderOwner: Any? = null
+
+    /**
+     * Register the player's "what subtitle is on screen right now" provider.
+     * `owner` is the registering Activity, tracked so that an OUTGOING player's
+     * teardown can't clear an already-registered INCOMING player's provider
+     * (Android runs the new Activity's onCreate before the old one's onDestroy).
+     */
+    @JvmStatic
+    fun setActiveSubtitleIdentityProvider(owner: Any, provider: (() -> String?)?) {
+        identityProviderOwner = owner
+        activeSubtitleIdentityProvider = provider
+    }
+
+    /**
+     * Drop the provider on teardown — but only if `owner` is still the current
+     * registrant, so a stale onDestroy doesn't wipe a newer player's provider.
+     */
+    @JvmStatic
+    fun clearActiveSubtitleIdentityProvider(owner: Any) {
+        if (identityProviderOwner === owner) {
+            activeSubtitleIdentityProvider = null
+            identityProviderOwner = null
+            resetSyncOffset()
+        }
+    }
+
+    /** Clear the in-memory offset. Call when a fresh playback session begins. */
+    @JvmStatic
+    fun resetSyncOffset() {
+        syncOffsetOwnerIdentity = null
+        syncOffsetMs = 0L
+    }
+
     @JvmStatic
     fun getSyncOffsetMs(context: Context): Long {
-        return getPrefs(context).getLong(KEY_SYNC_OFFSET_MS, 0L)
+        // Return the stored offset only while the subtitle it was set against is
+        // still active. Note both being null (no subtitle) is a legitimate match:
+        // it keeps the sync slider live when the user opens it with subtitles off,
+        // and the offset still drops to 0 the moment a real subtitle loads (its
+        // non-null identity no longer equals the null owner).
+        val active = activeSubtitleIdentityProvider?.invoke()
+        return if (active == syncOffsetOwnerIdentity) syncOffsetMs else 0L
     }
 
     @JvmStatic
     fun setSyncOffsetMs(context: Context, ms: Long) {
-        getPrefs(context).edit().putLong(
-            KEY_SYNC_OFFSET_MS,
-            ms.coerceIn(SYNC_OFFSET_MIN_MS, SYNC_OFFSET_MAX_MS)
-        ).apply()
+        syncOffsetOwnerIdentity = activeSubtitleIdentityProvider?.invoke()
+        syncOffsetMs = ms.coerceIn(SYNC_OFFSET_MIN_MS, SYNC_OFFSET_MAX_MS)
     }
 
     @JvmStatic
@@ -353,8 +408,9 @@ object SubtitleSettings {
             .putInt(KEY_BG_INDEX, DEFAULT_BG_INDEX)
             .putInt(KEY_OUTLINE_COLOR_INDEX, DEFAULT_OUTLINE_COLOR_INDEX)
             .putInt(KEY_ELEVATION_INDEX, DEFAULT_ELEVATION_INDEX)
-            .putLong(KEY_SYNC_OFFSET_MS, 0L)
             .apply()
+        // The sync offset is in-memory and per-subtitle, not a persisted style.
+        resetSyncOffset()
     }
 
     /**

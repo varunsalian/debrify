@@ -45,6 +45,10 @@ class TracksSheet {
     onDownloadStremioSubtitleToFile,
     Future<TracksSheetSubtitleSearchResult?> Function()? onIdentifyTitle,
     String? subtitleIdentityLabel,
+    // Fired only when the user applies an ACTUAL subtitle change (not an audio
+    // change, not a re-selection of the current subtitle, not a failed load).
+    // Used to reset the per-subtitle sync offset.
+    VoidCallback? onSubtitleTrackChanged,
   }) async {
     final tracks = player.state.tracks;
     final audios = tracks.audio
@@ -250,6 +254,7 @@ class TracksSheet {
                         onStremioSubtitleSelected: onStremioSubtitleSelected,
                         onDownloadStremioSubtitleToFile:
                             onDownloadStremioSubtitleToFile,
+                        onSubtitleTrackChanged: onSubtitleTrackChanged,
                         isIdentifyingTitle: isIdentifyingTitle,
                         subtitleIdentityLabel: activeSubtitleIdentityLabel,
                         onIdentifyTitle: onIdentifyTitle == null
@@ -410,6 +415,7 @@ class TracksSheet {
     required void Function(String? id)? onStremioSubtitleSelected,
     required Future<String?> Function(StremioSubtitle subtitle)?
     onDownloadStremioSubtitleToFile,
+    VoidCallback? onSubtitleTrackChanged,
     required bool isIdentifyingTitle,
     required String? subtitleIdentityLabel,
     required Future<void> Function()? onIdentifyTitle,
@@ -442,6 +448,7 @@ class TracksSheet {
           onSubChanged: onSubChanged,
           onStremioSubtitleSelected: onStremioSubtitleSelected,
           onDownloadStremioSubtitleToFile: onDownloadStremioSubtitleToFile,
+          onSubtitleTrackChanged: onSubtitleTrackChanged,
           isIdentifyingTitle: isIdentifyingTitle,
           subtitleIdentityLabel: subtitleIdentityLabel,
           onIdentifyTitle: onIdentifyTitle,
@@ -546,6 +553,7 @@ class _SubtitlesTab extends StatelessWidget {
   final void Function(String? id)? onStremioSubtitleSelected;
   final Future<String?> Function(StremioSubtitle subtitle)?
   onDownloadStremioSubtitleToFile;
+  final VoidCallback? onSubtitleTrackChanged;
   final bool isIdentifyingTitle;
   final String? subtitleIdentityLabel;
   final Future<void> Function()? onIdentifyTitle;
@@ -562,10 +570,18 @@ class _SubtitlesTab extends StatelessWidget {
     required this.onSubChanged,
     required this.onStremioSubtitleSelected,
     required this.onDownloadStremioSubtitleToFile,
+    this.onSubtitleTrackChanged,
     required this.isIdentifyingTitle,
     required this.subtitleIdentityLabel,
     required this.onIdentifyTitle,
   });
+
+  /// A tap on subtitle [tappedId] is a genuine subtitle switch worth resetting
+  /// the sync offset for — but only if it differs from what's already selected
+  /// and the current selection isn't the ambiguous 'auto' sentinel (whose real
+  /// track id we can't compare against, so we bias toward keeping the offset).
+  bool _isRealSubtitleChange(String tappedId) =>
+      tappedId != selectedSub && selectedSub != 'auto';
 
   @override
   Widget build(BuildContext context) {
@@ -594,9 +610,11 @@ class _SubtitlesTab extends StatelessWidget {
           subtitle: 'Disable subtitles',
           isSelected: selectedSub == 'no',
           onTap: () async {
+            final realChange = _isRealSubtitleChange('no');
             onSubChanged('no');
             await player.setSubtitleTrack(mk.SubtitleTrack.no());
             await onTrackChanged(selectedAudio, 'no');
+            if (realChange) onSubtitleTrackChanged?.call();
           },
         ),
 
@@ -615,9 +633,11 @@ class _SubtitlesTab extends StatelessWidget {
                 title: label,
                 isSelected: sub.id == selectedSub,
                 onTap: () async {
+                  final realChange = _isRealSubtitleChange(sub.id);
                   onSubChanged(sub.id);
                   await player.setSubtitleTrack(sub);
                   await onTrackChanged(selectedAudio, sub.id);
+                  if (realChange) onSubtitleTrackChanged?.call();
                 },
               ),
             );
@@ -671,10 +691,13 @@ class _SubtitlesTab extends StatelessWidget {
                   subtitle: sub.source,
                   isSelected: subId == selectedSub,
                   onTap: () async {
+                    final realChange = _isRealSubtitleChange(subId);
                     onSubChanged(subId);
                     try {
                       final filePath = await onDownloadStremioSubtitleToFile
                           ?.call(sub);
+                      // Download failed: leave the current subtitle (and its
+                      // offset) untouched — do NOT fire onSubtitleTrackChanged.
                       if (filePath == null) return;
 
                       final track = mk.SubtitleTrack.uri(
@@ -686,6 +709,7 @@ class _SubtitlesTab extends StatelessWidget {
                       await player.setSubtitleTrack(track);
                       onStremioSubtitleSelected?.call(sub.id);
                       await onTrackChanged(selectedAudio, subId);
+                      if (realChange) onSubtitleTrackChanged?.call();
                     } catch (e) {
                       debugPrint('TracksSheet: Subtitle error - $e');
                     }

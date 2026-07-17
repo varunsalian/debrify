@@ -288,6 +288,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // resume/seek logic that a re-prepare would).
     private var externalSubtitleCues: List<SubtitleCue> = emptyList()
     private var externalSubtitleActive = false
+    private var activeExternalSubtitleUrl: String? = null  // URL of the side-rendered subtitle currently on screen; identifies it for sync-offset scoping
     private var externalSubtitleLoadToken = 0  // Guard against stale downloads (fast switching / content change)
     private val externalSubtitleHandler = Handler(Looper.getMainLooper())
     private var externalSubtitleTicker: Runnable? = null
@@ -1011,6 +1012,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Setup subtitle styling from saved preferences
         subtitleOverlay.setApplyEmbeddedStyles(false)
         subtitleOverlay.setApplyEmbeddedFontSizes(false)
+        // The sync offset is per-subtitle and in-memory: start this session at 0
+        // and let SubtitleSettings scope it to whatever subtitle is on screen.
+        SubtitleSettings.resetSyncOffset()
+        SubtitleSettings.setActiveSubtitleIdentityProvider(this) { currentSubtitleIdentity() }
         applySubtitleSettings()
 
         playerView.setControllerAutoShow(false)
@@ -1835,6 +1840,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSubtitleEpisode = null
         manualSubtitleDisplayLabel = null
         addonSubtitleFetchToken++
+        // Switching content resets the sync offset (it belonged to the previous
+        // item's subtitle). The identity-scoped read already returns 0 for the
+        // new content, but the embedded renderer offset is push-based and would
+        // otherwise keep the previous item's shift — pushing a stale offset onto
+        // the next episode's auto-selected subtitles while the UI reads 0.
+        SubtitleSettings.resetSyncOffset()
+        offsetRenderersFactory?.setOffsetUs(0L)
     }
 
     private fun playMediaDirect(item: PlaybackItem) {
@@ -5231,6 +5243,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
         }
         ts.parameters = params.build()
+        // Selecting a different embedded subtitle (or Off) resets the sync offset:
+        // it was calibrated for the previous subtitle. Do it explicitly rather
+        // than via an identity-scoped read — player.currentTracks hasn't updated
+        // to the new selection yet, so a read here would be stale, and embedded
+        // subs carry the offset at the (push-based) renderer level. This also
+        // prevents a same-language embedded track from inheriting a sibling
+        // track's offset through the folded "emb" identity.
+        SubtitleSettings.resetSyncOffset()
+        offsetRenderersFactory?.setOffsetUs(0L)
     }
 
     /**
@@ -5314,6 +5335,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         externalSubtitleCues = cues
         externalSubtitleActive = true
+        activeExternalSubtitleUrl = subtitle.url
         lastExternalCueText = null
         // Clear immediately: disabling the embedded track fires onCues(empty),
         // but that's now suppressed, and the first ticker render early-returns
@@ -5332,6 +5354,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         externalSubtitleTicker = null
         if (externalSubtitleActive || externalSubtitleCues.isNotEmpty()) {
             externalSubtitleActive = false
+            activeExternalSubtitleUrl = null
             externalSubtitleCues = emptyList()
             lastExternalCueText = null
             if (::subtitleOverlay.isInitialized) subtitleOverlay.setCues(emptyList())
@@ -5459,6 +5482,32 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }.start()
     }
 
+    /**
+     * A stable key for "the subtitle currently on screen", used to scope the
+     * sync offset (see SubtitleSettings). It changes whenever the subtitle
+     * changes OR the content/episode changes, so the offset — which is only
+     * valid for the exact subtitle it was dialed in against — resets by
+     * construction. Returns null when no subtitle is showing.
+     *
+     * The content key is folded in so the same embedded language (or a reused
+     * subtitle URL) across two different episodes never shares an offset.
+     */
+    private fun currentSubtitleIdentity(): String? {
+        val contentKey = payload?.items?.getOrNull(currentIndex)?.resumeId ?: "idx:$currentIndex"
+        if (externalSubtitleActive) {
+            val url = activeExternalSubtitleUrl ?: return null
+            return "$contentKey|ext:$url"
+        }
+        // Fold all embedded text tracks into a single "emb" identity: switching
+        // between embedded tracks of the SAME episode keeping the offset is an
+        // acceptable edge; the offset only needs to reset across episodes (the
+        // content key handles that) and across the external⇄embedded boundary.
+        val embeddedSelected = player?.currentTracks?.groups?.any { group ->
+            group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
+        } ?: false
+        return if (embeddedSelected) "$contentKey|emb" else null
+    }
+
     private fun applySubtitleSettings() {
         subtitleOverlay.setFixedTextSize(
             TypedValue.COMPLEX_UNIT_SP,
@@ -5466,7 +5515,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
         subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this))
         subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
-        val newOffsetUs = SubtitleSettings.getSyncOffsetMs(this) * 1000L
+        // Only carry an offset onto the renderer when a subtitle is actually on
+        // screen. Dialing the slider with subtitles off stores an offset under a
+        // null owner (so the slider stays live), but it must NOT be pushed to the
+        // renderer — otherwise a later auto-selected subtitle, which doesn't pass
+        // through the selection reset, would render shifted while the read is 0.
+        val hasSubtitle = currentSubtitleIdentity() != null
+        val newOffsetUs = if (hasSubtitle) SubtitleSettings.getSyncOffsetMs(this) * 1000L else 0L
         val oldOffsetUs = offsetRenderersFactory?.currentOffsetUs ?: 0L
         offsetRenderersFactory?.setOffsetUs(newOffsetUs)
         if (externalSubtitleActive) {
@@ -6673,6 +6728,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         linePickerOverlay = null
         subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)
         externalSubtitleHandler.removeCallbacksAndMessages(null)
+        // Drop the identity provider so the SubtitleSettings singleton doesn't
+        // retain this Activity via the captured lambda (no-op if a newer player
+        // already registered its own).
+        SubtitleSettings.clearActiveSubtitleIdentityProvider(this)
 
         // Clear adapters to release lambda references
         playlistView.adapter = null

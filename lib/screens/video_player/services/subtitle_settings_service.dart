@@ -152,7 +152,6 @@ class SubtitleSettingsService {
   static const String _keyBgIndex = 'subtitle_bg_index';
   static const String _keyOutlineColorIndex = 'subtitle_outline_color_index';
   static const String _keyElevationIndex = 'subtitle_elevation_index';
-  static const String _keySyncOffsetMs = 'subtitle_sync_offset_ms';
 
   static const int syncOffsetMinMs = -3600000;
   static const int syncOffsetMaxMs = 3600000;
@@ -167,6 +166,13 @@ class SubtitleSettingsService {
   SubtitleSettingsService._();
 
   SharedPreferences? _prefs;
+
+  // The sync offset is per-subtitle and lives only for the current playback
+  // session — a delay calibrated for one subtitle file is meaningless for a
+  // different subtitle or a different episode, so it is deliberately in-memory
+  // (never persisted) and reset to 0 whenever the subtitle or content changes.
+  // (The style settings above stay persisted; only the offset is session-scoped.)
+  int _syncOffsetMs = 0;
 
   Future<void> _ensurePrefs() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -243,14 +249,16 @@ class SubtitleSettingsService {
   }
 
   Future<int> getSyncOffsetMs() async {
-    await _ensurePrefs();
-    return _prefs!.getInt(_keySyncOffsetMs) ?? 0;
+    return _syncOffsetMs;
   }
 
   Future<void> setSyncOffsetMs(int ms) async {
-    await _ensurePrefs();
-    await _prefs!.setInt(
-        _keySyncOffsetMs, ms.clamp(syncOffsetMinMs, syncOffsetMaxMs));
+    _syncOffsetMs = ms.clamp(syncOffsetMinMs, syncOffsetMaxMs);
+  }
+
+  /// Clear the in-memory sync offset. Call when the subtitle or content changes.
+  void resetSyncOffset() {
+    _syncOffsetMs = 0;
   }
 
   // Get current values
@@ -304,7 +312,7 @@ class SubtitleSettingsService {
           SubtitleOutlineColor.defaultIndex,
       elevationIndex: _prefs!.getInt(_keyElevationIndex) ??
           SubtitleElevation.defaultIndex,
-      syncOffsetMs: _prefs!.getInt(_keySyncOffsetMs) ?? 0,
+      syncOffsetMs: _syncOffsetMs,
       fontIndex: fontIndex,
       fontFamily: fontFamily,
       fontLabel: selectedFont.label,
@@ -321,7 +329,8 @@ class SubtitleSettingsService {
     await _prefs!.setInt(
         _keyOutlineColorIndex, SubtitleOutlineColor.defaultIndex);
     await _prefs!.setInt(_keyElevationIndex, SubtitleElevation.defaultIndex);
-    await _prefs!.setInt(_keySyncOffsetMs, 0);
+    // Sync offset is in-memory and per-subtitle, not a persisted style.
+    resetSyncOffset();
     await SubtitleFontService.instance.resetToDefault();
   }
 
