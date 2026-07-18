@@ -149,6 +149,24 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
 
   @override
   Widget build(BuildContext context) {
+    // TV: one row, equal-width columns (leading + each chip share the width
+    // evenly). The dropdowns fill their column and pin the chevron right (see
+    // StremioDropdown), so it reads as a deliberate bar instead of a ragged
+    // 2-row wrap. No collapse on TV — sheets are a pointer-only affordance.
+    if (widget.isTelevision) {
+      final items = <Widget>[
+        if (widget.leading != null) widget.leading!,
+        ...widget.buildChips(),
+      ];
+      return Row(
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(width: 12),
+            Expanded(child: items[i]),
+          ],
+        ],
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final narrow =

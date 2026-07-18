@@ -146,56 +146,71 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
         child: GestureDetector(
           onTap: _open,
           behavior: HitTestBehavior.opaque,
-          child: Container(
-            key: _btnKey,
-            padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
-            decoration: BoxDecoration(
-              color: kSeeAllPanel,
-              borderRadius: BorderRadius.circular(11),
-              // Constant width: Container feeds the border's thickness into its
-              // layout padding, so a 1→2px focus ring RESIZES the pill and
-              // reflows the whole filter row (reads as the screen shaking on
-              // DPAD moves). Only the color may change on focus.
-              border: Border.all(
-                width: 2,
-                color: _focused
-                    ? kSeeAllAccent
-                    : (active ? kSeeAllAccentBorder : kSeeAllLine),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.label != null) ...[
-                  Text(
-                    widget.label!.toUpperCase(),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.42),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 200),
-                  child: Text(
-                    _valueLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+          // When a parent hands a TIGHT width (an equal-width filter column —
+          // see SeeAllFilterBar's TV single row), fill it and pin the chevron to
+          // the right edge, ellipsizing the value. Otherwise stay intrinsic (the
+          // Wrap/Row usages everywhere else are unaffected — they pass loose or
+          // unbounded width, so `hasTightWidth` is false).
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final stretch = constraints.hasTightWidth;
+              final valueText = Text(
+                _valueLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              );
+              return Container(
+                key: _btnKey,
+                padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
+                decoration: BoxDecoration(
+                  color: kSeeAllPanel,
+                  borderRadius: BorderRadius.circular(11),
+                  // Constant width: Container feeds the border's thickness into
+                  // its layout padding, so a 1→2px focus ring RESIZES the pill
+                  // and reflows the whole filter row (reads as the screen shaking
+                  // on DPAD moves). Only the color may change on focus.
+                  border: Border.all(
+                    width: 2,
+                    color: _focused
+                        ? kSeeAllAccent
+                        : (active ? kSeeAllAccentBorder : kSeeAllLine),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Icon(Icons.keyboard_arrow_down_rounded,
-                    size: 18, color: Colors.white.withValues(alpha: 0.5)),
-              ],
-            ),
+                child: Row(
+                  mainAxisSize:
+                      stretch ? MainAxisSize.max : MainAxisSize.min,
+                  children: [
+                    if (widget.label != null) ...[
+                      Text(
+                        widget.label!.toUpperCase(),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.42),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (stretch)
+                      Expanded(child: valueText)
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 200),
+                        child: valueText,
+                      ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.keyboard_arrow_down_rounded,
+                        size: 18, color: Colors.white.withValues(alpha: 0.5)),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ),
