@@ -5461,7 +5461,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             }
             return KeyEventResult.ignored;
           },
-          child: Stack(
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _controlsVisible,
+            child: Stack(
             fit: StackFit.expand,
             children: [
               // Video texture (media_kit renderer)
@@ -5845,10 +5847,46 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // Subtitle sync overlay
               if (_showSyncOverlay) _buildSyncOverlay(),
             ],
+            ),
+            builder: (context, controlsVisible, child) {
+              // Hide the desktop mouse pointer once controls fade out; any
+              // mouse movement wakes both the cursor and the controls.
+              // Keep the cursor visible whenever an overlay/sheet is open —
+              // those set _controlsVisible=false but still need the pointer.
+              final hideCursor = !controlsVisible && !_isAnyOverlayOpen;
+              return MouseRegion(
+                cursor: hideCursor
+                    ? SystemMouseCursors.none
+                    : MouseCursor.defer,
+                onHover: (_) => _wakeControlsOnPointer(),
+                child: child,
+              );
+            },
           ),
         ),
       ),
     );
+  }
+
+  /// True while any overlay/sheet is open on top of the player. These set
+  /// _controlsVisible=false but must keep the mouse pointer visible.
+  bool get _isAnyOverlayOpen =>
+      _showSyncOverlay ||
+      _showChannelGuide ||
+      _showIptvChannelSheet ||
+      _showSourceSheet ||
+      _showStremioTvGuide;
+
+  /// Called on mouse movement: reveal controls (and the cursor) if hidden and
+  /// (re)start the auto-hide countdown so continuous movement keeps them alive.
+  void _wakeControlsOnPointer() {
+    // Don't disturb the base controls while an overlay owns the screen; the
+    // cursor is already kept visible by _isAnyOverlayOpen in the builder.
+    if (_isAnyOverlayOpen) return;
+    if (!_controlsVisible.value) {
+      _controlsVisible.value = true;
+    }
+    _scheduleAutoHide();
   }
 
   String _currentPlaybackTitleForIdentity() {
