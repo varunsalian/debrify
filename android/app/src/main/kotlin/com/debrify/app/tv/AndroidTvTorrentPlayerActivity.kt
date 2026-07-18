@@ -62,6 +62,9 @@ import android.net.Uri
 import com.debrify.app.ActivityTracker
 import com.debrify.app.MainActivity
 import com.debrify.app.R
+import com.debrify.app.subtitle.AddonSubtitleResult
+import com.debrify.app.subtitle.AddonSubtitleStatus
+import com.debrify.app.subtitle.StremioAddon
 import com.debrify.app.subtitle.StremioSubtitle
 import com.debrify.app.subtitle.StremioSubtitleService
 import com.debrify.app.util.LanguageMapper
@@ -256,6 +259,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitlePanel: SubtitlePanelController? = null
     private var syncOverlay: SubtitleSyncOverlayController? = null
     private var linePickerOverlay: SubtitleLinePickerController? = null
+    private var unifiedMenu: UnifiedMenuController? = null
     private val subtitleSeekHandler = Handler(Looper.getMainLooper())
     private val subtitleSeekRunnable = Runnable {
         player?.let { p ->
@@ -268,7 +272,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Stremio external subtitles
     private var stremioSubtitleService: StremioSubtitleService? = null
-    private val stremioSubtitles = mutableListOf<StremioSubtitle>()
+    private val stremioSubtitles = mutableListOf<StremioSubtitle>()  // deduped flat view over addonSubtitleResults
+    private val addonSubtitleResults = mutableListOf<AddonSubtitleResult>()  // per-addon, ordered/stable
+    private val addonFetchTokens = mutableMapOf<String, Int>()  // per-addon retry generation
+    private val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues — don't re-auto-select
     private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
     private var isLoadingStremioSubtitles = false  // Loading state for UI indicator
     private var embeddedSubtitleSelected = false  // Track if embedded subtitle was auto-selected
@@ -824,6 +831,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 callbacks = subtitlePanelCallbacks
             )
         }
+
+        // Unified player menu (Miller columns) — additive, gated by USE_UNIFIED_MENU
+        findViewById<View?>(R.id.unified_menu_root)?.let { root ->
+            unifiedMenu = UnifiedMenuController(
+                activity = this,
+                root = root,
+                col1 = findViewById(R.id.unified_col1),
+                col2 = findViewById(R.id.unified_col2),
+                col3 = findViewById(R.id.unified_col3),
+                col2Header = findViewById(R.id.unified_col2_header),
+                col3Header = findViewById(R.id.unified_col3_header),
+                preview = findViewById(R.id.unified_preview),
+                callbacks = unifiedMenuCallbacks
+            )
+        }
+
         bufferingIndicator = findViewById(R.id.android_tv_buffering_indicator)
         pikPakReactivationIndicator = findViewById(R.id.android_tv_pikpak_reactivation_indicator)
         pikPakReactivationText = findViewById(R.id.android_tv_pikpak_reactivation_text)
@@ -1696,33 +1719,53 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pauseButton?.onFocusChangeListener = extendTimerOnFocus
 
         nightModeButton?.setOnClickListener {
-            showNightModeDialog()
+            if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                hideControlsMenu(); unifiedMenu?.show("display", "night")
+            } else {
+                showNightModeDialog()
+            }
         }
         nightModeButton?.onFocusChangeListener = extendTimerOnFocus
         updateNightModeButtonLabel()
 
         audioButton?.setOnClickListener {
-            showAudioTrackDialog()
-            scheduleHideControlsMenu()
+            if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                hideControlsMenu(); unifiedMenu?.show("audio")
+            } else {
+                showAudioTrackDialog()
+                scheduleHideControlsMenu()
+            }
         }
         audioButton?.onFocusChangeListener = extendTimerOnFocus
 
         subtitleButton?.setOnClickListener {
             hideControlsMenu()
-            showSubtitleSettingsPanel()
+            if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                unifiedMenu?.show("subs")
+            } else {
+                showSubtitleSettingsPanel()
+            }
         }
         subtitleButton?.onFocusChangeListener = extendTimerOnFocus
 
         aspectButton?.setOnClickListener {
-            cycleAspectRatio()
-            scheduleHideControlsMenu()
+            if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                hideControlsMenu(); unifiedMenu?.show("display", "aspect")
+            } else {
+                cycleAspectRatio()
+                scheduleHideControlsMenu()
+            }
         }
         aspectButton?.onFocusChangeListener = extendTimerOnFocus
         updateAspectButtonLabel()
 
         speedButton?.setOnClickListener {
-            cyclePlaybackSpeed()
-            scheduleHideControlsMenu()
+            if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                hideControlsMenu(); unifiedMenu?.show("playback", "speed")
+            } else {
+                cyclePlaybackSpeed()
+                scheduleHideControlsMenu()
+            }
         }
         speedButton?.onFocusChangeListener = extendTimerOnFocus
 
@@ -1740,7 +1783,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         randomButton?.setOnClickListener {
             hideControlsMenu()
-            showRandomPlaybackDialog()
+            if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                unifiedMenu?.show("playback", "shuffle")
+            } else {
+                showRandomPlaybackDialog()
+            }
         }
         randomButton?.onFocusChangeListener = extendTimerOnFocus
     }
@@ -1830,6 +1877,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun resetSubtitleState() {
         stopExternalSubtitleRendering()
         stremioSubtitles.clear()
+        subtitleTracks.clear()   // rebuilt lazily for the new media's embedded tracks
+        addonSubtitleResults.clear()
+        addonFetchTokens.clear()
+        failedSubtitleUrls.clear()
+        subtitleSearchResults = emptyList()
+        subtitleSearchStatus = ""
+        pendingSeriesResult = null
         currentStremioSubtitleIndex = -1
         isLoadingStremioSubtitles = false
         embeddedSubtitleSelected = false
@@ -2071,61 +2125,120 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * Actually fetch subtitles with a known IMDB ID.
      */
     private fun fetchStremioSubtitlesWithImdb(imdbId: String, type: String, item: PlaybackItem) {
-        // Capture token to detect if content changes during async fetch
-        val fetchToken = addonSubtitleFetchToken
+        // Fan out one independent fetch per addon so each keeps its own identity,
+        // loading/failed state and can be retried alone. Two guards:
+        //  • addonSubtitleFetchToken — invalidates ALL slots on a content switch.
+        //  • addonFetchTokens[addonId] — invalidates one addon's in-flight call
+        //    when that addon is retried.
+        val contentToken = addonSubtitleFetchToken
+        val addons = stremioSubtitleService?.getSubtitleAddons() ?: emptyList()
+
+        addonSubtitleResults.clear()
+        addons.forEach { addonSubtitleResults.add(AddonSubtitleResult(it, AddonSubtitleStatus.LOADING)) }
+        isLoadingStremioSubtitles = addons.isNotEmpty()
+        rebuildFlatStremioSubtitles()
+        refreshSubtitleUiForLoading()
+
+        addons.forEach { launchAddonSubtitleFetch(it, type, imdbId, item, contentToken) }
+    }
+
+    private fun launchAddonSubtitleFetch(
+        addon: StremioAddon,
+        type: String,
+        imdbId: String,
+        item: PlaybackItem,
+        contentToken: Int
+    ) {
+        val slotToken = (addonFetchTokens[addon.id] ?: 0) + 1
+        addonFetchTokens[addon.id] = slotToken
+        setAddonSubtitleSlot(addon.id, AddonSubtitleStatus.LOADING, emptyList(), null)
+        isLoadingStremioSubtitles = true   // covers single-addon retry too
+        refreshSubtitleUiForLoading()
 
         subtitleScope.launch {
-            try {
-                val subtitles = (stremioSubtitleService?.fetchSubtitles(
+            val result = try {
+                val subs = (stremioSubtitleService?.fetchSubtitlesForAddon(
+                    addon = addon,
                     type = type,
                     imdbId = imdbId,
                     season = if (type == "series") item.season else null,
                     episode = if (type == "series") item.episode else null
                 ) ?: emptyList()).filter { isSideRenderableSubtitle(it.url) }
-
-                // Check if content changed during fetch
-                if (fetchToken != addonSubtitleFetchToken) {
-                    android.util.Log.d("StremioSubs", "Content changed during fetch, discarding results for IMDB $imdbId")
-                    return@launch
-                }
-
-                stremioSubtitles.clear()
-                stremioSubtitles.addAll(subtitles)
-                currentStremioSubtitleIndex = -1
-                isLoadingStremioSubtitles = false
-                android.util.Log.d("StremioSubs", "Fetched ${subtitles.size} subtitles for IMDB $imdbId")
-                if (subtitles.isEmpty() && manualSubtitleImdbId == imdbId) {
-                    Toast.makeText(
-                        this@AndroidTvTorrentPlayerActivity,
-                        "No online subtitles found for this title",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-
-                // Try to auto-select addon subtitle if no embedded subtitle was selected
-                tryAutoSelectAddonSubtitle()
-
-                // Refresh panel if visible to show loaded subtitles
-                if (subtitleSettingsVisible) {
-                    refreshSubtitlePanelForLoading()
-                }
+                AddonSubtitleResult(addon, AddonSubtitleStatus.OK, subs)
             } catch (e: Exception) {
-                android.util.Log.e("StremioSubs", "Failed to fetch subtitles", e)
+                android.util.Log.w("StremioSubs", "${addon.name} subtitle fetch failed: ${e.message}")
+                AddonSubtitleResult(addon, AddonSubtitleStatus.FAILED, emptyList(), e.message)
+            }
 
-                // Check if content changed during fetch
-                if (fetchToken != addonSubtitleFetchToken) {
-                    return@launch
-                }
+            if (contentToken != addonSubtitleFetchToken) return@launch      // content switched
+            if (slotToken != addonFetchTokens[addon.id]) return@launch      // superseded by a retry
 
-                stremioSubtitles.clear()
-                currentStremioSubtitleIndex = -1
-                isLoadingStremioSubtitles = false
-                // Refresh panel if visible to clear loading indicator
-                if (subtitleSettingsVisible) {
-                    refreshSubtitlePanelForLoading()
-                }
+            setAddonSubtitleSlot(addon.id, result.status, result.subtitles, result.error)
+            rebuildFlatStremioSubtitles()
+            isLoadingStremioSubtitles =
+                addonSubtitleResults.any { it.status == AddonSubtitleStatus.LOADING }
+            tryAutoSelectAddonSubtitle()   // no-ops once a subtitle is selected
+            // When the LAST addon finishes a manual "Fix movie" search with nothing
+            // usable, tell the user (the old merged fetch showed this toast).
+            if (!isLoadingStremioSubtitles && stremioSubtitles.isEmpty() && !manualSubtitleImdbId.isNullOrEmpty()) {
+                Toast.makeText(this@AndroidTvTorrentPlayerActivity, "No online subtitles found for this title", Toast.LENGTH_SHORT).show()
+            }
+            refreshSubtitleUiForLoading()
+        }
+    }
+
+    private fun setAddonSubtitleSlot(
+        addonId: String,
+        status: AddonSubtitleStatus,
+        subs: List<StremioSubtitle>,
+        error: String?
+    ) {
+        val i = addonSubtitleResults.indexOfFirst { it.addon.id == addonId }
+        if (i >= 0) {
+            addonSubtitleResults[i] =
+                addonSubtitleResults[i].copy(status = status, subtitles = subs, error = error)
+        }
+    }
+
+    /** Rebuild the deduped flat [stremioSubtitles] view, re-pinning the active
+     *  selection by URL so a late-arriving addon can't shift the user's pick. */
+    private fun rebuildFlatStremioSubtitles() {
+        val activeUrl = if (currentStremioSubtitleIndex >= 0)
+            stremioSubtitles.getOrNull(currentStremioSubtitleIndex)?.url else null
+        val seen = HashSet<String>()
+        stremioSubtitles.clear()
+        for (r in addonSubtitleResults) {
+            for (s in r.subtitles) {
+                if (s.url.isNotEmpty() && seen.add(s.url)) stremioSubtitles.add(s)
             }
         }
+        currentStremioSubtitleIndex =
+            if (activeUrl != null) stremioSubtitles.indexOfFirst { it.url == activeUrl } else -1
+    }
+
+    /** Retry a single addon's subtitle fetch (bound to the col3 "retry" row). */
+    private fun retryAddonSubtitles(addonId: String) {
+        val model = payload ?: return
+        val addon = addonSubtitleResults.firstOrNull { it.addon.id == addonId }?.addon ?: return
+        val item = model.items.getOrNull(currentIndex) ?: return
+        // Mirror fetchStremioSubtitles' id resolution: multi-item movie collections
+        // resolve per-item via perItemImdbIds (payload.imdbId is null for them).
+        val imdbId = manualSubtitleImdbId ?: model.perItemImdbIds[item.index] ?: model.imdbId ?: return
+        val type = if ((manualSubtitleType ?: model.contentType).lowercase(Locale.US) == "series")
+            "series" else "movie"
+        val subtitleItem = if (type == "series") {
+            item.copy(
+                season = manualSubtitleSeason ?: item.season,
+                episode = manualSubtitleEpisode ?: item.episode
+            )
+        } else item
+        launchAddonSubtitleFetch(addon, type, imdbId, subtitleItem, addonSubtitleFetchToken)
+    }
+
+    /** Repaint whichever subtitle surface is showing (unified menu or legacy panel). */
+    private fun refreshSubtitleUiForLoading() {
+        if (unifiedMenu?.isVisible == true) unifiedMenu?.render()
+        if (subtitleSettingsVisible) refreshSubtitlePanelForLoading()
     }
 
     /**
@@ -3382,6 +3495,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Search for addon subtitle matching the preferred language
         for ((index, sub) in stremioSubtitles.withIndex()) {
+            if (sub.url in failedSubtitleUrls) continue   // skip subs that parsed to zero cues
             if (LanguageMapper.matchesLanguage(targetLang, sub.lang)) {
                 android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-selecting addon subtitle: ${sub.displayName} (${sub.lang})")
                 loadStremioSubtitle(sub)
@@ -3410,6 +3524,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Handle subtitle settings panel
         if (subtitlePanel?.isVisible == true) {
             return subtitlePanel?.dispatchKey(event) ?: super.dispatchKeyEvent(event)
+        }
+
+        // Handle unified player menu (Miller columns). Only navigation keys are
+        // consumed; volume/media keys fall through to the system. In edit mode
+        // (search field focused) all keys fall through so typing + IME work,
+        // except the boundary keys the controller uses to leave the field.
+        if (unifiedMenu?.isVisible == true) {
+            if (unifiedMenu?.inEditMode == true) {
+                if (unifiedMenu?.handleEditModeKey(event) == true) return true
+                return super.dispatchKeyEvent(event)
+            }
+            if (unifiedMenu?.dispatchKey(event) == true) return true
+            return super.dispatchKeyEvent(event)
         }
 
         // Handle IPTV guide overlay
@@ -4554,6 +4681,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (stremioSourcesVisible || iptvGuideVisible || stremioTvGuideVisible) return false
         if (subtitlePanel?.isVisible == true) return false
         if (linePickerOverlay?.isVisible == true || syncOverlay?.isVisible == true) return false
+        if (unifiedMenu?.isVisible == true) return false
         if (nextOverlay.visibility == View.VISIBLE) return false
         if (pikPakReactivationIndicator.visibility == View.VISIBLE) return false
         return true
@@ -4947,6 +5075,453 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     // Track selection
+    // ═══════════════════════════════════════════════════════════════════════════
+    // UNIFIED MENU · backing (reuses existing apply logic; nothing is duplicated
+    // that would drift from the individual dialogs).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /** Same list [showAudioTrackDialog] builds: "Off" + one entry per audio track. */
+    private fun umAudioTracks(): List<Pair<String, TrackSelectionOverride?>> {
+        val out = mutableListOf<Pair<String, TrackSelectionOverride?>>()
+        out.add("Off" to null)
+        val tracks = player?.currentTracks ?: return out
+        for (group in tracks.groups) {
+            if (group.type == C.TRACK_TYPE_AUDIO) {
+                for (i in 0 until group.length) {
+                    out.add(
+                        buildAudioTrackLabel(group.getTrackFormat(i)) to
+                            TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
+                    )
+                }
+            }
+        }
+        return out
+    }
+
+    /** Index into [umAudioTracks] of the currently selected track (0 = Off). */
+    private fun umAudioSelectedIndex(): Int {
+        val tracks = player?.currentTracks ?: return 0
+        var pos = 1
+        for (group in tracks.groups) {
+            if (group.type == C.TRACK_TYPE_AUDIO) {
+                for (i in 0 until group.length) {
+                    if (group.isTrackSelected(i)) return pos
+                    pos++
+                }
+            }
+        }
+        return 0
+    }
+
+    // Inline subtitle-search state (rendered in the Subtitles → Fix movie column).
+    private var subtitleSearchResults: List<SubtitleCatalogResult> = emptyList()
+    private var subtitleSearchStatus: String = ""
+    private var pendingSeriesResult: SubtitleCatalogResult? = null
+    private var pendingSeason: Int = 1
+    private var pendingEpisode: Int = 1
+
+    // Menu section order — MUST match UnifiedMenuController.sectionIds.
+    private val unifiedSectionIds = listOf("audio", "subs", "sources", "display", "playback")
+
+    private fun mrow(
+        title: String, value: String? = null, selected: Boolean = false, accent: Boolean = false,
+        enabled: Boolean = true, swatch: Int? = null, adjustable: Boolean = false, tag: String? = null,
+        onOk: (() -> Unit)? = null, onAdjust: ((Int) -> Unit)? = null
+    ) = UnifiedMenuController.Row(title, value, selected, accent, enabled, swatch, adjustable, tag, onOk, onAdjust)
+
+    private fun umSectionRows(): List<UnifiedMenuController.Row> {
+        val subBadge = when {
+            isLoadingStremioSubtitles -> "…"
+            stremioSubtitles.isNotEmpty() -> "${stremioSubtitles.size}"
+            else -> null
+        }
+        return listOf(
+            mrow("Audio"),
+            mrow("Subtitles", value = subBadge),
+            mrow("Sources", value = if (stremioSources.isNotEmpty()) "${stremioSources.size}" else null),
+            mrow("Display"),
+            mrow("Playback")
+        )
+    }
+
+    private val unifiedMenuCallbacks = object : UnifiedMenuController.Callbacks {
+        override fun buildModel(sectionIndex: Int, col2Index: Int): UnifiedMenuController.Model {
+            val col1 = umSectionRows()
+            return when (unifiedSectionIds.getOrNull(sectionIndex)) {
+                "audio" -> umAudioModel(col1)
+                "subs" -> umSubsModel(col1, col2Index)
+                "sources" -> umSourcesModel(col1, col2Index)
+                "display" -> umDisplayModel(col1, col2Index)
+                "playback" -> umPlaybackModel(col1, col2Index)
+                else -> UnifiedMenuController.Model(col1, "", emptyList(), "", emptyList())
+            }
+        }
+
+        override fun onSearchSubmit(query: String) {
+            subtitleSearchStatus = "Searching…"
+            subtitleSearchResults = emptyList()
+            pendingSeriesResult = null
+            unifiedMenu?.render()
+            requestSubtitleCatalogSearchFromFlutter(
+                query,
+                onSuccess = { results ->
+                    if (unifiedMenu?.isVisible != true) return@requestSubtitleCatalogSearchFromFlutter
+                    subtitleSearchResults = results
+                    subtitleSearchStatus =
+                        if (results.isEmpty()) "No matches — try a different title" else "${results.size} results"
+                    unifiedMenu?.render()
+                },
+                onError = { msg ->
+                    if (unifiedMenu?.isVisible != true) return@requestSubtitleCatalogSearchFromFlutter
+                    subtitleSearchStatus = msg
+                    unifiedMenu?.render()
+                }
+            )
+        }
+
+        override fun searchInitialQuery(): String {
+            val item = getCurrentSubtitleSearchItem() ?: return ""
+            return buildSubtitleSearchInitialQuery(item)
+        }
+
+        override fun stylePreview(tv: TextView) {
+            val ctx = this@AndroidTvTorrentPlayerActivity
+            tv.text = "Sample subtitle preview"
+            tv.setTextColor(SubtitleSettings.getCurrentColor(ctx).color)
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, SubtitleSettings.getFontSizeSp(ctx))
+            tv.typeface = SubtitleFontManager.getTypeface(ctx)
+            tv.setBackgroundColor(SubtitleSettings.getCurrentBg(ctx).color)
+            if (SubtitleSettings.getStyleIndex(ctx) != 0) {  // 0 = "None" edge
+                val edge = SubtitleSettings.getCurrentOutlineColor(ctx).color ?: Color.BLACK
+                tv.setShadowLayer(6f, 0f, 0f, edge)
+            } else {
+                tv.setShadowLayer(0f, 0f, 0f, 0)
+            }
+        }
+
+        override fun onHidden() { /* clean frame; BACK returns to the video */ }
+    }
+
+    // ── Audio ─────────────────────────────────────────────────────────────────
+    private fun umAudioModel(col1: List<UnifiedMenuController.Row>): UnifiedMenuController.Model {
+        if (umAudioTracks().size <= 1) {   // only the synthetic "Off" entry → no real tracks
+            return UnifiedMenuController.Model(
+                col1, "AUDIO", listOf(mrow("Audio track", tag = "audio")),
+                "Audio tracks", listOf(mrow("No audio tracks available", enabled = false))
+            )
+        }
+        val sel = umAudioSelectedIndex()
+        val rows = umAudioTracks().mapIndexed { i, pair ->
+            mrow(pair.first, selected = i == sel, onOk = {
+                val ts = trackSelector
+                if (ts != null) {
+                    val override = umAudioTracks().getOrNull(i)?.second
+                    val p = ts.parameters.buildUpon()
+                    if (override != null) {
+                        p.setOverrideForType(override); p.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                    } else p.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                    ts.parameters = p.build()
+                }
+            })
+        }
+        return UnifiedMenuController.Model(
+            col1, "AUDIO", listOf(mrow("Audio track", tag = "audio")), "Audio tracks", rows
+        )
+    }
+
+    // ── Subtitles (embedded + per-addon + appearance + timing + search) ─────────
+    private fun umSubsModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
+        val curSub = stremioSubtitles.getOrNull(currentStremioSubtitleIndex)
+        val col2 = mutableListOf<UnifiedMenuController.Row>()
+        col2.add(mrow("Embedded", tag = "emb", selected = curSub == null))
+        for (r in addonSubtitleResults) {
+            val badge = when (r.status) {
+                AddonSubtitleStatus.LOADING -> "…"
+                AddonSubtitleStatus.OK -> "${r.subtitles.size}"
+                AddonSubtitleStatus.FAILED -> "⚠"
+            }
+            col2.add(mrow(
+                r.addon.name, value = badge, tag = "addon:${r.addon.id}",
+                selected = curSub != null && curSub.addonId == r.addon.id
+            ))
+        }
+        col2.add(mrow("Fix movie", tag = "search", accent = true))
+        col2.add(mrow("Appearance", tag = "appearance"))
+        col2.add(mrow("Timing", tag = "timing"))
+
+        val tag = col2.getOrNull(col2Index)?.tag
+        var mode = UnifiedMenuController.Col3Mode.ROWS
+        val (col3Title, col3) = when {
+            tag == "emb" -> "Track" to umEmbeddedTrackRows()
+            tag == "appearance" -> "Appearance · live" to umAppearanceRows()
+            tag == "timing" -> "Timing" to umTimingRows()
+            tag == "search" -> {
+                if (pendingSeriesResult == null) mode = UnifiedMenuController.Col3Mode.SEARCH
+                "Fix movie" to umSearchRows()
+            }
+            tag != null && tag.startsWith("addon:") -> {
+                val id = tag.removePrefix("addon:")
+                (addonSubtitleResults.firstOrNull { it.addon.id == id }?.addon?.name ?: "Addon") to
+                    umAddonTrackRows(id)
+            }
+            else -> "" to emptyList()
+        }
+        // Column header carries the detected/override identity ("Detected: <title>" /
+        // "Subtitles for <title>") that the old panel showed as a persistent row.
+        return UnifiedMenuController.Model(
+            col1, currentSubtitleIdentityLabel(), col2, col3Title, col3, mode,
+            previewVisible = tag == "appearance"
+        )
+    }
+
+    private fun umEmbeddedTrackRows(): List<UnifiedMenuController.Row> {
+        // Build the flat track list only when we don't already have one (menu open /
+        // after a content switch clears it). Rebuilding on every render would re-derive
+        // currentSubtitleTrackIndex from the not-yet-updated player.currentTracks and
+        // clobber a just-made selection, painting the wrong row as selected.
+        if (subtitleTracks.isEmpty()) rebuildSubtitleTrackList()
+        val rows = mutableListOf<UnifiedMenuController.Row>()
+        for ((i, pair) in subtitleTracks.withIndex()) {
+            val isOff = i == 0
+            val isEmbedded = pair.second != null
+            if (isOff || isEmbedded) {
+                rows.add(mrow(
+                    if (isOff) "Off" else pair.first,
+                    selected = currentSubtitleTrackIndex == i,
+                    onOk = { umSelectSubtitleRowIndex(i) }
+                ))
+            }
+        }
+        return rows
+    }
+
+    private fun umAddonTrackRows(addonId: String): List<UnifiedMenuController.Row> {
+        val r = addonSubtitleResults.firstOrNull { it.addon.id == addonId } ?: return emptyList()
+        return when (r.status) {
+            AddonSubtitleStatus.LOADING -> listOf(mrow("Loading…", enabled = false))
+            AddonSubtitleStatus.FAILED -> {
+                val rows = mutableListOf(mrow("Failed — retry this addon", accent = true,
+                    onOk = { retryAddonSubtitles(addonId) }))
+                r.error?.takeIf { it.isNotBlank() }?.let { rows.add(mrow(it.take(48), enabled = false)) }
+                rows
+            }
+            AddonSubtitleStatus.OK ->
+                if (r.subtitles.isEmpty()) listOf(mrow("No subtitles from this addon", enabled = false))
+                else r.subtitles.map { sub ->
+                    val cur = stremioSubtitles.getOrNull(currentStremioSubtitleIndex)
+                    mrow(
+                        sub.displayName, value = sub.lang.uppercase(Locale.US),
+                        // Require addonId match too: a URL shared by two addons dedupes
+                        // to one owner, so only that addon's row highlights.
+                        selected = cur?.url == sub.url && cur.addonId == addonId,
+                        onOk = { umSelectStremioSubtitleByUrl(sub.url) }
+                    )
+                }
+        }
+    }
+
+    private fun umAppearanceRows(): List<UnifiedMenuController.Row> {
+        val ctx = this
+        val color = SubtitleSettings.getCurrentColor(ctx)
+        val outline = SubtitleSettings.getCurrentOutlineColor(ctx)
+        return listOf(
+            mrow("Size", value = SubtitleSettings.getCurrentSize(ctx).label, adjustable = true, onAdjust = { d ->
+                if (d > 0) SubtitleSettings.cycleSizeUp(ctx) else SubtitleSettings.cycleSizeDown(ctx); applySubtitleSettings()
+            }),
+            mrow("Style", value = SubtitleSettings.getCurrentStyle(ctx).label, adjustable = true, onAdjust = { d ->
+                if (d > 0) SubtitleSettings.cycleStyleUp(ctx) else SubtitleSettings.cycleStyleDown(ctx); applySubtitleSettings()
+            }),
+            mrow("Text colour", value = color.label, swatch = color.color, adjustable = true, onAdjust = { d ->
+                if (d > 0) SubtitleSettings.cycleColorUp(ctx) else SubtitleSettings.cycleColorDown(ctx); applySubtitleSettings()
+            }),
+            mrow("Outline colour", value = outline.label, swatch = outline.color, adjustable = true, onAdjust = { d ->
+                if (d > 0) SubtitleSettings.cycleOutlineColorUp(ctx) else SubtitleSettings.cycleOutlineColorDown(ctx); applySubtitleSettings()
+            }),
+            mrow("Background", value = SubtitleSettings.getCurrentBg(ctx).label, adjustable = true, onAdjust = { d ->
+                if (d > 0) SubtitleSettings.cycleBgUp(ctx) else SubtitleSettings.cycleBgDown(ctx); applySubtitleSettings()
+            }),
+            mrow("Position", value = SubtitleSettings.getCurrentElevation(ctx).label, adjustable = true, onAdjust = { d ->
+                if (d > 0) SubtitleSettings.cycleElevationUp(ctx) else SubtitleSettings.cycleElevationDown(ctx); applySubtitleSettings()
+            }),
+            mrow("Font", value = SubtitleFontManager.getCurrentFontLabel(ctx), adjustable = true, onAdjust = { d ->
+                if (d > 0) SubtitleFontManager.cycleFontUp(ctx) else SubtitleFontManager.cycleFontDown(ctx); applySubtitleSettings()
+            }),
+            mrow("Reset all to defaults", accent = true, onOk = {
+                SubtitleSettings.resetToDefaults(ctx); SubtitleFontManager.resetToDefault(ctx); applySubtitleSettings()
+            })
+        )
+    }
+
+    private fun umTimingRows(): List<UnifiedMenuController.Row> {
+        val ctx = this
+        val ms = SubtitleSettings.getSyncOffsetMs(ctx)
+        // Sync needs the subtitle on screen to judge alignment, which a bottom menu
+        // column covers — so this opens the dedicated over-video sync overlay
+        // (slider for embedded subs, "tap the line" picker for downloaded subs).
+        // Single launcher — the overlay itself owns reset (OK on the slider /
+        // hold-OK on the picker), which also clears the picker's remembered line.
+        return listOf(
+            mrow("Adjust timing  ▸", value = SubtitleSettings.formatSyncOffset(ms),
+                swatch = SubtitleSettings.getSyncOffsetColor(ms), accent = true, onOk = {
+                    unifiedMenu?.hide(); showSyncOverlay()
+                })
+        )
+    }
+
+    private fun umSearchRows(): List<UnifiedMenuController.Row> {
+        if (pendingSeriesResult != null) {
+            return listOf(
+                mrow("Season  ◀ ▶", value = "$pendingSeason", adjustable = true,
+                    onAdjust = { d -> pendingSeason = (pendingSeason + d).coerceIn(1, 99) }),
+                mrow("Episode  ◀ ▶", value = "$pendingEpisode", adjustable = true,
+                    onAdjust = { d -> pendingEpisode = (pendingEpisode + d).coerceIn(1, 999) }),
+                mrow("Fetch subtitles", accent = true, onOk = {
+                    val r = pendingSeriesResult
+                    pendingSeriesResult = null
+                    if (r != null) applyManualSubtitleIdentity(r, pendingSeason, pendingEpisode)
+                    unifiedMenu?.hide()
+                })
+            )
+        }
+        val rows = mutableListOf<UnifiedMenuController.Row>()
+        if (subtitleSearchStatus.isNotEmpty()) rows.add(mrow(subtitleSearchStatus, enabled = false))
+        for (r in subtitleSearchResults) {
+            rows.add(mrow(r.titleLine(), value = r.detailLine(), onOk = { umPickSearchResult(r) }))
+        }
+        return rows
+    }
+
+    private fun umPickSearchResult(r: SubtitleCatalogResult) {
+        if (r.type == "series") {
+            val se = getCurrentSubtitleSearchItem()?.let { resolveSeasonEpisodeForSubtitle(it) }
+            if (se != null) {
+                applyManualSubtitleIdentity(r, se.season, se.episode)
+                unifiedMenu?.hide()
+            } else {
+                val cur = getCurrentSubtitleSearchItem()
+                pendingSeriesResult = r
+                pendingSeason = (cur?.season ?: manualSubtitleSeason ?: 1).coerceAtLeast(1)
+                pendingEpisode = (cur?.episode ?: manualSubtitleEpisode ?: 1).coerceAtLeast(1)
+                unifiedMenu?.render()
+            }
+        } else {
+            applyManualSubtitleIdentity(r, null, null)
+            unifiedMenu?.hide()
+        }
+    }
+
+    /** Select an entry from the flat [subtitleTracks] list (Off / embedded) and apply it. */
+    private fun umSelectSubtitleRowIndex(rowIndex: Int) {
+        if (rowIndex !in subtitleTracks.indices) return
+        currentSubtitleTrackIndex = rowIndex
+        userManuallySelectedSubtitle = true
+        applySelectedSubtitleTrack()
+    }
+
+    /** Select an external Stremio subtitle by URL, reusing the battle-tested apply path. */
+    private fun umSelectStremioSubtitleByUrl(url: String) {
+        rebuildSubtitleTrackList()
+        val k = stremioSubtitles.indexOfFirst { it.url == url }
+        if (k < 0) return
+        var ext = 0
+        var rowIdx = -1
+        for ((i, pair) in subtitleTracks.withIndex()) {
+            if (isExternalSubtitleOption(pair.first)) {
+                if (ext == k) { rowIdx = i; break }
+                ext++
+            }
+        }
+        if (rowIdx < 0) return
+        currentSubtitleTrackIndex = rowIdx
+        userManuallySelectedSubtitle = true
+        applySelectedSubtitleTrack()
+    }
+
+    // ── Sources ─────────────────────────────────────────────────────────────
+    private fun umSourcesModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
+        val direct = stremioSources.filter { it.isDirectStream }
+        val torrent = stremioSources.filter { !it.isDirectStream }
+        val curDirect = stremioSources.getOrNull(currentStremioSourceIndex)?.isDirectStream
+        val col2 = listOf(
+            mrow("Direct", value = "${direct.size}", tag = "direct", selected = curDirect == true),
+            mrow("Torrent", value = "${torrent.size}", tag = "torrent", selected = curDirect == false)
+        )
+        val tab = col2.getOrNull(col2Index)?.tag ?: "direct"
+        val list = if (tab == "torrent") torrent else direct
+        val col3 = if (list.isEmpty()) listOf(mrow("No ${tab} sources", enabled = false))
+        else list.map { src ->
+            val meta = buildString {
+                append(src.quality)
+                src.formattedSize?.let { append(" · $it") }
+                if (!src.isDirectStream && src.seeders > 0) append(" · ${src.seeders}s")
+                src.source?.let { append(" · $it") }
+            }
+            mrow(
+                src.displayTitle, value = meta, selected = src.index == currentStremioSourceIndex,
+                onOk = { onStremioSourceSelected(src); unifiedMenu?.hide() }
+            )
+        }
+        return UnifiedMenuController.Model(col1, "SOURCES", col2, "Switch source", col3)
+    }
+
+    // ── Display ───────────────────────────────────────────────────────────────
+    private fun umDisplayModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
+        val col2 = listOf(
+            mrow("Aspect ratio", value = resizeModeLabels.getOrNull(resizeModeIndex), tag = "aspect"),
+            mrow("Night mode", value = nightModeLabels.getOrNull(nightModeIndex), tag = "night")
+        )
+        val tag = col2.getOrNull(col2Index)?.tag
+        val (title, col3) = if (tag == "night") {
+            "Night mode · loudness" to nightModeLabels.mapIndexed { i, l ->
+                mrow(l, selected = i == nightModeIndex, onOk = { applyNightMode(i) })
+            }
+        } else {
+            "Aspect ratio" to resizeModeLabels.mapIndexed { i, l ->
+                mrow(l, selected = i == resizeModeIndex, onOk = {
+                    resizeModeIndex = i.coerceIn(0, resizeModes.lastIndex)
+                    playerView.resizeMode = resizeModes[resizeModeIndex]
+                    updateAspectButtonLabel()
+                })
+            }
+        }
+        return UnifiedMenuController.Model(col1, "DISPLAY", col2, title, col3)
+    }
+
+    // ── Playback ────────────────────────────────────────────────────────────
+    private fun umPlaybackModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
+        val col2 = listOf(
+            mrow("Playback speed", value = playbackSpeedLabels.getOrNull(playbackSpeedIndex), tag = "speed"),
+            mrow("Shuffle & autoplay", tag = "shuffle")
+        )
+        val tag = col2.getOrNull(col2Index)?.tag
+        val (title, col3) = if (tag == "shuffle") {
+            "Shuffle & autoplay" to listOf(
+                mrow("Play random once", accent = true, onOk = {
+                    continuousShuffleEnabled = false; shuffleBag.clear(); playRandom(); unifiedMenu?.hide()
+                }),
+                mrow("Shuffle continuously", value = if (continuousShuffleEnabled) "On" else "Off",
+                    selected = continuousShuffleEnabled, onOk = {
+                        val turningOn = !continuousShuffleEnabled
+                        continuousShuffleEnabled = turningOn
+                        shuffleBag.clear()
+                        Toast.makeText(
+                            this, if (turningOn) "Continuous shuffle on" else "Continuous shuffle off",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        if (turningOn) { playRandom(); unifiedMenu?.hide() }   // jump to a random item now
+                    })
+            )
+        } else {
+            "Playback speed" to playbackSpeedLabels.mapIndexed { i, l ->
+                mrow(l, selected = i == playbackSpeedIndex, onOk = {
+                    playbackSpeedIndex = i.coerceIn(0, playbackSpeeds.lastIndex)
+                    player?.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+                })
+            }
+        }
+        return UnifiedMenuController.Model(col1, "PLAYBACK", col2, title, col3)
+    }
+
     private fun showAudioTrackDialog() {
         val ts = trackSelector ?: return
         val tracks = player?.currentTracks ?: return
@@ -5145,9 +5720,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun showSyncOverlay() {
         val root = findViewById<ViewGroup>(android.R.id.content)?.getChildAt(0) as? ViewGroup ?: return
 
-        // Use line picker for external (Stremio) subtitles
-        if (currentStremioSubtitleIndex >= 0 && currentStremioSubtitleIndex < stremioSubtitles.size) {
-            val subtitle = stremioSubtitles[currentStremioSubtitleIndex]
+        // Use line picker for external (Stremio) subtitles. Prefer the actually-
+        // rendering URL: a per-addon retry can transiently drop the current sub's
+        // URL from the flat list (currentStremioSubtitleIndex → -1) while it's still
+        // on screen, and we must not fall through to the embedded slider for it.
+        val externalUrl = activeExternalSubtitleUrl?.takeIf { externalSubtitleActive }
+            ?: stremioSubtitles.getOrNull(currentStremioSubtitleIndex)?.url
+        if (externalUrl != null) {
             if (linePickerOverlay == null) {
                 linePickerOverlay = SubtitleLinePickerController(
                     activity = this,
@@ -5160,7 +5739,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     }
                 )
             }
-            linePickerOverlay?.show(subtitle.url)
+            linePickerOverlay?.show(externalUrl)
             return
         }
 
@@ -5304,6 +5883,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     ) {
         if (cues.isEmpty()) {
             android.util.Log.w("StremioSubs", "Failed to load/parse external subtitle: ${subtitle.url}")
+            failedSubtitleUrls.add(subtitle.url)   // don't auto-select this broken sub again
             showSubtitleLoadingPillTransient("Couldn't load ${subtitle.displayName}")
             // Keep whatever was rendering before — do NOT stopExternalSubtitleRendering()
             // here (it would wipe a working subtitle and cancel the error pill).
@@ -7427,6 +8007,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     companion object {
         const val PAYLOAD_KEY = "payload"
+        /**
+         * When true, the dock buttons (Audio, Subs, Fill, Speed, Night, Shuffle) open the
+         * unified Miller-columns menu instead of the individual dialogs/panels. Additive —
+         * flip to false to restore the exact prior behaviour.
+         */
+        private const val USE_UNIFIED_MENU = true
         private const val PROGRESS_INTERVAL_MS = 5_000L
         private const val UP_NEXT_THRESHOLD_MS = 25_000L   // show card when this much remains
         private const val UP_NEXT_MIN_DURATION_MS = 5 * 60_000L  // skip for short clips

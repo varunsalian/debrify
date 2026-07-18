@@ -430,6 +430,9 @@
     <!-- Subtitle Settings Panel -->
     <include layout="@layout/view_subtitle_settings_panel" />
 
+    <!-- Unified Player Menu (Miller columns) -->
+    <include layout="@layout/view_unified_menu" />
+
     <!-- PikPak Reactivation Indicator (non-blocking, bottom-center pill) -->
     <LinearLayout
         android:id="@+id/android_tv_pikpak_reactivation_indicator"

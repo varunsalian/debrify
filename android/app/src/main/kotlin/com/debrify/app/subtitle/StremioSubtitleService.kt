@@ -20,7 +20,8 @@ data class StremioSubtitle(
     val url: String,
     val lang: String,
     val label: String?,
-    val source: String
+    val source: String,
+    val addonId: String = ""   // stable StremioAddon.id — for per-addon grouping/retry
 ) {
     /**
      * Display name for UI (label or formatted language)
@@ -64,7 +65,7 @@ data class StremioSubtitle(
             return languageNames[code.lowercase()] ?: code.uppercase()
         }
 
-        fun fromJson(json: JSONObject, source: String): StremioSubtitle {
+        fun fromJson(json: JSONObject, source: String, addonId: String = ""): StremioSubtitle {
             val url = json.optString("url", "")
             val lang = json.optString("lang", "unknown")
             val id = json.optString("id")
@@ -76,11 +77,23 @@ data class StremioSubtitle(
                 url = url,
                 lang = lang,
                 label = json.optString("label").takeIf { it.isNotEmpty() },
-                source = source
+                source = source,
+                addonId = addonId
             )
         }
     }
 }
+
+/** Per-addon subtitle fetch status, for the unified menu's per-addon rows. */
+enum class AddonSubtitleStatus { LOADING, OK, FAILED }
+
+/** Result of fetching subtitles from a single addon (kept per-addon for retry). */
+data class AddonSubtitleResult(
+    val addon: StremioAddon,
+    val status: AddonSubtitleStatus,
+    val subtitles: List<StremioSubtitle> = emptyList(),
+    val error: String? = null
+)
 
 /**
  * Represents a Stremio addon configuration stored in SharedPreferences.
@@ -235,6 +248,22 @@ class StremioSubtitleService(private val context: Context) {
     }
 
     /**
+     * Fetch subtitles from a SINGLE addon. Unlike [fetchSubtitles] this does not
+     * swallow errors — [fetchSubtitlesFromAddon] rethrows once its retry ladder is
+     * exhausted, so the caller can surface a FAILED state and offer a per-addon retry.
+     */
+    suspend fun fetchSubtitlesForAddon(
+        addon: StremioAddon,
+        type: String,
+        imdbId: String,
+        season: Int? = null,
+        episode: Int? = null
+    ): List<StremioSubtitle> = withContext(Dispatchers.IO) {
+        val subtitleId = buildSubtitleId(imdbId, season, episode)
+        fetchSubtitlesFromAddon(addon, type, subtitleId)
+    }
+
+    /**
      * Blocking version of fetchSubtitles for Java interop.
      * This can be called from a background thread in Java code.
      */
@@ -332,7 +361,7 @@ class StremioSubtitleService(private val context: Context) {
             val subtitles = mutableListOf<StremioSubtitle>()
             for (i in 0 until subtitlesArray.length()) {
                 val subtitleJson = subtitlesArray.getJSONObject(i)
-                val subtitle = StremioSubtitle.fromJson(subtitleJson, addon.name)
+                val subtitle = StremioSubtitle.fromJson(subtitleJson, addon.name, addon.id)
                 if (subtitle.url.isNotEmpty()) {
                     subtitles.add(subtitle)
                 }
