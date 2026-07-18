@@ -11,6 +11,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../services/analytics_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
@@ -528,6 +529,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Map<String, double>? _traktEpisodeProgress;
   String? _traktLastScrobbleAction;
   Timer? _traktHeartbeatTimer;
+  // Keeps the analytics session alive during long, interaction-free playback.
+  Timer? _analyticsHeartbeatTimer;
 
   Duration? _randomStartOffset(Duration duration) {
     final num clampedPercent = widget.randomStartMaxPercent.clamp(0, 99);
@@ -559,6 +562,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('video_player');
+    _startAnalyticsHeartbeat();
     _activePlaylist = widget.playlist;
 
     // Log playlist entries to trace relativePath
@@ -751,6 +756,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _stopTraktHeartbeat() {
     _traktHeartbeatTimer?.cancel();
     _traktHeartbeatTimer = null;
+  }
+
+  /// Periodic analytics ping so a long, interaction-free watch keeps the
+  /// analytics session alive. Independent of Trakt (fires regardless of Trakt
+  /// auth); only emits while actually playing. No content details are sent.
+  void _startAnalyticsHeartbeat() {
+    _analyticsHeartbeatTimer?.cancel();
+    _analyticsHeartbeatTimer = Timer.periodic(
+      AnalyticsService.heartbeatInterval,
+      (_) {
+        if (_isPlaying) {
+          AnalyticsService.playbackHeartbeat('dart');
+        }
+      },
+    );
   }
 
   /// Send updated progress to Trakt after a user seek (bypasses dedup guard).
@@ -4209,6 +4229,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void dispose() {
     // Scrobble stop to Trakt when user exits player
     _stopTraktHeartbeat();
+    _analyticsHeartbeatTimer?.cancel();
     _traktScrobble('stop');
 
     // Save the current state before disposing

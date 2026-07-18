@@ -52,7 +52,7 @@ import 'widgets/desktop_sidebar_nav.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
-import 'services/aptabase_service.dart';
+import 'services/analytics_service.dart';
 import 'services/support_remote_config_service.dart';
 import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
@@ -125,7 +125,7 @@ class _TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AptabaseService.init();
+  await AnalyticsService.init();
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
@@ -142,7 +142,7 @@ Future<void> main() async {
   await _capImageCache();
   // Clean up old playback state data
   await _cleanupPlaybackState();
-  AptabaseService.trackInBackground('app_started');
+  AnalyticsService.trackInBackground('app_started');
   runApp(const DebrifyApp());
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
@@ -1765,10 +1765,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   void _trackCurrentTab() {
     final title = _titles[_selectedIndex];
-    AptabaseService.trackInBackground('tab_opened', <String, Object?>{
+    AnalyticsService.trackInBackground('tab_opened', <String, Object?>{
       'tab': title,
       'tab_index': _selectedIndex,
-      'platform': AptabaseService.currentPlatformLabel(),
+      'platform': AnalyticsService.currentPlatformLabel(),
       'tv_mode': _isAndroidTv,
     });
   }

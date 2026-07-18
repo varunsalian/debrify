@@ -8,6 +8,7 @@ import '../utils/dominant_color.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/playlist_view_mode.dart';
+import '../services/analytics_service.dart';
 import '../services/app_route_observer.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
@@ -200,6 +201,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('series_detail');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadEnrichedMeta();

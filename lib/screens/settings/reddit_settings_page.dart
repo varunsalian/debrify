@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
@@ -34,6 +35,7 @@ class _RedditSettingsPageState extends State<RedditSettingsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('reddit_settings');
     _loadSettings();
   }
 

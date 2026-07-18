@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../services/aptabase_service.dart';
+import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_service.dart';
@@ -43,6 +43,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('trakt_settings');
     _loadSettings();
   }
 
@@ -158,7 +159,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         _resetDeviceCodeState();
       });
       await StorageService.setTraktSyncCatalogItems(true);
-      AptabaseService.trackInBackground('trakt_connected', {
+      AnalyticsService.trackInBackground('trakt_connected', {
         'surface': 'settings',
         'method': 'device_code',
       });

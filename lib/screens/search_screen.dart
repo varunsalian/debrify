@@ -16,6 +16,7 @@ import '../models/stremio_tv/stremio_tv_channel.dart';
 import '../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
+import '../services/analytics_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/settings_manager.dart';
@@ -773,6 +774,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    // This one widget backs three tabs (Home board / dedicated Search / Discover).
+    AnalyticsService.screenView(
+      widget.searchMode
+          ? 'search'
+          : widget.discoverMode
+          ? 'discover'
+          : 'home',
+    );
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);

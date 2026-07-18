@@ -7,6 +7,7 @@ import '../models/playlist_view_mode.dart';
 import '../models/rd_torrent.dart';
 import '../models/rd_file_node.dart';
 import '../models/debrid_download.dart';
+import '../services/analytics_service.dart';
 import '../services/debrid_service.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
@@ -155,6 +156,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('debrid_downloads');
 
     // Row 0 binds this node; CloudFileRow supplies the key handling (its
     // upFocusNode routes ↑ to the torrent search field when active).

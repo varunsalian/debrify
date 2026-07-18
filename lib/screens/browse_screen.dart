@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/browse/browse_results_focus.dart';
 import '../widgets/browse/browse_search_header.dart';
@@ -71,6 +72,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
   @override
   void initState() {
     super.initState();
+    // Same widget backs both the IPTV (13) and YouTube (14) tabs.
+    AnalyticsService.screenView(
+      widget.tabIndex == 14 ? 'youtube' : 'iptv',
+    );
     // Assigning the node's own handler (rather than an ancestor Focus) so it
     // runs before the default text-editing shortcuts, which would otherwise
     // swallow the arrow key on a single-line field.

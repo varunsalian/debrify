@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/torrent_filter_state.dart';
 import '../../services/storage_service.dart';
+import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
@@ -30,6 +31,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('filter_settings');
     _initFocusNodes();
     _clearAllFocusNode.addListener(_onClearAllFocusChange);
     _loadSettings();

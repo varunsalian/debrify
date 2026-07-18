@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/account_service.dart';
-import '../services/aptabase_service.dart';
+import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/engine/remote_engine_manager.dart';
 import '../services/engine/local_engine_storage.dart';
@@ -1749,7 +1749,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           _hasConfigured = true;
           _errorMessage = null;
         });
-        AptabaseService.trackInBackground('provider_connected', {
+        AnalyticsService.trackInBackground('provider_connected', {
           'provider': 'pikpak',
           'surface': 'onboarding',
         });
@@ -1974,7 +1974,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           _hasConfigured = true;
           _errorMessage = null;
         });
-        AptabaseService.trackInBackground('provider_connected', {
+        AnalyticsService.trackInBackground('provider_connected', {
           'provider': current == _IntegrationType.realDebrid
               ? 'real_debrid'
               : current == _IntegrationType.torbox
@@ -2167,7 +2167,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _resetTraktDeviceCodeState();
 
       await StorageService.setTraktSyncCatalogItems(true);
-      AptabaseService.trackInBackground('trakt_connected', {
+      AnalyticsService.trackInBackground('trakt_connected', {
         'surface': 'onboarding',
         'method': 'device_code',
       });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/analytics_service.dart';
 import '../../services/app_route_observer.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
@@ -103,6 +104,7 @@ class _ContinueWatchingSeeAllScreenState
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('continue_watching_see_all');
     _items = widget.items;
     _category = widget.initialCategory;
     _recompute();

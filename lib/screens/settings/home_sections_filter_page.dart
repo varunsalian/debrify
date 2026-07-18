@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/storage_service.dart';
+import '../../services/analytics_service.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/home/home_theme.dart';
 
@@ -79,6 +80,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('home_sections_filter');
     _groups = _buildModel();
     _railNodes = List.generate(
       _groups.length,

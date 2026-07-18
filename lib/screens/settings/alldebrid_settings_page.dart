@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/alldebrid_account_service.dart';
-import '../../services/aptabase_service.dart';
+import '../../services/analytics_service.dart';
 import '../../widgets/alldebrid_account_status_widget.dart';
 import '../../services/main_page_bridge.dart';
 import '../../utils/platform_util.dart';
@@ -39,6 +39,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('alldebrid_settings');
     _load();
   }
 
@@ -140,7 +141,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
       _apiKeyController.clear();
     });
     _refocusOnTv(_logoutButtonFocusNode);
-    AptabaseService.trackInBackground('provider_connected', {
+    AnalyticsService.trackInBackground('provider_connected', {
       'provider': 'alldebrid',
       'surface': 'settings',
     });

@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
-import '../../services/aptabase_service.dart';
+import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/pikpak_folder_picker_dialog.dart';
@@ -55,6 +55,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('pikpak_settings');
     _loadSettings();
   }
 
@@ -137,7 +138,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
           _pikpakEnabled = true;
         });
         await StorageService.setPikPakEnabled(true);
-        AptabaseService.trackInBackground('provider_connected', {
+        AnalyticsService.trackInBackground('provider_connected', {
           'provider': 'pikpak',
           'surface': 'settings',
         });

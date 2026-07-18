@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 
+import '../services/analytics_service.dart';
 import '../services/download_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
@@ -50,6 +51,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('downloads');
     _tabController = TabController(length: 2, vsync: this);
     _init();
 

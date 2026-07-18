@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
@@ -40,6 +41,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('quick_play_settings');
     _loadSettings();
   }
 

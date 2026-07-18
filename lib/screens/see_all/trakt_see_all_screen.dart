@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/skeleton_poster.dart';
@@ -144,6 +145,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('trakt_see_all');
     _items = widget.cwItems;
     _category = widget.initialCategory;
     _recompute();

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../addons_screen.dart';
@@ -1277,6 +1278,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('stremio_addons');
     _urlFieldFocusNode.addListener(_onUrlFieldFocusChanged);
     _stremioService.addAddonsChangedListener(_onAddonsChanged);
     _loadAddons();

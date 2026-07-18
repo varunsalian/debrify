@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 import '../widgets/see_all/see_all_theme.dart';
@@ -29,6 +30,7 @@ class _AddonsSwitcherState extends State<AddonsScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('addons');
     StorageService.getStremioAddonHubEnabled().then((on) {
       if (mounted) setState(() => _useHub = on);
     });

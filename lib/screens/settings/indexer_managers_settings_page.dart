@@ -5,6 +5,7 @@ import '../../models/indexer_manager_config.dart';
 import '../../services/indexer_manager_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/torrent_service.dart';
+import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -39,6 +40,7 @@ class _IndexerManagersSettingsPageState
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('indexer_managers_settings');
     _loadConfigs();
   }
 

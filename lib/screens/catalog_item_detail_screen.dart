@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../services/analytics_service.dart';
 import '../services/app_route_observer.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
@@ -135,6 +136,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('catalog_detail');
     _revealCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1100),

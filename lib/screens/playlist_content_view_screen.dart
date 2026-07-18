@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/rd_file_node.dart';
 import '../models/series_playlist.dart';
+import '../services/analytics_service.dart';
 import '../services/storage_service.dart';
 import '../services/debrid_service.dart';
 import '../services/alldebrid_service.dart';
@@ -114,6 +115,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('playlist_content');
     _checkIfAndroidTv();
     _initializeScreen();
 

@@ -21,7 +21,7 @@ import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/next_episode_service.dart';
-import '../services/aptabase_service.dart';
+import '../services/analytics_service.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
@@ -593,12 +593,12 @@ class VideoPlayerLauncher {
       );
     }
 
-    AptabaseService.trackInBackground('playback_started', <String, Object?>{
+    AnalyticsService.trackInBackground('playback_started', <String, Object?>{
       'content_type': args.contentType ?? 'unknown',
       'provider': _analyticsProviderLabel(args),
       'has_playlist': args.playlist?.isNotEmpty ?? false,
       'trakt_scrobble': args.traktScrobble,
-      'platform': AptabaseService.currentPlatformLabel(),
+      'platform': AnalyticsService.currentPlatformLabel(),
     });
 
     MainPageBridge.notifyPlayerLaunching(isTrailer: isTrailer);

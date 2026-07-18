@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../widgets/episodes_panel.dart';
+import '../services/analytics_service.dart';
 
 /// Route name for [EpisodesScreen]'s pushed route (a `MaterialPageRoute`,
 /// or a zero-duration `PageRouteBuilder` on TV).
@@ -104,6 +105,12 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
   /// [dispose] can tell a real selection apart from a plain back-out and only
   /// fire [EpisodesScreen.onExitedWithoutSelection] for the latter.
   bool _selectionDispatched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    AnalyticsService.screenView('episodes');
+  }
 
   @override
   void dispose() {

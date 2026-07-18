@@ -3,6 +3,7 @@ import '../../models/stremio_addon.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import 'home_sections_filter_page.dart';
 import 'widgets/settings_widgets.dart';
@@ -36,6 +37,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('home_page_settings');
     _loadSettings();
   }
 

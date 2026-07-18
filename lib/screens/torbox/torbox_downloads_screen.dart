@@ -8,6 +8,7 @@ import '../../models/torbox_file.dart';
 import '../../models/torbox_torrent.dart';
 import '../../models/torbox_web_download.dart';
 import '../../models/rd_file_node.dart';
+import '../../services/analytics_service.dart';
 import '../../services/series_source_service.dart';
 import '../../services/torbox_service.dart';
 import '../../services/video_player_launcher.dart';
@@ -160,6 +161,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('torbox_downloads');
 
     // Initialize first item focus node with DPAD up handler
     _firstItemFocusNode = FocusNode(

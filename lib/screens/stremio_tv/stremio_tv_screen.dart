@@ -11,6 +11,7 @@ import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../models/torrent.dart';
+import '../../services/analytics_service.dart';
 import '../../services/debrid_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
@@ -121,6 +122,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('stremio_tv');
     _loadSettings().then((_) => _discoverAndLoad());
 
     // Search DPAD key handler

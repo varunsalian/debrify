@@ -92,7 +92,7 @@
 // import '../services/local_bound_source_service.dart';
 // import '../services/next_episode_service.dart';
 // import '../services/stremio_service.dart';
-// import '../services/aptabase_service.dart';
+// import '../services/analytics_service.dart';
 // import '../models/stremio_addon.dart';
 // import 'dart:async';
 // 
@@ -3224,7 +3224,7 @@
 //         return;
 //       }
 // 
-//       AptabaseService.trackInBackground('search_used', {
+//       AnalyticsService.trackInBackground('search_used', {
 //         'mode': selection != null && selection.imdbId.trim().isNotEmpty
 //             ? 'imdb'
 //             : 'keyword',

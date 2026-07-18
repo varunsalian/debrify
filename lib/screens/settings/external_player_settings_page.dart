@@ -6,6 +6,7 @@ import '../../services/external_player_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/android_native_downloader.dart';
 import '../../services/subtitle_font_service.dart';
+import '../../services/analytics_service.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
 import '../../utils/platform_util.dart';
@@ -124,6 +125,7 @@ class _ExternalPlayerSettingsPageState
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('external_player_settings');
     _loadSettings();
     _commandFocusNode.addListener(() {
       if (!mounted) return;

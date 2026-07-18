@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 
@@ -74,6 +75,7 @@ class _CloudScreenState extends State<CloudScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('cloud');
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     if (widget.isTelevision) {
       MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusFirstTile);

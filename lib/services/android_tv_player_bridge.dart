@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' show debugPrint;
 
 import '../utils/movie_parser.dart';
+import 'analytics_service.dart';
 import 'movie_metadata_service.dart';
 import 'stremio_service.dart';
 import 'subtitle_font_service.dart';
@@ -65,6 +66,23 @@ class AndroidTvPlayerBridge {
   // Session ID to track which launch the metadata belongs to
   // Prevents stale metadata from previous sessions being sent to new sessions
   static String? _currentSessionId;
+
+  // Throttle for analytics playback heartbeats fed from the native TV player's
+  // high-frequency progress pings (fires every ~5s). We only forward one
+  // heartbeat per [AnalyticsService.heartbeatInterval] so the analytics session
+  // stays alive without flooding events.
+  static DateTime? _lastPlaybackHeartbeat;
+
+  static void _maybeSendPlaybackHeartbeat(String player) {
+    final now = DateTime.now();
+    final last = _lastPlaybackHeartbeat;
+    if (last != null &&
+        now.difference(last) < AnalyticsService.heartbeatInterval) {
+      return;
+    }
+    _lastPlaybackHeartbeat = now;
+    AnalyticsService.playbackHeartbeat(player);
+  }
 
   // Deprecated: use _streamNextProvider
   static StreamNextProvider? get _torboxNextProvider => _streamNextProvider;
@@ -149,6 +167,11 @@ class AndroidTvPlayerBridge {
               message: e.toString(),
             );
           }
+        case 'analyticsHeartbeat':
+          // Dedicated keep-alive ping from the Java (Torbox/Real-Debrid/stream)
+          // TV player, which has no periodic progress channel of its own.
+          AnalyticsService.playbackHeartbeat('torbox_tv');
+          return null;
         case 'torboxPlaybackFinished':
         case 'realDebridPlaybackFinished':
         case 'streamPlaybackFinished':
@@ -168,6 +191,10 @@ class AndroidTvPlayerBridge {
           }
           return null;
         case 'torrentPlaybackProgress':
+          // Keep the analytics session alive during native TV playback (the
+          // Flutter UI is backgrounded, so this progress ping is our activity
+          // signal). Throttled so we emit at most one heartbeat per interval.
+          _maybeSendPlaybackHeartbeat('android_tv');
           final handler = _torrentProgressCallback;
           if (handler == null) {
             return null;

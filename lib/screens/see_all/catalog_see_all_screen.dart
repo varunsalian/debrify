@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/skeleton_poster.dart';
 import '../../services/stremio_service.dart';
@@ -127,6 +128,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('catalog_see_all');
     _type = widget.initialCatalog.type;
     _catalog = widget.initialCatalog;
     _searchQuery = widget.query?.trim() ?? '';

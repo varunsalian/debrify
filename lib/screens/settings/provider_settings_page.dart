@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../utils/platform_util.dart';
@@ -32,6 +33,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('provider_settings');
     _loadSettings();
   }
 

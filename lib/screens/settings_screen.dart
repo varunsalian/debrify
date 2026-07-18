@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/webdav_item.dart';
 import '../services/main_page_bridge.dart';
 
+import '../services/analytics_service.dart';
 import '../services/account_service.dart';
 import '../services/backup_restore_service.dart';
 import '../services/download_service.dart';
@@ -114,6 +115,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('settings');
     _loadSummaries();
     _loadSupportConfig();
 
@@ -876,10 +878,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _restoreBackup() async {
     final FilePickerResult? pick;
     try {
+      // FileType.any instead of custom: Android's MIME mapping for `json` is
+      // unreliable and throws PlatformException("Unsupported filter") on many
+      // devices, leaving the backup unselectable. The contents are validated by
+      // BackupRestoreService.parse below, so no extension filter is needed.
       pick = await FilePicker.platform.pickFiles(
         dialogTitle: 'Choose Debrify backup file',
-        type: FileType.custom,
-        allowedExtensions: const ['json'],
+        type: FileType.any,
         withData: true,
       );
     } catch (e) {

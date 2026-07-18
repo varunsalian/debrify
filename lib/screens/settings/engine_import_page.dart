@@ -6,6 +6,7 @@ import '../../services/engine/remote_engine_manager.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/engine/config_loader.dart';
 import '../../services/engine/engine_registry.dart';
+import '../../services/analytics_service.dart';
 import '../../utils/tv_keys.dart';
 
 /// Page for importing and managing torrent search engines (with Scaffold wrapper)
@@ -883,6 +884,7 @@ class _EngineImportPageState extends State<EngineImportPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('engine_import');
     _loadEngines();
   }
 

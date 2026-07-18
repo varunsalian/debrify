@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:yaml/yaml.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/analytics_service.dart';
 import '../../services/android_native_downloader.dart';
 import '../../services/engine/config_loader.dart';
 import '../../services/engine/engine_registry.dart';
@@ -104,6 +105,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.screenView('addon_hub');
     _stremio.addAddonsChangedListener(_onAddonsChanged);
     _searchController.addListener(() {
       final q = _searchController.text.trim();
