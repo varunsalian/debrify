@@ -7229,16 +7229,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   ),
                 ),
               ),
-            if (_heroTrailerActive)
-              Positioned.fill(
-                child: _HeroTrailerLayer(
-                  trailer: _heroTrailer,
-                  heroHeight: heroH,
-                  volume: _heroTrailerVolume,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  takeover: _heroTrailerTakeover,
-                ),
-              ),
             _buildTrailerTakeoverRecede(
               Column(
                 children: [
@@ -7274,9 +7264,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               isTelevision: tv,
                               height: heroH,
                               tint: _heroTint,
-                              trailerLoading: _heroTrailerActive
-                                  ? _heroTrailerLoading
-                                  : null,
+                              // Blended trailer: it plays in a region on the
+                              // right (the overlay added below), so the spotlight
+                              // keeps its backdrop + text (no fade) and just caps
+                              // the text at the region's left edge; the pill lives
+                              // in the region. Reserve only when trailers can
+                              // actually appear (enabled), else full-width text.
+                              boxedTrailer:
+                                  _heroTrailerActive && _heroTrailerEnabled,
+                              // Pill lives in the trailer region now.
+                              trailerLoading: null,
+                              // Still passed so the backdrop's Ken Burns drift
+                              // freezes while the trailer plays (boxedTrailer
+                              // suppresses the image FADE, not this freeze).
                               trailerShowing: _heroTrailerActive
                                   ? _heroTrailerShowing
                                   : null,
@@ -7372,6 +7372,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 ],
               ),
             ),
+            // The ambient trailer, painted into a right-anchored region of the
+            // hero whose edges dissolve into the backdrop (premium-OTT blend).
+            // Sits ABOVE the board as an IgnorePointer overlay so the video
+            // paints over the hero backdrop while the title/rows keep DPAD focus;
+            // the spotlight reserves the right zone (boxedTrailer) so the crisp
+            // trailer never overlaps the title text.
+            if (_heroTrailerActive)
+              Positioned.fill(
+                child: _HeroTrailerLayer(
+                  trailer: _heroTrailer,
+                  heroHeight: heroH,
+                  volume: _heroTrailerVolume,
+                  loading: _heroTrailerLoading,
+                  tint: _heroTint,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  takeover: _heroTrailerTakeover,
+                ),
+              ),
             // While the film owns the board, only the showcased title's
             // name/plot remain on screen — small, top-left, fully readable.
             if (_heroTrailerActive) _buildTakeoverInfoOverlay(),
@@ -8409,6 +8427,12 @@ class _HeroSpotlight extends StatefulWidget {
   /// the results off-screen.
   final bool compact;
 
+  /// True on the TV Home hero when the ambient trailer plays in a blended region
+  /// on the RIGHT (see [_HeroTrailerLayer]). The spotlight then keeps its
+  /// backdrop and text (no crossfade) but caps the identity block at the
+  /// region's left edge so the title and the crisp trailer sit side by side.
+  final bool boxedTrailer;
+
   /// Dominant color of the focused title's poster (host-extracted, debounced).
   /// Blended softly into the scrim + an ambient glow so the whole hero takes
   /// on the title's mood. Null = neutral (no tint yet / colorless art).
@@ -8434,6 +8458,7 @@ class _HeroSpotlight extends StatefulWidget {
     this.rating,
     this.runtime,
     this.compact = false,
+    this.boxedTrailer = false,
     this.tint,
     this.trailerLoading,
     this.trailerShowing,
@@ -8518,12 +8543,13 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     super.dispose();
   }
 
-  /// The image→trailer crossfade (see the call site): fades the static
-  /// backdrop out while trailer frames are showing in the layer beneath.
-  /// No-op wrapper when the host runs no trailers on this surface.
+  /// Legibility wrapper for the left tint SCRIM and the identity TEXT: in
+  /// [boxedTrailer] mode they must STAY while the trailer plays (only the
+  /// backdrop image yields — see [_fadeBackdropForTrailer]), so this is a pass-
+  /// through there. No-op too when the surface runs no trailers.
   Widget _maybeFadeForTrailer(Widget child) {
     final showing = widget.trailerShowing;
-    if (showing == null) return child;
+    if (showing == null || widget.boxedTrailer) return child;
     return ValueListenableBuilder<bool>(
       valueListenable: showing,
       builder: (context, on, kid) => AnimatedOpacity(
@@ -8533,6 +8559,87 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
         child: kid,
       ),
       child: child,
+    );
+  }
+
+  /// Fades the backdrop IMAGE out while the trailer plays (boxedTrailer). The
+  /// colour field beneath ([_trailerColorField]) takes its place, so the left of
+  /// the hero becomes a rich tint wash instead of a cropped half-poster beside
+  /// the trailer. Timing mirrors the 650ms crossfade the video uses internally.
+  Widget _fadeBackdropForTrailer(Widget child) {
+    final showing = widget.trailerShowing;
+    if (showing == null || !widget.boxedTrailer) return child;
+    return ValueListenableBuilder<bool>(
+      valueListenable: showing,
+      builder: (context, on, kid) => AnimatedOpacity(
+        opacity: on ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 650),
+        curve: Curves.easeOut,
+        child: kid,
+      ),
+      child: child,
+    );
+  }
+
+  /// The colour field that replaces the backdrop on the left while a trailer
+  /// plays: a diagonal wash built from the SAME extracted tint the trailer's
+  /// edge-feather melts into ([_HeroTrailerLayer]), plus a soft glow leaning
+  /// toward the trailer — so the whole hero reads as one cohesive colour stage,
+  /// no half-poster seam. Fades in with [trailerShowing]; sits at the very back
+  /// (revealed as the image fades out above it). Baked gradients only — no
+  /// per-frame layer. Boxed mode only.
+  Widget _trailerColorField(ColorScheme scheme) {
+    final showing = widget.trailerShowing;
+    if (showing == null || !widget.boxedTrailer) return const SizedBox.shrink();
+    const base = Color(0xFF0D0B1A); // the board's own bg
+    return IgnorePointer(
+      child: ValueListenableBuilder<bool>(
+        valueListenable: showing,
+        builder: (context, on, _) => AnimatedOpacity(
+          opacity: on ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 650),
+          curve: Curves.easeOut,
+          child: ValueListenableBuilder<Color?>(
+            valueListenable:
+                widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
+            builder: (context, tint, __) {
+              final t = tint ?? scheme.surface;
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  // Diagonal tint field: brighter top-left, deeper foot — the
+                  // mid value (~0.30) meets the trailer's melt (0.34) so the two
+                  // read as one surface across the feather.
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.lerp(base, t, 0.42)!,
+                      Color.lerp(base, t, 0.28)!,
+                      Color.lerp(base, t, 0.16)!,
+                    ],
+                    stops: const [0.0, 0.55, 1.0],
+                  ),
+                ),
+                child: DecoratedBox(
+                  // Soft glow leaning toward the trailer (right of centre) so the
+                  // colour intensifies into it and the left stays calm for text.
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0.55, -0.25),
+                      radius: 1.3,
+                      colors: [
+                        Color.lerp(base, t, 0.62)!.withValues(alpha: 0.5),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 1.0],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 
@@ -8586,6 +8693,10 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
         clipBehavior: Clip.hardEdge,
         fit: StackFit.expand,
         children: [
+          // Behind everything: the tint colour field that takes over the left
+          // while a trailer plays (boxed mode), so no half-poster shows beside
+          // the trailer. Hidden (faded 0) otherwise, and behind the image below.
+          if (widget.boxedTrailer) _trailerColorField(scheme),
           if (bg.isNotEmpty)
             // Fade the backdrop's lower third to transparent so it melts into
             // the page's own gradient instead of ending on a hard horizontal
@@ -8602,12 +8713,11 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
             // it detects at layout time. Without this, the zoomed backdrop
             // smears above the hero into the search header (the "bleed").
             //
-            // The outer fade is the image→trailer crossfade: the trailer video
-            // renders in the board layer BENEATH this spotlight, so when its
-            // frames arrive the image yields (fades out) to reveal it, and
-            // fades back the moment the trailer stops. Timing mirrors the
-            // 650ms crossfade HeroTrailerBackdrop uses internally.
-            _maybeFadeForTrailer(
+            // The outer fade is the image→colour-field crossfade: while a
+            // trailer plays the image yields (fades out) to reveal the tint
+            // colour field beneath, so the left is a rich wash, not a cropped
+            // half-poster. Timing mirrors the 650ms crossfade the video uses.
+            _fadeBackdropForTrailer(
               RepaintBoundary(
                 child: ClipRect(
                   child: ShaderMask(
@@ -8729,13 +8839,30 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           _maybeFadeForTrailer(
             Align(
               alignment: Alignment.bottomLeft,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(24, 0, 24, isTelevision ? 22 : 16),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: isTelevision ? 640 : 520,
-                  ),
-                  child: Column(
+              child: LayoutBuilder(
+                builder: (context, cons) {
+                  // Keep the identity block clear of the trailer's crisp part
+                  // (boxedTrailer): cap its width at the region's left edge (the
+                  // text ends where the trailer's left feather begins, so the
+                  // two blend rather than collide).
+                  final defaultMax = isTelevision ? 640.0 : 520.0;
+                  double maxTextW = defaultMax;
+                  if (widget.boxedTrailer) {
+                    final region = _heroTrailerRegionRect(cons.maxWidth, height);
+                    if (region != null) {
+                      maxTextW = (region.left - 24).clamp(220.0, defaultMax);
+                    }
+                  }
+                  return Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      24,
+                      0,
+                      24,
+                      isTelevision ? 22 : 16,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxTextW),
+                      child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -8845,11 +8972,13 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                         ),
                       ],
                     ],
-                  ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
-          ),
           // "Trailer loading" pill — top-right, above the scrims so it reads
           // against any backdrop. Purely informational (never focusable), and
           // rendered only while the host is actually fetching/starting a
@@ -8882,44 +9011,80 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   );
 }
 
-/// Full-board ambient trailer layer (TV Home board only). Sits BEHIND the
-/// hero + rows, laid out full-screen from frame one, and masked down to the
-/// hero rect while ambient — visually identical to a hero-embedded trailer.
-/// Once the viewer has actually watched ~10s ([_promoteAfter]), it promotes:
-/// the mask animates open until the video fills the whole board behind the
-/// cards, with a scrim fading in over the lower region so rows stay legible.
+/// Geometry of the Home hero's ambient-trailer REGION — a right-anchored slab
+/// that fills the hero band's height and bleeds to the right screen edge, into
+/// which the trailer is painted and then feathered (its left/top/bottom edges
+/// dissolve into the hero via baked gradients — no hard frame, the premium-OTT
+/// look). Shared by [_HeroSpotlight] (which keeps its title text clear of the
+/// region's crisp part) and [_HeroTrailerLayer] (which paints the video) so both
+/// agree on the rect. Origin is the hero band's own top-left.
 ///
-/// The promotion is glitch-free BY CONSTRUCTION: the video's layout never
-/// changes (always full-screen, BoxFit.cover never re-fits) and the
-/// [HeroTrailerBackdrop] subtree is pinned by a [GlobalKey], so even the
-/// steady-state branch change (masked → bare, dropping the ClipRect/
-/// ShaderMask wrappers entirely once fully promoted) re-parents the SAME
-/// element — the texture, decoder and audio simply keep running.
+/// Width-led: ~56% of the hero, so the title keeps the left ~44%. Returns null
+/// for a band too short to read as a trailer (falls back to full-width text).
+Rect? _heroTrailerRegionRect(double width, double heroH) {
+  if (!width.isFinite || !heroH.isFinite || width <= 0 || heroH <= 0) {
+    return null;
+  }
+  if (heroH < 170) return null; // too short — keep the full-width hero instead
+  // Below this the region can't be both wide enough to read and leave room for
+  // the title — and it also keeps the clamp() below well-formed (lower ≤ upper).
+  if (width < 480) return null;
+  final regionW = (width * 0.56).clamp(360.0, width);
+  final left = width - regionW; // flush to the right screen edge
+  return Rect.fromLTWH(left, 0, regionW, heroH);
+}
+
+/// Fraction of the region's width over which its LEFT edge dissolves into the
+/// hero — the crisp trailer starts after this. The title text ends at the
+/// region's left, so it sits over the dark side of this feather.
+const double _heroTrailerFeatherFrac = 0.34;
+
+/// Full-board ambient trailer layer (TV Home board only). Sits ABOVE the hero +
+/// rows as an [IgnorePointer] overlay and paints the trailer into a right-
+/// anchored REGION of the hero band (see [_heroTrailerRegionRect]) whose edges
+/// dissolve into the hero — a live, frameless picture beside the title, the way
+/// premium OTT heroes blend a trailer into their key art. The region fades in
+/// when a trailer starts resolving and out when it clears; the title/backdrop
+/// underneath stay put (no crossfade-to-fullscreen), so the hero keeps its
+/// identity. [HeroTrailerBackdrop] cover-fills the region (clipped), and a
+/// [GlobalKey] pins the player element across rebuilds; it's replaced per URL so
+/// each title still spins a fresh engine.
 ///
-/// Any hero change tears the trailer down (the host nulls the listenable →
-/// the video unmounts) and the promotion resets for the next title. A
-/// trailer that stops for content playback demotes on its own via
-/// [HeroTrailerBackdrop.onPlayingChanged](false).
+/// Any hero change tears the trailer down (the host nulls the listenable → the
+/// video unmounts and the region fades out). A trailer that stops for content
+/// playback drops on its own via [HeroTrailerBackdrop.onPlayingChanged](false).
 class _HeroTrailerLayer extends StatefulWidget {
   final ValueListenable<YoutubeResolvedStreams?> trailer;
 
-  /// The hero spotlight's height — the ambient mask's shape.
+  /// The hero spotlight's height — sets the region's height (see
+  /// [_heroTrailerRegionRect]).
   final double heroHeight;
 
   /// Ambient volume 0–100 (0 = play silently).
   final double volume;
 
-  /// Relayed [HeroTrailerBackdrop.onPlayingChanged] (host pill + image fade).
+  /// Host "a trailer is resolving/buffering" flag — the region fades in on it
+  /// (so it's already there when frames land) and hosts the "Trailer" pill.
+  final ValueListenable<bool> loading;
+
+  /// The focused title's dominant colour — the feather gradients melt the
+  /// trailer's edges into THIS colour (not a flat black), so it blends into the
+  /// poster's mood. Null = neutral dark.
+  final ValueListenable<Color?>? tint;
+
+  /// Relayed [HeroTrailerBackdrop.onPlayingChanged] (host pill + colour bleed).
   final ValueChanged<bool>? onPlayingChanged;
 
-  /// Published takeover progress (the eased 0→1 of the promote animation).
-  /// The host's board content listens and recedes in sync.
+  /// Retained (unused) takeover hook — the fullscreen promote is gone in the
+  /// boxed layout, but the host still wires a notifier; kept for compatibility.
   final ValueNotifier<double>? takeover;
 
   const _HeroTrailerLayer({
     required this.trailer,
     required this.heroHeight,
     required this.volume,
+    required this.loading,
+    this.tint,
     this.onPlayingChanged,
     this.takeover,
   });
@@ -8928,49 +9093,28 @@ class _HeroTrailerLayer extends StatefulWidget {
   State<_HeroTrailerLayer> createState() => _HeroTrailerLayerState();
 }
 
-class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
-    with SingleTickerProviderStateMixin {
-  /// Retained (pinned at 0) from the disabled full-board takeover — the host's
-  /// dormant takeover overlay/recede still listen to its published value. It is
-  /// never driven now: the trailer stays windowed (full-bleed) in the hero.
-  late final AnimationController _promote = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1600),
-  );
-
-  double get _promoteT => Curves.easeInOutCubic.transform(_promote.value);
-
-  /// Pins the backdrop's element so state (engine/texture) survives the
-  /// masked↔bare branch swap. Replaced per trailer URL so each title still
-  /// gets a fresh engine.
+class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
+  /// Pins the backdrop's element so its engine/texture survive rebuilds.
+  /// Replaced per trailer URL so each title still gets a fresh engine.
   GlobalKey _backdropKey = GlobalKey();
   String? _backdropUrl;
 
-  /// The streams actually being rendered. Normally mirrors `widget.trailer`,
-  /// but during a graceful dismiss it OUTLIVES a null from the host so the
-  /// video keeps playing while the mask eases back down to the hero shape —
-  /// unmounted only once that collapse lands. A new trailer replaces it at once.
+  /// The streams actually being rendered — mirrors `widget.trailer`. Held in
+  /// state so a `setState` drives the video mount/unmount as titles change.
   YoutubeResolvedStreams? _held;
 
-  /// True while easing the mask down after the trailer was cleared mid-takeover
-  /// — the cue to unmount [_held] when the reverse reaches the hero shape.
-  bool _collapsing = false;
-
-  /// The graceful dismiss is quicker than the 10s promote-in — a deliberate,
-  /// readable settle rather than a snap.
-  static const Duration _collapseDuration = Duration(milliseconds: 900);
+  /// True once the video is actually producing frames (not merely resolving /
+  /// buffering). The edge-feathers fade in ONLY on this — so while a trailer
+  /// loads the poster shows through the region untouched, and the tint dissolve
+  /// appears together with the moving picture, never over a still. Reset on any
+  /// trailer change so a new title starts clean.
+  bool _playing = false;
 
   @override
   void initState() {
     super.initState();
     _held = widget.trailer.value;
     widget.trailer.addListener(_onTrailerChanged);
-    _promote.addListener(_publishTakeover);
-    _promote.addStatusListener(_onPromoteStatus);
-  }
-
-  void _publishTakeover() {
-    widget.takeover?.value = _promoteT;
   }
 
   @override
@@ -8980,145 +9124,206 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer>
       old.trailer.removeListener(_onTrailerChanged);
       widget.trailer.addListener(_onTrailerChanged);
       // We render from _held (not the listenable directly), so re-sync it to
-      // the new notifier's current value — the rebuild from didUpdateWidget
-      // then reflects it without waiting for the next fire.
-      _collapsing = false;
+      // the new notifier's current value.
       _held = widget.trailer.value;
-    }
-    if (!identical(old.takeover, widget.takeover)) {
-      // didUpdateWidget runs during build — a synchronous notifier write here
-      // would mark listeners dirty mid-build. Defer to the frame's end. (In
-      // practice the host notifier is stable, so this path is theoretical.)
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        old.takeover?.value = 0;
-        _publishTakeover();
-      });
+      _playing = false;
     }
   }
 
   @override
   void dispose() {
     widget.trailer.removeListener(_onTrailerChanged);
-    _promote.dispose();
     super.dispose();
   }
 
   void _onTrailerChanged() {
     if (!mounted) return;
-    final next = widget.trailer.value;
-    if (next != null) {
-      // A trailer arrived — the first resolve, or a fresh one for a new hero.
-      // Adopt it now (its own URL/key mounts a fresh engine); any pending
-      // collapse is moot, the new video simply plays ambient.
-      _collapsing = false;
-      setState(() => _held = next);
-      return;
-    }
-    // Cleared (hero moved on, a key press, content launched). Fullscreen
-    // takeover is disabled so _promote is always 0 — just drop the video.
-    if (_promote.value > 0) {
-      _collapsing = true;
-      _promote.animateBack(0.0, duration: _collapseDuration);
-    } else {
-      _promote.value = 0;
-      setState(() => _held = null);
-    }
-  }
-
-  /// The collapse landed: the mask is back at the hero shape, so drop the held
-  /// video (unmount + dispose its engine) — unless a new trailer arrived first.
-  void _onPromoteStatus(AnimationStatus status) {
-    if (status == AnimationStatus.dismissed && _collapsing) {
-      _collapsing = false;
-      if (mounted && widget.trailer.value == null) {
-        setState(() => _held = null);
-      }
-    }
+    // A new trailer arrives (or a null drops it). Either way the feathers go
+    // back to hidden until THIS video reports frames — the new poster shows
+    // through cleanly meanwhile.
+    setState(() {
+      _held = widget.trailer.value;
+      _playing = false;
+    });
   }
 
   void _onPlaying(bool playing) {
-    // Relay to the host — drives the spotlight still-fade, the identity-block
-    // fade and the color bleed. Fullscreen takeover is disabled (the promote
-    // controller stays pinned at 0), so there's nothing else to do here.
+    // Relay to the host — drives the colour bleed under the rows and clears the
+    // "Trailer" pill once frames are up.
     widget.onPlayingChanged?.call(playing);
+    // Drive the feathers locally: they appear with the picture, not before.
+    if (_playing != playing && mounted) setState(() => _playing = playing);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Render from _held (not widget.trailer directly) so the video survives a
-    // mid-takeover clear for the length of the collapse — setState on _held
-    // drives the rebuilds.
     final streams = _held;
-    if (streams == null || !streams.hasPlayable) {
-      return const SizedBox.shrink();
-    }
-    if (streams.playUrl != _backdropUrl) {
+    if (streams != null && streams.hasPlayable && streams.playUrl != _backdropUrl) {
       _backdropUrl = streams.playUrl;
       _backdropKey = GlobalKey();
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final boardH = constraints.maxHeight;
-        final boardW = constraints.maxWidth;
-        if (!boardH.isFinite ||
-            boardH <= 0 ||
-            !boardW.isFinite ||
-            boardW <= 0) {
-          return const SizedBox.shrink();
-        }
-        final heroH = widget.heroHeight.clamp(0.0, boardH);
-        // Full-bleed: the trailer COVERS the whole hero band (cropped to fill),
-        // the way the big OTT apps ship their hero. A bottom gradient melts it
-        // into the board and carries the title/meta that sit over it in the
-        // spotlight (the left edge is handled by the spotlight's tint scrim in
-        // front). RepaintBoundary isolates the texture's per-frame updates.
-        return Align(
-          alignment: Alignment.topCenter,
-          child: SizedBox(
-            height: heroH,
-            width: double.infinity,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                RepaintBoundary(
-                  child: HeroTrailerBackdrop(
-                    key: _backdropKey,
-                    imageUrl: null,
-                    videoUrl: streams.playUrl,
-                    audioUrl: streams.audioUrl,
-                    enabled: true,
-                    imageBlurSigma: 0,
-                    videoBlurSigma: 0,
-                    startDelay: const Duration(milliseconds: 300),
-                    ambientVolume: widget.volume,
-                    onPlayingChanged: _onPlaying,
-                  ),
-                ),
-                // Bottom scrim over the video: melts the hero into the board and
-                // keeps the title/meta (above, in the spotlight) legible. Baked
-                // gradient, no Opacity layer.
-                const IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          Color(0xFF0D0B1A),
-                          Color(0xB30D0B1A),
-                          Colors.transparent,
-                        ],
-                        stops: [0.0, 0.28, 0.62],
+    return IgnorePointer(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final boardH = constraints.maxHeight;
+          final boardW = constraints.maxWidth;
+          if (!boardH.isFinite ||
+              boardH <= 0 ||
+              !boardW.isFinite ||
+              boardW <= 0) {
+            return const SizedBox.shrink();
+          }
+          final heroH = widget.heroHeight.clamp(0.0, boardH);
+          final region = _heroTrailerRegionRect(boardW, heroH);
+          if (region == null) return const SizedBox.shrink();
+
+          final hasVideo = streams != null && streams.hasPlayable;
+          // The region is present while a trailer is resolving OR playing; it
+          // fades out once neither holds. Listening to `loading` keeps it up
+          // through the resolve gap so frames land inside it, not a pop.
+          return ValueListenableBuilder<bool>(
+            valueListenable: widget.loading,
+            builder: (context, loading, _) {
+              final show = loading || hasVideo;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned.fromRect(
+                    rect: region,
+                    child: AnimatedOpacity(
+                      opacity: show ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeOut,
+                      child: _buildRegion(
+                        hasVideo ? streams : null,
+                        loading,
+                        _playing,
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  /// The trailer region — NO frame. The video cover-fills a right-anchored slab
+  /// and its left/top/bottom edges DISSOLVE into the hero via baked gradients
+  /// tinted to the title's colour, so it melts into the poster instead of
+  /// sitting in a box (the premium-OTT look). The right edge bleeds off screen.
+  ///
+  /// Weak-TV safe: the feathers are plain gradient fills painted OVER the video
+  /// (no per-frame ShaderMask / saveLayer); the video keeps its own
+  /// RepaintBoundary so its texture updates never repaint the gradients or pill.
+  ///
+  /// [playing] gates the feathers: while the trailer only resolves/buffers they
+  /// stay hidden so the poster shows through the region cleanly, then they fade
+  /// in with the picture.
+  Widget _buildRegion(
+    YoutubeResolvedStreams? streams,
+    bool loading,
+    bool playing,
+  ) {
+    return ClipRect(
+      // Clip the cover-crop so the scaled-up video can't spill left over the
+      // title text; the right side simply bleeds off the screen edge.
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // imageUrl null: the hero backdrop shows through the region while
+          // resolving, and the video fades in over it — no black plate.
+          if (streams != null)
+            RepaintBoundary(
+              child: HeroTrailerBackdrop(
+                key: _backdropKey,
+                imageUrl: null,
+                videoUrl: streams.playUrl,
+                audioUrl: streams.audioUrl,
+                enabled: true,
+                imageBlurSigma: 0,
+                videoBlurSigma: 0,
+                startDelay: const Duration(milliseconds: 300),
+                ambientVolume: widget.volume,
+                onPlayingChanged: _onPlaying,
+              ),
+            ),
+          // The feather — three tinted gradients melting the edges into the
+          // hero. Hidden until the video actually plays (so a resolving trailer
+          // leaves the poster untouched), then fades in with the picture.
+          // Recolours only when the settled tint changes (never per frame); kept
+          // out of the video's RepaintBoundary above.
+          IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: playing ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 340),
+              curve: Curves.easeOut,
+              child: ValueListenableBuilder<Color?>(
+                valueListenable:
+                    widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
+                builder: (context, tint, __) {
+                const base = Color(0xFF0D0B1A); // the board's own bg
+                // Melt toward the title's mood, but stay dark enough that the
+                // title text (which ends at this region's left) reads over it.
+                final melt = tint == null
+                    ? base
+                    : Color.lerp(base, tint, 0.34)!;
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Left: the crisp trailer starts after this — melts into the
+                    // dark text zone on the left.
+                    _feather(
+                      Alignment.centerLeft,
+                      Alignment.centerRight,
+                      melt,
+                      _heroTrailerFeatherFrac,
+                    ),
+                    // Top: soften the upper edge into the hero.
+                    _feather(
+                      Alignment.topCenter,
+                      Alignment.bottomCenter,
+                      melt,
+                      0.16,
+                    ),
+                    // Bottom: melt down into the rows (mirrors the spotlight's
+                    // own backdrop foot-fade).
+                    _feather(
+                      Alignment.bottomCenter,
+                      Alignment.topCenter,
+                      melt,
+                      0.36,
+                    ),
+                  ],
+                );
+                },
+              ),
             ),
           ),
-        );
-      },
+          Positioned(
+            top: 16,
+            right: 22,
+            child: _HeroTrailerLoadingPill(visible: loading),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One edge-feather: a gradient from opaque [c] at [begin] fading to the same
+  /// hue transparent by [frac], painted over the video to dissolve that edge.
+  Widget _feather(Alignment begin, Alignment end, Color c, double frac) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: begin,
+          end: end,
+          colors: [c, c.withValues(alpha: 0)],
+          stops: [0.0, frac],
+        ),
+      ),
     );
   }
 }
