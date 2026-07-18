@@ -2084,9 +2084,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _handleImportChannelsFromDevice() async {
+    // FileType.any instead of custom: Android has no MimeTypeMap entry for
+    // `yaml`/`yml`/`debrify`, so a custom filter silently greys those files out
+    // in the system picker (and throws "Unsupported filter" outright when every
+    // extension is unmapped). The importer validates the bytes/format below.
     final selection = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['zip', 'yaml', 'yml', 'txt', 'debrify'],
+      type: FileType.any,
       withData: true,
       withReadStream: true,
     );
@@ -2096,6 +2099,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final pickedFile = selection.files.first;
+
+    // Reject an implausibly large pick before reading it into memory.
+    if (pickedFile.size > 100 * 1024 * 1024) {
+      _showSnack('Selected file is too large to import.', color: Colors.orange);
+      return;
+    }
     Uint8List bytes;
     try {
       bytes = await _readPickedFileBytes(pickedFile);

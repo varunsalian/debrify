@@ -898,6 +898,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (pick == null || pick.files.isEmpty) return;
     final file = pick.files.first;
 
+    // FileType.any lets the user pick anything and withData buffers it into RAM;
+    // reject an implausibly large pick before reading so a stray huge file can't OOM.
+    if (file.size > 20 * 1024 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That file is too large to be a Debrify backup.')),
+      );
+      return;
+    }
+
     final String content;
     try {
       if (file.bytes != null) {

@@ -980,12 +980,23 @@ class StremioTvLocalCatalogsDialog extends StatefulWidget {
   /// Pick and import a JSON file. Returns true if imported.
   static Future<bool> importFromFile(BuildContext context) async {
     try {
+      // FileType.any instead of custom: Android's MIME mapping for `json` is
+      // unreliable and throws PlatformException("Unsupported filter"). The JSON
+      // content is validated by LocalCatalogImporter.import below.
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
+        type: FileType.any,
         withData: true,
       );
       if (result == null || result.files.isEmpty) return false;
+
+      // Reject an implausibly large pick before buffering it (FileType.any +
+      // withData would otherwise load the whole file into RAM).
+      if (result.files.first.size > 20 * 1024 * 1024) {
+        if (context.mounted) {
+          _showSnackBar(context, 'That file is too large to be a catalog', true);
+        }
+        return false;
+      }
 
       final bytes = result.files.first.bytes;
       if (bytes == null) {

@@ -885,15 +885,32 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _importCustomFont() async {
     try {
+      // FileType.any instead of custom: Android's MIME mapping for `ttf`/`otf`
+      // is unreliable and throws PlatformException("Unsupported filter"). We
+      // validate the extension ourselves below.
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['ttf', 'otf'],
+        type: FileType.any,
         allowMultiple: false,
       );
 
       if (result == null || result.files.isEmpty) return;
 
       final file = result.files.first;
+      // Reject only a clearly-wrong extension; if the picker's display name has
+      // no extension (some Android SAF providers), let the font service try it
+      // rather than wrongly rejecting a valid font.
+      final lowerName = file.name.toLowerCase();
+      final hasExtension = lowerName.contains('.');
+      if (hasExtension &&
+          !lowerName.endsWith('.ttf') &&
+          !lowerName.endsWith('.otf')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select a .ttf or .otf font file')),
+          );
+        }
+        return;
+      }
       if (file.path == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
