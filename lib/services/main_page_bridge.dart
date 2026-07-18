@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
 
@@ -363,6 +364,14 @@ class MainPageBridge {
   /// the board content, so the WHOLE room goes dark, not just the page. The
   /// publisher must reset it to 0 when it disposes.
   static final ValueNotifier<double> tvChromeDim = ValueNotifier<double>(0);
+
+  /// The focused Home-hero title's dominant colour, published by the Home board
+  /// ONLY while its ambient trailer is actually playing (null otherwise). The TV
+  /// shell's sidebar rail blends it softly into its background so the whole
+  /// room takes on the film's colour, in lock-step with the hero's left colour
+  /// field and the rows' colour-bleed. The publisher must reset it to null when
+  /// the trailer stops or it disposes.
+  static final ValueNotifier<Color?> tvHeroTint = ValueNotifier<Color?>(null);
 
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.

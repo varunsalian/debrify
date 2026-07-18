@@ -251,45 +251,93 @@ class TvSidebarNavState extends State<TvSidebarNav>
         final t = _expand.value;
         final width = TvSidebarNav.collapsedWidth +
             (TvSidebarNav.expandedWidth - TvSidebarNav.collapsedWidth) * t;
-        return Container(
-          width: width,
-          decoration: BoxDecoration(
-            // Stremio look: a purple-tinted top blooming down into deep indigo-
-            // black, richer as it expands so the overlay reads as a raised panel.
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color.lerp(const Color(0xFF1B1636), _bg, 0.15)!,
-                Color.lerp(const Color(0xFF14112A), _bg, 0.5 - t * 0.2)!,
-                _bg,
-              ],
-              stops: const [0.0, 0.42, 1.0],
-            ),
-            border: Border(
-              right: BorderSide(
-                // faint accent-tinted hairline, brightening as it opens
-                color: _accent.withValues(alpha: 0.10 + t * 0.10),
-                width: 1,
-              ),
-            ),
-            boxShadow: t > 0.02
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5 * t),
-                      blurRadius: 28,
-                      offset: const Offset(8, 0),
-                    ),
-                    BoxShadow(
-                      color: _accent.withValues(alpha: 0.10 * t),
-                      blurRadius: 40,
-                      offset: const Offset(2, 0),
-                    ),
-                  ]
-                : null,
-          ),
-          clipBehavior: Clip.hardEdge,
+        // While the Home hero's trailer plays, the shell publishes the focused
+        // title's colour (MainPageBridge.tvHeroTint); the rail takes it on in
+        // lock-step with the hero's left colour stage and the rows, so the whole
+        // room shares the film's mood. Null (no trailer) → the normal purple.
+        return ValueListenableBuilder<Color?>(
+          valueListenable: MainPageBridge.tvHeroTint,
           child: child,
+          builder: (context, heroTint, kid) {
+            return TweenAnimationBuilder<Color?>(
+              // Ease toward the tint, or toward TRANSPARENT when there's none
+              // (its alpha eases to 0 so the rail melts back to purple). Must be
+              // non-null — TweenAnimationBuilder asserts tween.end != null, and
+              // tvHeroTint is null whenever no trailer plays.
+              tween: ColorTween(end: heroTint ?? const Color(0x00000000)),
+              duration: const Duration(milliseconds: 650),
+              curve: Curves.easeOut,
+              child: kid,
+              builder: (context, eased, inner) {
+                // Blend the film's colour into the rail by [amt], scaled by the
+                // eased alpha so it fades in and out. Low amounts keep the icons
+                // and labels legible over the darkened, tinted rail.
+                Color tinted(Color c, double amt) => eased == null
+                    ? c
+                    : Color.lerp(
+                        c,
+                        eased.withValues(alpha: 1.0),
+                        amt * eased.a,
+                      )!;
+                return Container(
+                  width: width,
+                  decoration: BoxDecoration(
+                    // Stremio look: a purple-tinted top blooming down into deep
+                    // indigo-black, richer as it expands so the overlay reads as
+                    // a raised panel. Blended toward the hero tint while playing.
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        tinted(
+                          Color.lerp(const Color(0xFF1B1636), _bg, 0.15)!,
+                          0.34,
+                        ),
+                        tinted(
+                          Color.lerp(
+                            const Color(0xFF14112A),
+                            _bg,
+                            0.5 - t * 0.2,
+                          )!,
+                          0.22,
+                        ),
+                        // Foot stays near _bg so the rail still melts into the
+                        // page bottom; a whisper of tint keeps it cohesive.
+                        tinted(_bg, 0.10),
+                      ],
+                      stops: const [0.0, 0.42, 1.0],
+                    ),
+                    border: Border(
+                      right: BorderSide(
+                        // faint hairline, brightening as it opens; picks up the
+                        // hero tint so the rail edge matches the stage.
+                        color: tinted(_accent, 0.5)
+                            .withValues(alpha: 0.10 + t * 0.10),
+                        width: 1,
+                      ),
+                    ),
+                    boxShadow: t > 0.02
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.5 * t),
+                              blurRadius: 28,
+                              offset: const Offset(8, 0),
+                            ),
+                            BoxShadow(
+                              color: tinted(_accent, 0.5)
+                                  .withValues(alpha: 0.10 * t),
+                              blurRadius: 40,
+                              offset: const Offset(2, 0),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  clipBehavior: Clip.hardEdge,
+                  child: inner,
+                );
+              },
+            );
+          },
         );
       },
       child: SafeArea(

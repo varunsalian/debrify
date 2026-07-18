@@ -788,6 +788,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // Relay the takeover arc to the app shell so the sidebar rail hides in
       // lock-step with the board.
       _heroTrailerTakeover.addListener(_relayChromeDim);
+      // Relay the focused title's colour to the sidebar rail WHILE its trailer
+      // plays, so the rail takes on the film's colour like the hero's left
+      // stage and the rows. Driven by both the playing flag and the tint.
+      _heroTrailerShowing.addListener(_relaySidebarTint);
+      _heroTint.addListener(_relaySidebarTint);
       // Real content playback (from a detail page, Quick Play, anywhere)
       // suppresses the trailer for this spotlight — see _heroTrailerSuppressed.
       MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunch);
@@ -1015,16 +1020,23 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     if (_heroTrailerActive) {
       _heroTrailerTakeover.removeListener(_relayChromeDim);
+      _heroTrailerShowing.removeListener(_relaySidebarTint);
+      _heroTint.removeListener(_relaySidebarTint);
       MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunch);
       HardwareKeyboard.instance.removeHandler(_onTakeoverKey);
       appRouteObserver.unsubscribe(this);
-      // Reset the shell notifier AFTER this frame: dispose can run inside
+      // Reset the shell notifiers AFTER this frame: dispose can run inside
       // finalizeTree (tab switch mid-takeover) while the tree is locked, and
       // a synchronous write would markNeedsBuild the sidebar's listener
       // mid-unmount.
       if (MainPageBridge.tvChromeDim.value != 0) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           MainPageBridge.tvChromeDim.value = 0;
+        });
+      }
+      if (MainPageBridge.tvHeroTint.value != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          MainPageBridge.tvHeroTint.value = null;
         });
       }
     }
@@ -2814,6 +2826,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Mirror the takeover arc onto the app-shell notifier (sidebar rail hide).
   void _relayChromeDim() {
     MainPageBridge.tvChromeDim.value = _heroTrailerTakeover.value;
+  }
+
+  /// Publish the focused title's tint to the sidebar rail ONLY while the trailer
+  /// is actually playing (else null), so the rail colours in lock-step with the
+  /// hero's left colour stage and clears the moment the trailer stops or the
+  /// hero moves on. Fired by both [_heroTrailerShowing] and [_heroTint].
+  void _relaySidebarTint() {
+    MainPageBridge.tvHeroTint.value =
+        _heroTrailerShowing.value ? _heroTint.value : null;
   }
 
   // ── Route awareness (Home board trailer only) ────────────────────────────
@@ -7186,11 +7207,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         // that alpha, so a title with no poster fades the colour
                         // out instead of popping it away in one frame.
                         builder: (context, tint, __) => TweenAnimationBuilder<Color?>(
-                          tween: ColorTween(end: tint),
+                          // end must be non-null (TweenAnimationBuilder asserts
+                          // it) — ease toward transparent when there's no tint so
+                          // its alpha still runs to 0 and the wash fades out.
+                          tween: ColorTween(end: tint ?? const Color(0x00000000)),
                           duration: const Duration(milliseconds: 700),
                           curve: Curves.easeOut,
                           builder: (context, eased, ___) {
-                            if (eased == null) {
+                            // Fully cleared → paint nothing (perf); this also
+                            // covers the transparent fallback above.
+                            if (eased == null || eased.a <= 0.001) {
                               return const SizedBox.shrink();
                             }
                             // eased.a runs 1→0 as a cleared tint eases out; fold
