@@ -159,7 +159,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         _resetDeviceCodeState();
       });
       await StorageService.setTraktSyncCatalogItems(true);
-      AnalyticsService.trackInBackground('trakt_connected', {
+      AnalyticsService.integrationConnected('trakt', {
         'surface': 'settings',
         'method': 'device_code',
       });

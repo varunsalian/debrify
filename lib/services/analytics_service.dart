@@ -39,22 +39,14 @@ class AnalyticsService {
     }
   }
 
+  /// Emit a custom (non-well-known) event via the untyped escape hatch.
   static Future<void> track(
     String eventName, [
     Map<String, Object?> properties = const <String, Object?>{},
   ]) async {
     if (!_initialized) return;
-
-    final normalizedProps = <String, Object?>{};
-    for (final entry in properties.entries) {
-      final value = _normalizeValue(entry.value);
-      if (value != null) {
-        normalizedProps[entry.key] = value;
-      }
-    }
-
     try {
-      Pug.track(eventName, props: normalizedProps);
+      Pug.track(eventName, props: _normalize(properties));
     } catch (error, stackTrace) {
       debugPrint('AnalyticsService: track exception for "$eventName": $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -68,26 +60,58 @@ class AnalyticsService {
     unawaited(track(eventName, properties));
   }
 
-  /// Records that the user opened a screen/page. [screen] is a stable,
-  /// human-readable identifier (e.g. 'settings', 'cloud_files'); never pass
+  /// Records that the user opened a screen/page. Maps to Pug's well-known
+  /// `screen_view` event (so it feeds the built-in Screen Views report).
+  /// [screen] is a stable identifier (e.g. 'settings', 'cloud'); never pass
   /// content titles, search terms, or IDs.
   static void screenView(
     String screen, [
     Map<String, Object?> properties = const <String, Object?>{},
   ]) {
-    trackInBackground('screen_view', <String, Object?>{
-      'screen': screen,
-      ...properties,
-    });
+    _safe(
+      () => Pug.track.screenView(
+        screenName: screen,
+        extras: _normalize(properties),
+      ),
+    );
   }
 
-  /// Records a discrete user action (e.g. 'download_started'). Keep [action]
-  /// and [properties] free of anything that identifies specific content.
-  static void action(
-    String action, [
-    Map<String, Object?> properties = const <String, Object?>{},
+  /// A third-party account/provider was connected. Maps to Pug's well-known
+  /// `integration_connected` event. [integrationType] is e.g. 'real_debrid',
+  /// 'torbox', 'trakt'. [extras] carries only non-sensitive context.
+  static void integrationConnected(
+    String integrationType, [
+    Map<String, Object?> extras = const <String, Object?>{},
   ]) {
-    trackInBackground(action, properties);
+    _safe(
+      () => Pug.track.integrationConnected(
+        integrationType: integrationType,
+        extras: _normalize(extras),
+      ),
+    );
+  }
+
+  /// Guarded emit for the typed `Pug.track.*` well-known-event methods: no-ops
+  /// until initialized and never lets an analytics failure surface to callers.
+  static void _safe(void Function() emit) {
+    if (!_initialized) return;
+    try {
+      emit();
+    } catch (error, stackTrace) {
+      debugPrint('AnalyticsService: emit exception: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  static Map<String, Object?> _normalize(Map<String, Object?> properties) {
+    final normalized = <String, Object?>{};
+    for (final entry in properties.entries) {
+      final value = _normalizeValue(entry.value);
+      if (value != null) {
+        normalized[entry.key] = value;
+      }
+    }
+    return normalized;
   }
 
   /// Throttled interval used to gate playback heartbeats fed from high-frequency

@@ -159,8 +159,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
       }
     }
     debugPrint('TorboxSettingsPage: API key saved successfully.');
-    AnalyticsService.trackInBackground('provider_connected', {
-      'provider': 'torbox',
+    AnalyticsService.integrationConnected('torbox', {
       'surface': 'settings',
     });
     _snack('Torbox connected successfully');

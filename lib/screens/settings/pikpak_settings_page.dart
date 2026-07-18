@@ -138,8 +138,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
           _pikpakEnabled = true;
         });
         await StorageService.setPikPakEnabled(true);
-        AnalyticsService.trackInBackground('provider_connected', {
-          'provider': 'pikpak',
+        AnalyticsService.integrationConnected('pikpak', {
           'surface': 'settings',
         });
 

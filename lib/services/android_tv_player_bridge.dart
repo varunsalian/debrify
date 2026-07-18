@@ -175,6 +175,7 @@ class AndroidTvPlayerBridge {
         case 'torboxPlaybackFinished':
         case 'realDebridPlaybackFinished':
         case 'streamPlaybackFinished':
+          _lastPlaybackHeartbeat = null; // reset so the next watch isn't throttled
           final finished = _playbackFinishedCallback;
           _streamNextProvider = null;
           _channelSwitchProvider = null;
@@ -193,8 +194,13 @@ class AndroidTvPlayerBridge {
         case 'torrentPlaybackProgress':
           // Keep the analytics session alive during native TV playback (the
           // Flutter UI is backgrounded, so this progress ping is our activity
-          // signal). Throttled so we emit at most one heartbeat per interval.
-          _maybeSendPlaybackHeartbeat('android_tv');
+          // signal). The native player pings even while paused, so gate on the
+          // isPlaying flag to match the Dart/Java players; throttled so we emit
+          // at most one heartbeat per interval.
+          if (call.arguments is Map &&
+              (call.arguments as Map)['isPlaying'] == true) {
+            _maybeSendPlaybackHeartbeat('android_tv');
+          }
           final handler = _torrentProgressCallback;
           if (handler == null) {
             return null;
@@ -379,6 +385,7 @@ class AndroidTvPlayerBridge {
           }
           return null;
         case 'torrentPlaybackFinished':
+          _lastPlaybackHeartbeat = null; // reset so the next watch isn't throttled
           final finishedTorrent = _torrentFinishedCallback;
           _torrentProgressCallback = null;
           _torrentFinishedCallback = null;

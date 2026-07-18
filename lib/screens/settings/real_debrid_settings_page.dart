@@ -168,8 +168,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       }
     });
     _refocusOnTv(_logoutButtonFocusNode);
-    AnalyticsService.trackInBackground('provider_connected', {
-      'provider': 'real_debrid',
+    AnalyticsService.integrationConnected('real_debrid', {
       'surface': 'settings',
     });
     _snack('API key saved and validated');

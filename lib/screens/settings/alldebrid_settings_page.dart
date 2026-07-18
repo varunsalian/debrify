@@ -141,8 +141,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
       _apiKeyController.clear();
     });
     _refocusOnTv(_logoutButtonFocusNode);
-    AnalyticsService.trackInBackground('provider_connected', {
-      'provider': 'alldebrid',
+    AnalyticsService.integrationConnected('alldebrid', {
       'surface': 'settings',
     });
     _snack('AllDebrid connected successfully');

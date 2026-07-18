@@ -149,8 +149,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
       _apiKeyController.clear();
     });
     _refocusOnTv(_logoutButtonFocusNode);
-    AnalyticsService.trackInBackground('provider_connected', {
-      'provider': 'premiumize',
+    AnalyticsService.integrationConnected('premiumize', {
       'surface': 'settings',
     });
     _snack('Premiumize connected successfully');

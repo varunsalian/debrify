@@ -1749,8 +1749,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           _hasConfigured = true;
           _errorMessage = null;
         });
-        AnalyticsService.trackInBackground('provider_connected', {
-          'provider': 'pikpak',
+        AnalyticsService.integrationConnected('pikpak', {
           'surface': 'onboarding',
         });
         MainPageBridge.notifyIntegrationChanged();
@@ -1974,16 +1973,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           _hasConfigured = true;
           _errorMessage = null;
         });
-        AnalyticsService.trackInBackground('provider_connected', {
-          'provider': current == _IntegrationType.realDebrid
+        AnalyticsService.integrationConnected(
+          current == _IntegrationType.realDebrid
               ? 'real_debrid'
               : current == _IntegrationType.torbox
               ? 'torbox'
               : current == _IntegrationType.premiumize
               ? 'premiumize'
               : 'alldebrid',
-          'surface': 'onboarding',
-        });
+          {'surface': 'onboarding'},
+        );
         MainPageBridge.notifyIntegrationChanged();
         _advanceOrFinish();
       } else {
@@ -2167,7 +2166,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _resetTraktDeviceCodeState();
 
       await StorageService.setTraktSyncCatalogItems(true);
-      AnalyticsService.trackInBackground('trakt_connected', {
+      AnalyticsService.integrationConnected('trakt', {
         'surface': 'onboarding',
         'method': 'device_code',
       });

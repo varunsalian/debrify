@@ -142,7 +142,8 @@ Future<void> main() async {
   await _capImageCache();
   // Clean up old playback state data
   await _cleanupPlaybackState();
-  AnalyticsService.trackInBackground('app_started');
+  // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
+  // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
