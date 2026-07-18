@@ -327,7 +327,18 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
   // null = watched state unknown (offer both mark-watched and mark-unwatched);
   // true = show only "Unwatched"; false = show only "Watched".
   bool? isWatched,
+  // The user's live Trakt relationship to this title. When provided, the
+  // watchlist/collection/rating entries become state-aware toggles (Add ↔
+  // Remove) instead of blind "Add" actions, and its `watched` overrides
+  // [isWatched] for movies. Null → the legacy add-only behaviour.
+  TraktTitleStatus? status,
 }) {
+  // Effective watched state: a movie's authoritative Trakt watched flag wins;
+  // otherwise fall back to the caller's hint (series stay null → offer both).
+  final bool? effectiveWatched = status?.watched ?? isWatched;
+  final bool inWatchlist = status?.inWatchlist ?? false;
+  final bool inCollection = status?.inCollection ?? false;
+  final int? currentRating = status?.rating;
   return [
     // App / Stremio actions first.
     if (isSeries || isMovie)
@@ -364,30 +375,50 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
         label: 'Search Season Packs',
         caption: 'Packs',
       ),
-    // Trakt-syncing actions — badged TRAKT in the UI.
+    // Trakt-syncing actions — badged TRAKT in the UI. When [status] is known
+    // these flip between Add and Remove to mirror the user's real library.
     if (isTraktAuthenticated) ...[
-      const TraktMenuOption(
-        action: TraktItemMenuAction.addToWatchlist,
-        icon: Icons.bookmark_add_rounded,
-        color: Color(0xFFFBBF24),
-        label: 'Add to Trakt Watchlist',
-        caption: 'Watchlist',
-        isTrakt: true,
-      ),
-      const TraktMenuOption(
-        action: TraktItemMenuAction.addToCollection,
-        icon: Icons.video_library_rounded,
-        color: Color(0xFF60A5FA),
-        label: 'Add to Trakt Collection',
-        caption: 'Collection',
-        isTrakt: true,
-      ),
-      // When the watched state is known (isWatched), show the single relevant
-      // toggle like the old home item menu. When it's unknown (isWatched null —
-      // the Search-tab detail can't reliably tell a title's Trakt watched state)
-      // offer BOTH so an already-watched title can always be un-marked instead
-      // of only re-marked.
-      if (isWatched != true)
+      if (inWatchlist)
+        const TraktMenuOption(
+          action: TraktItemMenuAction.removeFromWatchlist,
+          icon: Icons.bookmark_remove_rounded,
+          color: Color(0xFFFBBF24),
+          label: 'Remove from Trakt Watchlist',
+          caption: 'In Watchlist',
+          isTrakt: true,
+        )
+      else
+        const TraktMenuOption(
+          action: TraktItemMenuAction.addToWatchlist,
+          icon: Icons.bookmark_add_rounded,
+          color: Color(0xFFFBBF24),
+          label: 'Add to Trakt Watchlist',
+          caption: 'Watchlist',
+          isTrakt: true,
+        ),
+      if (inCollection)
+        const TraktMenuOption(
+          action: TraktItemMenuAction.removeFromCollection,
+          icon: Icons.video_library_rounded,
+          color: Color(0xFF60A5FA),
+          label: 'Remove from Trakt Collection',
+          caption: 'In Collection',
+          isTrakt: true,
+        )
+      else
+        const TraktMenuOption(
+          action: TraktItemMenuAction.addToCollection,
+          icon: Icons.video_library_outlined,
+          color: Color(0xFF60A5FA),
+          label: 'Add to Trakt Collection',
+          caption: 'Collection',
+          isTrakt: true,
+        ),
+      // When the watched state is known (effectiveWatched), show the single
+      // relevant toggle like the old home item menu. When it's unknown (series
+      // whose whole-title completion is fuzzy) offer BOTH so an already-watched
+      // title can always be un-marked instead of only re-marked.
+      if (effectiveWatched != true)
         const TraktMenuOption(
           action: TraktItemMenuAction.markWatched,
           icon: Icons.check_circle_rounded,
@@ -396,7 +427,7 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
           caption: 'Watched',
           isTrakt: true,
         ),
-      if (isWatched != false)
+      if (effectiveWatched != false)
         const TraktMenuOption(
           action: TraktItemMenuAction.markUnwatched,
           icon: Icons.visibility_off_rounded,
@@ -405,14 +436,27 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
           caption: 'Unwatch',
           isTrakt: true,
         ),
-      const TraktMenuOption(
+      // Rating: once rated, offer "Change Rating" plus a distinct "Remove
+      // Rating"; otherwise a plain "Rate".
+      TraktMenuOption(
         action: TraktItemMenuAction.rate,
         icon: Icons.star_rounded,
-        color: Color(0xFFFBBF24),
-        label: 'Rate on Trakt',
-        caption: 'Rate',
+        color: const Color(0xFFFBBF24),
+        label: currentRating != null
+            ? 'Change Trakt Rating ($currentRating/10)'
+            : 'Rate on Trakt',
+        caption: currentRating != null ? 'Rated $currentRating' : 'Rate',
         isTrakt: true,
       ),
+      if (currentRating != null)
+        const TraktMenuOption(
+          action: TraktItemMenuAction.removeRating,
+          icon: Icons.star_outline_rounded,
+          color: Color(0xFFFBBF24),
+          label: 'Remove Trakt Rating',
+          caption: 'Unrate',
+          isTrakt: true,
+        ),
       const TraktMenuOption(
         action: TraktItemMenuAction.addToList,
         icon: Icons.playlist_add_rounded,

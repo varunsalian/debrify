@@ -18,6 +18,7 @@ import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
+import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
 
@@ -61,9 +62,19 @@ class MergedDetailScreen extends StatefulWidget {
   final int Function(StremioMeta show)? boundSourceCount;
   final Future<void> Function(StremioMeta show)? onSelectSource;
 
-  /// Quick-action strip (Trakt / app actions), identical to the detail screen.
+  /// Quick-action strip (Trakt / app actions). [traktMenuOptions] is the
+  /// initial (status-unknown) set shown until [traktStatusLoader] resolves;
+  /// [traktMenuBuilder], when provided, rebuilds the strip against the live
+  /// Trakt status so Add ↔ Remove toggles reflect the user's real library.
   final List<TraktMenuOption> traktMenuOptions;
-  final void Function(TraktItemMenuAction action)? onTraktAction;
+  final List<TraktMenuOption> Function(TraktTitleStatus? status)?
+  traktMenuBuilder;
+  final Future<void> Function(TraktItemMenuAction action)? onTraktAction;
+
+  /// Resolves the user's Trakt relationship to this title (in watchlist /
+  /// collection / watched / rating) so the page can badge it and offer the
+  /// right toggles. Null (disconnected / no IMDb id) keeps the add-only menu.
+  final Future<TraktTitleStatus?> Function()? traktStatusLoader;
 
   /// "More Like This" rail + sparse-item meta backfill (same loaders the detail
   /// screen receives).
@@ -90,7 +101,9 @@ class MergedDetailScreen extends StatefulWidget {
     this.boundSourceCount,
     this.onSelectSource,
     this.traktMenuOptions = const [],
+    this.traktMenuBuilder,
     this.onTraktAction,
+    this.traktStatusLoader,
     this.recommendationsLoader,
     this.onRecommendationTap,
     this.metaEnricher,
@@ -173,6 +186,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   int? _resumeSeason;
   int? _resumeEpisode;
 
+  /// The user's live Trakt relationship to this title (watchlist / collection /
+  /// watched / rating). Null until [traktStatusLoader] resolves — the menu then
+  /// falls back to the add-only [traktMenuOptions]. Re-read after a quick action
+  /// and when the player pops back.
+  TraktTitleStatus? _traktStatus;
+
+  /// The quick-actions strip to render: rebuilt against [_traktStatus] when a
+  /// builder was supplied, else the static list passed in.
+  List<TraktMenuOption> get _menuOptions =>
+      widget.traktMenuBuilder?.call(_traktStatus) ?? widget.traktMenuOptions;
+
   @override
   void initState() {
     super.initState();
@@ -185,6 +209,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       _loadTrailer();
       _loadAccent();
       _loadResumeInfo();
+      _loadTraktStatus();
     });
   }
 
@@ -200,6 +225,22 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   @override
   void didPopNext() {
     _loadResumeInfo();
+    // Watched state (and thus the resume label / badges) may have changed while
+    // away — re-read the Trakt status too.
+    _loadTraktStatus();
+  }
+
+  /// Resolve the user's Trakt relationship to this title so the menu shows
+  /// Add ↔ Remove toggles and the hero can badge Watchlist/Collection/Watched/
+  /// rating. Silent on failure — the menu just stays add-only.
+  Future<void> _loadTraktStatus() async {
+    final loader = widget.traktStatusLoader;
+    if (loader == null) return;
+    try {
+      final status = await loader();
+      if (!mounted || status == null) return;
+      setState(() => _traktStatus = status);
+    } catch (_) {}
   }
 
   Future<void> _loadResumeInfo() async {
@@ -760,6 +801,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             enabled: animate,
             child: _buildMetaBar(year, extra, rating),
           ),
+          if (_buildTraktStatusChips() case final chips?) ...[
+            SizedBox(height: t ? 8 : 10),
+            _StaggerReveal(
+              key: const ValueKey('rev-trakt-status'),
+              delayMs: 140,
+              enabled: animate,
+              child: chips,
+            ),
+          ],
           if (genres.isNotEmpty) ...[
             SizedBox(height: t ? 8 : 10),
             _StaggerReveal(
@@ -885,6 +935,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             enabled: animate,
             child: _buildMetaBar(year, extra, rating),
           ),
+          if (_buildTraktStatusChips() case final chips?) ...[
+            const SizedBox(height: 10),
+            _StaggerReveal(
+              key: const ValueKey('rev-h-trakt-status'),
+              delayMs: 140,
+              enabled: animate,
+              child: chips,
+            ),
+          ],
           if (genres.isNotEmpty) ...[
             const SizedBox(height: 10),
             _StaggerReveal(
@@ -977,6 +1036,59 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: parts);
   }
 
+  /// Small state badges from the live Trakt status (In Watchlist / In
+  /// Collection / Watched / ★rating). Renders nothing until the status resolves
+  /// or when the title has no tracked state, so the layout doesn't jump.
+  Widget? _buildTraktStatusChips() {
+    final s = _traktStatus;
+    if (s == null) return null;
+    final chips = <Widget>[
+      if (s.inWatchlist)
+        _statusChip(Icons.bookmark_rounded, 'In Watchlist', _gold),
+      if (s.inCollection)
+        _statusChip(
+          Icons.video_library_rounded,
+          'In Collection',
+          const Color(0xFF7FB2FF),
+        ),
+      if (s.watched == true)
+        _statusChip(
+          Icons.visibility_rounded,
+          'Watched',
+          const Color(0xFF34D399),
+        ),
+      if (s.rating != null)
+        _statusChip(Icons.star_rounded, '${s.rating}/10', _gold),
+    ];
+    if (chips.isEmpty) return null;
+    return Wrap(spacing: 7, runSpacing: 7, children: chips);
+  }
+
+  Widget _statusChip(IconData icon, String label, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: color.withValues(alpha: 0.45)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    ),
+  );
+
   Widget _metaText(String s) => Text(
     s,
     style: const TextStyle(
@@ -1042,7 +1154,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             },
           ),
         // More — opens the labelled quick-actions menu (with descriptions).
-        if (widget.traktMenuOptions.isNotEmpty && widget.onTraktAction != null)
+        if (_menuOptions.isNotEmpty && widget.onTraktAction != null)
           _RoundIconButton(
             icon: Icons.more_horiz_rounded,
             tooltip: 'More options',
@@ -1104,7 +1216,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   void _showQuickActionsMenu() {
-    final options = widget.traktMenuOptions;
+    final options = _menuOptions;
     if (options.isEmpty || widget.onTraktAction == null) return;
     showModalBottomSheet<void>(
       context: context,
@@ -1116,9 +1228,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         title: _item.name,
         options: options,
         isTelevision: widget.isTelevision,
-        onSelected: (action) {
+        onSelected: (action) async {
           Navigator.of(sheetCtx).pop();
-          widget.onTraktAction!(action);
+          await widget.onTraktAction?.call(action);
+          // The action likely changed the title's Trakt state (watchlist /
+          // collection / watched / rating) — refresh so the menu and badges
+          // reflect it on the next open.
+          if (mounted) _loadTraktStatus();
         },
       ),
     );

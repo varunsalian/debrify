@@ -4115,33 +4115,43 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // app actions (Select Source, Add to Stremio TV, Search Packs, Random
     // Episode) always, Trakt-syncing actions only when connected — plus Remove
     // for Continue Watching titles.
-    final options = <TraktMenuOption>[
-      ...buildTraktAddOnlyMenuOptions(
-        isSeries: item.type == 'series',
-        isMovie: item.type == 'movie',
-        hasBoundSource: _isBound(item),
-        // The Trakt-syncing actions key off the IMDb id, so only offer them for
-        // titles that have one (otherwise the sync call fails with an error).
-        isTraktAuthenticated: _isTraktAuthenticated && imdb != null,
-      ),
-      if (inCw)
-        const TraktMenuOption(
-          action: TraktItemMenuAction.removeFromPlayback,
-          icon: Icons.delete_sweep_rounded,
-          color: Color(0xFFEF4444),
-          label: 'Remove from Continue Watching',
-          caption: 'Remove',
-        ),
-      if (inTraktCw)
-        const TraktMenuOption(
-          action: TraktItemMenuAction.removeFromTraktPlayback,
-          icon: Icons.remove_circle_outline_rounded,
-          color: Color(0xFFEF4444),
-          label: 'Remove from Trakt Continue Watching',
-          caption: 'Remove',
-          isTrakt: true,
-        ),
-    ];
+    // Build the quick-actions strip against a (possibly still-unknown) Trakt
+    // status. Called with null for the initial/legacy add-only strip, then
+    // rebuilt by the merged page once `traktStatusLoader` resolves — so
+    // watchlist/collection/rating entries flip to their Remove form when the
+    // title is already there.
+    List<TraktMenuOption> buildMenuOptions(TraktTitleStatus? status) =>
+        <TraktMenuOption>[
+          ...buildTraktAddOnlyMenuOptions(
+            isSeries: item.type == 'series',
+            isMovie: item.type == 'movie',
+            hasBoundSource: _isBound(item),
+            // The Trakt-syncing actions key off the IMDb id, so only offer them
+            // for titles that have one (else the sync call fails with an error).
+            isTraktAuthenticated: _isTraktAuthenticated && imdb != null,
+            status: status,
+          ),
+          if (inCw)
+            const TraktMenuOption(
+              action: TraktItemMenuAction.removeFromPlayback,
+              icon: Icons.delete_sweep_rounded,
+              color: Color(0xFFEF4444),
+              label: 'Remove from Continue Watching',
+              caption: 'Remove',
+            ),
+          if (inTraktCw)
+            const TraktMenuOption(
+              action: TraktItemMenuAction.removeFromTraktPlayback,
+              icon: Icons.remove_circle_outline_rounded,
+              color: Color(0xFFEF4444),
+              label: 'Remove from Trakt Continue Watching',
+              caption: 'Remove',
+              isTrakt: true,
+            ),
+        ];
+    // Static (status-unknown) strip — the fallback for the merged page until its
+    // status loads, and the only strip the legacy CatalogItemDetailScreen uses.
+    final options = buildMenuOptions(null);
 
     // Experimental: series route to the merged detail+episodes page. Movies and
     // the flag-off path fall through to the existing CatalogItemDetailScreen.
@@ -4167,6 +4177,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   addon,
                   isTraktSource: isTraktSource,
                   skipEpisodeFallback: true,
+                  // Play the Trakt paused episode when the Trakt-first label
+                  // shows one, so the button and the action agree.
+                  preferTraktResume: true,
                 ),
                 // Movie only: the Sources (manual list) button.
                 onBrowse: item.type == 'movie'
@@ -4181,6 +4194,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 boundSourceCount: _boundCountFor,
                 onSelectSource: _handleEditOrSelectSource,
                 traktMenuOptions: options,
+                traktMenuBuilder: buildMenuOptions,
+                // Live Trakt status (in watchlist / collection / watched /
+                // rating) — only when connected and the title has an IMDb id.
+                traktStatusLoader: (_isTraktAuthenticated && imdb != null)
+                    ? () => TraktService.instance.fetchTitleStatus(
+                        imdb,
+                        item.type,
+                      )
+                    : null,
                 onTraktAction: (a) => _handleDetailQuickAction(
                   item,
                   addon,
@@ -4223,8 +4245,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               hasBoundSource: _isBound(item),
               resumeInfoLoader: () =>
                   _resolveResumeInfo(item, addon, isTraktSource: isTraktSource),
-              onPlay: () =>
-                  _onCatalogPlay(item, addon, isTraktSource: isTraktSource),
+              // preferTraktResume: this screen's resumeInfoLoader is the same
+              // Trakt-authoritative _resolveResumeInfo the merged page uses, so
+              // Play must honour the Trakt position too or the button label and
+              // playback diverge (button "Resume · S3E4" vs local S01E01).
+              onPlay: () => _onCatalogPlay(
+                item,
+                addon,
+                isTraktSource: isTraktSource,
+                preferTraktResume: true,
+              ),
               onBrowse: () =>
                   _onCatalogBrowse(item, addon, isTraktSource: isTraktSource),
               traktMenuOptions: options,
@@ -4902,19 +4932,33 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // would stack a duplicate episode list on top). It resolves the resume
     // episode against the raw catalog id and plays via the addon /stream path.
     bool skipEpisodeFallback = false,
+    // Merged detail Resume: honour Trakt's paused position for ANY authenticated
+    // title (not just Trakt-CW-sourced ones), so Play matches the Trakt-first
+    // label from [_resolveResumeInfo]. Off elsewhere (Home/row quick-play keep
+    // their local-vs-Trakt-CW split untouched).
+    bool preferTraktResume = false,
   }) async {
     // Set the active addon before any early return so a movie play carries the
     // right addon id into meta.addonId (addon-stream resume/next), instead of a
     // stale one left over from a previously-browsed series.
     _activeAddonId = addon.id;
 
-    // Trakt continue-watching resume (movie OR series): resolve the Trakt
-    // paused/next position via selectionForItem — the exact path the Trakt
-    // row's Quick Play uses, and what the deprecated home did. Without this the
-    // merged detail Resume used only local history: a series defaulted to
-    // S01E01, and a movie lost its watch position — both wrong for a title
-    // watched entirely on Trakt.
-    if (isTraktSource) {
+    // Trakt-wins resume — resolve the SAME position the detail button advertised
+    // (_resolveResumeInfo → _traktResumeFor) so label and Play never disagree.
+    // Fires for Trakt-sourced titles and for the merged Resume's authenticated
+    // series (preferTraktResume). Cached CW item → selectionForItem (carries a
+    // movie's Trakt % and a series' next-episode). Otherwise a live playback
+    // lookup, series-only: a movie's Trakt resume is a percent the local player
+    // path can't honour, so movies without a cached CW item fall through to the
+    // local byte-offset resolution below (matching the label, which also skips
+    // the general Trakt lookup for movies — see [_traktResumeFor]).
+    // `_isTraktAuthenticated || isTraktSource`: a Trakt-sourced item always
+    // resolves via Trakt (matching the pre-change `if (isTraktSource)` — which
+    // never checked the auth flag), so a still-settling `_isTraktAuthenticated`
+    // can't regress its cached resume; the general series path self-guards
+    // (resolveSelection returns null when not authed).
+    if ((_isTraktAuthenticated || isTraktSource) &&
+        (isTraktSource || (preferTraktResume && item.type == 'series'))) {
       final cw = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
       if (cw != null) {
         final sel = await TraktContinueWatchingService.instance
@@ -4923,6 +4967,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         if (sel != null) {
           _playSelection(sel);
           return;
+        }
+      } else if (item.type == 'series') {
+        // Same resolution the label used (_traktResumeFor general path) so Play
+        // lands on exactly the advertised episode. resolveSelection returns a
+        // ready-to-play selection (Trakt paused/next episode, with progress).
+        // Guard the empty id (resolveSelection would otherwise treat it as "the
+        // first CW item" and play an unrelated title).
+        final id = item.effectiveImdbId ?? item.id;
+        if (id.isNotEmpty) {
+          final sel = await TraktContinueWatchingService.instance
+              .resolveSelection(
+                traktContentType: TraktContinueWatchingService.showsContentType,
+                itemId: id,
+              );
+          if (!mounted) return;
+          if (sel != null) {
+            _playSelection(sel);
+            return;
+          }
         }
       }
     }
@@ -5000,22 +5063,76 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// progress and, for a series, the season/episode a Play would actually land
   /// on (the next episode when the last one was finished). Never plays — keep in
   /// sync with [_onCatalogPlay].
+  /// Trakt's authoritative resume position for [item], or null when
+  /// disconnected / Trakt has no in-progress entry. Shared by the detail-button
+  /// label ([_resolveResumeInfo]) and the actual Play ([_onCatalogPlay]) so the
+  /// two never disagree ("Resume · S3E4" must play S3E4). Fast path: an
+  /// already-loaded Continue Watching item; general path: a one-shot live
+  /// playback lookup for any other title (progress made on another device).
+  Future<({bool started, int? season, int? episode})?> _traktResumeFor(
+    StremioMeta item,
+  ) async {
+    // No auth-flag short-circuit here: callers gate entry, and both the cached
+    // _traktByImdb read and resolveSelection (which self-checks isAuthenticated)
+    // are safe/null when disconnected — so a Trakt-sourced item still resolves
+    // even if _isTraktAuthenticated hasn't settled yet.
+    final cached = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
+    if (cached != null) {
+      final sel = await TraktContinueWatchingService.instance.selectionForItem(
+        cached,
+      );
+      if (sel == null) return null;
+      return (started: true, season: sel.season, episode: sel.episode);
+    }
+    // General (live) fallback only for SERIES. A movie's Trakt resume is a
+    // percent the local player path can't honour, and _onCatalogPlay only
+    // replays a cached CW movie's position (via selectionForItem) — so claiming
+    // a Trakt resume for an uncached movie would make the label promise a
+    // "Resume" that Play starts from 00:00. Uncached movies → null → local.
+    if (item.type != 'series') return null;
+    // resolveSelection treats an empty itemId as "the first CW item", which would
+    // match an unrelated title — so bail when we have no usable id.
+    final id = item.effectiveImdbId ?? item.id;
+    if (id.isEmpty) return null;
+    // Use the SAME resolution _onCatalogPlay's general series branch uses
+    // (resolveSelection → fetchItems + selectionForItem). This includes Trakt's
+    // recent-shows "next episode" augmentation, so the label matches Play even
+    // when the title is only reachable via that augmentation and regardless of
+    // whether _traktByImdb has populated yet (fixes the open-before-CW-load race
+    // where the cached Play branch and the live label branch disagreed).
+    final sel = await TraktContinueWatchingService.instance.resolveSelection(
+      traktContentType: TraktContinueWatchingService.showsContentType,
+      itemId: id,
+    );
+    if (sel == null) return null;
+    return (started: true, season: sel.season, episode: sel.episode);
+  }
+
   Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
   }) async {
-    // Trakt continue-watching (movie OR series): the paused/next position.
-    if (isTraktSource) {
-      final cw = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
-      if (cw != null) {
-        final sel = await TraktContinueWatchingService.instance
-            .selectionForItem(cw);
-        if (!mounted) return (started: false, season: null, episode: null);
-        if (sel != null) {
-          return (started: true, season: sel.season, episode: sel.episode);
-        }
-      }
+    // Trakt-wins: when connected, Trakt's paused position is authoritative for
+    // "currently watching". Only when Trakt has NO in-progress entry do we fall
+    // back to local history below, so a Trakt-tracked title always reflects
+    // Trakt (incl. progress made on another device).
+    //
+    // Scope: series always (Play honours it via preferTraktResume), and any
+    // Trakt-sourced title (Play honours it via the cached selectionForItem
+    // path, which carries a movie's Trakt progress). A NON-Trakt-sourced movie
+    // is deliberately excluded — Play resumes it from the local byte offset
+    // (Trakt gives only a percent), so a Trakt-first label here would read
+    // "Resume" while Play started from 00:00. Keep the label local so the two
+    // agree.
+    // Gate mirrors _onCatalogPlay so label and Play stay in lock-step: a
+    // Trakt-sourced item always consults Trakt (flag-independent), otherwise
+    // authenticated series only.
+    if ((_isTraktAuthenticated || isTraktSource) &&
+        (item.type == 'series' || isTraktSource)) {
+      final resume = await _traktResumeFor(item);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (resume != null) return resume;
     }
 
     // Movie: started == a saved playback position exists. No S/E tag.

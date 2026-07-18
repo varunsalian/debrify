@@ -7,6 +7,30 @@ import '../storage_service.dart';
 import 'trakt_calendar_service.dart';
 import 'trakt_constants.dart';
 
+/// The user's Trakt relationship to a single title — used to render a
+/// state-aware detail page (in watchlist / collection / watched / rating)
+/// instead of a blind "add only" menu.
+class TraktTitleStatus {
+  final bool inWatchlist;
+  final bool inCollection;
+
+  /// Title-level watched. Non-null only for **movies** (a movie is a clean
+  /// binary). Null for series — whole-series completion is fuzzy and the
+  /// episode list owns per-episode watched state — so the menu keeps offering
+  /// both "Mark Watched" and "Mark Unwatched" for shows.
+  final bool? watched;
+
+  /// The user's 1–10 Trakt rating, or null if unrated.
+  final int? rating;
+
+  const TraktTitleStatus({
+    this.inWatchlist = false,
+    this.inCollection = false,
+    this.watched,
+    this.rating,
+  });
+}
+
 /// Service for Trakt OAuth authentication and API calls.
 class TraktService {
   static final TraktService _instance = TraktService._internal();
@@ -14,6 +38,122 @@ class TraktService {
   TraktService._internal();
 
   static TraktService get instance => _instance;
+
+  // ── Library-status cache ────────────────────────────────────────────────────
+  // Detail pages ask "is this title in my watchlist / collection / watched /
+  // rated?" on open. The answers come from account-wide lists (per content
+  // type), so cache each list briefly and serve every title lookup from it —
+  // opening five detail pages costs one fetch, not five. Any sync mutation
+  // (add/remove/rate via [_syncAction]) clears the cache so the next open is
+  // fresh.
+  final Map<String, ({DateTime at, Object data})> _libCache = {};
+  static const Duration _libTtl = Duration(seconds: 45);
+
+  void _invalidateLibraryCache() => _libCache.clear();
+
+  Future<T?> _cachedLib<T>(String key, Future<T?> Function() load) async {
+    final hit = _libCache[key];
+    if (hit != null && DateTime.now().difference(hit.at) < _libTtl) {
+      return hit.data as T;
+    }
+    final data = await load();
+    // Only cache authoritative results — never poison the cache with the empty
+    // set a transient failure produces, which would otherwise flip every
+    // affected title's badge/menu to "not in library" for the whole TTL.
+    if (data != null) _libCache[key] = (at: DateTime.now(), data: data as Object);
+    return data;
+  }
+
+  /// Extract the set of IMDb ids from a standard Trakt list response (items
+  /// wrap a `movie`/`show` container).
+  Set<String> _extractListImdbIds(List<dynamic> items) {
+    final out = <String>{};
+    for (final it in items) {
+      if (it is! Map<String, dynamic>) continue;
+      final container =
+          (it['movie'] ?? it['show']) as Map<String, dynamic>?;
+      final imdb = (container?['ids'] as Map<String, dynamic>?)?['imdb']
+          as String?;
+      if (imdb != null) out.add(imdb);
+    }
+    return out;
+  }
+
+  /// Extract IMDb id → rating from a `/sync/ratings` list response.
+  Map<String, int> _extractRatings(List<dynamic> items) {
+    final out = <String, int>{};
+    for (final it in items) {
+      if (it is! Map<String, dynamic>) continue;
+      final container =
+          (it['movie'] ?? it['show']) as Map<String, dynamic>?;
+      final imdb = (container?['ids'] as Map<String, dynamic>?)?['imdb']
+          as String?;
+      final rating = it['rating'] as int?;
+      if (imdb != null && rating != null) out[imdb] = rating;
+    }
+    return out;
+  }
+
+  /// The user's relationship to a single title: whether it's in their
+  /// watchlist / collection, whether it's watched (movies only — see
+  /// [TraktTitleStatus.watched]), and their rating. Backed by the short-lived
+  /// library cache, so repeated detail opens don't re-fetch.
+  ///
+  /// Returns **null** when the answer can't be trusted — disconnected, or any of
+  /// the core lists (watchlist / collection / ratings) failed to load — so
+  /// callers keep whatever they last showed instead of wrongly rendering the
+  /// title as "not in library". A genuine "in none of them" is a non-null
+  /// all-false status, distinct from this null.
+  Future<TraktTitleStatus?> fetchTitleStatus(String imdbId, String type) async {
+    if (!await isAuthenticated()) return null;
+    final contentType = type == 'series' ? 'shows' : 'movies';
+    try {
+      // Kick all list fetches off together, then await — they run concurrently.
+      // Each returns null (not []) on a transient failure so it isn't cached.
+      final watchlistF = _cachedLib<Set<String>>('watchlist:$contentType', () async {
+        final l = await fetchListOrNull('watchlist', contentType);
+        return l == null ? null : _extractListImdbIds(l);
+      });
+      final collectionF = _cachedLib<Set<String>>('collection:$contentType', () async {
+        final l = await fetchListOrNull('collection', contentType);
+        return l == null ? null : _extractListImdbIds(l);
+      });
+      final ratingsF = _cachedLib<Map<String, int>>('ratings:$contentType', () async {
+        final l = await fetchListOrNull('ratings', contentType);
+        return l == null ? null : _extractRatings(l);
+      });
+      // Watched (movies only) via the failure-aware list endpoint, so a
+      // transient failure returns null (not cached, treated as "unknown
+      // watched") instead of poisoning the cache with an empty set that would
+      // hide the Watched badge for 45s. Unknown watched → offer both toggles,
+      // which is safe (mark/unmark are idempotent), so it never blocks a status.
+      final watchedF = type == 'series'
+          ? null
+          : _cachedLib<Set<String>>('watched:movies', () async {
+              final l = await fetchListOrNull('watched', 'movies');
+              return l == null ? null : _extractListImdbIds(l);
+            });
+
+      final watchlist = await watchlistF;
+      final collection = await collectionF;
+      final ratings = await ratingsF;
+      // A core list unavailable → signal unknown (null) rather than fabricate an
+      // all-false status the UI would read as "not in library".
+      if (watchlist == null || collection == null || ratings == null) return null;
+      // Null (watched fetch failed) → watched unknown, not "unwatched".
+      final watchedMovies = watchedF == null ? null : await watchedF;
+
+      return TraktTitleStatus(
+        inWatchlist: watchlist.contains(imdbId),
+        inCollection: collection.contains(imdbId),
+        watched: watchedMovies?.contains(imdbId),
+        rating: ratings[imdbId],
+      );
+    } catch (e) {
+      debugPrint('Trakt: fetchTitleStatus failed: $e');
+      return null;
+    }
+  }
 
   /// Common headers for all Trakt API requests.
   Map<String, String> _apiHeaders({String? accessToken}) => {
@@ -166,6 +306,9 @@ class TraktService {
 
     await StorageService.clearTraktAuth();
     TraktCalendarService.instance.invalidate();
+    // Drop cached library state so a later sign-in (possibly a different
+    // account) never reads the previous user's watchlist/collection/ratings.
+    _invalidateLibraryCache();
   }
 
   /// Get the stored username.
@@ -175,6 +318,11 @@ class TraktService {
 
   /// Store tokens and expiry from a token response.
   Future<void> _storeTokens(Map<String, dynamic> data) async {
+    // A fresh token may belong to a different account (a sign-in without an
+    // intervening logout, e.g. re-auth). Drop any cached library state so the
+    // previous user's watchlist/collection/ratings can't be served. Harmless on
+    // a same-account refresh — it just forces one re-fetch.
+    _invalidateLibraryCache();
     await StorageService.setTraktAccessToken(data['access_token'] as String);
     await StorageService.setTraktRefreshToken(data['refresh_token'] as String);
 
@@ -434,6 +582,10 @@ class TraktService {
       debugPrint(
         'Trakt: $path failed (${response.statusCode}): ${response.body}',
       );
+    } else {
+      // A watchlist/collection/history/ratings change makes the cached lists
+      // stale — drop them so the next title-status lookup reflects it.
+      _invalidateLibraryCache();
     }
     return ok;
   }
