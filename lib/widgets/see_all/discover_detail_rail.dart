@@ -107,6 +107,12 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   /// or the user browses to another title, which then re-arms the trailer.
   bool _suppressed = false;
 
+  /// The TV sidebar currently owns focus (LEFT opened it). A hard gate — the
+  /// trailer must never arm or play behind it — kept separate from [_suppressed]
+  /// so an app-resume (which lifts the player/route latch) can't wrongly clear
+  /// it, and so it lifts exactly when the sidebar closes, not on a route pop.
+  bool get _sidebarFocused => MainPageBridge.isTvSidebarFocused?.call() ?? false;
+
   /// Dwell before a rested card resolves its trailer — long enough that fast
   /// arrowing never spins a resolve, short enough that the video follows the
   /// pill promptly.
@@ -115,8 +121,9 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   /// A shorter dwell that just surfaces the "Trailer" loading pill, so a rested
   /// card shows prompt feedback the moment the user settles — the pill is up for
   /// the whole search (dwell → resolve → buffer), not a flash right before the
-  /// video. Only fires for cards we already know carry a trailer, so no-trailer
-  /// cards never show a false spinner.
+  /// video. Fires for any rested title; a card that turns out to have no trailer
+  /// clears the pill from [_resolveAndPlay]'s failure exit (a brief spinner, the
+  /// same trade the Home hero accepts to keep the feedback prompt).
   static const Duration _pillDwellDelay = Duration(milliseconds: 400);
 
   @override
@@ -125,6 +132,10 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     _adopt(widget.item);
     WidgetsBinding.instance.addObserver(this);
     MainPageBridge.addPlayerLaunchListener(_onPlayerLaunch);
+    // Entering the TV sidebar isn't a route push, so RouteAware can't catch it —
+    // listen explicitly and tear the trailer down (LEFT to the sidebar must not
+    // leave a trailer playing behind the rail), re-arming on the way back.
+    MainPageBridge.addTvSidebarFocusListener(_onTvSidebarFocusChanged);
     // Reuse the Home hero's ambient-trailer preference so one toggle governs
     // both living surfaces; volume is 0 when the sound sub-toggle is off.
     Future.wait([
@@ -155,12 +166,39 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     if (route is PageRoute) appRouteObserver.subscribe(this, route);
   }
 
+  /// A route is being pushed over us (a detail page, or a Flutter-route player).
+  /// Suppress and tear the trailer down NOW: without this, an in-flight resolve
+  /// would complete and mount a fresh backdrop UNDER the pushed page (the
+  /// backdrop's own RouteAware can't help — it mounts after the push and never
+  /// sees a didPushNext), leaving a trailer playing behind the detail page.
+  @override
+  void didPushNext() => _suppressTrailer();
+
   /// The route that covered us (a detail page, or a Flutter-route player) popped
   /// back — we're browsing again, so lift suppression and re-arm the trailer for
   /// the still-focused title (which otherwise never re-evaluates, since focus
   /// stayed on the same tile).
   @override
   void didPopNext() => _unsuppress();
+
+  /// TV sidebar focus entered/left. Entering it isn't a route push, so we tear
+  /// the trailer down here (LEFT to the sidebar must not leave it playing behind
+  /// the rail); leaving re-evaluates the still-focused title.
+  ///
+  /// The sidebar deliberately does NOT touch [_suppressed] — it holds the trailer
+  /// off purely through the live [_sidebarFocused] gate. That keeps it orthogonal
+  /// to the route/player latch: if a detail page still covers us when the sidebar
+  /// closes (e.g. the sidebar was opened over the detail page), [_evaluateTrailer]
+  /// stays suppressed via [_suppressed] and only [didPopNext] re-arms — closing
+  /// the sidebar can't prematurely clear a cover it didn't set.
+  void _onTvSidebarFocusChanged(bool focused) {
+    if (!mounted || !_trailerEnabled) return;
+    if (focused) {
+      _teardownTrailer();
+    } else {
+      _evaluateTrailer();
+    }
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -204,6 +242,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     _pillDwell?.cancel();
     _loadingWatchdog?.cancel();
     MainPageBridge.removePlayerLaunchListener(_onPlayerLaunch);
+    MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     WidgetsBinding.instance.removeObserver(this);
     appRouteObserver.unsubscribe(this);
     super.dispose();
@@ -271,18 +310,17 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
       _streams = null;
     }
     if (_suppressed || !_trailerEnabled) return;
+    if (_sidebarFocused) return; // sidebar owns focus — never arm behind it
     if (imdb == null) return; // need an imdbId to look up / play a trailer
     if (_streams != null) return; // already playing this title
     if (_trailerDwell?.isActive ?? false) return; // resolve already pending
-    // Two dwells, both reset by arrowing: a short one flips the pill on for a
-    // rested card that already has a known trailer id (prompt feedback), and the
-    // resolve dwell fires the actual fetch/play. The pill stays up from the first
-    // through to playback.
+    // Two dwells, both reset by arrowing: a short one flips the pill on the
+    // moment a card is rested — so the "Trailer" indicator is up for the WHOLE
+    // search (dwell → resolve → buffer), like the Home hero, not a flash right
+    // before the video. The resolve dwell then fires the actual fetch/play, and
+    // its failure exits (no trailer for this title) clear the pill again.
     _pillDwell = Timer(_pillDwellDelay, () {
-      if (mounted &&
-          !_suppressed &&
-          _shown?.imdbId == imdb &&
-          (_shown?.trailerYtId?.isNotEmpty ?? false)) {
+      if (mounted && !_suppressed && !_sidebarFocused && _shown?.imdbId == imdb) {
         widget.trailerLoading.value = true;
       }
     });
@@ -297,7 +335,9 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   Future<void> _resolveAndPlay(String imdb) async {
     // Moved on / suppressed: whoever caused it already reset the pill (and, if
     // the user browsed on, the new title now owns it) — don't touch it.
-    if (!mounted || _suppressed || _shown?.imdbId != imdb) return;
+    if (!mounted || _suppressed || _sidebarFocused || _shown?.imdbId != imdb) {
+      return;
+    }
     // A modal/sheet the route observer can't see covered us AFTER the pill dwell
     // turned the spinner on: clear it, since this path arms no watchdog and
     // nothing else would.
@@ -315,7 +355,8 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
       if (mounted) widget.trailerLoading.value = false;
     });
 
-    bool stale() => !mounted || _suppressed || _shown?.imdbId != imdb;
+    bool stale() =>
+        !mounted || _suppressed || _sidebarFocused || _shown?.imdbId != imdb;
     void fail() {
       if (mounted && _shown?.imdbId == imdb) widget.trailerLoading.value = false;
     }
@@ -349,13 +390,29 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   /// now so the scarce hardware decoder is free before the player claims it, and
   /// stays free (no in-flight resolve or late re-arm sneaks a decoder back in)
   /// until we return.
-  void _onPlayerLaunch() {
-    _suppressed = true;
+  void _onPlayerLaunch() => _suppressTrailer();
+
+  /// Release the trailer: cancel any pending dwell/resolve, drop the loading pill,
+  /// and null the published streams so the stage tears its decoder down. Does NOT
+  /// latch [_suppressed] — callers that need the trailer held off across a return
+  /// (player launch, a pushed route) latch it via [_suppressTrailer]; the sidebar
+  /// relies on the live [_sidebarFocused] gate instead.
+  void _teardownTrailer() {
     _trailerDwell?.cancel();
     _pillDwell?.cancel();
     _loadingWatchdog?.cancel();
     widget.trailerLoading.value = false;
     _streams = null;
+  }
+
+  /// Tear the trailer down AND latch it off until we return (route pop / app
+  /// resume / a browse to another title). The latch also blocks an in-flight
+  /// resolve from publishing after this returns. Used by the player-launch and
+  /// pushed-route covers, which — unlike the sidebar — aren't reflected by a live
+  /// gate the arm paths can consult.
+  void _suppressTrailer() {
+    _suppressed = true;
+    _teardownTrailer();
   }
 
   /// Keep the list item's own fields when present (its poster/name are the ones
