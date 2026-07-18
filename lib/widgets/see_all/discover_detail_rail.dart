@@ -336,7 +336,11 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     }
     if (stale()) return; // moved on — the new title owns the pill now
     if (ytId == null || ytId.isEmpty) return fail(); // no trailer for this title
-    final streams = await YoutubeService.resolveStreams(ytId);
+    // Ambient rail backdrop: resolve at a low cap (small box, weak TV).
+    final streams = await YoutubeService.resolveStreams(
+      ytId,
+      maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
+    );
     if (stale()) return;
     if (streams == null || !streams.hasPlayable) return fail();
     // Publish — the stage mounts the player; the pill stays up until the stage

@@ -2792,7 +2792,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
       if (!mounted || req != _heroTrailerReq) return;
       if (ytId == null || ytId.isEmpty) return fail();
-      final streams = await YoutubeService.resolveStreams(ytId);
+      // Ambient hero backdrop: resolve at a low cap (small region, weak TV).
+      final streams = await YoutubeService.resolveStreams(
+        ytId,
+        maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
+      );
       if (!mounted || req != _heroTrailerReq) return;
       if (streams == null || !streams.hasPlayable) return fail();
       _heroTrailer.value = streams;

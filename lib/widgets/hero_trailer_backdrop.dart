@@ -115,7 +115,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   /// Cap the ExoPlayer render texture (TV only) — the backdrop never needs full
   /// res, and trimming the per-frame GPU upload is what kills the TV stutter.
-  static const int _tvTrailerMaxHeight = 720;
+  /// Matches the ambient ~480p decode (see [YoutubeService.ambientTrailerMaxHeight])
+  /// so a small texture is composited each frame; the box is far from full-bleed.
+  static const int _tvTrailerMaxHeight = 480;
 
   TrailerEngine? _engine;
   StreamSubscription<bool>? _playingSub;

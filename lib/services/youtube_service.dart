@@ -284,6 +284,11 @@ class YoutubeService {
   /// (prefetch + Trailer button) share one isolate instead of spawning two.
   static final Map<String, Future<YoutubeResolvedStreams?>> _resolveInFlight = {};
 
+  /// Resolution cap for ambient backdrop trailers (Home hero, Discover rail).
+  /// They render in a small region, so a 480p decode looks identical there while
+  /// being far lighter than a 720/1080p decode+composite on weak TV silicon.
+  static const int ambientTrailerMaxHeight = 480;
+
   /// Resolve a YouTube [videoId] into playable/downloadable stream URLs.
   ///
   /// For playback this prefers a high-res *video-only* H.264 stream at or below
@@ -293,23 +298,41 @@ class YoutubeService {
   ///
   /// Deduped by in-flight id + cached briefly; the heavy extraction runs off the
   /// main isolate (see [_resolveStreamsBlocking]).
-  static Future<YoutubeResolvedStreams?> resolveStreams(String videoId) {
-    final cached = _resolveCache[videoId];
+  /// [maxHeightOverride] forces the default-quality cap instead of the user's
+  /// playback preference — the ambient hero/Discover trailers pass a low value
+  /// (they render in a small region, so a 480p decode is plenty and far lighter
+  /// on weak TV silicon: less decode, less buffering, less per-frame GPU upload).
+  /// Cached separately from the un-capped resolve so it never collides with the
+  /// fullscreen player resolving the same video at full quality.
+  static Future<YoutubeResolvedStreams?> resolveStreams(
+    String videoId, {
+    int? maxHeightOverride,
+  }) {
+    final key = _resolveKey(videoId, maxHeightOverride);
+    final cached = _resolveCache[key];
     if (cached != null &&
         DateTime.now().difference(cached.at) < _resolveCacheTtl) {
       return Future.value(cached.streams);
     }
-    final inFlight = _resolveInFlight[videoId];
+    final inFlight = _resolveInFlight[key];
     if (inFlight != null) return inFlight;
-    final future = _resolveUncached(videoId);
-    _resolveInFlight[videoId] = future;
-    return future.whenComplete(() => _resolveInFlight.remove(videoId));
+    final future = _resolveUncached(videoId, maxHeightOverride: maxHeightOverride);
+    _resolveInFlight[key] = future;
+    return future.whenComplete(() => _resolveInFlight.remove(key));
   }
 
-  static Future<YoutubeResolvedStreams?> _resolveUncached(String videoId) async {
+  static String _resolveKey(String videoId, int? maxHeightOverride) =>
+      maxHeightOverride == null ? videoId : '$videoId#h$maxHeightOverride';
+
+  static Future<YoutubeResolvedStreams?> _resolveUncached(
+    String videoId, {
+    int? maxHeightOverride,
+  }) async {
     // Read the user's resolution cap on the MAIN isolate — SharedPreferences is
     // a platform channel and isn't available in the background isolate below.
-    final maxHeight = await StorageService.getYoutubeMaxHeight();
+    // An explicit override (ambient trailers) skips the pref entirely.
+    final maxHeight =
+        maxHeightOverride ?? await StorageService.getYoutubeMaxHeight();
     try {
       // youtube_explode fetches the watch page, deciphers the signature cipher
       // and parses a large player-response JSON — all synchronous CPU that would
@@ -322,7 +345,8 @@ class YoutubeService {
         // Prune expired entries so the cache stays bounded to the active window.
         _resolveCache
             .removeWhere((_, e) => DateTime.now().difference(e.at) >= _resolveCacheTtl);
-        _resolveCache[videoId] = _ResolvedCacheEntry(streams, DateTime.now());
+        _resolveCache[_resolveKey(videoId, maxHeightOverride)] =
+            _ResolvedCacheEntry(streams, DateTime.now());
       }
       return streams;
     } catch (e) {
