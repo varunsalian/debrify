@@ -392,6 +392,17 @@ class MainPageBridge {
     null,
   );
 
+  /// True while the Home hero's AMBIENT trailer has frames on screen and the
+  /// board has gone lights-off (near-opaque neutral veils over its rows and
+  /// hero canvas). The TV shell mirrors the same veil over the sidebar rail
+  /// so the WHOLE room dims — without this the rail stayed full-bright beside
+  /// a darkened stage. A bool on purpose: the shell animates its own fade
+  /// matching the board's veil cadence (slow dim down, fast lights-up). The
+  /// publisher must reset it to false when it disposes.
+  static final ValueNotifier<bool> tvStageLightsOff = ValueNotifier<bool>(
+    false,
+  );
+
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.
   /// Key is the tab index (0=Home, 1=Playlist, 2=Downloads, etc.)

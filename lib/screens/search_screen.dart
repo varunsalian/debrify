@@ -821,6 +821,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // Relay the takeover arc to the app shell so the sidebar rail hides in
       // lock-step with the board.
       _heroTrailerTakeover.addListener(_relayChromeDim);
+      // Relay the ambient lights-off state too: the rail dims with the rows
+      // while a trailer plays instead of glowing beside the darkened stage.
+      _heroTrailerShowing.addListener(_relayLightsOff);
       // Deliberately NO sidebar tint relay any more: the "colour floods the
       // chrome while the trailer plays" move read as noise, not mood (user
       // call). Playback now dims the stage neutrally instead ("lights down");
@@ -1053,6 +1056,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     if (_heroTrailerActive) {
       _heroTrailerTakeover.removeListener(_relayChromeDim);
+      _heroTrailerShowing.removeListener(_relayLightsOff);
       MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunch);
       HardwareKeyboard.instance.removeHandler(_onTakeoverKey);
       appRouteObserver.unsubscribe(this);
@@ -1073,6 +1077,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (MainPageBridge.tvAmbientArt.value != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           MainPageBridge.tvAmbientArt.value = null;
+        });
+      }
+      if (MainPageBridge.tvStageLightsOff.value) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          MainPageBridge.tvStageLightsOff.value = false;
         });
       }
     }
@@ -2984,6 +2993,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.tvChromeDim.value = _heroTrailerTakeover.value;
   }
 
+  /// Mirror the ambient trailer's lights-off state onto the app-shell
+  /// notifier — the shell veils the sidebar rail in lock-step with the
+  /// board's own row/hero veils, so the whole room goes dark together.
+  void _relayLightsOff() {
+    MainPageBridge.tvStageLightsOff.value = _heroTrailerShowing.value;
+  }
+
   // ── Route awareness (Home board trailer only) ────────────────────────────
   // The trailer schedule is time-driven, so without this a pushed route
   // (detail page, player) would let the 2.4s debounce fire UNDER the cover
@@ -3098,6 +3114,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// focused film's hue while browsing. TV Home board only.
   void _publishHeroTintToShell(Color? color) {
     if (_heroTrailerActive) MainPageBridge.tvHeroTint.value = color;
+  }
+
+  /// Title-treatment art URL derivable SYNCHRONOUSLY from an IMDb id — the
+  /// same metahub image Cinemeta's /meta `logo` field points at. Lets the
+  /// hero start fetching the logo the moment focus settles instead of after
+  /// the /meta roundtrip — the roundtrip gap is what flashed the text title
+  /// for a beat before the art swapped in over it (the "title comes as text
+  /// then updates to image" complaint). A dead URL (title has no logo art)
+  /// falls back to the text title inside [_HeroTitleArt].
+  String? _derivedHeroLogo(StremioMeta item) {
+    final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
+    if (imdb == null) return null;
+    return 'https://images.metahub.space/logo/medium/$imdb/img';
   }
 
   /// Debounced backdrop/description enrichment. Catalog list items usually
@@ -7301,26 +7330,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   Widget _buildBoard() {
     if (_loading) {
-      // A restrained loading stand-in that mirrors the real board: a hero block
-      // on top (TV) plus a couple of rails — not a screenful of dense shimmer —
-      // so it looks premium and the swap into content doesn't reflow.
-      final tv = widget.isTelevision;
-      final width = MediaQuery.of(context).size.width;
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          // Same hero sizing the real board uses (see the LayoutBuilder below),
-          // so the placeholder hero lands exactly where the real one will.
-          final heroH = tv
-              ? _tvHeroBudget(constraints.maxHeight)
-              : (width >= 900 ? 300.0 : 196.0);
-          return SkeletonRailList(
-            posterWidth: _railPosterW(context),
-            isTelevision: tv,
-            showHero: _heroActive,
-            heroHeight: heroH,
-          );
-        },
-      );
+      // The brand moment: DEBRIFY centred on the ink while catalogs load —
+      // replaces the old skeleton-rail wall, which read as a broken app.
+      return BrandLoadingStage(isTelevision: widget.isTelevision);
     }
     if (_error != null) {
       return _message(
@@ -7433,10 +7445,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                   item.runtimeDisplay ??
                                   enriched?.runtimeDisplay,
                               // Catalog rows rarely carry the title-treatment
-                              // art; the enriched /meta details usually do.
+                              // art; the enriched /meta details usually do —
+                              // but that roundtrip lands AFTER first paint, so
+                              // derive the metahub URL from the IMDb id and
+                              // start loading it immediately (for tt items the
+                              // enriched logo IS this URL, so nothing swaps
+                              // when the details arrive).
                               logo: item.logo?.isNotEmpty == true
                                   ? item.logo
-                                  : enriched?.logo,
+                                  : (enriched?.logo?.isNotEmpty == true
+                                        ? enriched!.logo
+                                        : _derivedHeroLogo(item)),
                               compact: widget.searchMode,
                               isTelevision: tv,
                               height: heroH,
@@ -8954,15 +8973,19 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
         ? background
         : (item.poster ?? '');
     final runtime = widget.runtime;
-    // Chip-grammar meta line (type · genres · runtime · year, then the IMDb
+    // Chip-grammar meta line (type · year · runtime · genres, then the IMDb
     // mark) — replaces the old bordered type pill + star line for the flatter
-    // OTT look.
+    // OTT look. Facts-first order on purpose: the line ellipsizes from the
+    // END when the identity block is narrow (boxed-trailer mode caps it at
+    // the region's left edge), so the tail must be the part that reads fine
+    // truncated. "MOVIE · 2023 · 1h 58m · Action · Adv…" still looks whole;
+    // the old genre-first order chopped the year off instead ("…").
     final metaParts = <String>[
       item.type == 'series' ? 'SERIES' : 'MOVIE',
+      if (item.year != null && item.year!.isNotEmpty) item.year!,
+      if (runtime != null && runtime.isNotEmpty) runtime,
       if (item.genres != null && item.genres!.isNotEmpty)
         item.genres!.take(2).join(' · '),
-      if (runtime != null && runtime.isNotEmpty) runtime,
-      if (item.year != null && item.year!.isNotEmpty) item.year!,
     ];
 
     return SizedBox(
@@ -9366,59 +9389,13 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     );
   }
 
-  /// The hero's title: studio title-treatment art when the meta carries a
-  /// `logo`, else the plain text title. The text is also the logo's ERROR
-  /// fallback, so a dead URL degrades to exactly the old look; while the logo
-  /// decodes the slot holds empty (no text-flash-then-swap). Bottom-left
-  /// anchored in a fixed-height slot so successive titles sit on one baseline
-  /// as DPAD focus flies.
+  /// The hero's title — see [_HeroTitleArt] for the image-first grammar.
   Widget _buildTitleArt() {
-    final item = widget.item;
-    final compact = widget.compact;
-    final isTelevision = widget.isTelevision;
-    Text titleText(int maxLines) => Text(
-      item.name,
-      maxLines: maxLines,
-      overflow: TextOverflow.ellipsis,
-      // Poppins (rounded geometric) for the display title, airier and lighter
-      // than Inter-w800/-1 tracking — closer to Stremio's hero. Body/metadata
-      // stay on the Inter theme.
-      style: GoogleFonts.poppins(
-        fontSize: compact ? (isTelevision ? 24 : 20) : (isTelevision ? 38 : 26),
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0,
-        height: 1.06,
-        color: Colors.white,
-      ),
-    );
-    final logo = widget.logo;
-    if (logo == null || logo.isEmpty) return titleText(2);
-    final logoH = compact
-        ? (isTelevision ? 46.0 : 38.0)
-        : (isTelevision ? 76.0 : 58.0);
-    return SizedBox(
-      height: logoH,
-      width: double.infinity,
-      child: Align(
-        alignment: Alignment.bottomLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isTelevision ? 320 : 280),
-          child: CachedNetworkImage(
-            imageUrl: logo,
-            fit: BoxFit.contain,
-            alignment: Alignment.bottomLeft,
-            // Logos are wide PNGs (metahub ~800px) shown ~300px at most — cap
-            // the decode like every other art surface.
-            memCacheWidth: 480,
-            fadeInDuration: HomeTheme.imageFadeIn(isTelevision),
-            fadeOutDuration: HomeTheme.imageFadeOut(isTelevision),
-            placeholder: (_, __) => const SizedBox.shrink(),
-            // Single line: the fallback lives inside the logo's short slot, so
-            // a two-line wrap would clip mid-glyph.
-            errorWidget: (_, __, ___) => titleText(1),
-          ),
-        ),
-      ),
+    return _HeroTitleArt(
+      title: widget.item.name,
+      logoUrl: widget.logo,
+      compact: widget.compact,
+      isTelevision: widget.isTelevision,
     );
   }
 
@@ -9781,19 +9758,168 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
       _heroEdgeFeather(begin, end, c, frac);
 }
 
-/// The hero's "trailer is on its way" chip: a small glass pill with a thin
-/// accent spinner and a whispered label, fading/drifting in while a trailer
-/// resolves and buffers, gone the instant frames land (the host flips
-/// [visible]). Deliberately quiet — it must read as a status whisper, not a
-/// control — and cheap: no blur (weak-TV rule), one AnimatedOpacity +
-/// AnimatedSlide pair, and when hidden it paints nothing at all.
-class _HeroTrailerLoadingPill extends StatelessWidget {
+/// The hero's title, IMAGE-FIRST: the studio title-treatment art when a
+/// `logo` URL is known, the plain text title only when it is genuinely
+/// unavailable (no URL, or the fetch failed). While the art is in flight the
+/// slot holds EMPTY — never the text — because text-flashing-then-swapping
+/// to the image read as a glitch (the old behaviour). Failed URLs are
+/// remembered for the session so revisiting a logo-less title shows its text
+/// immediately instead of re-probing (and re-flashing empty) every time.
+/// Bottom-left anchored in a fixed-height slot so successive titles sit on
+/// one baseline as DPAD focus flies.
+class _HeroTitleArt extends StatefulWidget {
+  final String title;
+  final String? logoUrl;
+  final bool compact;
+  final bool isTelevision;
+
+  const _HeroTitleArt({
+    required this.title,
+    required this.logoUrl,
+    required this.compact,
+    required this.isTelevision,
+  });
+
+  @override
+  State<_HeroTitleArt> createState() => _HeroTitleArtState();
+}
+
+class _HeroTitleArtState extends State<_HeroTitleArt> {
+  /// Session-wide memo of logo URLs that 404'd (metahub simply has no art
+  /// for many titles) — those heroes go straight to text with no empty beat
+  /// and no repeat network probe on every DPAD revisit.
+  static final Set<String> _deadLogoUrls = <String>{};
+
+  Text _titleText(int maxLines) => Text(
+    widget.title,
+    maxLines: maxLines,
+    overflow: TextOverflow.ellipsis,
+    // Poppins (rounded geometric) for the display title, airier and lighter
+    // than Inter-w800/-1 tracking — closer to Stremio's hero. Body/metadata
+    // stay on the Inter theme.
+    style: GoogleFonts.poppins(
+      fontSize: widget.compact
+          ? (widget.isTelevision ? 24 : 20)
+          : (widget.isTelevision ? 38 : 26),
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0,
+      height: 1.06,
+      color: Colors.white,
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = widget.logoUrl;
+    final compact = widget.compact;
+    final isTelevision = widget.isTelevision;
+    if (logo == null || logo.isEmpty || _deadLogoUrls.contains(logo)) {
+      // Known-no-art: the full two-line text title, exactly the old look.
+      return _titleText(2);
+    }
+    final logoH = compact
+        ? (isTelevision ? 46.0 : 38.0)
+        : (isTelevision ? 76.0 : 58.0);
+    return SizedBox(
+      height: logoH,
+      width: double.infinity,
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isTelevision ? 320 : 280),
+          child: CachedNetworkImage(
+            imageUrl: logo,
+            fit: BoxFit.contain,
+            alignment: Alignment.bottomLeft,
+            // Logos are wide PNGs (metahub ~800px) shown ~300px at most — cap
+            // the decode like every other art surface.
+            memCacheWidth: 480,
+            fadeInDuration: HomeTheme.imageFadeIn(isTelevision),
+            fadeOutDuration: HomeTheme.imageFadeOut(isTelevision),
+            // Empty while loading AND on error: the error frame only shows
+            // for the instant before errorListener rebuilds us onto the
+            // full-size text path below (a slot-cramped one-line fallback
+            // here would flash before that swap).
+            placeholder: (_, __) => const SizedBox.shrink(),
+            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+            errorListener: (_) {
+              _deadLogoUrls.add(logo);
+              if (mounted) setState(() {});
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The hero's "trailer is on its way" chip: the same quiet glass capsule as
+/// [_HeroAmbientChip] (they hand over in place in the same corner), but with
+/// three tiny amber equalizer bars dancing where the ambient dot will sit —
+/// "sound and picture incoming", not a generic spinner (the old bordered
+/// spinner-pill read dated). Deliberately quiet — a status whisper, never a
+/// control — and cheap: no blur (weak-TV rule), the bars are a ~14px-wide
+/// repaint inside their own RepaintBoundary, and the controller only runs
+/// while [visible], so the 99% of browsing the chip spends hidden costs
+/// nothing at all.
+class _HeroTrailerLoadingPill extends StatefulWidget {
   final bool visible;
 
   const _HeroTrailerLoadingPill({required this.visible});
 
   @override
+  State<_HeroTrailerLoadingPill> createState() =>
+      _HeroTrailerLoadingPillState();
+}
+
+class _HeroTrailerLoadingPillState extends State<_HeroTrailerLoadingPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _wave;
+
+  @override
+  void initState() {
+    super.initState();
+    _wave = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
+    if (widget.visible) _wave.repeat();
+  }
+
+  @override
+  void didUpdateWidget(_HeroTrailerLoadingPill old) {
+    super.didUpdateWidget(old);
+    if (widget.visible && !_wave.isAnimating) {
+      _wave.repeat();
+    } else if (!widget.visible && _wave.isAnimating) {
+      // Freezing mid-wave is invisible: the chip itself is fading to 0.
+      _wave.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _wave.dispose();
+    super.dispose();
+  }
+
+  /// One equalizer bar: bottom-anchored, height riding a phase-shifted sine
+  /// so the three bars roll as a wave rather than pumping in unison.
+  Widget _bar(double t, double phase) {
+    final f = 0.30 + 0.70 * (0.5 + 0.5 * sin(2 * pi * (t + phase)));
+    return Container(
+      width: 2.5,
+      height: 11 * f,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF59E0B), // the ambient dot's amber
+        borderRadius: BorderRadius.circular(1.5),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final visible = widget.visible;
     return IgnorePointer(
       child: AnimatedSlide(
         offset: visible ? Offset.zero : const Offset(0, -0.25),
@@ -9803,63 +9929,55 @@ class _HeroTrailerLoadingPill extends StatelessWidget {
           opacity: visible ? 1 : 0,
           duration: const Duration(milliseconds: 260),
           curve: Curves.easeOut,
-          // TickerMode (not a subtree swap, which would cut the fade-out
-          // short): the spinner's ticker only runs while visible, so the
-          // pill costs nothing during the 99% of browsing it spends hidden.
-          child: TickerMode(
-            enabled: visible,
-            // RepaintBoundary: while resolving, the spinner produces a frame
-            // per vsync — without the boundary each one dirtied the ROUTE's
-            // layer and repainted every non-isolated part of the screen for
-            // the whole resolve window (measured: the pill janking itself).
-            child: RepaintBoundary(
+          // RepaintBoundary: while resolving, the wave produces a frame per
+          // vsync — without the boundary each one would dirty the ROUTE's
+          // layer and repaint every non-isolated part of the screen for the
+          // whole resolve window (measured with the old spinner).
+          child: RepaintBoundary(
             child: Container(
-              padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+              padding: const EdgeInsets.fromLTRB(11, 6, 12, 6),
               decoration: BoxDecoration(
                 color: const Color(0xCC0D0B1A), // glassy HomeTheme.bg
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: HomeTheme.chromeAccent.withValues(alpha: 0.35),
+                  color: Colors.white.withValues(alpha: 0.16),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 3),
-                  ),
-                  BoxShadow(
-                    color: HomeTheme.chromeAccent.withValues(alpha: 0.18),
-                    blurRadius: 18,
-                    spreadRadius: -4,
-                  ),
-                ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const SizedBox(
-                    width: 11,
+                  SizedBox(
+                    width: 13,
                     height: 11,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.8,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        HomeTheme.chromeAccent,
-                      ),
+                    child: AnimatedBuilder(
+                      animation: _wave,
+                      builder: (context, _) {
+                        final t = _wave.value;
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            _bar(t, 0.0),
+                            _bar(t, 0.30),
+                            _bar(t, 0.60),
+                          ],
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 7),
                   Text(
-                    'Trailer',
+                    'TRAILER',
                     style: TextStyle(
-                      fontSize: 11.5,
+                      fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                      color: Colors.white.withValues(alpha: 0.85),
+                      letterSpacing: 1.2,
+                      color: Colors.white.withValues(alpha: 0.62),
                     ),
                   ),
                 ],
               ),
-            ),
             ),
           ),
         ),

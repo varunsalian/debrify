@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'see_all/see_all_poster_grid.dart';
 
@@ -158,142 +159,54 @@ class SkeletonPosterGrid extends StatelessWidget {
   }
 }
 
-/// A loading stand-in that MIRRORS the real home board so the swap is seamless
-/// and uncluttered: an optional hero block on top (matching the TV spotlight),
-/// then just a couple of rail placeholders — not a screenful of dense shimmer.
-/// Non-interactive; still for fast loads, breathing on long ones ([DelayedPulse]).
-class SkeletonRailList extends StatelessWidget {
-  /// Poster width for a rail cell, from the board's own `_railPosterW`.
-  final double posterWidth;
-
-  /// Matches the board's per-platform rail-header padding.
+/// The home board's load state: a quiet brand moment — the DEBRIFY wordmark
+/// centred on the page ink with a thin breathing accent bar beneath — instead
+/// of a screenful of skeleton boxes (which read as "broken app", the old
+/// complaint). This is the Netflix grammar: brand holds the stage, then the
+/// board simply appears.
+///
+/// Cost-shaped for weak TV hardware: the wordmark is one static text layer
+/// (never animates — it must read rock solid, and text that blinks during a
+/// CPU-busy load judders); the only motion is the tiny accent bar breathing
+/// opacity inside its own [DelayedPulse] compositor layer, which also waits
+/// out the busiest first moments of the load before starting.
+class BrandLoadingStage extends StatelessWidget {
   final bool isTelevision;
 
-  /// Reserve a hero-spotlight placeholder on top (TV home), matching where the
-  /// real hero renders so it doesn't reflow when content arrives.
-  final bool showHero;
-
-  /// Height of that hero placeholder — the board's own computed `heroH`.
-  final double heroHeight;
-
-  final int rails;
-
-  const SkeletonRailList({
-    super.key,
-    required this.posterWidth,
-    required this.isTelevision,
-    this.showHero = false,
-    this.heroHeight = 0,
-    this.rails = 3,
-  });
-
-  // A subtle full-bleed hero placeholder (matching the real spotlight, which is
-  // edge-to-edge with hard corners) with a title + two description bars in the
-  // lower-left, so the swap into the real hero doesn't shift or reflow.
-  Widget _heroPlaceholder(bool tv) {
-    return SizedBox(
-      height: heroHeight,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // radius 0 → matches the hard-edged, full-width hero backdrop.
-          const ShimmerBox(radius: 0),
-          Positioned(
-            left: tv ? 40 : 20,
-            bottom: tv ? 34 : 22,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: tv ? 300 : 200,
-                  height: tv ? 28 : 22,
-                  child: const ShimmerBox(radius: 7),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: tv ? 460 : 250,
-                  height: 12,
-                  child: const ShimmerBox(radius: 4),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: tv ? 380 : 200,
-                  height: 12,
-                  child: const ShimmerBox(radius: 4),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _rail(bool tv, double posterW, double cellH, double rowH) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Title-bar placeholder, aligned to the real rail header's padding.
-        Padding(
-          padding: EdgeInsets.fromLTRB(24, tv ? 14 : 22, 24, tv ? 10 : 12),
-          child: const SizedBox(
-            height: 16,
-            width: 150,
-            child: ShimmerBox(radius: 6),
-          ),
-        ),
-        SizedBox(
-          height: rowH,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.hardEdge,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            itemCount: 8,
-            itemBuilder: (context, j) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                child: Center(
-                  child: SizedBox(
-                    width: posterW,
-                    height: cellH,
-                    child: const ShimmerBox(),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
+  const BrandLoadingStage({super.key, required this.isTelevision});
 
   @override
   Widget build(BuildContext context) {
     final tv = isTelevision;
-    final posterW = posterWidth;
-    final cellH = posterW * 3 / 2;
-    final rowH = cellH + 14;
-    // With a hero on top there's only room for ~2 rails below it — keep it that
-    // restrained so the load reads as premium, not a wall of placeholders.
-    final railCount = showHero ? 2 : rails;
-    return DelayedPulse(
+    return Center(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (showHero && heroHeight > 0) _heroPlaceholder(tv),
-          // Rails fill the remaining bounded height and clip any overflow — no
-          // scrolling a placeholder.
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(top: 6, bottom: 32),
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                for (int i = 0; i < railCount; i++)
-                  _rail(tv, posterW, cellH, rowH),
-              ],
+          Text(
+            'DEBRIFY',
+            // Poppins — the same display face the hero titles wear, so the
+            // brand and the content read as one voice.
+            style: GoogleFonts.poppins(
+              fontSize: tv ? 34 : 26,
+              fontWeight: FontWeight.w600,
+              letterSpacing: tv ? 10 : 7,
+              color: Colors.white.withValues(alpha: 0.92),
+            ),
+          ),
+          SizedBox(height: tv ? 22 : 18),
+          // The life sign: a small accent bar breathing slowly. Starts after a
+          // short beat so instant loads never show motion at all.
+          DelayedPulse(
+            delay: const Duration(milliseconds: 400),
+            child: Container(
+              width: 56,
+              height: 3,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7B5CFF), Color(0xFF818CF8)],
+                ),
+              ),
             ),
           ),
         ],

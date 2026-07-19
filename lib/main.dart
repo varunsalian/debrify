@@ -2522,6 +2522,37 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
+                        // LIGHTS OFF, rail edition: while the Home hero's
+                        // ambient trailer plays, the board veils its rows and
+                        // hero canvas near-black — this mirrors the same veil
+                        // over the collapsed rail strip so the menu dims with
+                        // the room instead of glowing beside it. Same cadence
+                        // as the board's veils (slow dim, fast lights-up).
+                        // Collapsed width only: entering the rail clears the
+                        // trailer (see _onTvSidebarFocusChanged on the board),
+                        // so the veil is already lifting before it expands.
+                        // IgnorePointer — purely visual, the rail underneath
+                        // stays focusable.
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: TvSidebarNav.collapsedWidth,
+                          child: IgnorePointer(
+                            child: ValueListenableBuilder<bool>(
+                              valueListenable: MainPageBridge.tvStageLightsOff,
+                              builder: (context, off, _) => AnimatedOpacity(
+                                opacity: off ? 1.0 : 0.0,
+                                duration: off
+                                    ? const Duration(milliseconds: 900)
+                                    : const Duration(milliseconds: 250),
+                                curve: Curves.easeOut,
+                                child:
+                                    const ColoredBox(color: Color(0xEB0D0B1A)),
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   );
