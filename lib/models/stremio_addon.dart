@@ -180,6 +180,13 @@ class StremioMeta {
   /// Null when the title has no trailer. Played on-device via youtube_explode.
   final String? trailerYtId;
 
+  /// Title-treatment ("logo") artwork URL — the studio's styled title art that
+  /// Cinemeta serves on `/meta` (metahub, keyed by IMDb id). Usually absent on
+  /// catalog list items, so it's resolved from the enriched details like the
+  /// rating/runtime. UIs render it in place of the text title, with the text
+  /// as fallback.
+  final String? logo;
+
   const StremioMeta({
     required this.id,
     this.imdbId,
@@ -194,6 +201,7 @@ class StremioMeta {
     this.runtime,
     this.sourceAddon,
     this.trailerYtId,
+    this.logo,
   });
 
   /// Create a copy with a source addon attached.
@@ -211,6 +219,7 @@ class StremioMeta {
     runtime: runtime,
     sourceAddon: addon,
     trailerYtId: trailerYtId,
+    logo: logo,
   );
 
   /// Extract a trailer's YouTube ID from a meta JSON. Cinemeta exposes trailers
@@ -349,6 +358,7 @@ class StremioMeta {
         json['source_addon'] ?? json['sourceAddon'],
       ),
       trailerYtId: json['trailer_yt_id'] as String? ?? _parseTrailerYtId(json),
+      logo: json['logo'] as String?,
     );
   }
 
@@ -400,6 +410,7 @@ class StremioMeta {
       if (runtime != null) 'runtime': runtime,
       if (sourceAddonJson != null) 'source_addon': sourceAddonJson,
       if (trailerYtId != null) 'trailer_yt_id': trailerYtId,
+      if (logo != null) 'logo': logo,
     };
   }
 

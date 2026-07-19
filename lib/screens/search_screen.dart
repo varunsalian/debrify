@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/advanced_search_selection.dart';
+import '../utils/platform_util.dart';
 import '../models/debrify_tv/channel.dart';
 import '../models/iptv_playlist.dart';
 import '../models/playlist_view_mode.dart';
@@ -73,6 +74,11 @@ import 'torbox/torbox_downloads_screen.dart';
 /// near-black indigo base behind the poster board.
 const Color kStremioAccent = Color(0xFF7B5CFF);
 const Color kStremioBg = Color(0xFF0D0B1A);
+
+/// TV focus ring for board cards — violet-300, deliberately LIGHTER than
+/// [kStremioAccent]: a light ring over dark art pops at 10ft, while the deep
+/// accent stays for chrome (tags, sidebar). Pairs with the calm 1.045 scale.
+const Color kStremioFocusRing = Color(0xFFA78BFA);
 
 /// Continue Watching progress-bar fill (Stremio shows a white line; we use red).
 const Color _kCwProgressRed = Color(0xFFE50914);
@@ -690,6 +696,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   int _heroReqId = 0;
   Timer? _heroTimer;
 
+  /// Settle debounce for the hero SWAP itself (260ms): while DPAD focus flies
+  /// across cards only the card visuals update; the spotlight (backdrop
+  /// decode, logo, meta, tint cascade) follows once focus rests.
+  Timer? _heroSwapTimer;
+
   // Hero ambient trailer (Home board, TV only): once DPAD focus RESTS on a
   // card, its trailer crossfades into the hero backdrop — same living-backdrop
   // treatment (and the same HeroTrailerBackdrop machinery: single decoder,
@@ -810,11 +821,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // Relay the takeover arc to the app shell so the sidebar rail hides in
       // lock-step with the board.
       _heroTrailerTakeover.addListener(_relayChromeDim);
-      // Relay the focused title's colour to the sidebar rail WHILE its trailer
-      // plays, so the rail takes on the film's colour like the hero's left
-      // stage and the rows. Driven by both the playing flag and the tint.
-      _heroTrailerShowing.addListener(_relaySidebarTint);
-      _heroTint.addListener(_relaySidebarTint);
+      // Deliberately NO sidebar tint relay any more: the "colour floods the
+      // chrome while the trailer plays" move read as noise, not mood (user
+      // call). Playback now dims the stage neutrally instead ("lights down");
+      // the rail just stays its quiet dark self. (dispose() already resets
+      // the shell's tvHeroTint post-frame, so no stale colour can survive.)
       // Real content playback (from a detail page, Quick Play, anywhere)
       // suppresses the trailer for this spotlight — see _heroTrailerSuppressed.
       MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunch);
@@ -1042,8 +1053,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     if (_heroTrailerActive) {
       _heroTrailerTakeover.removeListener(_relayChromeDim);
-      _heroTrailerShowing.removeListener(_relaySidebarTint);
-      _heroTint.removeListener(_relaySidebarTint);
       MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunch);
       HardwareKeyboard.instance.removeHandler(_onTakeoverKey);
       appRouteObserver.unsubscribe(this);
@@ -1064,6 +1073,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
+    _heroSwapTimer?.cancel();
     _heroTrailerTimer?.cancel();
     _tintTimer?.cancel();
     _heroItem.dispose();
@@ -2787,7 +2797,35 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Off-TV / blank search prompt the hero isn't rendered, so don't track focus
     // or fire the per-item backdrop-enrichment /meta fetch behind it.
     if (!_heroActive) return;
-    if (_heroItem.value?.id == item.id) return;
+    if (_heroItem.value?.id == item.id) {
+      // Back on the current hero (e.g. a vertical move within the column):
+      // drop any pending swap to a neighbour focus merely passed through.
+      _heroSwapTimer?.cancel();
+      return;
+    }
+    // Instant + cheap on EVERY move: kill any trailer (timer cancels and
+    // notifier flips) so the lights-off veils start lifting with the
+    // keypress, even though the hero swap itself waits for the rest below.
+    _clearHeroTrailer();
+    // First hero (board just landed) shows instantly. After that, the swap
+    // waits for a short DPAD rest — holding a direction across a row costs
+    // only the card focus visuals (ring + scale), never a spotlight rebuild
+    // plus a backdrop decode per step. This is the Nuvio/Netflix billboard
+    // settle debounce from the approved Concept-5 foundations, and the
+    // second half of the "navigation feels heavy" fix (the first was the
+    // tint cache publishing synchronously).
+    if (_heroItem.value == null) {
+      _applyHero(item);
+      return;
+    }
+    _heroSwapTimer?.cancel();
+    _heroSwapTimer = Timer(const Duration(milliseconds: 260), () {
+      if (mounted) _applyHero(item);
+    });
+  }
+
+  /// The real hero swap — everything downstream of "focus has RESTED here".
+  void _applyHero(StremioMeta item) {
     _heroItem.value = item;
     _heroEnriched.value = null;
     _enrichHero(item);
@@ -2889,15 +2927,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.tvChromeDim.value = _heroTrailerTakeover.value;
   }
 
-  /// Publish the focused title's tint to the sidebar rail ONLY while the trailer
-  /// is actually playing (else null), so the rail colours in lock-step with the
-  /// hero's left colour stage and clears the moment the trailer stops or the
-  /// hero moves on. Fired by both [_heroTrailerShowing] and [_heroTint].
-  void _relaySidebarTint() {
-    MainPageBridge.tvHeroTint.value =
-        _heroTrailerShowing.value ? _heroTint.value : null;
-  }
-
   // ── Route awareness (Home board trailer only) ────────────────────────────
   // The trailer schedule is time-driven, so without this a pushed route
   // (detail page, player) would let the 2.4s debounce fire UNDER the cover
@@ -2973,17 +3002,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   void _updateHeroTint(StremioMeta item) {
     _tintTimer?.cancel();
-    final poster = item.poster;
-    if (poster == null || poster.isEmpty) {
-      _heroTint.value = null;
-      return;
-    }
-    if (_tintCache.containsKey(item.id)) {
-      _heroTint.value = _tintCache[item.id];
-      return;
-    }
     final req = ++_tintReq;
-    _tintTimer = Timer(const Duration(milliseconds: 350), () async {
+    // ALWAYS defer — cache hits and empty posters included. Publishing a
+    // cached tint synchronously here meant every DPAD step over already-
+    // visited cards re-rastered every tint consumer (the full-screen mood
+    // field, the hero stage, the 450ms scrim tween, the art feathers) — the
+    // "navigation feels heavy" regression. The tint is scenery: it only
+    // needs to land once focus RESTS, never while scrubbing a row. (Short
+    // now that the 260ms hero-swap settle already ran before this fires.)
+    _tintTimer = Timer(const Duration(milliseconds: 120), () async {
+      final poster = item.poster;
+      if (poster == null || poster.isEmpty) {
+        _heroTint.value = null;
+        return;
+      }
+      if (_tintCache.containsKey(item.id)) {
+        _heroTint.value = _tintCache[item.id];
+        return;
+      }
       final color = await extractDominantColor(
         CachedNetworkImageProvider(poster),
       );
@@ -3008,11 +3044,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // fetch (its only source) would be skipped whenever bg+desc+rating are
     // already present — and the hero/takeover runtime would stay blank.
     final needsRuntime = item.runtime == null;
-    if (!needsBg && !needsDesc && !needsRating && !needsRuntime) return;
+    // Same for the logo title-treatment: catalog items basically never carry
+    // it, and without this an item that happens to have bg+desc+rating+runtime
+    // (e.g. Continue Watching) would skip the fetch and stay text-titled.
+    final needsLogo = item.logo == null || item.logo!.isEmpty;
+    if (!needsBg && !needsDesc && !needsRating && !needsRuntime && !needsLogo) {
+      return;
+    }
     final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (imdb == null) return;
     final reqId = ++_heroReqId;
-    _heroTimer = Timer(const Duration(milliseconds: 300), () async {
+    // Short: on the board this only fires after the 260ms hero-swap settle.
+    _heroTimer = Timer(const Duration(milliseconds: 140), () async {
       final details = await _stremio.fetchMetaDetails(
         imdbId: imdb,
         type: item.type,
@@ -6923,13 +6966,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return (MediaQuery.of(context).size.height * 0.17).clamp(92.0, 140.0);
   }
 
-  /// Height to reserve for one board row in the TV hero budget. Sized to the
-  /// TALLEST row type — a favourites rail, whose poster carries an inline 2-line
-  /// caption — so whichever row sits directly below the hero (a favourites rail
-  /// when Continue Watching is empty, else a titleless catalog/CW row that's a
-  /// little shorter) always stays fully visible.
-  double _railRowH(BuildContext context) =>
-      _railPosterW(context) * 3 / 2 + _artPosterCaptionBand(context) + 14;
+  /// TV hero band budget — Concept-5 geometry (tv_home_mockup): the hero owns
+  /// ~60% of the board; below it exactly ONE titleless card row fits, plus a
+  /// ~24px peek of the NEXT row's header — the "there's more" cue. Budgeted
+  /// against the short catalog-row height on purpose: a taller favourites rail
+  /// (inline captions) clips at the fold rather than shrinking the hero for
+  /// everyone. The Search tab keeps its compact strip via the clamp.
+  double _tvHeroBudget(double boardH) {
+    final catalogRowH = _railPosterW(context) * 3 / 2 + 14;
+    return (boardH - _railHeaderH - catalogRowH - 24).clamp(
+      150.0,
+      widget.searchMode ? 180.0 : 440.0,
+    );
+  }
 
   /// Approximate height of a rail's header (title row). Matches the padding +
   /// line height in [_railHeader]; used only to budget the hero so a row header
@@ -7182,8 +7231,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           // Same hero sizing the real board uses (see the LayoutBuilder below),
           // so the placeholder hero lands exactly where the real one will.
           final heroH = tv
-              ? (constraints.maxHeight - _railRowH(context) - _railHeaderH * 2)
-                    .clamp(150.0, widget.searchMode ? 180.0 : 380.0)
+              ? _tvHeroBudget(constraints.maxHeight)
               : (width >= 900 ? 300.0 : 196.0);
           return SkeletonRailList(
             posterWidth: _railPosterW(context),
@@ -7251,8 +7299,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // focus-rest/move as trailers start and stop. The full-bleed cover-crop
         // of a 16:9 trailer into this wide-short band is accepted as inherent.
         final heroH = tv
-            ? (constraints.maxHeight - _railRowH(context) - _railHeaderH * 2)
-                  .clamp(150.0, widget.searchMode ? 180.0 : 380.0)
+            ? _tvHeroBudget(constraints.maxHeight)
             : (width >= 900 ? 300.0 : 196.0);
 
         // The ambient trailer is hosted BEHIND the spotlight, in the hero band
@@ -7262,75 +7309,65 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return Stack(
           fit: StackFit.expand,
           children: [
-            // Ambient colour bleed: while the trailer plays, the focused title's
-            // dominant colour (see _heroTint) glows out of the hero's foot down
-            // into the rows and tints the board — the app "takes on" the film's
-            // colours. Behind everything; eases in with playback and between
-            // titles; IgnorePointer + no per-frame layer (a settled gradient).
-            if (_heroTrailerActive)
+            // The board's ambient mood field — ALWAYS on, not just during
+            // trailers: a soft radial in the focused title's extracted colour
+            // over the flat page bg, so the whole screen takes on each film's
+            // palette as focus surfs the board — the Concept-5 "the page is
+            // the canvas" look. Perf-shaped for weak TV GPUs: ONE gradient
+            // (a long radial that carries both the top-left glow and a faint
+            // mid wash down into the rows — a second nested radial doubled
+            // the full-screen fill), and a SHORT tween on TV, because every
+            // frame of the tween re-rasters this full-screen layer (the
+            // RepaintBoundary only isolates it from neighbours). Idle cost:
+            // zero — it repaints only when the settled 350ms-debounced tint
+            // changes.
+            if (_heroActive && tv)
               Positioned.fill(
                 child: IgnorePointer(
-                  child: ValueListenableBuilder<bool>(
-                    valueListenable: _heroTrailerShowing,
-                    builder: (context, showing, _) => AnimatedOpacity(
-                      opacity: showing ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 700),
-                      curve: Curves.easeOut,
-                      child: ValueListenableBuilder<Color?>(
-                        valueListenable: _heroTint,
-                        // Tween on the RAW tint (incl. → null): ColorTween eases a
-                        // cleared tint's alpha toward 0, and we scale the wash by
-                        // that alpha, so a title with no poster fades the colour
-                        // out instead of popping it away in one frame.
-                        builder: (context, tint, __) => TweenAnimationBuilder<Color?>(
-                          // end must be non-null (TweenAnimationBuilder asserts
-                          // it) — ease toward transparent when there's no tint so
-                          // its alpha still runs to 0 and the wash fades out.
-                          tween: ColorTween(end: tint ?? const Color(0x00000000)),
-                          duration: const Duration(milliseconds: 700),
-                          curve: Curves.easeOut,
-                          builder: (context, eased, ___) {
-                            // Fully cleared → paint nothing (perf); this also
-                            // covers the transparent fallback above.
-                            if (eased == null || eased.a <= 0.001) {
-                              return const SizedBox.shrink();
-                            }
-                            // eased.a runs 1→0 as a cleared tint eases out; fold
-                            // it into the wash alphas so the fade rides along.
-                            final k = eased.a;
-                            final frac = (heroH / constraints.maxHeight).clamp(
-                              0.1,
-                              0.9,
-                            );
-                            return DecoratedBox(
-                              decoration: BoxDecoration(
-                                // Transparent through the hero (the video shows),
-                                // a bright glow right at the hero's foot, then a
-                                // soft tint carried to the bottom so the whole
-                                // rows area is bathed in the colour, not a band.
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.transparent,
-                                    eased.withValues(alpha: 0.32 * k),
-                                    eased.withValues(alpha: 0.10 * k),
-                                  ],
-                                  stops: [
-                                    (frac - 0.14).clamp(0.0, 1.0),
-                                    frac,
-                                    1.0,
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                  child: RepaintBoundary(
+                    child: ValueListenableBuilder<Color?>(
+                      valueListenable: _heroTint,
+                      // SNAP, no colour tween — every tween frame re-rastered
+                      // this FULL-SCREEN layer, the single biggest "DPAD nav
+                      // feels heavy" cost. One repaint per 350ms-debounced
+                      // settle; a one-frame shift between dark washes is
+                      // imperceptible.
+                      builder: (context, tint, _) {
+                        final t = tint ?? kStremioBg;
+                        return DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: RadialGradient(
+                              center: const Alignment(-0.7, -1.0),
+                              radius: 1.9,
+                              colors: [
+                                Color.lerp(
+                                  kStremioBg,
+                                  t,
+                                  0.32,
+                                )!.withValues(alpha: 0.55),
+                                Color.lerp(
+                                  kStremioBg,
+                                  t,
+                                  0.18,
+                                )!.withValues(alpha: 0.28),
+                                Colors.transparent,
+                              ],
+                              stops: const [0.0, 0.55, 1.0],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
               ),
+            // (The old "ambient colour bleed" — a tinted wash flooding the
+            // rows while the trailer played, then draining out on stop — is
+            // gone by user call. Playback now reads as LIGHTS DOWN instead:
+            // neutral graded veils over the rows (_dimRowsForTrailer) and the
+            // hero canvas (spotlight's stage-dim), no hue swinging in/out.
+            // The always-on mood field above is the only colour, and it
+            // doesn't react to playback at all.)
             _buildTrailerTakeoverRecede(
               Column(
                 children: [
@@ -7362,18 +7399,28 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               runtime:
                                   item.runtimeDisplay ??
                                   enriched?.runtimeDisplay,
+                              // Catalog rows rarely carry the title-treatment
+                              // art; the enriched /meta details usually do.
+                              logo: item.logo?.isNotEmpty == true
+                                  ? item.logo
+                                  : enriched?.logo,
                               compact: widget.searchMode,
                               isTelevision: tv,
                               height: heroH,
                               tint: _heroTint,
-                              // Blended trailer: it plays in a region on the
-                              // right (the overlay added below), so the spotlight
-                              // keeps its backdrop + text (no fade) and just caps
-                              // the text at the region's left edge; the pill lives
-                              // in the region. Reserve only when trailers can
-                              // actually appear (enabled), else full-width text.
-                              boxedTrailer:
-                                  _heroTrailerActive && _heroTrailerEnabled,
+                              // The Concept-5 stage (region key art + colour
+                              // field, text capped at the region's left edge)
+                              // is the TV Home LAYOUT, full stop — driven by
+                              // the synchronous getter only, never by the
+                              // async Settings read (_heroTrailerEnabled).
+                              // That read used to pick the layout and could
+                              // land AFTER first paint (or never trigger a
+                              // rebuild), flipping the hero mid-session; now
+                              // it only gates whether a video actually plays
+                              // in the region (see _scheduleHeroTrailer).
+                              // Trailers-off users keep the same stage — the
+                              // region simply always shows the key art.
+                              boxedTrailer: _heroTrailerActive,
                               // Pill lives in the trailer region now.
                               trailerLoading: null,
                               // Still passed so the backdrop's Ken Burns drift
@@ -7396,7 +7443,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       (_catalogSearching || _catalogSearchFailures > 0))
                     _buildSearchStatusStrip(),
                   Expanded(
-                    child: Builder(
+                    child: _dimRowsForTrailer(
+                      Builder(
                       builder: (context) {
                         // Leading board rows, in order: Continue Watching (local, then
                         // Trakt), then the favourites rows (IPTV, Debrify TV, Stremio TV —
@@ -7469,6 +7517,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           },
                         );
                       },
+                      ),
                     ),
                   ),
                 ],
@@ -7487,7 +7536,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   heroHeight: heroH,
                   volume: _heroTrailerVolume,
                   loading: _heroTrailerLoading,
-                  tint: _heroTint,
                   onPlayingChanged: _onHeroTrailerPlaying,
                   takeover: _heroTrailerTakeover,
                 ),
@@ -7498,6 +7546,54 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           ],
         );
       },
+    );
+  }
+
+  /// Settles the poster rows back while the ambient trailer plays, so the
+  /// moving picture owns the frame (Nuvio/Netflix behavior) and any DPAD move
+  /// brings them straight back. Implemented as a flat bg-tinted VEIL fading in
+  /// ABOVE the rows — NOT an Opacity around them: fading the rows subtree
+  /// meant a rows-viewport-sized saveLayer re-rastered on every frame of the
+  /// fade (the "trailer start stutters" kind of cost on a weak TV GPU), while
+  /// this is one solid fill that paints nothing at all when idle. Rows live
+  /// BELOW the hero band, so the veil can never sit over the trailer
+  /// underlay's punch-through hole.
+  Widget _dimRowsForTrailer(Widget rows) {
+    if (!_heroTrailerActive) return rows;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        rows,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _heroTrailerShowing,
+              builder: (context, on, _) => AnimatedOpacity(
+                opacity: on ? 1.0 : 0.0,
+                // LIGHTS OFF, asymmetric: the theatre dims slowly when the
+                // picture starts, but any DPAD move brings the room back
+                // FAST so navigation never feels gated by an effect.
+                duration: on
+                    ? const Duration(milliseconds: 900)
+                    : const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                // Near-black: the rows become ghosts (a whisper of structure
+                // stays so pressing DOWN isn't a leap into a void), graded a
+                // touch deeper toward the screen's foot.
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xE00D0B1A), Color(0xFA0D0B1A)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -7991,8 +8087,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               overflow: TextOverflow.ellipsis,
               // Poppins for the rail titles too, so headings share one display
               // face; loosened from the old -0.2 tracking for the airier look.
+              // TV runs them quieter (15px) — the hero carries the weight, the
+              // row title just labels the shelf (Nuvio's row grammar).
               style: GoogleFonts.poppins(
-                fontSize: tv ? 18 : 17,
+                fontSize: tv ? 15 : 17,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0,
                 color: Colors.white.withValues(alpha: 0.92),
@@ -8524,6 +8622,11 @@ class _HeroSpotlight extends StatefulWidget {
   /// item or its enriched /meta details (catalog rows usually omit it).
   final String? runtime;
 
+  /// Title-treatment artwork URL (Cinemeta `logo`) — rendered in place of the
+  /// text title when present, with the text as loading/error fallback. Resolved
+  /// by the host from the item or its enriched /meta details.
+  final String? logo;
+
   /// Compact layout for the Search tab: smaller title, single-line plot and
   /// tighter spacing so the whole spotlight fits a short strip without pushing
   /// the results off-screen.
@@ -8559,6 +8662,7 @@ class _HeroSpotlight extends StatefulWidget {
     required this.height,
     this.rating,
     this.runtime,
+    this.logo,
     this.compact = false,
     this.boxedTrailer = false,
     this.tint,
@@ -8688,39 +8792,62 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     );
   }
 
-  /// The colour field that replaces the backdrop on the left while a trailer
-  /// plays: a diagonal wash built from the SAME extracted tint the trailer's
-  /// edge-feather melts into ([_HeroTrailerLayer]), plus a soft glow leaning
-  /// toward the trailer — so the whole hero reads as one cohesive colour stage,
-  /// no half-poster seam. Fades in with [trailerShowing]; sits at the very back
-  /// (revealed as the image fades out above it). Baked gradients only — no
-  /// per-frame layer. Boxed mode only.
-  Widget _trailerColorField(ColorScheme scheme) {
+  /// Boxed-mode counterpart of [_maybeFadeForTrailer] for the SECONDARY
+  /// identity lines only (meta chips + plot): while the ambient trailer plays
+  /// they fade away and the title/logo stays — the Netflix/Nuvio "logo holds
+  /// the stage" move. Safe by construction: the identity block sits left of
+  /// the trailer region, so this Opacity never covers the underlay's
+  /// punch-through hole. Pass-through outside boxed mode (the full-block fade
+  /// above already handles that layout).
+  Widget _fadeMetaForTrailer(Widget child) {
     final showing = widget.trailerShowing;
-    if (showing == null || !widget.boxedTrailer) return const SizedBox.shrink();
+    if (showing == null || !widget.boxedTrailer) return child;
+    return ValueListenableBuilder<bool>(
+      valueListenable: showing,
+      builder: (context, on, kid) => AnimatedOpacity(
+        opacity: on ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 480),
+        curve: Curves.easeOut,
+        child: kid,
+      ),
+      child: child,
+    );
+  }
+
+  /// The hero's colour STAGE (boxed mode): a diagonal wash in the focused
+  /// title's extracted tint plus a soft glow leaning toward the art region —
+  /// the left half of the Concept-5 hero. Always on (this IS the rest-state
+  /// background now that the key art lives in the region on the right, not
+  /// full-bleed), and the surface the idle art's tinted feathers melt into
+  /// (mid value ~0.30 meets their 0.34) — no half-poster seam, ever. During
+  /// playback the lights-off veil above quenches this to near-black so the
+  /// video's neutral feathers match. Baked gradients only — no per-frame
+  /// layer. Boxed mode only.
+  Widget _heroMoodField(ColorScheme scheme) {
+    if (!widget.boxedTrailer) return const SizedBox.shrink();
     const base = Color(0xFF0D0B1A); // the board's own bg
     return IgnorePointer(
-      child: ValueListenableBuilder<bool>(
-        valueListenable: showing,
-        builder: (context, on, _) => AnimatedOpacity(
-          opacity: on ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 650),
-          curve: Curves.easeOut,
-          child: ValueListenableBuilder<Color?>(
-            valueListenable:
-                widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
-            builder: (context, tint, __) {
+      // RepaintBoundary so this layer's repaint never bubbles up and
+      // re-rasters the whole hero band (region art included). And the colour
+      // SNAPS — no tween: every tween frame re-rastered this two-fill band
+      // (~60% of the screen) and made DPAD navigation feel heavy. The tint
+      // only ever changes on its 350ms settle debounce, and a one-frame
+      // shift between two dark washes is imperceptible from the couch —
+      // one repaint per settle, zero frames of animation.
+      child: RepaintBoundary(
+        child: ValueListenableBuilder<Color?>(
+          valueListenable:
+              widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
+          builder: (context, tint, __) {
               final t = tint ?? scheme.surface;
               return DecoratedBox(
                 decoration: BoxDecoration(
-                  // Diagonal tint field: brighter top-left, deeper foot — the
-                  // mid value (~0.30) meets the trailer's melt (0.34) so the two
-                  // read as one surface across the feather.
+                  // Diagonal tint field: brighter top-left, deeper foot.
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Color.lerp(base, t, 0.42)!,
+                      Color.lerp(base, t, 0.44)!,
                       Color.lerp(base, t, 0.28)!,
                       Color.lerp(base, t, 0.16)!,
                     ],
@@ -8728,8 +8855,9 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                   ),
                 ),
                 child: DecoratedBox(
-                  // Soft glow leaning toward the trailer (right of centre) so the
-                  // colour intensifies into it and the left stays calm for text.
+                  // Soft glow leaning toward the art region (right of centre)
+                  // so the colour intensifies into it and the left stays calm
+                  // for the title text.
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
                       center: const Alignment(0.55, -0.25),
@@ -8743,8 +8871,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                   ),
                 ),
               );
-            },
-          ),
+          },
         ),
       ),
     );
@@ -8784,27 +8911,77 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
         ? background
         : (item.poster ?? '');
     final runtime = widget.runtime;
+    // Chip-grammar meta line (type · genres · runtime · year, then the IMDb
+    // mark) — replaces the old bordered type pill + star line for the flatter
+    // OTT look.
     final metaParts = <String>[
-      if (item.year != null && item.year!.isNotEmpty) item.year!,
-      if (runtime != null && runtime.isNotEmpty) runtime,
+      item.type == 'series' ? 'SERIES' : 'MOVIE',
       if (item.genres != null && item.genres!.isNotEmpty)
         item.genres!.take(2).join(' · '),
+      if (runtime != null && runtime.isNotEmpty) runtime,
+      if (item.year != null && item.year!.isNotEmpty) item.year!,
     ];
 
     return SizedBox(
       height: height,
       width: double.infinity,
-      child: Stack(
+      child: LayoutBuilder(
+        builder: (context, cons) {
+          // Concept-5 stage geometry: in boxed mode the key art lives in the
+          // SAME right-anchored region the trailer plays in (identical eased
+          // feathers, colour field on the left) — idle and playing are one
+          // layout, so the art→video swap is a crossfade in place, no
+          // geometry jump. Falls back to the classic full-bleed backdrop when
+          // the band is too short for a region (and on the compact hero).
+          final Rect? artRegion = widget.boxedTrailer
+              ? _heroTrailerRegionRect(cons.maxWidth, height)
+              : null;
+          return Stack(
         // Clip so a long title/plot can never bleed out of the hero into the
         // row header below it (the overflow bug on the compact Search hero).
         clipBehavior: Clip.hardEdge,
         fit: StackFit.expand,
         children: [
-          // Behind everything: the tint colour field that takes over the left
-          // while a trailer plays (boxed mode), so no half-poster shows beside
-          // the trailer. Hidden (faded 0) otherwise, and behind the image below.
-          if (widget.boxedTrailer) _trailerColorField(scheme),
-          if (bg.isNotEmpty)
+          // Behind everything: the hero's always-on colour stage (boxed mode)
+          // — the canvas the title text sits on, and the surface the region's
+          // feathers melt into.
+          if (widget.boxedTrailer) _heroMoodField(scheme),
+          if (bg.isNotEmpty && artRegion != null)
+            // Region-anchored key art: cover-crop + the same eased feathers
+            // the trailer uses, so still art and live video dissolve into the
+            // field identically. No ShaderMask on this path (one less
+            // saveLayer than full-bleed) — the bottom feather melts it into
+            // the rows. Fades out while the trailer plays: the video occupies
+            // this exact rect in the overlay above.
+            Positioned.fromRect(
+              rect: artRegion,
+              child: _fadeBackdropForTrailer(
+                RepaintBoundary(
+                  child: ClipRect(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CachedNetworkImage(
+                          imageUrl: bg,
+                          fit: BoxFit.cover,
+                          alignment: Alignment.topCenter,
+                          memCacheWidth: isTelevision
+                              ? HomeTheme.heroBackdropCacheWidthTv
+                              : HomeTheme.heroBackdropCacheWidth,
+                          fadeInDuration: HomeTheme.imageFadeIn(isTelevision),
+                          fadeOutDuration: HomeTheme.imageFadeOut(
+                            isTelevision,
+                          ),
+                          errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                        _regionArtFeathers(scheme),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (bg.isNotEmpty && artRegion == null)
             // Fade the backdrop's lower third to transparent so it melts into
             // the page's own gradient instead of ending on a hard horizontal
             // edge (the "seam"). The board rows then read as one surface with
@@ -8941,6 +9118,34 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               },
             ),
           ),
+          // LIGHTS OFF: while the trailer plays the hero canvas goes near-
+          // neutral-dark — a deep veil over the colour field + key art,
+          // sitting BELOW the identity block (the logo stays full-bright)
+          // and below the trailer overlay's punch-through hole (which clears
+          // every Flutter pixel under it in the region, veil included). With
+          // the tint quenched here, the video's NEUTRAL edge feathers land on
+          // a matching near-black — no colour anywhere near the picture; the
+          // title art and the moving image are the only lit things on stage.
+          // Slow dim down, fast lights-up on any DPAD move. Paints nothing
+          // when idle.
+          if (widget.boxedTrailer && widget.trailerShowing != null)
+            IgnorePointer(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: widget.trailerShowing!,
+                builder: (context, on, _) => AnimatedOpacity(
+                  opacity: on ? 1.0 : 0.0,
+                  duration: on
+                      ? const Duration(milliseconds: 900)
+                      : const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                  // 96% — verified on-device: at 72% the warm mood field
+                  // still glowed through beside the video ("you can still
+                  // see colors"). Near-opaque bg kills the hue completely
+                  // and lands flush with the video's neutral left feather.
+                  child: const ColoredBox(color: Color(0xF50D0B1A)),
+                ),
+              ),
+            ),
           // The whole identity block — badge, title, meta, plot — fades out once
           // the trailer covers the hero, so a full-bleed trailer plays clean.
           _maybeFadeForTrailer(
@@ -8961,11 +9166,14 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                     }
                   }
                   return Padding(
+                    // The tall Concept-5 hero gets real air under the plot
+                    // line before the fold; the compact strip keeps its
+                    // tighter foot.
                     padding: EdgeInsets.fromLTRB(
                       24,
                       0,
                       24,
-                      isTelevision ? 22 : 16,
+                      isTelevision ? (compact ? 22 : 34) : 16,
                     ),
                     child: ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: maxTextW),
@@ -8973,109 +9181,58 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _cascade(
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.14),
-                            ),
-                          ),
-                          child: Text(
-                            item.type == 'series' ? 'SERIES' : 'MOVIE',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        0.0,
-                        0.6,
-                      ),
-                      SizedBox(height: compact ? 7 : 10),
-                      _cascade(
-                        Text(
-                          item.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          // Poppins (rounded geometric) for the display title, airier
-                          // and lighter than Inter-w800/-1 tracking — closer to
-                          // Stremio's hero. Body/metadata stay on the Inter theme.
-                          style: GoogleFonts.poppins(
-                            fontSize: compact
-                                ? (isTelevision ? 24 : 20)
-                                : (isTelevision ? 38 : 26),
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0,
-                            height: 1.06,
-                            color: Colors.white,
-                          ),
-                        ),
-                        0.08,
-                        0.72,
-                      ),
-                      SizedBox(height: compact ? 6 : 8),
-                      _cascade(
-                        Row(
-                          children: [
-                            if (rating != null) ...[
-                              const Icon(
-                                Icons.star_rounded,
-                                size: 16,
-                                color: HomeTheme.focusGold,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                rating.toStringAsFixed(1),
-                                style: const TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                      _cascade(_buildTitleArt(), 0.08, 0.72),
+                      SizedBox(height: compact ? 6 : 10),
+                      // Meta chips + plot fade away while the ambient trailer
+                      // plays (boxed mode) — the title art above holds the
+                      // stage alone. Layout is opacity-only, so nothing
+                      // reflows when they go.
+                      _fadeMetaForTrailer(
+                        _cascade(
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  metaParts.join('  ·  '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
+                                    color: Colors.white.withValues(alpha: 0.82),
+                                  ),
                                 ),
                               ),
-                              if (metaParts.isNotEmpty) _dot(),
+                              if (rating != null) ...[
+                                if (metaParts.isNotEmpty) _dot(),
+                                _imdbChip(rating),
+                              ],
                             ],
-                            Flexible(
-                              child: Text(
-                                metaParts.join('   ·   '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white.withValues(alpha: 0.82),
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
+                          0.2,
+                          0.85,
                         ),
-                        0.2,
-                        0.85,
                       ),
                       if (description != null && description.isNotEmpty) ...[
                         SizedBox(height: compact ? 6 : 10),
-                        _cascade(
-                          Text(
-                            description,
-                            maxLines: compact ? 1 : (isTelevision ? 3 : 2),
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: compact
-                                  ? 12.5
-                                  : (isTelevision ? 14.5 : 13),
-                              height: compact ? 1.3 : 1.45,
-                              color: Colors.white.withValues(alpha: 0.72),
+                        _fadeMetaForTrailer(
+                          _cascade(
+                            Text(
+                              description,
+                              maxLines: compact ? 1 : (isTelevision ? 3 : 2),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: compact
+                                    ? 12.5
+                                    : (isTelevision ? 14.5 : 13),
+                                height: compact ? 1.3 : 1.45,
+                                color: Colors.white.withValues(alpha: 0.72),
+                              ),
                             ),
+                            0.32,
+                            1.0,
                           ),
-                          0.32,
-                          1.0,
                         ),
                       ],
                     ],
@@ -9101,6 +9258,8 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               ),
             ),
         ],
+          );
+        },
       ),
     );
   }
@@ -9115,6 +9274,137 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
         shape: BoxShape.circle,
       ),
     ),
+  );
+
+  /// The idle key-art's edge dissolve — the same three eased feather shapes
+  /// the trailer paints over itself ([_HeroTrailerLayerState]), but TINTED
+  /// (lerped 0.34 toward the board bg) because at rest the art sits on the
+  /// coloured mood field. The video's own feathers are NEUTRAL — by the time
+  /// they fade in, the lights-off veils have quenched the tint around the
+  /// region, so the handover still reads seamless. Recolours only when the
+  /// settled tint changes — never per frame.
+  Widget _regionArtFeathers(ColorScheme scheme) {
+    return IgnorePointer(
+      child: ValueListenableBuilder<Color?>(
+        valueListenable:
+            widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
+        builder: (context, tint, __) {
+          const base = Color(0xFF0D0B1A); // the board's own bg
+          final melt = tint == null ? base : Color.lerp(base, tint, 0.34)!;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              _heroEdgeFeather(
+                Alignment.centerLeft,
+                Alignment.centerRight,
+                melt,
+                _heroTrailerFeatherFrac,
+              ),
+              _heroEdgeFeather(
+                Alignment.topCenter,
+                Alignment.bottomCenter,
+                melt,
+                0.16,
+              ),
+              _heroEdgeFeather(
+                Alignment.bottomCenter,
+                Alignment.topCenter,
+                melt,
+                0.36,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// The hero's title: studio title-treatment art when the meta carries a
+  /// `logo`, else the plain text title. The text is also the logo's ERROR
+  /// fallback, so a dead URL degrades to exactly the old look; while the logo
+  /// decodes the slot holds empty (no text-flash-then-swap). Bottom-left
+  /// anchored in a fixed-height slot so successive titles sit on one baseline
+  /// as DPAD focus flies.
+  Widget _buildTitleArt() {
+    final item = widget.item;
+    final compact = widget.compact;
+    final isTelevision = widget.isTelevision;
+    Text titleText(int maxLines) => Text(
+      item.name,
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      // Poppins (rounded geometric) for the display title, airier and lighter
+      // than Inter-w800/-1 tracking — closer to Stremio's hero. Body/metadata
+      // stay on the Inter theme.
+      style: GoogleFonts.poppins(
+        fontSize: compact ? (isTelevision ? 24 : 20) : (isTelevision ? 38 : 26),
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0,
+        height: 1.06,
+        color: Colors.white,
+      ),
+    );
+    final logo = widget.logo;
+    if (logo == null || logo.isEmpty) return titleText(2);
+    final logoH = compact
+        ? (isTelevision ? 46.0 : 38.0)
+        : (isTelevision ? 76.0 : 58.0);
+    return SizedBox(
+      height: logoH,
+      width: double.infinity,
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isTelevision ? 320 : 280),
+          child: CachedNetworkImage(
+            imageUrl: logo,
+            fit: BoxFit.contain,
+            alignment: Alignment.bottomLeft,
+            // Logos are wide PNGs (metahub ~800px) shown ~300px at most — cap
+            // the decode like every other art surface.
+            memCacheWidth: 480,
+            fadeInDuration: HomeTheme.imageFadeIn(isTelevision),
+            fadeOutDuration: HomeTheme.imageFadeOut(isTelevision),
+            placeholder: (_, __) => const SizedBox.shrink(),
+            // Single line: the fallback lives inside the logo's short slot, so
+            // a two-line wrap would clip mid-glyph.
+            errorWidget: (_, __, ___) => titleText(1),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The gold IMDb mark + rating — the meta line's one piece of colour.
+  Widget _imdbChip(double rating) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5C518),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Text(
+          'IMDb',
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.2,
+            color: Color(0xFF161616),
+          ),
+        ),
+      ),
+      const SizedBox(width: 5),
+      Text(
+        rating.toStringAsFixed(1),
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ),
+    ],
   );
 }
 
@@ -9146,6 +9436,33 @@ Rect? _heroTrailerRegionRect(double width, double heroH) {
 /// region's left, so it sits over the dark side of this feather.
 const double _heroTrailerFeatherFrac = 0.34;
 
+/// One edge-feather for the hero's art/trailer region: a gradient from opaque
+/// [c] at [begin] dissolving to transparent by [frac]. EASED stops (not a
+/// linear two-stop ramp — that reads as a hard "veil edge" where the fade
+/// starts): dense at the covered edge, long soft tail into the picture, the
+/// Nuvio/Netflix gradient recipe. Still one baked gradient fill — no shader
+/// mask, no per-frame cost — shared by the idle key-art and the live trailer
+/// so the two states dissolve identically and the crossfade between them is
+/// seamless.
+Widget _heroEdgeFeather(Alignment begin, Alignment end, Color c, double frac) {
+  return DecoratedBox(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: begin,
+        end: end,
+        colors: [
+          c,
+          c.withValues(alpha: 0.86),
+          c.withValues(alpha: 0.42),
+          c.withValues(alpha: 0.13),
+          c.withValues(alpha: 0.0),
+        ],
+        stops: [0.0, frac * 0.28, frac * 0.56, frac * 0.80, frac],
+      ),
+    ),
+  );
+}
+
 /// Full-board ambient trailer layer (TV Home board only). Sits ABOVE the hero +
 /// rows as an [IgnorePointer] overlay and paints the trailer into a right-
 /// anchored REGION of the hero band (see [_heroTrailerRegionRect]) whose edges
@@ -9174,12 +9491,8 @@ class _HeroTrailerLayer extends StatefulWidget {
   /// (so it's already there when frames land) and hosts the "Trailer" pill.
   final ValueListenable<bool> loading;
 
-  /// The focused title's dominant colour — the feather gradients melt the
-  /// trailer's edges into THIS colour (not a flat black), so it blends into the
-  /// poster's mood. Null = neutral dark.
-  final ValueListenable<Color?>? tint;
-
-  /// Relayed [HeroTrailerBackdrop.onPlayingChanged] (host pill + colour bleed).
+  /// Relayed [HeroTrailerBackdrop.onPlayingChanged] (host pill + lights-off
+  /// veils).
   final ValueChanged<bool>? onPlayingChanged;
 
   /// Retained (unused) takeover hook — the fullscreen promote is gone in the
@@ -9191,7 +9504,6 @@ class _HeroTrailerLayer extends StatefulWidget {
     required this.heroHeight,
     required this.volume,
     required this.loading,
-    this.tint,
     this.onPlayingChanged,
     this.takeover,
   });
@@ -9317,9 +9629,10 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
   }
 
   /// The trailer region — NO frame. The video cover-fills a right-anchored slab
-  /// and its left/top/bottom edges DISSOLVE into the hero via baked gradients
-  /// tinted to the title's colour, so it melts into the poster instead of
-  /// sitting in a box (the premium-OTT look). The right edge bleeds off screen.
+  /// and its left/top/bottom edges DISSOLVE via baked NEUTRAL near-black
+  /// gradients into the lights-off stage around it, so it melts into the dark
+  /// instead of sitting in a box (the premium-OTT look). The right edge bleeds
+  /// off screen.
   ///
   /// Weak-TV safe: the feathers are plain gradient fills painted OVER the video
   /// (no per-frame ShaderMask / saveLayer); the video keeps its own
@@ -9356,55 +9669,44 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
                 onPlayingChanged: _onPlaying,
               ),
             ),
-          // The feather — three tinted gradients melting the edges into the
-          // hero. Hidden until the video actually plays (so a resolving trailer
-          // leaves the poster untouched), then fades in with the picture.
-          // Recolours only when the settled tint changes (never per frame); kept
-          // out of the video's RepaintBoundary above.
+          // The feather — three NEUTRAL gradients melting the video's edges
+          // into the board's own near-black. Deliberately NOT tinted (user
+          // call): a coloured melt reads as "colour bleeding into the
+          // player", and during playback the whole stage goes lights-off
+          // dark anyway, so near-black is exactly what surrounds the picture.
+          // Constant colours = these never rebuild or re-raster once faded
+          // in. Hidden until the video actually plays.
           IgnorePointer(
             child: AnimatedOpacity(
               opacity: playing ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 340),
               curve: Curves.easeOut,
-              child: ValueListenableBuilder<Color?>(
-                valueListenable:
-                    widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
-                builder: (context, tint, __) {
-                const base = Color(0xFF0D0B1A); // the board's own bg
-                // Melt toward the title's mood, but stay dark enough that the
-                // title text (which ends at this region's left) reads over it.
-                final melt = tint == null
-                    ? base
-                    : Color.lerp(base, tint, 0.34)!;
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Left: the crisp trailer starts after this — melts into the
-                    // dark text zone on the left.
-                    _feather(
-                      Alignment.centerLeft,
-                      Alignment.centerRight,
-                      melt,
-                      _heroTrailerFeatherFrac,
-                    ),
-                    // Top: soften the upper edge into the hero.
-                    _feather(
-                      Alignment.topCenter,
-                      Alignment.bottomCenter,
-                      melt,
-                      0.16,
-                    ),
-                    // Bottom: melt down into the rows (mirrors the spotlight's
-                    // own backdrop foot-fade).
-                    _feather(
-                      Alignment.bottomCenter,
-                      Alignment.topCenter,
-                      melt,
-                      0.36,
-                    ),
-                  ],
-                );
-                },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Left: the crisp trailer starts after this — melts into
+                  // the darkened text zone on the left.
+                  _feather(
+                    Alignment.centerLeft,
+                    Alignment.centerRight,
+                    const Color(0xFF0D0B1A),
+                    _heroTrailerFeatherFrac,
+                  ),
+                  // Top: soften the upper edge into the hero.
+                  _feather(
+                    Alignment.topCenter,
+                    Alignment.bottomCenter,
+                    const Color(0xFF0D0B1A),
+                    0.16,
+                  ),
+                  // Bottom: melt down into the darkened rows.
+                  _feather(
+                    Alignment.bottomCenter,
+                    Alignment.topCenter,
+                    const Color(0xFF0D0B1A),
+                    0.36,
+                  ),
+                ],
               ),
             ),
           ),
@@ -9413,25 +9715,23 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
             right: 22,
             child: _HeroTrailerLoadingPill(visible: loading),
           ),
+          // Once frames are up the loading pill yields to the AMBIENT chip —
+          // a quiet state affordance so the motion reads as intentional, not
+          // a stray video. Same corner, so the two hand over in place.
+          Positioned(
+            top: 16,
+            right: 22,
+            child: _HeroAmbientChip(visible: playing && !loading),
+          ),
         ],
       ),
     );
   }
 
-  /// One edge-feather: a gradient from opaque [c] at [begin] fading to the same
-  /// hue transparent by [frac], painted over the video to dissolve that edge.
-  Widget _feather(Alignment begin, Alignment end, Color c, double frac) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: begin,
-          end: end,
-          colors: [c, c.withValues(alpha: 0)],
-          stops: [0.0, frac],
-        ),
-      ),
-    );
-  }
+  /// One edge-feather over the video — the shared eased recipe, so the live
+  /// trailer dissolves exactly like the idle key-art it replaces.
+  Widget _feather(Alignment begin, Alignment end, Color c, double frac) =>
+      _heroEdgeFeather(begin, end, c, frac);
 }
 
 /// The hero's "trailer is on its way" chip: a small glass pill with a thin
@@ -9503,6 +9803,140 @@ class _HeroTrailerLoadingPill extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.6,
                       color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The "AMBIENT" chip that replaces the loading pill once trailer frames are
+/// on screen: a quiet glass pill with a slowly breathing amber dot — a state
+/// affordance ("this motion is intentional"), never a control. Same corner and
+/// idioms as [_HeroTrailerLoadingPill] (no blur; the pulse ticker is started/
+/// stopped with [visible] — TickerMode can't gate it, the ticker belongs to
+/// this State which sits above any wrapper — so it costs nothing while hidden;
+/// the dot is a 6px repaint, trivia next to the video already playing beneath
+/// it).
+class _HeroAmbientChip extends StatefulWidget {
+  final bool visible;
+
+  const _HeroAmbientChip({required this.visible});
+
+  @override
+  State<_HeroAmbientChip> createState() => _HeroAmbientChipState();
+}
+
+class _HeroAmbientChipState extends State<_HeroAmbientChip>
+    with SingleTickerProviderStateMixin {
+  // Created EAGERLY in initState: on TV nothing else touches it, and a `late`
+  // field first reached by dispose() would create its Ticker there — a
+  // TickerMode ancestor lookup on a defunct context (debug assertion crash).
+  late final AnimationController _pulse;
+
+  /// TV never breathes: the pulse would tick + repaint at 60fps for the whole
+  /// trailer, compositing over the underlay video every frame — continuous
+  /// idle animation is exactly what the TV effects budget bans, and a static
+  /// lit dot reads identically from the couch. Phones keep the breath.
+  bool get _pulseOk => !PlatformUtil.isAndroidTvCached;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    if (widget.visible && _pulseOk) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_HeroAmbientChip old) {
+    super.didUpdateWidget(old);
+    if (!_pulseOk) return;
+    if (widget.visible && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!widget.visible && _pulse.isAnimating) {
+      // Freezing mid-breath is invisible: the chip itself is fading to 0.
+      _pulse.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = widget.visible;
+    return IgnorePointer(
+      child: AnimatedSlide(
+        offset: visible ? Offset.zero : const Offset(0, -0.25),
+        duration: const Duration(milliseconds: 340),
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 340),
+          curve: Curves.easeOut,
+          child: RepaintBoundary(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+              decoration: BoxDecoration(
+                color: const Color(0xCC0D0B1A), // glassy HomeTheme.bg
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.16),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Builder(
+                    builder: (context) {
+                      const dot = SizedBox(
+                        width: 6,
+                        height: 6,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Color(0xFFF59E0B),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0x8CF59E0B),
+                                blurRadius: 8,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                      if (!_pulseOk) return dot; // TV: lit, still, free
+                      return FadeTransition(
+                        opacity: Tween<double>(begin: 0.45, end: 1.0).animate(
+                          CurvedAnimation(
+                            parent: _pulse,
+                            curve: Curves.easeInOut,
+                          ),
+                        ),
+                        child: dot,
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    'AMBIENT',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: Colors.white.withValues(alpha: 0.62),
                     ),
                   ),
                 ],
@@ -9922,7 +10356,9 @@ class _StremioCardState extends State<_StremioCard> {
     final posterCard = AnimatedScale(
       duration: scaleFx,
       curve: Curves.easeOutCubic,
-      scale: _active ? (widget.isTelevision ? 1.09 : 1.05) : 1.0,
+      // TV pop calmed from 1.09 to the Nuvio-class 1.045: with the lighter
+      // ring the smaller lift reads premium, and neighbours shift less.
+      scale: _active ? (widget.isTelevision ? 1.045 : 1.05) : 1.0,
       child: AspectRatio(
         aspectRatio: 2 / 3,
         child: AnimatedContainer(
@@ -10026,8 +10462,10 @@ class _StremioCardState extends State<_StremioCard> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
+                            // Violet-300 on TV: the "light ring + small scale"
+                            // focus grammar (deep accent stays for chrome).
                             color: widget.isTelevision
-                                ? kStremioAccent
+                                ? kStremioFocusRing
                                 : Colors.white.withValues(alpha: 0.6),
                             width: widget.isTelevision ? 2.5 : 1.5,
                           ),
@@ -10330,7 +10768,9 @@ class _ArtPosterState extends State<_ArtPoster> {
     final posterCard = AnimatedScale(
       duration: scaleFx,
       curve: Curves.easeOutCubic,
-      scale: _active ? (widget.isTelevision ? 1.09 : 1.05) : 1.0,
+      // TV pop calmed from 1.09 to the Nuvio-class 1.045: with the lighter
+      // ring the smaller lift reads premium, and neighbours shift less.
+      scale: _active ? (widget.isTelevision ? 1.045 : 1.05) : 1.0,
       child: AspectRatio(
         aspectRatio: 2 / 3,
         child: AnimatedContainer(
@@ -10472,8 +10912,10 @@ class _ArtPosterState extends State<_ArtPoster> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
+                            // Violet-300 on TV: the "light ring + small scale"
+                            // focus grammar (deep accent stays for chrome).
                             color: widget.isTelevision
-                                ? kStremioAccent
+                                ? kStremioFocusRing
                                 : Colors.white.withValues(alpha: 0.6),
                             width: widget.isTelevision ? 2.5 : 1.5,
                           ),
