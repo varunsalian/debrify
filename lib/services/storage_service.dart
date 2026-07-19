@@ -454,16 +454,22 @@ class StorageService {
     await prefs.setBool('tv_trailer_underlay_enabled', enabled);
   }
 
-  /// First-read-wins snapshot of [getTvTrailerUnderlayEnabled] for engine
-  /// selection. The native transparency mode is fixed at activity creation
-  /// from the same key, so the Dart engine must not flip mid-session when the
-  /// user toggles the setting — an underlay hole against a still-opaque
-  /// Flutter surface would render a black region instead of video (and the
-  /// reverse would silently fall back to Texture, which at least works).
-  /// Restarting the app applies a changed setting to both sides together.
+  /// First-read-wins snapshot for engine selection. The native side decides
+  /// the EFFECTIVE underlay mode at activity creation (user toggle AND device
+  /// capability — GLES2-class GPUs can't afford the permanently-translucent
+  /// surface, so MainActivity keeps them opaque) and persists it under
+  /// `tv_trailer_underlay_effective` BEFORE the first Dart frame. Trust that
+  /// over the raw toggle so both sides always agree — an underlay hole
+  /// against an opaque Flutter surface would render a black region instead
+  /// of video (and the reverse would silently fall back to Texture, which at
+  /// least works). Restarting the app applies changes to both sides together.
   static bool? _tvTrailerUnderlaySession;
   static Future<bool> getTvTrailerUnderlayEnabledAtLaunch() async {
-    return _tvTrailerUnderlaySession ??= await getTvTrailerUnderlayEnabled();
+    if (_tvTrailerUnderlaySession != null) return _tvTrailerUnderlaySession!;
+    final prefs = await SharedPreferences.getInstance();
+    return _tvTrailerUnderlaySession =
+        prefs.getBool('tv_trailer_underlay_effective') ??
+        (prefs.getBool('tv_trailer_underlay_enabled') ?? true);
   }
 
   static Future<bool> getTorboxCacheCheckEnabled() async {

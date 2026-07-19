@@ -434,20 +434,25 @@ class _UnderlayHoleState extends State<_UnderlayHole> {
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.attached || !box.hasSize) return;
     // Map both corners so ancestor transforms (e.g. the Discover rail's
-    // FittedBox scale) land in true screen space, then go to physical pixels.
+    // FittedBox scale) land in true screen space — sent as LOGICAL px below.
     final topLeft = box.localToGlobal(Offset.zero);
     final bottomRight = box.localToGlobal(box.size.bottomRight(Offset.zero));
     final rect = Rect.fromPoints(topLeft, bottomRight);
     if (rect == _sentRect && id == _sentId) return;
     _sentRect = rect;
     _sentId = id;
-    final dpr = View.of(context).devicePixelRatio;
+    // LOGICAL px on the wire; the native side multiplies by ITS display
+    // density. Deliberately NOT this view's devicePixelRatio: under low-res
+    // rendering (weak-GPU TVs) Flutter's dpr is scaled down (e.g. 1.333)
+    // while the native window stays in real display space (density 2.0) —
+    // multiplying here would land the video at 2/3 size and offset. Flutter
+    // logical == Android dp on every device, so this is mode-independent.
     _TvTrailerChannel.instance.setBounds(
       id,
-      (rect.left * dpr).round(),
-      (rect.top * dpr).round(),
-      (rect.width * dpr).round(),
-      (rect.height * dpr).round(),
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height,
     );
   }
 
@@ -539,14 +544,21 @@ class _TvTrailerChannel {
 
   Future<void> setVolume(int id, double v) =>
       _safeInvoke('setVolume', {'id': id, 'volume': v});
-  Future<void> setBounds(int id, int left, int top, int width, int height) =>
-      _safeInvoke('setBounds', {
-        'id': id,
-        'left': left,
-        'top': top,
-        'width': width,
-        'height': height,
-      });
+  /// Bounds are LOGICAL px (Flutter logical == Android dp); the native side
+  /// converts to window px with its own display density. See _UnderlayHole.
+  Future<void> setBounds(
+    int id,
+    double left,
+    double top,
+    double width,
+    double height,
+  ) => _safeInvoke('setBounds', {
+    'id': id,
+    'left': left,
+    'top': top,
+    'width': width,
+    'height': height,
+  });
   Future<void> seek(int id, int ms) =>
       _safeInvoke('seek', {'id': id, 'positionMs': ms});
   Future<void> play(int id) => _safeInvoke('play', {'id': id});

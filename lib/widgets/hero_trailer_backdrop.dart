@@ -379,8 +379,17 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         engine.seek(_introSkip);
       }
       _lastPos = p;
-      // Don't snap the thumb back to stale positions mid-drag.
-      if (mounted && !_scrubbing) setState(() => _position = p);
+      // Don't snap the thumb back to stale positions mid-drag. And only
+      // REBUILD for it when the seek bar is actually on screen (foreground):
+      // the ambient backdrop renders no position UI, so its 4×/s poll used
+      // to setState the whole backdrop subtree for nothing, all trailer long.
+      if (mounted && !_scrubbing) {
+        if (widget.foreground) {
+          setState(() => _position = p);
+        } else {
+          _position = p;
+        }
+      }
     });
     _durSub = engine.durationStream.listen((d) {
       if (mounted) setState(() => _duration = d);

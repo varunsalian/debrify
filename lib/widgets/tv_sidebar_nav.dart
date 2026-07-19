@@ -282,30 +282,43 @@ class TvSidebarNavState extends State<TvSidebarNav>
                 return Container(
                   width: width,
                   decoration: BoxDecoration(
-                    // Stremio look: a purple-tinted top blooming down into deep
-                    // indigo-black, richer as it expands so the overlay reads as
-                    // a raised panel. Blended toward the hero tint while playing.
+                    // GLASS panel: the Home board lays the focused title's
+                    // blurred art behind this rail, so a TRANSLUCENT fill
+                    // reads as frosted glass for free (no BackdropFilter —
+                    // banned on TV; the blur is already in the background).
+                    // A faint white glint at the very top sells the gloss;
+                    // opacity rises with expansion so labels stay legible on
+                    // the open panel. Plain gradient fill — same cost as the
+                    // old opaque one.
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
+                        Color.lerp(
+                          tinted(
+                            Color.lerp(const Color(0xFF1B1636), _bg, 0.15)!,
+                            0.45,
+                          ),
+                          Colors.white,
+                          0.10,
+                        )!.withValues(alpha: 0.62 + t * 0.28),
                         tinted(
                           Color.lerp(const Color(0xFF1B1636), _bg, 0.15)!,
-                          0.34,
-                        ),
+                          0.45,
+                        ).withValues(alpha: 0.58 + t * 0.32),
                         tinted(
                           Color.lerp(
                             const Color(0xFF14112A),
                             _bg,
                             0.5 - t * 0.2,
                           )!,
-                          0.22,
-                        ),
+                          0.32,
+                        ).withValues(alpha: 0.55 + t * 0.35),
                         // Foot stays near _bg so the rail still melts into the
                         // page bottom; a whisper of tint keeps it cohesive.
-                        tinted(_bg, 0.10),
+                        tinted(_bg, 0.18).withValues(alpha: 0.52 + t * 0.38),
                       ],
-                      stops: const [0.0, 0.42, 1.0],
+                      stops: const [0.0, 0.08, 0.46, 1.0],
                     ),
                     border: Border(
                       right: BorderSide(

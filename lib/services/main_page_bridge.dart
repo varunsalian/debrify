@@ -373,13 +373,24 @@ class MainPageBridge {
   /// publisher must reset it to 0 when it disposes.
   static final ValueNotifier<double> tvChromeDim = ValueNotifier<double>(0);
 
-  /// The focused Home-hero title's dominant colour, published by the Home board
-  /// ONLY while its ambient trailer is actually playing (null otherwise). The TV
-  /// shell's sidebar rail blends it softly into its background so the whole
-  /// room takes on the film's colour, in lock-step with the hero's left colour
-  /// field and the rows' colour-bleed. The publisher must reset it to null when
-  /// the trailer stops or it disposes.
+  /// The focused Home-hero title's dominant colour, published by the Home
+  /// board whenever DPAD focus RESTS on a title (null off the Home board).
+  /// The TV shell's sidebar rail blends it into its glass background and the
+  /// shell's ambient art stage uses it for its tint wash, so the whole room
+  /// takes on the film's colour. Constant across trailer start/stop (no
+  /// colour flood in/out — user call). The publisher must reset it to null
+  /// when it disposes.
   static final ValueNotifier<Color?> tvHeroTint = ValueNotifier<Color?>(null);
+
+  /// URL of the focused Home-hero title's key art, published on the same
+  /// rest cadence as [tvHeroTint]. The TV shell renders it as the GLASS
+  /// STAGE — a tiny-decode blurred full-screen backdrop BEHIND both the tab
+  /// content and the sidebar rail (the Home board's scaffold goes transparent
+  /// over it), so every translucent panel reads as frosted glass. Null = the
+  /// flat page background. The publisher must reset it to null on dispose.
+  static final ValueNotifier<String?> tvAmbientArt = ValueNotifier<String?>(
+    null,
+  );
 
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.

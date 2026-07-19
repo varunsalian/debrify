@@ -1070,6 +1070,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           MainPageBridge.tvHeroTint.value = null;
         });
       }
+      if (MainPageBridge.tvAmbientArt.value != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          MainPageBridge.tvAmbientArt.value = null;
+        });
+      }
     }
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
@@ -2377,6 +2382,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           : null;
       _heroItem.value = first;
       _heroEnriched.value = null;
+      // Outside the null-check: a board that reloads EMPTY must clear the
+      // shell stage too (null item → null art), not keep the last title's.
+      _publishAmbientArt(first, null);
       if (first != null) {
         _enrichHero(first);
         _updateHeroTint(first);
@@ -2388,6 +2396,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _scheduleHeroTrailer(first);
       } else {
         _clearHeroTrailer();
+        // Clear the COLOUR too, not just the art — an empty reload otherwise
+        // left the departed title's tint on the shell stage + sidebar glass.
+        _heroTint.value = null;
+        _publishHeroTintToShell(null);
       }
     }
   }
@@ -2798,9 +2810,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // or fire the per-item backdrop-enrichment /meta fetch behind it.
     if (!_heroActive) return;
     if (_heroItem.value?.id == item.id) {
-      // Back on the current hero (e.g. a vertical move within the column):
-      // drop any pending swap to a neighbour focus merely passed through.
+      // Back on the current hero (a vertical move within the column, or an
+      // A→B→A jiggle inside the swap debounce): drop any pending swap to a
+      // neighbour focus merely passed through — and RE-ARM the trailer when
+      // the move away already tore it down and nothing is resolving. Without
+      // the re-arm, a quick jiggle left the hero permanently trailer-less
+      // (cleared on the first keypress, never rescheduled — "some cards
+      // never even show the loading pill"). A trailer that's already playing
+      // or resolving is left completely alone.
       _heroSwapTimer?.cancel();
+      if (_heroTrailer.value == null && !_heroTrailerLoading.value) {
+        _scheduleHeroTrailer(item);
+      }
       return;
     }
     // Instant + cheap on EVERY move: kill any trailer (timer cancels and
@@ -2828,12 +2849,48 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   void _applyHero(StremioMeta item) {
     _heroItem.value = item;
     _heroEnriched.value = null;
+    _publishAmbientArt(item, null);
     _enrichHero(item);
     _updateHeroTint(item);
     // A NEW title in the spotlight lifts the after-the-feature suppression —
     // fresh context, fresh trailer.
     _heroTrailerSuppressed = false;
     _scheduleHeroTrailer(item);
+  }
+
+  /// The hero id the shell stage's current art belongs to — lets a re-seed of
+  /// the SAME title (board reloads: See-All return, Home Rows change,
+  /// integrations refresh) keep the enriched backdrop on screen instead of
+  /// downgrading to the poster for the ~300ms until enrichment re-lands
+  /// (which was a prominent full-screen double-crossfade).
+  String? _ambientArtItemId;
+
+  /// Publish the focused title's key art to the app shell's glass stage
+  /// (TvAmbientArtStage — the blurred backdrop BEHIND the sidebar and this
+  /// board's transparent scaffold). Rest-cadence only: called from
+  /// [_applyHero] (260ms settle) and the enrichment landing, never per
+  /// keypress. TV Home board only; other modes leave the shell alone.
+  void _publishAmbientArt(StremioMeta? item, StremioMeta? enriched) {
+    if (!_heroTrailerActive) return;
+    final backdrop = item?.background?.isNotEmpty == true
+        ? item!.background
+        : (enriched?.background?.isNotEmpty == true
+              ? enriched!.background
+              : null);
+    // Same title, no backdrop in hand (only the poster fallback), and the
+    // stage already shows SOMETHING for it → keep what's showing; the
+    // enrichment landing republishes the real backdrop moments later.
+    if (backdrop == null &&
+        item?.id != null &&
+        item!.id == _ambientArtItemId &&
+        MainPageBridge.tvAmbientArt.value != null) {
+      return;
+    }
+    final art = backdrop ?? item?.poster;
+    _ambientArtItemId = item?.id;
+    MainPageBridge.tvAmbientArt.value = (art == null || art.isEmpty)
+        ? null
+        : art;
   }
 
   /// Debounced ambient-trailer load for the spotlighted title. The previous
@@ -3014,10 +3071,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       final poster = item.poster;
       if (poster == null || poster.isEmpty) {
         _heroTint.value = null;
+        _publishHeroTintToShell(null);
         return;
       }
       if (_tintCache.containsKey(item.id)) {
         _heroTint.value = _tintCache[item.id];
+        _publishHeroTintToShell(_tintCache[item.id]);
         return;
       }
       final color = await extractDominantColor(
@@ -3028,7 +3087,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (_tintCache.length > 300) _tintCache.clear();
       _tintCache[item.id] = color;
       _heroTint.value = color;
+      _publishHeroTintToShell(color);
     });
+  }
+
+  /// Relay the settled tint to the app shell — the sidebar's glass blends it
+  /// in and the shell's art stage tints its washes with it. Rest-cadence and
+  /// CONSTANT across trailer start/stop, so there's no colour flooding in or
+  /// out at playback edges (the old complaint); the room simply wears the
+  /// focused film's hue while browsing. TV Home board only.
+  void _publishHeroTintToShell(Color? color) {
+    if (_heroTrailerActive) MainPageBridge.tvHeroTint.value = color;
   }
 
   /// Debounced backdrop/description enrichment. Catalog list items usually
@@ -3062,6 +3131,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
       if (!mounted || reqId != _heroReqId || details == null) return;
       _heroEnriched.value = details;
+      // The enrichment usually carries the real backdrop a catalog item
+      // lacked — upgrade the shell stage from the poster-blur to it.
+      _publishAmbientArt(item, details);
     });
   }
 
@@ -5521,25 +5593,33 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
+    // The TV Home board is TRANSPARENT down to the app shell: the glass stage
+    // (TvAmbientArtStage, painted BEHIND the sidebar rail in main.dart) is the
+    // real background, so the focused title's blurred art fills the whole
+    // screen — rail strip included. Every other mode keeps the opaque indigo
+    // bloom below.
+    final glassHome = _heroTrailerActive;
     return Scaffold(
-      backgroundColor: kStremioBg,
+      backgroundColor: glassHome ? Colors.transparent : kStremioBg,
       // A restrained indigo bloom near the top fading fast into near-black —
       // toned down from a saturated purple so the posters carry the colour
       // (Stremio's home grid is nearly monochrome).
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.75),
-            radius: 1.35,
-            colors: [
-              Color(0xFF241E44), // dim indigo bloom
-              Color(0xFF161327),
-              Color(0xFF0F0D1D),
-              kStremioBg,
-            ],
-            stops: [0.0, 0.38, 0.68, 1.0],
-          ),
-        ),
+        decoration: glassHome
+            ? null
+            : const BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0, -0.75),
+                  radius: 1.35,
+                  colors: [
+                    Color(0xFF241E44), // dim indigo bloom
+                    Color(0xFF161327),
+                    Color(0xFF0F0D1D),
+                    kStremioBg,
+                  ],
+                  stops: [0.0, 0.38, 0.68, 1.0],
+                ),
+              ),
         child: SafeArea(
           // Three layouts:
           //  • Dedicated Search tab (searchMode) — the field + Catalog/Keyword
@@ -7309,58 +7389,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return Stack(
           fit: StackFit.expand,
           children: [
-            // The board's ambient mood field — ALWAYS on, not just during
-            // trailers: a soft radial in the focused title's extracted colour
-            // over the flat page bg, so the whole screen takes on each film's
-            // palette as focus surfs the board — the Concept-5 "the page is
-            // the canvas" look. Perf-shaped for weak TV GPUs: ONE gradient
-            // (a long radial that carries both the top-left glow and a faint
-            // mid wash down into the rows — a second nested radial doubled
-            // the full-screen fill), and a SHORT tween on TV, because every
-            // frame of the tween re-rasters this full-screen layer (the
-            // RepaintBoundary only isolates it from neighbours). Idle cost:
-            // zero — it repaints only when the settled 350ms-debounced tint
-            // changes.
-            if (_heroActive && tv)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: RepaintBoundary(
-                    child: ValueListenableBuilder<Color?>(
-                      valueListenable: _heroTint,
-                      // SNAP, no colour tween — every tween frame re-rastered
-                      // this FULL-SCREEN layer, the single biggest "DPAD nav
-                      // feels heavy" cost. One repaint per 350ms-debounced
-                      // settle; a one-frame shift between dark washes is
-                      // imperceptible.
-                      builder: (context, tint, _) {
-                        final t = tint ?? kStremioBg;
-                        return DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: RadialGradient(
-                              center: const Alignment(-0.7, -1.0),
-                              radius: 1.9,
-                              colors: [
-                                Color.lerp(
-                                  kStremioBg,
-                                  t,
-                                  0.32,
-                                )!.withValues(alpha: 0.55),
-                                Color.lerp(
-                                  kStremioBg,
-                                  t,
-                                  0.18,
-                                )!.withValues(alpha: 0.28),
-                                Colors.transparent,
-                              ],
-                              stops: const [0.0, 0.55, 1.0],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
+            // The GLASS STAGE (focused title's blurred art) lives in the
+            // APP SHELL now (TvAmbientArtStage in main.dart) so it also
+            // fills the strip behind the sidebar rail; this board's
+            // scaffold is transparent over it and publishes the art/tint
+            // via MainPageBridge (see _publishAmbientArt).
             // (The old "ambient colour bleed" — a tinted wash flooding the
             // rows while the trailer played, then draining out on stop — is
             // gone by user call. Playback now reads as LIGHTS DOWN instead:
@@ -7469,7 +7502,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         return ListView.builder(
                           controller: _boardScroll,
                           padding: const EdgeInsets.only(top: 6, bottom: 32),
-                          cacheExtent: 800,
+                          // ~1.5 rows of pre-build. 800 meant a vertical DPAD
+                          // move could construct several whole rows (each
+                          // 15-25 poster cards) in one frame — a visible
+                          // build/layout burst on the TV chip. Smaller extent
+                          // = smaller, more frequent builds.
+                          cacheExtent: 300,
                           itemCount:
                               _sections.length +
                               leadingCount +
@@ -8159,7 +8197,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   // over the sidebar to the left. rowH has enough headroom that the
                   // hover/focus lift still isn't clipped.
                   clipBehavior: Clip.hardEdge,
-                  cacheExtent: 800,
+                  // ~4 posters of pre-build either side (was 800 ≈ a dozen —
+                  // amplified every row mounted by the vertical cache).
+                  cacheExtent: 400,
                   padding: const EdgeInsets.symmetric(horizontal: 13),
                   // +1 trailing paging spinner.
                   itemCount:
@@ -8284,7 +8324,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               return ListView.builder(
                 scrollDirection: Axis.horizontal,
                 clipBehavior: Clip.hardEdge,
-                cacheExtent: 800,
+                cacheExtent: 400,
                 padding: const EdgeInsets.symmetric(horizontal: 13),
                 itemCount: items.length,
                 itemBuilder: (context, index) {
@@ -8409,7 +8449,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.hardEdge,
-            cacheExtent: 800,
+            cacheExtent: 400,
             padding: const EdgeInsets.symmetric(horizontal: 13),
             itemCount: itemCount,
             itemBuilder: (context, col) {
@@ -8843,13 +8883,16 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               return DecoratedBox(
                 decoration: BoxDecoration(
                   // Diagonal tint field: brighter top-left, deeper foot.
+                  // TRANSLUCENT washes (not opaque lerps) since the glass
+                  // stage landed: the blurred art behind glows through the
+                  // colour, which is what makes the hero read glossy.
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Color.lerp(base, t, 0.44)!,
-                      Color.lerp(base, t, 0.28)!,
-                      Color.lerp(base, t, 0.16)!,
+                      Color.lerp(base, t, 0.55)!.withValues(alpha: 0.55),
+                      Color.lerp(base, t, 0.40)!.withValues(alpha: 0.36),
+                      Color.lerp(base, t, 0.25)!.withValues(alpha: 0.20),
                     ],
                     stops: const [0.0, 0.55, 1.0],
                   ),
@@ -9148,8 +9191,11 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
             ),
           // The whole identity block — badge, title, meta, plot — fades out once
           // the trailer covers the hero, so a full-bleed trailer plays clean.
+          // RepaintBoundary: text + logo raster stays cached when siblings
+          // (pill, veils, fields) repaint, and vice versa.
           _maybeFadeForTrailer(
-            Align(
+            RepaintBoundary(
+            child: Align(
               alignment: Alignment.bottomLeft,
               child: LayoutBuilder(
                 builder: (context, cons) {
@@ -9242,6 +9288,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                   },
                 ),
               ),
+            ),
             ),
           // "Trailer loading" pill — top-right, above the scrims so it reads
           // against any backdrop. Purely informational (never focusable), and
@@ -9761,6 +9808,11 @@ class _HeroTrailerLoadingPill extends StatelessWidget {
           // pill costs nothing during the 99% of browsing it spends hidden.
           child: TickerMode(
             enabled: visible,
+            // RepaintBoundary: while resolving, the spinner produces a frame
+            // per vsync — without the boundary each one dirtied the ROUTE's
+            // layer and repainted every non-isolated part of the screen for
+            // the whole resolve window (measured: the pill janking itself).
+            child: RepaintBoundary(
             child: Container(
               padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
               decoration: BoxDecoration(
@@ -9807,6 +9859,7 @@ class _HeroTrailerLoadingPill extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
             ),
           ),
         ),

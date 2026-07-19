@@ -49,6 +49,7 @@ import 'services/magnet_link_handler.dart';
 import 'services/stremio_service.dart';
 import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
+import 'widgets/tv_ambient_art_stage.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
 import 'services/remote_control/remote_control_state.dart';
@@ -78,8 +79,13 @@ Future<void> _capImageCache() async {
   } catch (_) {}
   if (!isTv) return; // leave non-TV devices on the framework defaults
   final cache = PaintingBinding.instance.imageCache;
-  cache.maximumSize = 90;
-  cache.maximumSizeBytes = 40 << 20; // 40 MB
+  cache.maximumSize = 140;
+  // 56 MB: the Home hero decodes 1080-wide backdrops (~2.6 MB each) per rest
+  // — at 40 MB the cache held only ~12 backdrop-equivalents alongside the
+  // posters, so long browse sessions were evicting and re-decoding posters
+  // on every scroll-back (decode churn + texture re-uploads). Still well
+  // under the largeHeap budget on a 2 GB box.
+  cache.maximumSizeBytes = 56 << 20; // 56 MB
 }
 
 /// TV-aware page transition: on Android TV every push/pop animates a
@@ -2415,6 +2421,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     // whole board every frame — that reflow was the TV sluggishness.
                     body: Stack(
                       children: [
+                        // The whole-shell GLASS STAGE: the Home board's
+                        // focused title art, tiny-decode blurred, behind BOTH
+                        // the content and the sidebar rail (the board's
+                        // scaffold is transparent over it). Flat page ink
+                        // when nothing is published; other tabs' opaque
+                        // scaffolds simply cover it.
+                        const Positioned.fill(child: TvAmbientArtStage()),
                         Positioned.fill(
                           left: TvSidebarNav.collapsedWidth,
                           child: SafeArea(

@@ -1,6 +1,7 @@
 package com.debrify.app
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -8,14 +9,18 @@ import android.os.Bundle
 import android.provider.Settings
 import android.app.UiModeManager
 import android.content.res.Configuration
+import android.util.DisplayMetrics
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
+import android.view.SurfaceView
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.view.WindowCompat
+import io.flutter.FlutterInjector
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.TransparencyMode
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterJNI
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.ArrayList
@@ -50,6 +55,158 @@ class MainActivity : FlutterActivity() {
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
             .getBoolean("flutter.tv_trailer_underlay_enabled", true)
 
+    /** Whether this device's GPU can AFFORD the underlay's permanently
+     *  translucent Flutter surface. A translucent full-screen surface can never
+     *  be marked opaque, so SurfaceFlinger alpha-blends two full-1080p layers
+     *  on every frame the app draws — measured on a Mi Box (Mali-450, GLES 2.0)
+     *  that standing tax janks the whole app, spinners included, trailer or no
+     *  trailer. GLES 3.0+ devices have the fill-rate headroom; ES2-class
+     *  boxes compensate with low-res rendering (computeRenderScale), which
+     *  the onCreate interlock requires before granting them the translucent
+     *  surface. */
+    private fun underlaySurfaceAffordable(): Boolean = try {
+        val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
+    } catch (e: Exception) {
+        false
+    }
+
+    /** The EFFECTIVE underlay decision for this activity's whole life — user
+     *  toggle AND device capability — made once in [onCreate] BEFORE the
+     *  FlutterView exists, and persisted for the Dart side (see onCreate). */
+    private var trailerUnderlayEffective = false
+
+    // ── Low-res render scale (weak-GPU TVs) ─────────────────────────────────
+    // GLES2-class boxes (Mi Box: Mali-450) are FILL-RATE bound: rendering the
+    // Flutter UI at full 1080p is what makes the whole app feel heavy, no
+    // matter how lean the widget tree is (verified on-device: the same build
+    // at 720p feels near native). The games technique: give the Flutter
+    // surface a FIXED ~720p buffer (the hardware scaler upscales for free)
+    // and scale the viewport metrics by the same factor so the LOGICAL layout
+    // is pixel-for-pixel identical — every frame just costs ~2.25x fewer
+    // pixels. Scoped to this activity's Flutter surface only: video playback
+    // (movies in the native player activity, trailer underlays) renders on
+    // its own decoder-sized surfaces and stays full resolution.
+
+    /** <1.0 when low-res rendering is active (e.g. 720/1080 = 0.667). */
+    private var renderScale = 1.0f
+
+    private fun computeRenderScale(gpuCapable: Boolean) {
+        renderScale = 1.0f
+        val auto = isTelevision() && !gpuCapable
+        // Pref = future Settings escape hatch ("sharper picture vs faster
+        // navigation"); absent → the automatic weak-GPU decision.
+        val enabled = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .getBoolean("flutter.tv_low_res_render", auto)
+        if (!enabled) return
+        val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getRealMetrics(dm)
+        // Already ~720p-class (or unknown) → nothing to win, don't downscale.
+        if (dm.heightPixels <= 736 || dm.widthPixels <= 0) return
+        renderScale = 720f / dm.heightPixels
+    }
+
+    /** Rewrites the viewport metrics Flutter receives so the engine lays out
+     *  and rasters at the scaled size while logical geometry is unchanged:
+     *  physical w/h/insets × scale, devicePixelRatio × scale. MUST round
+     *  exactly like [applyFixedSurfaceSize] — the engine discards frames
+     *  whose size doesn't match the surface buffer.
+     *
+     *  Known limitations (accepted; TV is DPAD-driven): pointer coordinates
+     *  and accessibility-node bounds are NOT rescaled, so an air-mouse remote
+     *  or TalkBack on a scaled device would see ~2/3-offset hit targets. The
+     *  `flutter.tv_low_res_render=false` pref is the escape hatch. */
+    private class ScaledFlutterJNI(private val scale: Float) : FlutterJNI() {
+        private fun s(v: Int): Int = Math.round(v * scale)
+
+        override fun setViewportMetrics(
+            devicePixelRatio: Float,
+            physicalWidth: Int,
+            physicalHeight: Int,
+            physicalPaddingTop: Int,
+            physicalPaddingRight: Int,
+            physicalPaddingBottom: Int,
+            physicalPaddingLeft: Int,
+            physicalViewInsetTop: Int,
+            physicalViewInsetRight: Int,
+            physicalViewInsetBottom: Int,
+            physicalViewInsetLeft: Int,
+            systemGestureInsetTop: Int,
+            systemGestureInsetRight: Int,
+            systemGestureInsetBottom: Int,
+            systemGestureInsetLeft: Int,
+            physicalTouchSlop: Int,
+            displayFeaturesBounds: IntArray,
+            displayFeaturesType: IntArray,
+            displayFeaturesState: IntArray,
+        ) {
+            super.setViewportMetrics(
+                devicePixelRatio * scale,
+                s(physicalWidth),
+                s(physicalHeight),
+                s(physicalPaddingTop),
+                s(physicalPaddingRight),
+                s(physicalPaddingBottom),
+                s(physicalPaddingLeft),
+                s(physicalViewInsetTop),
+                s(physicalViewInsetRight),
+                s(physicalViewInsetBottom),
+                s(physicalViewInsetLeft),
+                s(systemGestureInsetTop),
+                s(systemGestureInsetRight),
+                s(systemGestureInsetBottom),
+                s(systemGestureInsetLeft),
+                s(physicalTouchSlop),
+                IntArray(displayFeaturesBounds.size) { i -> s(displayFeaturesBounds[i]) },
+                displayFeaturesType,
+                displayFeaturesState,
+            )
+        }
+    }
+
+    /** Low-res mode builds the engine around [ScaledFlutterJNI]; default path
+     *  (null) lets FlutterActivity create its own stock engine. */
+    override fun provideFlutterEngine(context: Context): FlutterEngine? {
+        if (renderScale >= 0.999f) return null
+        return FlutterEngine(
+            context,
+            FlutterInjector.instance().flutterLoader(),
+            ScaledFlutterJNI(renderScale),
+            /* dartVmArgs = */ null,
+            /* automaticallyRegisterPlugins = */ true,
+        )
+    }
+
+    /** Our provided engine must die with the activity like a stock one would —
+     *  otherwise every recreation would leak a running Dart isolate. */
+    override fun shouldDestroyEngineWithHost(): Boolean = true
+
+    /** Pins the Flutter SurfaceView's buffer to the scaled size, keyed off the
+     *  FlutterView's OWN layout size with the SAME rounding as the metrics
+     *  rewrite, so buffer and viewport can never disagree. */
+    private fun applyFixedSurfaceSize() {
+        if (renderScale >= 0.999f) return
+        val flutterView = findViewById<ViewGroup>(FLUTTER_VIEW_ID) ?: return
+        var surfaceView: SurfaceView? = null
+        for (i in 0 until flutterView.childCount) {
+            (flutterView.getChildAt(i) as? SurfaceView)?.let { surfaceView = it }
+        }
+        val sv = surfaceView ?: return
+        val scale = renderScale
+        fun apply() {
+            val w = flutterView.width
+            val h = flutterView.height
+            if (w > 0 && h > 0) {
+                sv.holder.setFixedSize(Math.round(w * scale), Math.round(h * scale))
+            }
+        }
+        apply()
+        flutterView.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, orr, ob ->
+            if (r - l != orr - ol || b - t != ob - ot) apply()
+        }
+    }
+
     /**
      * TV: make the Flutter surface translucent so the ambient trailer can play
      * on a native SurfaceView *behind* it (its own hardware overlay plane —
@@ -59,10 +216,11 @@ class MainActivity : FlutterActivity() {
      * surface just gets a TRANSLUCENT format and sits Z-above the window. The
      * window, launch theme and every non-TV platform are unchanged, and the app
      * paints opaque UI everywhere except the trailer hole, so nothing else is
-     * visibly different.
+     * visibly different. Weak GPUs get this too, but ONLY while low-res
+     * rendering offsets the blend tax — see the interlock in [onCreate].
      */
     override fun getTransparencyMode(): TransparencyMode =
-        if (isTelevision() && trailerUnderlayEnabled()) TransparencyMode.transparent
+        if (trailerUnderlayEffective) TransparencyMode.transparent
         else super.getTransparencyMode()
 
     /** Lazily creates the underlay container at content-view index 0 (below the
@@ -97,7 +255,39 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Decide the surface mode BEFORE super.onCreate builds the FlutterView
+        // (which consults getTransparencyMode exactly once), and persist the
+        // EFFECTIVE decision where Dart's launch snapshot reads it — both
+        // sides must agree, or the Dart underlay hole would punch through an
+        // opaque surface as a black rectangle. commit() (not apply) so the
+        // value is on disk before the Dart isolate starts reading prefs.
+        val gpuCapable = underlaySurfaceAffordable()
+        // Must run before super.onCreate (provideFlutterEngine, called from
+        // within it, reads renderScale) AND before the underlay decision
+        // below, which depends on the outcome.
+        computeRenderScale(gpuCapable)
+        // Underlay trailers are back ON for weak GPUs too: with low-res
+        // rendering the Flutter raster cost sits well under the pre-redesign
+        // level that co-existed happily with the underlay's full-screen blend
+        // tax — the charm-era playback architecture, at a UI cost the GPU can
+        // afford. The parenthesised clause is the safety interlock: a weak
+        // GPU gets the translucent surface ONLY while low-res rendering is
+        // actually paying for it — if a future Settings row turns low-res
+        // off (`tv_low_res_render=false`), the underlay drops with it rather
+        // than recreating the measured full-1080p-plus-blend jank.
+        trailerUnderlayEffective = isTelevision() && trailerUnderlayEnabled() &&
+            (gpuCapable || renderScale < 0.999f)
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .edit()
+            .putBoolean(
+                "flutter.tv_trailer_underlay_effective",
+                trailerUnderlayEffective,
+            )
+            // Surfaced for a future Settings row ("performance rendering").
+            .putBoolean("flutter.tv_low_res_render_active", renderScale < 0.999f)
+            .commit()
         super.onCreate(savedInstanceState)
+        applyFixedSurfaceSize()
         // Enable edge-to-edge display to properly handle system navigation bars
         WindowCompat.setDecorFitsSystemWindows(window, false)
     }

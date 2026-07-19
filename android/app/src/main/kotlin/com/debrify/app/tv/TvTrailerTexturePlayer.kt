@@ -39,7 +39,8 @@ import io.flutter.view.TextureRegistry
  *    `getTransparencyMode` / `trailerUnderlayContainer`). The video becomes its
  *    own hardware overlay plane — Flutter never touches the frames — and shows
  *    through wherever the Dart side punches a transparent hole in its UI.
- *    `setBounds` positions the view (physical px, window coords).
+ *    `setBounds` positions the view (LOGICAL px on the wire — Flutter logical
+ *    == Android dp — converted here with this side's display density).
  *
  * Both modes reuse the fullscreen [AndroidTvTorrentPlayerActivity]'s proven
  * video-only + audio [MergingMediaSource] merge for high-res YouTube — that
@@ -254,14 +255,19 @@ class TvTrailerTexturePlayer(
         }
     }
 
-    /** Position an underlay SurfaceView (physical px, window coordinates).
+    /** Position an underlay SurfaceView. Bounds arrive in LOGICAL px
+     *  (Flutter logical == Android dp) and are converted to window px with
+     *  THIS side's display density — deliberately not Flutter's
+     *  devicePixelRatio, which is scaled down under low-res rendering on
+     *  weak-GPU TVs while the window stays in real display space.
      *  No-op for texture players and for unchanged rects. */
     private fun setBounds(call: MethodCall) {
         val sv = handle(call)?.surfaceView ?: return
-        val left = call.argument<Number>("left")?.toInt() ?: return
-        val top = call.argument<Number>("top")?.toInt() ?: return
-        val width = call.argument<Number>("width")?.toInt() ?: return
-        val height = call.argument<Number>("height")?.toInt() ?: return
+        val d = sv.resources.displayMetrics.density
+        val left = call.argument<Number>("left")?.let { Math.round(it.toFloat() * d) } ?: return
+        val top = call.argument<Number>("top")?.let { Math.round(it.toFloat() * d) } ?: return
+        val width = call.argument<Number>("width")?.let { Math.round(it.toFloat() * d) } ?: return
+        val height = call.argument<Number>("height")?.let { Math.round(it.toFloat() * d) } ?: return
         if (width <= 0 || height <= 0) return
         val lp = sv.layoutParams as? FrameLayout.LayoutParams ?: return
         if (lp.width == width && lp.height == height &&
@@ -302,30 +308,41 @@ class TvTrailerTexturePlayer(
         }
     }
 
-    private fun dispose(id: Long?) {
+    private fun dispose(id: Long?, deferHeavy: Boolean = true) {
         val handle = players.remove(id ?: return) ?: return
-        try {
-            handle.player.release()
-        } catch (_: Exception) {
-        }
-        try {
-            handle.surface?.release()
-        } catch (_: Exception) {
-        }
-        try {
-            handle.entry?.release()
-        } catch (_: Exception) {
-        }
-        // Underlay: drop the view (and its punched-through window region).
+        // Underlay: drop the view (and its punched-through window region) NOW —
+        // a view op that must run on the platform thread and should land in
+        // the same frame as the teardown.
         try {
             handle.surfaceView?.let { (it.parent as? ViewGroup)?.removeView(it) }
         } catch (_: Exception) {
         }
+        // The codec release is the expensive part (50-300ms on weak SoCs). It
+        // must run on the thread the player was created on (this one), but it
+        // must NOT run inside the same main-looper turn as the DPAD input
+        // that triggered the teardown — that read as "navigation janks right
+        // after a trailer". Post it to a later turn; synchronous only on the
+        // Activity-destroy path where jank no longer matters.
+        val releaseHeavy = Runnable {
+            try {
+                handle.player.release()
+            } catch (_: Exception) {
+            }
+            try {
+                handle.surface?.release()
+            } catch (_: Exception) {
+            }
+            try {
+                handle.entry?.release()
+            } catch (_: Exception) {
+            }
+        }
+        if (deferHeavy) main.post(releaseHeavy) else releaseHeavy.run()
     }
 
     /** Tear down every player and detach the channel (call from Activity destroy). */
     fun releaseAll() {
-        players.keys.toList().forEach { dispose(it) }
+        players.keys.toList().forEach { dispose(it, deferHeavy = false) }
         channel.setMethodCallHandler(null)
     }
 
