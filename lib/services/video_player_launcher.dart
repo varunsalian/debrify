@@ -413,7 +413,10 @@ class VideoPlayerLauncher {
       }
 
       final filenames = playlist.map((e) => e.title).toList();
-      // Derive the same series title SeriesBrowser keys on (from filenames).
+      // Title used only for the title-keyed sibling stores below (finished-
+      // episode badges + season bars). The per-episode Trakt store is now keyed
+      // by IMDb id (see saveEpisodeTraktProgress below), so it no longer depends
+      // on this derivation matching the readers'.
       final effectiveTitle =
           SeriesParser.extractCommonSeriesTitle(filenames) ?? fallbackTitle;
 
@@ -434,7 +437,7 @@ class VideoPlayerLauncher {
         }
       });
       await StorageService.saveEpisodeTraktProgress(
-        seriesTitle: effectiveTitle,
+        imdbId: imdbId,
         percents: traktPercents,
       );
 
@@ -2725,10 +2728,11 @@ class _AndroidTvPlaybackPayloadBuilder {
     final perItemStates = await _fetchPerItemPlaybackState(playlistEntries);
     // Trakt cross-device per-episode progress ("season_episode" → 0-100), for
     // the playlist bars + resuming any episode from Trakt (see the Kotlin
-    // player). Display-only fallback — local resume still wins.
-    final traktProgress = seriesPlaylist?.seriesTitle != null
+    // player). Display-only fallback — local resume still wins. Keyed by the
+    // show's IMDb id (same id the seed wrote under).
+    final traktProgress = args.contentImdbId != null
         ? await StorageService.getEpisodeTraktProgress(
-            seriesTitle: seriesPlaylist!.seriesTitle!,
+            imdbId: args.contentImdbId!,
           )
         : const <String, double>{};
     final startIndex = await _determineStartIndex(

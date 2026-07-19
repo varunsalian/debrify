@@ -41,6 +41,7 @@ class SeriesBrowser extends StatefulWidget {
   final Function(int season, int episode) onEpisodeSelected;
   final int currentEpisodeIndex;
   final Map<String, dynamic>? playlistItem; // For Fix Metadata feature
+  final String? imdbId; // Show IMDb id, for per-episode Trakt progress lookup
 
   const SeriesBrowser({
     super.key,
@@ -48,6 +49,7 @@ class SeriesBrowser extends StatefulWidget {
     required this.onEpisodeSelected,
     required this.currentEpisodeIndex,
     this.playlistItem, // Optional playlist item data
+    this.imdbId,
   });
 
   @override
@@ -299,13 +301,14 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Future<void> _loadEpisodeProgress() async {
     try {
       if (widget.seriesPlaylist.isSeries && widget.seriesPlaylist.seriesTitle != null) {
+        final imdbId = widget.imdbId;
         final results = await Future.wait([
           StorageService.getEpisodeProgress(
             seriesTitle: widget.seriesPlaylist.seriesTitle!,
           ),
-          StorageService.getEpisodeTraktProgress(
-            seriesTitle: widget.seriesPlaylist.seriesTitle!,
-          ),
+          (imdbId != null && imdbId.isNotEmpty)
+              ? StorageService.getEpisodeTraktProgress(imdbId: imdbId)
+              : Future.value(const <String, double>{}),
         ]);
         if (mounted) {
           setState(() {

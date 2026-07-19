@@ -828,10 +828,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<double?> _currentEpisodeTraktPercent() async {
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) return null;
-    final title = seriesPlaylist.seriesTitle;
-    if (title == null) return null;
+    final imdbId = widget.contentImdbId;
+    if (imdbId == null || imdbId.isEmpty) return null;
     _traktEpisodeProgress ??=
-        await StorageService.getEpisodeTraktProgress(seriesTitle: title);
+        await StorageService.getEpisodeTraktProgress(imdbId: imdbId);
     final playlist = _activePlaylist;
     if (playlist == null || _currentIndex < 0 || _currentIndex >= playlist.length) {
       return null;
@@ -5182,6 +5182,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       currentIndex: _currentIndex,
       seriesPlaylist: _seriesPlaylist,
       playlistItemData: _constructPlaylistItemData(),
+      imdbId: widget.contentImdbId,
       viewMode: widget.viewMode,
       onSelect: (index, {bool allowResume = false}) async {
         _setManualSelectionMode(allowResume: allowResume);

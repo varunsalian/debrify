@@ -1087,26 +1087,33 @@ class StorageService {
     return result;
   }
 
-  static const String _episodeTraktProgressKey = 'episode_trakt_progress_v1';
+  // v2: keyed by IMDb id (stable, unambiguous) instead of the normalized series
+  // title. Title-keying silently broke the playlist bars whenever the writer's
+  // and readers' title derivations diverged; the seed and every reader always
+  // have the show's IMDb id, so we key on that. Bumped from _v1 so stale
+  // title-keyed data is dropped (it re-seeds on the next series launch).
+  static const String _episodeTraktProgressKey = 'episode_trakt_progress_v2';
+
+  /// Normalized storage key for the per-episode Trakt store (keyed by IMDb id).
+  static String _episodeTraktKeyFor(String imdbId) =>
+      'imdb_${imdbId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
   /// Cross-device Trakt playback progress per episode (percent, 0–100), kept
   /// SEPARATE from the ms-based resume state. It drives the playlist progress
   /// bars only — never a resume seek directly (the players convert % → ms at
   /// play time once the real duration is known, so we never store a fake
-  /// position). Keyed by the same normalized series title as
-  /// [getEpisodeProgress]; episode keys are "season_episode".
+  /// position). Keyed by the show's IMDb id; episode keys are "season_episode".
   static Future<Map<String, double>> getEpisodeTraktProgress({
-    required String seriesTitle,
+    required String imdbId,
   }) async {
+    if (imdbId.isEmpty) return {};
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_episodeTraktProgressKey);
     if (raw == null || raw.isEmpty) return {};
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) return {};
-      final key =
-          'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-      final series = decoded[key];
+      final series = decoded[_episodeTraktKeyFor(imdbId)];
       if (series is! Map) return {};
       final out = <String, double>{};
       series.forEach((k, v) {
@@ -1119,12 +1126,13 @@ class StorageService {
     }
   }
 
-  /// Replace the stored Trakt per-episode percents for [seriesTitle]. [percents]
-  /// is keyed by "season_episode".
+  /// Replace the stored Trakt per-episode percents for the show [imdbId].
+  /// [percents] is keyed by "season_episode".
   static Future<void> saveEpisodeTraktProgress({
-    required String seriesTitle,
+    required String imdbId,
     required Map<String, double> percents,
   }) async {
+    if (imdbId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_episodeTraktProgressKey);
     Map<String, dynamic> all = {};
@@ -1134,9 +1142,7 @@ class StorageService {
         if (decoded is Map<String, dynamic>) all = decoded;
       } catch (_) {}
     }
-    final key =
-        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    all[key] = percents;
+    all[_episodeTraktKeyFor(imdbId)] = percents;
     await prefs.setString(_episodeTraktProgressKey, jsonEncode(all));
   }
 

@@ -22,6 +22,7 @@ class PlaylistSheet {
   /// - [currentIndex]: Currently playing index
   /// - [seriesPlaylist]: Optional series playlist metadata
   /// - [playlistItemData]: Additional playlist item data
+  /// - [imdbId]: Show IMDb id, used to look up per-episode Trakt progress
   /// - [onSelect]: Callback when episode/movie is selected (index, allowResume)
   /// - [viewMode]: Optional view mode to determine collection organization
   static Future<void> show(
@@ -30,6 +31,7 @@ class PlaylistSheet {
     required int currentIndex,
     SeriesPlaylist? seriesPlaylist,
     Map<String, dynamic>? playlistItemData,
+    String? imdbId,
     required Future<void> Function(int index, {bool allowResume}) onSelect,
     PlaylistViewMode? viewMode,
   }) async {
@@ -58,6 +60,7 @@ class PlaylistSheet {
                     seriesPlaylist: seriesPlaylist,
                     currentEpisodeIndex: currentIndex,
                     playlistItem: playlistItemData,
+                    imdbId: imdbId,
                     onEpisodeSelected: (season, episode) async {
                       // Find the original index in the PlaylistEntry array
                       final originalIndex = seriesPlaylist
@@ -74,9 +77,10 @@ class PlaylistSheet {
                           season: season,
                           episode: episode,
                         );
-                        final traktMap =
-                            await StorageService.getEpisodeTraktProgress(
-                                seriesTitle: title);
+                        final traktMap = imdbId != null && imdbId.isNotEmpty
+                            ? await StorageService.getEpisodeTraktProgress(
+                                imdbId: imdbId)
+                            : const <String, double>{};
                         final hasTrakt =
                             (traktMap['${season}_$episode'] ?? 0) > 0;
 
