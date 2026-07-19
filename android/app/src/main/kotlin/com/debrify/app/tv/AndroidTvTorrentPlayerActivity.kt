@@ -386,61 +386,82 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 Player.STATE_READY -> {
                     hasEverBeenReady = true
                     hideBufferingIndicator()
-                    // Trakt progress takes priority over local resume (same as Dart player)
-                    val traktPct = payload?.traktProgressPercent ?: 0.0
+                    // Furthest-watched resume (same rule as the Dart player): seek
+                    // the DEEPER of the local position and the Trakt percent so
+                    // playback never jumps backward. startAtPercent (Stremio TV
+                    // slot progress) is an explicit start and still takes precedence;
+                    // it retries until the duration is known (Media3 can report
+                    // TIME_UNSET on the first READY), matching the old cascade.
+                    val duration = player?.duration ?: 0
                     val startPct = payload?.startAtPercent ?: 0.0
-                    if (traktPct > 0 && traktPct < 100 && !percentSeekApplied) {
-                        val duration = player?.duration ?: 0
-                        if (duration > 0) {
-                            // Consume the launch percent once duration is known —
-                            // even if the offset is rejected below — so it can never
-                            // re-fire on a later STATE_READY and hijack a switched-to
-                            // episode's own resume.
-                            percentSeekApplied = true
-                            pendingItemTraktPercent = 0.0
-                            val offset = (duration * traktPct / 100.0).toLong()
-                            if (offset > 2000 && offset < (duration * 0.9).toLong()) {
-                                player?.seekTo(offset)
-                                android.util.Log.d("AndroidTvPlayer", "Trakt: Resumed from Trakt progress ${traktPct.toInt()}% ($offset ms of $duration ms)")
-                                pendingSeekMs = 0
-                            } else if (pendingSeekMs > 0 && pendingSeekMs < duration) {
-                                // Trakt offset rejected (near start/end) → fall back to
-                                // the local resume this pass rather than starting at 0.
-                                player?.seekTo(pendingSeekMs)
-                                pendingSeekMs = 0
-                            }
-                        }
-                    } else if (startPct > 0 && !startPct.isNaN() && !percentSeekApplied) {
-                        val duration = player?.duration ?: 0
+                    if (startPct > 0 && !startPct.isNaN() && !percentSeekApplied) {
                         if (duration > 0) {
                             val offset = (duration * startPct).toLong()
                             if (offset in 1 until duration) {
                                 player?.seekTo(offset)
                                 android.util.Log.d("AndroidTvPlayer", "Seeked to ${startPct * 100}% ($offset ms of $duration ms)")
                             }
+                            // Latch ONLY once the duration was known — an unknown
+                            // duration must retry on the next READY, not burn the
+                            // one-shot without seeking.
                             percentSeekApplied = true
                             pendingSeekMs = 0
                             pendingItemTraktPercent = 0.0
                         }
-                    } else if (pendingSeekMs > 0) {
-                        val duration = player?.duration ?: 0
-                        if (duration > 0 && pendingSeekMs < duration) {
-                            player?.seekTo(pendingSeekMs)
-                        }
-                        pendingSeekMs = 0
-                        pendingItemTraktPercent = 0.0
-                    } else if (pendingItemTraktPercent > 0 && pendingItemTraktPercent < 100) {
-                        // A switched-to episode with Trakt progress but no local
-                        // resume: convert its percent to ms now the duration is known.
-                        val pct = pendingItemTraktPercent
-                        pendingItemTraktPercent = 0.0
-                        val duration = player?.duration ?: 0
-                        if (duration > 0) {
-                            val offset = (duration * pct / 100.0).toLong()
-                            if (offset > 2000 && offset < (duration * 0.9).toLong()) {
-                                player?.seekTo(offset)
-                                android.util.Log.d("AndroidTvPlayer", "Trakt: Resumed switched episode from ${pct.toInt()}% ($offset ms of $duration ms)")
+                    } else {
+                        // Launched item's payload percent (first load only) — an
+                        // eligible value also arms the branch below.
+                        val launchTrakt =
+                            if (!percentSeekApplied) (payload?.traktProgressPercent ?: 0.0) else 0.0
+                        if (pendingSeekMs > 0 || pendingItemTraktPercent > 0 || launchTrakt > 0) {
+                            if (duration > 0) {
+                                // Anti-yank: only seek while playback is still near
+                                // the start. If the duration resolved late (e.g. it
+                                // was TIME_UNSET on the first READY) and the user has
+                                // already watched real seconds, dropping the resume
+                                // beats jumping them mid-viewing.
+                                val pos = player?.currentPosition ?: 0L
+                                if (pos <= 5000) {
+                                    val hi = (duration * 0.9).toLong()
+                                    // The launched item's payload percent is an EXPLICIT
+                                    // promise (the details-screen Resume advertised this
+                                    // position) — honour it outright when seekable,
+                                    // matching the pre-rework launched-item behaviour.
+                                    val launchMs =
+                                        if (launchTrakt > 0 && launchTrakt < 100) (duration * launchTrakt / 100.0).toLong() else 0L
+                                    if (launchMs > 2000 && launchMs < hi) {
+                                        player?.seekTo(launchMs)
+                                        android.util.Log.d("AndroidTvPlayer", "Resume: explicit launch Trakt ${launchTrakt.toInt()}% -> $launchMs ms of $duration ms")
+                                    } else {
+                                        // FURTHEST-WATCHED WINS: the per-episode Trakt
+                                        // candidate is gated to the resumable window
+                                        // (past 2s, before the last 10%); the LOCAL
+                                        // candidate keeps the old cascade's semantics —
+                                        // ANY explicit position inside the duration is
+                                        // honoured (a source switch may capture 93% and
+                                        // must come back exactly there).
+                                        val rawTraktMs =
+                                            if (pendingItemTraktPercent > 0 && pendingItemTraktPercent < 100) (duration * pendingItemTraktPercent / 100.0).toLong() else 0L
+                                        val traktMs = if (rawTraktMs > 2000 && rawTraktMs < hi) rawTraktMs else 0L
+                                        val localMs =
+                                            if (pendingSeekMs > 0 && pendingSeekMs < duration) pendingSeekMs else 0L
+                                        val target = maxOf(traktMs, localMs)
+                                        if (target > 0) {
+                                            player?.seekTo(target)
+                                            android.util.Log.d("AndroidTvPlayer", "Resume: furthest trakt=$traktMs local=$localMs -> $target ms of $duration ms")
+                                        }
+                                    }
+                                }
+                                percentSeekApplied = true
+                                pendingSeekMs = 0
+                                pendingItemTraktPercent = 0.0
                             }
+                            // Duration unknown on this READY: leave ALL candidates
+                            // intact and retry on the next READY (Media3 often
+                            // resolves TIME_UNSET one event later) — otherwise a
+                            // launched item's local resume dies here and a shallower
+                            // payload Trakt percent would win the retry, jumping
+                            // backward. The anti-yank guard above bounds the retry.
                         }
                     }
                     // Initialize night mode if needed
@@ -1792,7 +1813,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         randomButton?.onFocusChangeListener = extendTimerOnFocus
     }
 
-    private fun playItem(index: Int) {
+    // [suppressTrakt]: a source switch resumes the captured live position and
+    // must not let the per-episode Trakt percent override it.
+    private fun playItem(index: Int, suppressTrakt: Boolean = false) {
         val model = payload ?: return
         android.util.Log.d("AndroidTvPlayer", "playItem called - index: $index, total items: ${model.items.size}")
 
@@ -1814,16 +1837,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentIndex = index
         val item = model.items[index]
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
-        pendingSeekMs = item.resumePositionMs
-        // Trakt cross-device resume for this episode, but only for a MANUAL
-        // selection with no local position (local wins). Never during
-        // auto-advance/skip — binge starts the next episode fresh, matching the
-        // Flutter player. The payload-level percent still handles the launched item.
+        // Keep BOTH the local position and the Trakt percent; STATE_READY resumes
+        // the FURTHER of the two (never backward). Suppress Trakt during
+        // auto-advance (binge starts the next episode fresh) and during a source
+        // switch on the same content (must honour the captured live position).
         val autoAdvance = isAutoAdvancing
         isAutoAdvancing = false
+        pendingSeekMs = item.resumePositionMs
         pendingItemTraktPercent =
-            if (autoAdvance || item.resumePositionMs > 0) 0.0
-            else (item.traktProgressPercent ?: 0.0)
+            if (autoAdvance || suppressTrakt) 0.0 else (item.traktProgressPercent ?: 0.0)
 
         // Check if URL needs to be resolved (lazy loading)
         if (item.url.isBlank()) {
@@ -6879,9 +6901,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Resume the previously-playing item; the captured position is carried
         // on the item above as resumePositionMs. Suppress trakt/startAt percent
-        // seeks so they can't override our explicit resume position.
+        // seeks so they can't override our explicit resume position — but ONLY
+        // when the new source landed on the SAME content: a fallback episode
+        // (exact episode missing from the new source) has no captured position
+        // and must keep its own per-episode Trakt resume, matching the Dart
+        // player's landedOnSameContent behaviour.
         percentSeekApplied = true
-        playItem(targetIndex)
+        playItem(targetIndex, suppressTrakt = matchedSameContent)
 
         // Hide sources panel once playback is ready (or on timeout)
         hideSourcesPanelWhenReady()
@@ -7778,6 +7804,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         payload?.startAtPercent = startAtPercent
         percentSeekApplied = false
         pendingSeekMs = 0
+        // Clear any leftover per-episode Trakt percent from a torrent item whose
+        // READY never fired (rapid switch mid-buffer) — the resume branch now
+        // arms on it, and a live channel must never seek to a stale Trakt offset.
+        pendingItemTraktPercent = 0.0
         hasEverBeenReady = false
 
         val metadata = MediaMetadata.Builder()
@@ -8322,14 +8352,24 @@ private data class PlaybackItem(
         }
     }
 
-    /** Playlist-bar progress percent: local resume when present, else the Trakt
-     *  cross-device percent (episode watched partway on another device), else 0. */
+    /** Playlist-bar progress percent: the FURTHER of the local resume ratio and
+     *  the Trakt cross-device percent, so the bar never shows less than what's
+     *  actually been watched (local advances live; Trakt is a launch snapshot).
+     *  Exception: an active REWATCH — Trakt says finished (>=95) but there's a
+     *  real in-progress local position — shows the live local percent, or the
+     *  card would dim into the watched state while you're 20% into a rewatch. */
     fun displayProgressPercent(): Int {
-        return if (durationMs > 0 && resumePositionMs > 0) {
+        val local = if (durationMs > 0 && resumePositionMs > 0) {
             ((resumePositionMs.toDouble() / durationMs.toDouble()) * 100).toInt()
         } else {
-            traktProgressPercent?.toInt() ?: 0
+            0
         }
+        val trakt = traktProgressPercent?.toInt() ?: 0
+        // resumePositionMs > 0 (not local >= 1): a just-started rewatch of a long
+        // episode truncates to local == 0% but is still an active rewatch —
+        // matching the Dart series-browser's `local > 0` bound.
+        if (trakt >= 95 && resumePositionMs > 0 && local < 95) return local
+        return maxOf(local, trakt)
     }
 
     companion object {

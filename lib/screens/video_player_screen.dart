@@ -523,7 +523,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Trakt scrobble state
   bool _traktScrobbleEnabled = false;
-  bool _traktProgressApplied = false;
+  // The launched item's widget.traktProgressPercent is a first-load-only
+  // signal; once spent it must not apply to a later switched-to episode.
+  bool _launchTraktPercentSpent = false;
   // Per-episode Trakt cross-device progress ("season_episode" → 0-100), loaded
   // once per series; drives resume for episodes switched to in-session.
   Map<String, double>? _traktEpisodeProgress;
@@ -803,22 +805,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         episode: se.episode,
       );
       _startTraktHeartbeat();
-    }
-  }
-
-  /// Seeks to a Trakt progress percentage, converting % → ms now the duration
-  /// is known. [percent] defaults to the launched item's [widget.traktProgressPercent];
-  /// pass a per-episode value when resuming a switched-to episode.
-  void _maybeSeekToTraktProgress({double? percent}) {
-    final p = percent ?? widget.traktProgressPercent;
-    if (p == null || p <= 0 || p >= 100) return;
-    final dur = _duration;
-    if (dur <= Duration.zero) return;
-    final ms = (dur.inMilliseconds * p / 100).floor();
-    final position = Duration(milliseconds: ms);
-    if (position > const Duration(seconds: 2) && position < dur * 0.9) {
-      _player.seek(position);
-      debugPrint('Trakt: Resumed from Trakt progress ${p.round()}%');
     }
   }
 
@@ -2528,6 +2514,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // otherwise restart at S1E1); _loadPlaylistIndex restores its saved
     // position.
     var targetIndex = 0;
+    // Whether the new source landed on the SAME content we were watching — only
+    // then does "prefer the checkpointed local position over Trakt" apply. When
+    // we fall back to a different episode, its own Trakt resume must still work.
+    var landedOnSameContent = true;
     if (se.season != null && se.episode != null) {
       final sp = _seriesPlaylist;
       final idx =
@@ -2535,6 +2525,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (idx >= 0) {
         targetIndex = idx;
       } else {
+        landedOnSameContent = false;
         // The exact episode isn't in this source. Don't fall back to raw entry
         // 0 — in torrent order that's often an extras/bonus clip. Land on the
         // first REAL episode (skips season 0 / specials) and warn the user.
@@ -2558,7 +2549,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // resuming. The switch is not a "manual episode pick", so drop the flag.
     _isManualEpisodeSelection = false;
     _allowResumeForManualSelection = false;
-    await _loadPlaylistIndex(targetIndex, autoplay: true, skipInitialSave: true);
+    // Resume the checkpointed LOCAL position, not Trakt (this is a source swap
+    // mid-episode, not a fresh open) — but only when the new source landed on
+    // the same content; a fallback episode keeps its own Trakt resume.
+    await _loadPlaylistIndex(
+      targetIndex,
+      autoplay: true,
+      skipInitialSave: true,
+      preferLocalResume: landedOnSameContent,
+    );
     if (!mounted) return;
 
     // End transition (same pattern as _switchToStremioSource)
@@ -3273,6 +3272,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     int index, {
     bool autoplay = false,
     bool skipInitialSave = false,
+    // Source switch on the same content: resume the checkpointed local position
+    // exactly (see _maybeRestoreResume).
+    bool preferLocalResume = false,
   }) async {
     if (_activePlaylist == null ||
         index < 0 ||
@@ -3387,7 +3389,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Wait for the video to load and duration to be available
     await _waitForVideoReady();
-    await _maybeRestoreResume();
+    await _maybeRestoreResume(preferLocalResume: preferLocalResume);
     // Restore audio and subtitle track preferences
     await _restoreTrackPreferences();
 
@@ -4393,7 +4395,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return _generateFilenameHash(name);
   }
 
-  Future<void> _maybeRestoreResume() async {
+  /// [preferLocalResume]: a source switch landed on the SAME content and
+  /// checkpointed the live position — resume exactly there (any position, even
+  /// past the 90% cutoff, matching the native TV player) and skip Trakt.
+  /// Threaded as a parameter, not ambient state, so an early return or throw
+  /// anywhere in the load path can never leak it into a later load.
+  Future<void> _maybeRestoreResume({bool preferLocalResume = false}) async {
     // If this is auto-advancing, don't restore position
     if (_isAutoAdvancing) {
       _isAutoAdvancing = false; // Reset the flag
@@ -4405,90 +4412,90 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Don't reset _isManualEpisodeSelection here - let it be reset after a delay
       return;
     }
+    // The launched item's widget percent is a first-load-only signal; capture it
+    // before marking it spent so it can't apply to a later switched-to episode.
+    final firstLoad = !_launchTraktPercentSpent;
+    _launchTraktPercentSpent = true;
 
-    // The LAUNCHED item resumes from Trakt over local (cross-device continuity,
-    // first load only). Switched-to episodes instead prefer LOCAL resume and
-    // only fall back to their per-episode Trakt percent when there's no local
-    // position (handled below), so we never discard a fresher on-device spot —
-    // matching the native TV player.
-    if (!_traktProgressApplied &&
-        widget.traktProgressPercent != null &&
-        widget.traktProgressPercent! > 0 &&
-        widget.traktProgressPercent! < 100) {
-      _traktProgressApplied = true;
-      await _waitForDuration();
-      _maybeSeekToTraktProgress();
-      return;
-    }
+    await _waitForDuration();
+    final dur = _duration;
 
-    // Try enhanced playback state first
-    final enhancedData = await _getEnhancedPlaybackState();
-    if (enhancedData != null) {
-      // Wait for duration to be available before attempting position restoration
-      await _waitForDuration();
-
-      final posMs = (enhancedData['positionMs'] ?? 0) as int;
-      final speed = (enhancedData['speed'] ?? 1.0) as double;
-      final aspect = (enhancedData['aspect'] ?? 'contain') as String;
-      final position = Duration(milliseconds: posMs);
-      final dur = _duration;
-
-      if (dur > Duration.zero &&
-          position > const Duration(seconds: 2) &&
-          position < dur * 0.9) {
-        debugPrint(
-          'Resume: restored from local state at ${(posMs / 1000).round()}s',
-        );
-        await _player.seek(position);
+    // Trakt candidate (cross-device %), skipped for a source switch. Launched
+    // item uses the widget percent (first load); a switched item uses its own
+    // per-episode store percent. The widget percent is an EXPLICIT promise —
+    // the details-screen Resume button advertised this position — so when
+    // seekable it wins outright below (never silently overridden by local).
+    double? traktPct;
+    var explicitLaunch = false;
+    if (!preferLocalResume) {
+      final launchPct = firstLoad ? widget.traktProgressPercent : null;
+      if (launchPct != null) {
+        traktPct = launchPct;
+        explicitLaunch = true;
+      } else {
+        traktPct = await _currentEpisodeTraktPercent();
       }
+    }
+    final int traktMs =
+        (traktPct != null && traktPct > 0 && traktPct < 100 && dur > Duration.zero)
+            ? (dur.inMilliseconds * traktPct / 100).floor()
+            : 0;
 
-      // restore speed
+    // Local candidate + speed/aspect restore (enhanced state preferred, else the
+    // legacy resume store). Speed/aspect are restored regardless of the seek.
+    int localMs = 0;
+    final state =
+        await _getEnhancedPlaybackState() ??
+            await StorageService.getVideoResume(_resumeKey);
+    if (state != null) {
+      localMs = (state['positionMs'] ?? 0) as int;
+      final speed = (state['speed'] ?? 1.0) as double;
+      final aspect = (state['aspect'] ?? 'contain') as String;
       if (speed != 1.0) {
         await _player.setRate(speed);
         _playbackSpeed = speed;
       }
-
-      // restore aspect
       _aspectMode = AspectModeUtils.stringToAspectMode(aspect);
-      return;
     }
-    // Fallback to legacy resume system
-    // Wait for duration to be available before attempting position restoration
-    await _waitForDuration();
-    final data = await StorageService.getVideoResume(_resumeKey);
-    if (data == null) {
-      // No local resume anywhere → fall back to Trakt cross-device progress.
-      // Launch item uses widget's (first load); a switched-to episode uses its
-      // own per-episode percent (e.g. watched partway on another device). No
-      // local state means there's no saved speed/aspect to restore either.
-      final pct = (!_traktProgressApplied ? widget.traktProgressPercent : null) ??
-          await _currentEpisodeTraktPercent();
-      _traktProgressApplied = true;
-      if (pct != null && pct > 0 && pct < 100) {
-        _maybeSeekToTraktProgress(percent: pct);
+
+    if (dur <= Duration.zero) return;
+
+    // Source switch on the same content: come back EXACTLY where you were —
+    // no resumable-window gating (you might be 93% in, mid-credits), matching
+    // the native TV player's source-switch semantics.
+    if (preferLocalResume) {
+      if (localMs > 0 && localMs < dur.inMilliseconds) {
+        await _player.seek(Duration(milliseconds: localMs));
       }
       return;
     }
 
-    final posMs = (data['positionMs'] ?? 0) as int;
-    final speed = (data['speed'] ?? 1.0) as double;
-    final aspect = (data['aspect'] ?? 'contain') as String;
-    final position = Duration(milliseconds: posMs);
-    final dur = _duration;
-
-    if (dur > Duration.zero &&
-        position > const Duration(seconds: 2) &&
-        position < dur * 0.9) {
-      await _player.seek(position);
+    final loMs = VideoPlayerTimingConstants.minimumPlaybackPosition.inMilliseconds;
+    final hiMs = (dur.inMilliseconds * 0.9).floor();
+    // The details-screen Resume promised THIS position — honour it outright when
+    // seekable (matching the pre-rework launched-item behaviour), even over a
+    // deeper/stale local. An unseekable promise falls through to furthest-wins.
+    if (explicitLaunch && traktMs > loMs && traktMs < hiMs) {
+      debugPrint('Resume: explicit launch Trakt percent -> ${traktMs}ms');
+      await _player.seek(Duration(milliseconds: traktMs));
+      return;
     }
-
-    // restore speed
-    if (speed != 1.0) {
-      await _player.setRate(speed);
-      _playbackSpeed = speed;
+    // FURTHEST-WATCHED WINS: seek the deeper of the local position and the Trakt
+    // percent, provided it's in the resumable window (past the first 2s, before
+    // the last 10%). If neither qualifies, start fresh.
+    // Locally FINISHED (past the 90% cutoff on this device): start fresh, and
+    // never let a shallower/stale Trakt percent yank a restarted episode into
+    // its middle — local IS the furthest position, it's just not seekable.
+    if (localMs >= hiMs && localMs > 0) return;
+    final traktCand = (traktMs > loMs && traktMs < hiMs) ? traktMs : 0;
+    final localCand = (localMs > loMs && localMs < hiMs) ? localMs : 0;
+    final target = traktCand > localCand ? traktCand : localCand;
+    if (target > 0) {
+      debugPrint(
+        'Resume: furthest of trakt=${traktMs}ms local=${localMs}ms -> ${target}ms',
+      );
+      await _player.seek(Duration(milliseconds: target));
     }
-    // restore aspect
-    _aspectMode = AspectModeUtils.stringToAspectMode(aspect);
   }
 
   /// Get enhanced playback state for current content

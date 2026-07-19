@@ -612,18 +612,23 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       return 0.0;
     }
     final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
+    // FURTHEST-WATCHED WINS: show whichever of the local position and the Trakt
+    // cross-device percent is further along, so the bar never regresses when
+    // you've watched more locally than the (once-per-launch) Trakt snapshot.
+    double local = 0.0;
     final progressData = _episodeProgress[episodeKey];
-    if (progressData == null) {
-      // No local resume — fall back to Trakt cross-device progress (e.g. an
-      // episode watched partway on another device).
-      final traktPercent = _traktEpisodeProgress[episodeKey];
-      if (traktPercent == null) return 0.0;
-      return (traktPercent / 100).clamp(0.0, 1.0);
+    if (progressData != null) {
+      final positionMs = progressData['positionMs'] as int? ?? 0;
+      final durationMs = progressData['durationMs'] as int? ?? 1;
+      if (durationMs > 0) local = (positionMs / durationMs).clamp(0.0, 1.0);
     }
-    final positionMs = progressData['positionMs'] as int? ?? 0;
-    final durationMs = progressData['durationMs'] as int? ?? 1;
-    if (durationMs <= 0) return 0.0;
-    return (positionMs / durationMs).clamp(0.0, 1.0);
+    final traktPercent = _traktEpisodeProgress[episodeKey];
+    final trakt =
+        traktPercent != null ? (traktPercent / 100).clamp(0.0, 1.0) : 0.0;
+    // Active rewatch: Trakt says finished but there's a real in-progress local
+    // position — show the live local bar, not the finished state.
+    if (trakt >= 0.95 && local > 0 && local < 0.95) return local;
+    return local >= trakt ? local : trakt;
   }
 
   bool _isFinished(SeriesEpisode episode) {
