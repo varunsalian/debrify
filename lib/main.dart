@@ -27,12 +27,14 @@ import 'screens/alldebrid/alldebrid_files_screen.dart';
 import 'screens/webdav/webdav_files_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
+import 'screens/trakt_calendar_screen.dart';
 import 'screens/magic_tv_screen.dart';
 import 'screens/stremio_tv/stremio_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
+import 'services/trakt/trakt_service.dart';
 import 'widgets/app_initializer.dart';
 
 import 'widgets/animated_background.dart';
@@ -125,7 +127,11 @@ class _TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AnalyticsService.init();
+  // Fire-and-forget: Pug's init does several platform-channel reads
+  // (package_info/device_info/connectivity/timezone) + storage setup that are
+  // slow on weak TV hardware. Never block first frame on analytics — it runs
+  // concurrently with the rest of startup and self-guards until ready.
+  unawaited(AnalyticsService.init());
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
@@ -602,6 +608,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _premiumizeHiddenFromNav = false;
   bool _allDebridEnabled = false;
   bool _allDebridHiddenFromNav = false;
+  // Whether a Trakt account is connected — gates the Trakt Calendar tab (19).
+  bool _traktAuthenticated = false;
   bool _isAndroidTv = false;
 
   // Back button press tracking for Android TV exit
@@ -686,6 +694,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Cloud', // 16: consolidated cloud-provider hub (RD/Torbox/PikPak/…/WebDAV)
     'Search', // 17: dedicated search tab (TV only)
     'Discover', // 18: source-dropdown browser (Continue Watching / Trakt / …)
+    'Calendar', // 19: Trakt calendar (visible only when Trakt is connected)
   ];
 
   final List<IconData> _icons = [
@@ -708,6 +717,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.cloud_rounded, // 16: Cloud
     Icons.search_rounded, // 17: Search
     Icons.explore_rounded, // 18: Discover
+    Icons.calendar_month_rounded, // 19: Calendar (Trakt)
   ];
 
   @override
@@ -1798,6 +1808,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final allDebridEnabledPref =
         await StorageService.getAllDebridIntegrationEnabled();
     final allDebridHidden = await StorageService.getAllDebridHiddenFromNav();
+    // Trakt connection gates the Calendar tab. Trakt login/logout both fire
+    // notifyIntegrationChanged(), so this re-reads on those events too.
+    final traktAuthed = await TraktService.instance.isAuthenticated();
 
     if (!mounted) return;
 
@@ -1826,6 +1839,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       premiumizeHidden: premiumizeHidden,
       allDebridEnabled: hasAllDebrid,
       allDebridHidden: allDebridHidden,
+      traktAuthenticated: traktAuthed,
     );
   }
 
@@ -1844,6 +1858,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool premiumizeHidden,
     required bool allDebridEnabled,
     required bool allDebridHidden,
+    required bool traktAuthenticated,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
@@ -1858,6 +1873,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       premiumizeHidden: premiumizeHidden,
       allDebridEnabled: allDebridEnabled,
       allDebridHidden: allDebridHidden,
+      traktAuthenticated: traktAuthenticated,
     );
 
     int nextIndex = _selectedIndex;
@@ -1883,6 +1899,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _premiumizeHiddenFromNav == premiumizeHidden &&
         _allDebridEnabled == allDebridEnabled &&
         _allDebridHiddenFromNav == allDebridHidden &&
+        _traktAuthenticated == traktAuthenticated &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -1902,8 +1919,23 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _premiumizeHiddenFromNav = premiumizeHidden;
       _allDebridEnabled = allDebridEnabled;
       _allDebridHiddenFromNav = allDebridHidden;
+      _traktAuthenticated = traktAuthenticated;
       _selectedIndex = nextIndex;
     });
+  }
+
+  /// Insert the Trakt Calendar tab (screen-ID 19) just before Downloads (2)
+  /// when [authed]. On layouts that omit Downloads (no provider configured) it
+  /// lands right after Discover (18) — the same visual slot — so the tab is
+  /// always in a consistent place. Mutates [indices] in place.
+  void _insertTraktCalendarTab(List<int> indices, bool authed) {
+    if (!authed || indices.contains(19)) return;
+    var pos = indices.indexOf(2);
+    if (pos < 0) {
+      final afterDiscover = indices.indexOf(18);
+      pos = afterDiscover >= 0 ? afterDiscover + 1 : indices.length;
+    }
+    indices.insert(pos, 19);
   }
 
   List<int> _computeVisibleNavIndices({
@@ -1919,7 +1951,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     bool? premiumizeHidden,
     bool? allDebridEnabled,
     bool? allDebridHidden,
+    bool? traktAuthenticated,
   }) {
+    final trakt = traktAuthenticated ?? _traktAuthenticated;
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
       final rdHidden = realDebridHidden ?? _rdHiddenFromNav;
@@ -1959,6 +1993,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       }
       indices.add(7); // Addons
       indices.add(8); // Settings
+      _insertTraktCalendarTab(indices, trakt);
       return indices;
     }
 
@@ -1975,7 +2010,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final allDebrid = allDebridEnabled ?? _allDebridEnabled;
     final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
     if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
-      return [
+      final indices = <int>[
         15,
         18,
         13,
@@ -1984,6 +2019,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         7,
         8,
       ]; // Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
+      _insertTraktCalendarTab(indices, trakt);
+      return indices;
     }
 
     final indices = <int>[15, 18, 2, 13, 14, 3, 9];
@@ -1999,6 +2036,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
     indices.add(7); // Addons
     indices.add(8); // Settings
+    _insertTraktCalendarTab(indices, trakt);
     return indices;
   }
 
@@ -2011,6 +2049,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       case 18: // Discover
       case 0: // Home
       case 2: // Downloads
+      case 19: // Trakt Calendar
         return 'Main';
       case 13: // IPTV
       case 14: // YouTube
@@ -2104,6 +2143,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return SearchScreen(isTelevision: _isAndroidTv, searchMode: true);
       case 18: // Discover (source-dropdown browser)
         return SearchScreen(isTelevision: _isAndroidTv, discoverMode: true);
+      case 19: // Trakt Calendar (gated on Trakt auth in the nav below)
+        return const TraktCalendarScreen();
       default:
         return _pages[index];
     }

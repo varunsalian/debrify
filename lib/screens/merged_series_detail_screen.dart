@@ -87,11 +87,19 @@ class MergedDetailScreen extends StatefulWidget {
   /// poster flies into (and back out of) this page's full-bleed backdrop.
   final String? heroTag;
 
+  /// For a series opened at a specific episode (e.g. from the Trakt Calendar):
+  /// the episodes panel lands on and scrolls to this season/episode instead of
+  /// its usual next-up/last-played target. Ignored for movies.
+  final int? initialSeason;
+  final int? initialEpisode;
+
   const MergedDetailScreen({
     super.key,
     required this.item,
     required this.addon,
     required this.onResume,
+    this.initialSeason,
+    this.initialEpisode,
     this.resumeInfoLoader,
     this.onBrowse,
     this.isTelevision = false,
@@ -1248,6 +1256,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return EpisodesPanel(
       show: widget.item,
       addon: widget.addon,
+      initialSeason: widget.initialSeason,
+      initialEpisode: widget.initialEpisode,
       isTelevision: widget.isTelevision,
       // Match the standalone `_openEpisodes` flow, which does NOT pass
       // showQuickPlay (defaults true) — episode tiles keep quick-play even for

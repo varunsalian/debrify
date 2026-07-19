@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/trakt/trakt_calendar_entry.dart';
 import '../services/analytics_service.dart';
 import '../services/android_native_downloader.dart';
+import '../services/main_page_bridge.dart';
 import '../services/trakt/trakt_calendar_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt_calendar_day_sheet.dart';
@@ -37,13 +38,21 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   bool _isTelevision = false;
   int _latestMonthChangeRequestId = 0;
 
+  // Remember the last-viewed month across this app session. Opening a title from
+  // the calendar switches to the Home tab (which hosts the detail page), which
+  // disposes+remounts this screen; without this, returning would snap back to
+  // today instead of the month the user was browsing. Session-scoped (static) —
+  // intentionally resets to the current month on a full app restart.
+  static int? _lastViewedYear;
+  static int? _lastViewedMonth;
+
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('trakt_calendar');
     final now = DateTime.now();
-    _selectedYear = now.year;
-    _selectedMonth = now.month;
+    _selectedYear = _lastViewedYear ?? now.year;
+    _selectedMonth = _lastViewedMonth ?? now.month;
     _detectTelevision();
     _loadInitial();
   }
@@ -135,6 +144,9 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       _selectedMonth = nextMonth;
       _isChangingMonth = true;
     });
+    // Remember it for the round-trip through a title's detail page (see fields).
+    _lastViewedYear = nextYear;
+    _lastViewedMonth = nextMonth;
 
     await _ensureMonthLoaded(nextStart);
 
@@ -213,7 +225,27 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   }
 
   void _handleEpisodeSelected(TraktCalendarEntry entry) {
-    Navigator.of(context).pop(entry);
+    // The day sheet already dismissed itself before calling this (see
+    // TraktCalendarDaySheet) — do NOT pop again here, or we'd pop the MainPage
+    // root (the calendar is a tab now, not a pushed route). Hand the title off
+    // to the Home board, which owns the merged detail page and its Play/Sources
+    // machinery (a separate tab can't push that flow itself): switchTab(15)
+    // mounts Home, which opens the detail scrolled to this episode and returns
+    // here (originTab) when it closes.
+    final imdbId = entry.showImdbId;
+    if (imdbId == null || imdbId.isEmpty) return;
+    MainPageBridge.pendingCatalogDetailOpen = {
+      'imdbId': imdbId,
+      // Trakt's calendar is show-episodes only, so these are always series.
+      'type': 'series',
+      'title': entry.showTitle,
+      'year': entry.showYear,
+      'poster': entry.posterUrl,
+      'season': entry.seasonNumber,
+      'episode': entry.episodeNumber,
+      'originTab': 19, // return to the Calendar tab when the detail closes
+    };
+    MainPageBridge.switchTab?.call(15);
   }
 
   @override

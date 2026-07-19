@@ -786,6 +786,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
     }
+    // A detail-open handed off from another tab (e.g. the Trakt Calendar, a
+    // separate tab that can't reach this screen's state). Only the Home board
+    // (not the Search/Discover variants) claims it; the opener switches here via
+    // switchTab(15) right after setting it, so it's present by the time we mount.
+    if (!widget.searchMode && !widget.discoverMode) {
+      final pending = MainPageBridge.pendingCatalogDetailOpen;
+      if (pending != null) {
+        MainPageBridge.pendingCatalogDetailOpen = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_openPendingCatalogDetail(pending));
+        });
+      }
+    }
     // Ambient hero trailer gates (Home board TV only) — read before the board
     // loads so the seeded first spotlight can already schedule its trailer.
     if (_heroTrailerActive) {
@@ -2235,6 +2248,41 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       item,
       _addonForContinue(item.sourceAddon?.id),
       isTraktSource: true,
+    );
+  }
+
+  /// Open a detail page requested by another tab (see [initState]). Builds a
+  /// minimal Trakt-sourced [StremioMeta] from the handoff map and routes through
+  /// the normal [_openItem] path, so every action button behaves exactly as on
+  /// the Home board. For a series it scrolls to the requested season/episode,
+  /// and it returns to the origin tab when the detail closes.
+  Future<void> _openPendingCatalogDetail(Map<String, dynamic> data) async {
+    final imdbId = data['imdbId'] as String?;
+    if (imdbId == null || imdbId.isEmpty) return;
+    // This can run before the board's async flags settle (they're kicked off
+    // fire-and-forget in initState). Await the two that shape the detail so we
+    // don't open the wrong thing: the merged-page flag (merged vs legacy screen
+    // — only the merged one honours initialSeason/Episode, i.e. the scroll) and
+    // Trakt auth (status chips + menu). Both are fast local reads, no network.
+    await _loadMergedSeriesFlag();
+    await _refreshTraktAuthState();
+    if (!mounted) return;
+    final type = (data['type'] as String?) == 'movie' ? 'movie' : 'series';
+    final meta = StremioMeta(
+      id: imdbId,
+      imdbId: imdbId,
+      type: type,
+      name: (data['title'] as String?) ?? '',
+      poster: data['poster'] as String?,
+      year: (data['year'] as int?)?.toString(),
+    );
+    _openItem(
+      meta,
+      _addonForContinue(null),
+      isTraktSource: true,
+      initialSeason: data['season'] as int?,
+      initialEpisode: data['episode'] as int?,
+      returnToTabOnClose: data['originTab'] as int?,
     );
   }
 
@@ -4135,6 +4183,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Shared-element tag from the tapped board cell: the poster flies into the
     // detail page's backdrop. Null (non-board callers) = regular transition.
     String? heroTag,
+    // For a series opened at a specific episode (Trakt Calendar): scroll the
+    // episodes panel to this season/episode. Ignored by the movie/legacy paths.
+    int? initialSeason,
+    int? initialEpisode,
+    // When set, switch back to this tab once the detail route closes — lets a
+    // cross-tab opener (the Calendar) return the user to where they came from.
+    int? returnToTabOnClose,
   }) {
     _activeAddonId = addon.id;
     final imdb = _imdbOf(item);
@@ -4201,6 +4256,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 showQuickPlay: !_pikpakOnly,
                 isTraktSource: isTraktSource,
                 heroTag: heroTag,
+                initialSeason: initialSeason,
+                initialEpisode: initialEpisode,
                 resumeInfoLoader: () => _resolveResumeInfo(
                   item,
                   addon,
@@ -4262,6 +4319,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             _refreshBoundSources();
             _loadContinueWatching();
             _refreshTraktAuthState();
+            if (returnToTabOnClose != null) {
+              MainPageBridge.switchTab?.call(returnToTabOnClose);
+            }
           });
       return;
     }
@@ -4321,6 +4381,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _refreshBoundSources();
           _loadContinueWatching();
           _refreshTraktAuthState();
+          if (returnToTabOnClose != null) {
+            MainPageBridge.switchTab?.call(returnToTabOnClose);
+          }
         });
   }
 

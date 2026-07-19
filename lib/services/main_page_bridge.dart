@@ -91,6 +91,14 @@ class MainPageBridge {
   static Future<void> Function(AdvancedSearchSelection selection)?
   watchAdvancedSearchSelection;
 
+  /// A one-shot request from another tab (e.g. the Trakt Calendar, which is its
+  /// own tab and can't reach the Home board's state directly) to open a catalog
+  /// detail page on the Home board. The requester fills this, switches to Home
+  /// via [switchTab], and the Home SearchScreen consumes it on mount. Keys:
+  /// imdbId, type ('series'|'movie'), title, year (int?), poster, season (int?),
+  /// episode (int?), originTab (int? — tab to return to when the detail closes).
+  static Map<String, dynamic>? pendingCatalogDetailOpen;
+
   // ==========================================================================
   // Back Navigation Handling
   // ==========================================================================
