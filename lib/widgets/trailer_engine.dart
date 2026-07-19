@@ -9,12 +9,19 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 ///
 /// Lets the backdrop's UI/state logic stay identical while the underlying
 /// decoder swaps: [MediaKitTrailerEngine] (libmpv) on phones/desktop, and
-/// [ExoTrailerEngine] (native ExoPlayer rendered into a Flutter [Texture]) on
-/// Android TV, where libmpv stutters on weak SoCs.
+/// [ExoTrailerEngine] (native ExoPlayer rendered into a Flutter [Texture] or,
+/// in underlay mode, onto a native SurfaceView *behind* the Flutter surface)
+/// on Android TV, where libmpv stutters on weak SoCs.
 ///
 /// Volume is on media_kit's 0–100 scale throughout (the widget was written
 /// against it); the Exo engine rescales to 0–1 internally.
 abstract class TrailerEngine {
+  /// True when [buildVideo] renders a see-through hole to a native surface
+  /// *behind* Flutter instead of Flutter pixels. The backdrop widget must then
+  /// invert its crossfade (fade covering content OUT — the video itself can't
+  /// fade) and must not wrap the slot in Opacity/filters (a saveLayer would
+  /// localize the hole's BlendMode.clear and break the punch-through).
+  bool get rendersUnderlay => false;
   Stream<bool> get playingStream;
   Stream<Duration> get positionStream;
   Stream<Duration> get durationStream;
@@ -52,8 +59,11 @@ abstract class TrailerEngine {
   /// Release all native/player resources. Idempotent; implies [detach].
   Future<void> dispose();
 
-  /// The render surface (media_kit `Video` or a Flutter [Texture]).
-  Widget buildVideo({required BoxFit fit});
+  /// The render surface (media_kit `Video`, a Flutter [Texture], or the
+  /// underlay hole). [revealed] only matters for underlay engines: while false
+  /// the slot reports its bounds natively but paints nothing, so the covering
+  /// UI stays opaque and the native surface stays hidden until first frame.
+  Widget buildVideo({required BoxFit fit, bool revealed = true});
 }
 
 /// libmpv-backed engine (the original path). Used off-TV.
@@ -70,6 +80,9 @@ class MediaKitTrailerEngine implements TrailerEngine {
   late final mkv.VideoController _controller;
   bool _disposed = false;
   bool _released = false;
+
+  @override
+  bool get rendersUnderlay => false;
 
   @override
   Stream<bool> get playingStream => _player.stream.playing;
@@ -138,7 +151,7 @@ class MediaKitTrailerEngine implements TrailerEngine {
   }
 
   @override
-  Widget buildVideo({required BoxFit fit}) =>
+  Widget buildVideo({required BoxFit fit, bool revealed = true}) =>
       mkv.Video(controller: _controller, controls: null, fit: fit);
 }
 
@@ -150,15 +163,30 @@ class _ExoRender {
   const _ExoRender(this.textureId, this.width, this.height);
 }
 
-/// Native ExoPlayer rendered into a Flutter [Texture]. Android-TV only. Reuses
-/// the app's proven video-only + audio [MergingMediaSource] merge (built
-/// natively) so high-res YouTube trailers play with hardware decode.
+/// Native ExoPlayer, Android-TV only. Reuses the app's proven video-only +
+/// audio MergingMediaSource merge (built natively) so high-res YouTube
+/// trailers play with hardware decode. Two render modes:
+///
+///  - Texture (default): frames land in a Flutter [Texture]; Flutter
+///    re-composites the scene at video framerate (the historical TV stutter).
+///  - [underlay]: frames land on a native SurfaceView *behind* a translucent
+///    Flutter surface (its own hardware overlay plane — Flutter never touches
+///    them). [buildVideo] then renders a punched-through hole that reports its
+///    bounds to the native side instead of a Texture. Requires MainActivity's
+///    TV transparency mode (same setting gates both).
 class ExoTrailerEngine implements TrailerEngine {
-  ExoTrailerEngine({this.maxHeight = 0});
+  ExoTrailerEngine({this.maxHeight = 0, this.underlay = false});
 
   /// Cap the render texture to this height (0 = uncapped). Trims per-frame GPU
-  /// upload on weak TV GPUs; decode stays hardware-cheap regardless.
+  /// upload on weak TV GPUs; decode stays hardware-cheap regardless. Unused in
+  /// [underlay] mode (there is no per-frame upload to trim).
   final int maxHeight;
+
+  /// Render behind Flutter on a native hardware overlay plane. See class doc.
+  final bool underlay;
+
+  @override
+  bool get rendersUnderlay => underlay;
 
   int? _textureId;
   bool _disposed = false;
@@ -198,6 +226,7 @@ class ExoTrailerEngine implements TrailerEngine {
       maxHeight: maxHeight,
       volume: (volume / 100).clamp(0.0, 1.0),
       loop: loop,
+      underlay: underlay,
     );
     if (_disposed) {
       // A detach raced the native create — release the orphaned player and drop
@@ -327,7 +356,8 @@ class ExoTrailerEngine implements TrailerEngine {
   }
 
   @override
-  Widget buildVideo({required BoxFit fit}) {
+  Widget buildVideo({required BoxFit fit, bool revealed = true}) {
+    if (underlay) return _UnderlayHole(engine: this, revealed: revealed);
     return ValueListenableBuilder<_ExoRender>(
       valueListenable: _render,
       builder: (context, r, _) {
@@ -349,6 +379,98 @@ class ExoTrailerEngine implements TrailerEngine {
       },
     );
   }
+}
+
+/// The render slot for an underlay [ExoTrailerEngine]: continuously reports its
+/// global bounds to the native side and, once [revealed], paints a
+/// [BlendMode.clear] rect that punches through every Flutter pixel below it —
+/// with the Flutter surface translucent (MainActivity's TV path), the native
+/// SurfaceView behind shows through. Content painted *above* this widget
+/// (feathers, tints, text, scrims) still composites over the video normally.
+///
+/// While not [revealed] it paints nothing (the UI above stays opaque, hiding
+/// the SurfaceView) but bounds still flow, so the native surface is already
+/// sized and rendering when the reveal lands — no black flash, no resize.
+class _UnderlayHole extends StatefulWidget {
+  final ExoTrailerEngine engine;
+  final bool revealed;
+
+  const _UnderlayHole({required this.engine, required this.revealed});
+
+  @override
+  State<_UnderlayHole> createState() => _UnderlayHoleState();
+}
+
+class _UnderlayHoleState extends State<_UnderlayHole> {
+  Rect? _sentRect;
+  int? _sentId;
+  bool _scheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleReport();
+  }
+
+  /// Re-measures after every rendered frame while mounted. Piggybacks on
+  /// frames the app renders anyway (addPostFrameCallback never schedules one),
+  /// so scrolls/transitions retarget the native view within a frame while a
+  /// fully idle app — including video playing with no UI changes, the whole
+  /// point of the underlay — pays nothing.
+  void _scheduleReport() {
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      if (!mounted) return;
+      _report();
+      _scheduleReport();
+    });
+  }
+
+  void _report() {
+    final id = widget.engine._textureId;
+    if (id == null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !box.hasSize) return;
+    // Map both corners so ancestor transforms (e.g. the Discover rail's
+    // FittedBox scale) land in true screen space, then go to physical pixels.
+    final topLeft = box.localToGlobal(Offset.zero);
+    final bottomRight = box.localToGlobal(box.size.bottomRight(Offset.zero));
+    final rect = Rect.fromPoints(topLeft, bottomRight);
+    if (rect == _sentRect && id == _sentId) return;
+    _sentRect = rect;
+    _sentId = id;
+    final dpr = View.of(context).devicePixelRatio;
+    _TvTrailerChannel.instance.setBounds(
+      id,
+      (rect.left * dpr).round(),
+      (rect.top * dpr).round(),
+      (rect.width * dpr).round(),
+      (rect.height * dpr).round(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.revealed) return const SizedBox.expand();
+    return const CustomPaint(
+      painter: _HolePunchPainter(),
+      child: SizedBox.expand(),
+    );
+  }
+}
+
+class _HolePunchPainter extends CustomPainter {
+  const _HolePunchPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..blendMode = BlendMode.clear);
+  }
+
+  @override
+  bool shouldRepaint(_HolePunchPainter oldDelegate) => false;
 }
 
 /// Owns the `com.debrify.app/tv_trailer` channel and dispatches native → Dart
@@ -373,6 +495,7 @@ class _TvTrailerChannel {
     required int maxHeight,
     required double volume,
     required bool loop,
+    required bool underlay,
   }) async {
     final res = await _channel.invokeMapMethod<String, dynamic>('create', {
       'videoUrl': videoUrl,
@@ -380,6 +503,7 @@ class _TvTrailerChannel {
       'maxHeight': maxHeight,
       'volume': volume,
       'loop': loop,
+      'underlay': underlay,
     });
     return (res?['textureId'] as num).toInt();
   }
@@ -415,6 +539,14 @@ class _TvTrailerChannel {
 
   Future<void> setVolume(int id, double v) =>
       _safeInvoke('setVolume', {'id': id, 'volume': v});
+  Future<void> setBounds(int id, int left, int top, int width, int height) =>
+      _safeInvoke('setBounds', {
+        'id': id,
+        'left': left,
+        'top': top,
+        'width': width,
+        'height': height,
+      });
   Future<void> seek(int id, int ms) =>
       _safeInvoke('seek', {'id': id, 'positionMs': ms});
   Future<void> play(int id) => _safeInvoke('play', {'id': id});

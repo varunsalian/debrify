@@ -437,6 +437,35 @@ class StorageService {
     await prefs.setInt('home_hero_trailer_volume', percent.clamp(10, 100));
   }
 
+  /// Android TV: render ambient trailers on a native SurfaceView *under* a
+  /// translucent Flutter surface (a hardware overlay plane — Flutter never
+  /// composites the video frames) instead of a Flutter Texture. Default on;
+  /// the toggle is the escape hatch back to the Texture path for boxes where
+  /// the underlay misbehaves. MainActivity reads the same key natively (the
+  /// surface mode is fixed at activity creation), so changes take effect on
+  /// the next app start.
+  static Future<bool> getTvTrailerUnderlayEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('tv_trailer_underlay_enabled') ?? true;
+  }
+
+  static Future<void> setTvTrailerUnderlayEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('tv_trailer_underlay_enabled', enabled);
+  }
+
+  /// First-read-wins snapshot of [getTvTrailerUnderlayEnabled] for engine
+  /// selection. The native transparency mode is fixed at activity creation
+  /// from the same key, so the Dart engine must not flip mid-session when the
+  /// user toggles the setting — an underlay hole against a still-opaque
+  /// Flutter surface would render a black region instead of video (and the
+  /// reverse would silently fall back to Texture, which at least works).
+  /// Restarting the app applies a changed setting to both sides together.
+  static bool? _tvTrailerUnderlaySession;
+  static Future<bool> getTvTrailerUnderlayEnabledAtLaunch() async {
+    return _tvTrailerUnderlaySession ??= await getTvTrailerUnderlayEnabled();
+  }
+
   static Future<bool> getTorboxCacheCheckEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_torboxCacheCheckPref) ?? false;

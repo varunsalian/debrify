@@ -9285,27 +9285,26 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
           if (region == null) return const SizedBox.shrink();
 
           final hasVideo = streams != null && streams.hasPlayable;
-          // The region is present while a trailer is resolving OR playing; it
-          // fades out once neither holds. Listening to `loading` keeps it up
-          // through the resolve gap so frames land inside it, not a pop.
+          // Listening to `loading` keeps the region (and its pill) up through
+          // the resolve gap so frames land inside it, not a pop.
           return ValueListenableBuilder<bool>(
             valueListenable: widget.loading,
             builder: (context, loading, _) {
-              final show = loading || hasVideo;
               return Stack(
                 fit: StackFit.expand,
                 children: [
+                  // No region-level fade wrapper: it was redundant (`show`
+                  // false implies streams == null — the video unmounts
+                  // instantly regardless — and the feathers/pill carry their
+                  // own fades), and the underlay trailer's punch-through hole
+                  // must not sit under an Opacity (its saveLayer would break
+                  // the BlendMode.clear against the translucent surface).
                   Positioned.fromRect(
                     rect: region,
-                    child: AnimatedOpacity(
-                      opacity: show ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 280),
-                      curve: Curves.easeOut,
-                      child: _buildRegion(
-                        hasVideo ? streams : null,
-                        loading,
-                        _playing,
-                      ),
+                    child: _buildRegion(
+                      hasVideo ? streams : null,
+                      loading,
+                      _playing,
                     ),
                   ),
                 ],

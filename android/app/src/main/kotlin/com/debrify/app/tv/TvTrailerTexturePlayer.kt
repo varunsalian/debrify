@@ -1,10 +1,12 @@
 package com.debrify.app.tv
 
 import android.content.Context
-import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
+import android.view.SurfaceView
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -23,30 +25,51 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.TextureRegistry
 
 /**
- * Inline, texture-based ExoPlayer for the ambient trailer backdrop on Android TV.
+ * Inline ExoPlayer for the ambient trailer backdrop on Android TV.
  *
  * media_kit/libmpv stutters decoding the trailer on weak TV SoCs. This renders
- * the same YouTube trailer through ExoPlayer (hardware MediaCodec) into a Flutter
- * [Texture], so it can sit *inside* the widget tree behind the hero content — the
- * fullscreen [AndroidTvTorrentPlayerActivity] can't be embedded, so this is a
- * separate, controls-free surface that reuses that activity's proven
- * video-only + audio [MergingMediaSource] merge for high-res YouTube.
+ * the same YouTube trailer through ExoPlayer (hardware MediaCodec) in one of
+ * two modes, chosen per-player by the Dart side:
  *
- * One instance lives for the app; it manages N players keyed by textureId. All
- * ExoPlayer access happens on the platform/main thread (method-channel calls and
- * [Player.Listener] callbacks both run there). Native → Dart events are pushed on
- * the same channel and dispatched by `id` on the Dart side.
+ *  - **Texture** (`underlay: false`): renders into a Flutter [android.graphics.SurfaceTexture]
+ *    composited by a Flutter `Texture` widget. Works everywhere, but every
+ *    video frame forces Flutter to re-composite the scene on the TV's GPU.
+ *  - **Underlay** (`underlay: true`): renders into a plain [SurfaceView] that
+ *    lives *under* a translucent FlutterView (see MainActivity's
+ *    `getTransparencyMode` / `trailerUnderlayContainer`). The video becomes its
+ *    own hardware overlay plane — Flutter never touches the frames — and shows
+ *    through wherever the Dart side punches a transparent hole in its UI.
+ *    `setBounds` positions the view (physical px, window coords).
+ *
+ * Both modes reuse the fullscreen [AndroidTvTorrentPlayerActivity]'s proven
+ * video-only + audio [MergingMediaSource] merge for high-res YouTube — that
+ * activity itself cannot be embedded, so this is a separate, controls-free
+ * player.
+ *
+ * One instance lives for the app; it manages N players keyed by id (positive =
+ * Flutter texture id, negative = underlay). All ExoPlayer access happens on the
+ * platform/main thread (method-channel calls and [Player.Listener] callbacks
+ * both run there). Native → Dart events are pushed on the same channel and
+ * dispatched by `id` on the Dart side.
  */
 @OptIn(UnstableApi::class)
 class TvTrailerTexturePlayer(
     private val context: Context,
     private val textureRegistry: TextureRegistry,
     messenger: BinaryMessenger,
+    /** Lazily provides the full-window layer under the FlutterView that hosts
+     *  underlay SurfaceViews; null when the host can't offer one (underlay
+     *  create then fails and the Dart side stays on its poster). */
+    private val underlayHost: () -> FrameLayout?,
 ) : MethodChannel.MethodCallHandler {
 
     private val channel = MethodChannel(messenger, CHANNEL)
     private val main = Handler(Looper.getMainLooper())
     private val players = HashMap<Long, Handle>()
+
+    /** Underlay players have no texture entry to mint ids from — hand out
+     *  negatives so they can never collide with texture ids. */
+    private var nextUnderlayId = -1L
 
     init {
         channel.setMethodCallHandler(this)
@@ -54,10 +77,13 @@ class TvTrailerTexturePlayer(
 
     private class Handle(
         val id: Long,
-        val entry: TextureRegistry.SurfaceTextureEntry,
-        val surface: Surface,
         val player: ExoPlayer,
         val maxHeight: Int,
+        // Texture mode.
+        val entry: TextureRegistry.SurfaceTextureEntry? = null,
+        val surface: Surface? = null,
+        // Underlay mode.
+        val surfaceView: SurfaceView? = null,
     )
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -77,6 +103,10 @@ class TvTrailerTexturePlayer(
             }
             "pause" -> {
                 handle(call)?.player?.pause()
+                result.success(null)
+            }
+            "setBounds" -> {
+                setBounds(call)
                 result.success(null)
             }
             "getPosition" -> {
@@ -112,19 +142,45 @@ class TvTrailerTexturePlayer(
         val maxHeight = call.argument<Number>("maxHeight")?.toInt() ?: 0
         val volume = (call.argument<Double>("volume") ?: 1.0).toFloat()
         val loop = call.argument<Boolean>("loop") ?: true
+        val underlay = call.argument<Boolean>("underlay") ?: false
 
         try {
-            val entry = textureRegistry.createSurfaceTexture()
-            val id = entry.id()
-            val surface = Surface(entry.surfaceTexture())
             val player = ExoPlayer.Builder(context).build()
-            player.setVideoSurface(surface)
+            val handle: Handle
+            if (underlay) {
+                val container = underlayHost()
+                if (container == null) {
+                    player.release()
+                    result.error("no_underlay", "underlay container unavailable", null)
+                    return
+                }
+                val id = nextUnderlayId--
+                val surfaceView = SurfaceView(container.context)
+                // Start 1×1: a valid render surface for ExoPlayer immediately,
+                // but effectively invisible — the underlay only shows through
+                // where Flutter clears pixels, and nothing is cleared until the
+                // Dart side reveals the hole. Real bounds land via setBounds
+                // (sent as soon as the Dart slot mounts) well before that, so
+                // the surface is already full-size and rendering on reveal —
+                // no black flash, no post-reveal resize.
+                container.addView(surfaceView, FrameLayout.LayoutParams(1, 1))
+                player.setVideoSurfaceView(surfaceView)
+                // Cover-crop inside the bounds rect (the Texture path does this
+                // with a Dart FittedBox; here MediaCodec crops while rendering).
+                player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                handle = Handle(id, player, maxHeight, surfaceView = surfaceView)
+            } else {
+                val entry = textureRegistry.createSurfaceTexture()
+                val id = entry.id()
+                val surface = Surface(entry.surfaceTexture())
+                player.setVideoSurface(surface)
+                handle = Handle(id, player, maxHeight, entry = entry, surface = surface)
+            }
             player.volume = volume
             player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
             player.playWhenReady = true
-
-            val handle = Handle(id, entry, surface, player, maxHeight)
-            players[id] = handle
+            players[handle.id] = handle
+            val id = handle.id
 
             // Reuse the app's high-res YouTube merge: a video-only track muxed
             // with its separate audio track. Cross-protocol redirects match the
@@ -163,9 +219,10 @@ class TvTrailerTexturePlayer(
                 }
 
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
-                    // Cap the texture (and thus GPU upload) to [maxHeight] — the
-                    // backdrop never needs full res. Decode stays hardware-cheap
-                    // regardless; this trims the per-frame upload on weak TV GPUs.
+                    // Texture mode: cap the texture (and thus GPU upload) to
+                    // [maxHeight] — the backdrop never needs full res. Underlay
+                    // mode needs no cap (the compositor scales the plane; there
+                    // is no per-frame GPU upload to trim).
                     applyBufferCap(handle, videoSize.width, videoSize.height)
                     emit(
                         "videoSize",
@@ -197,7 +254,30 @@ class TvTrailerTexturePlayer(
         }
     }
 
+    /** Position an underlay SurfaceView (physical px, window coordinates).
+     *  No-op for texture players and for unchanged rects. */
+    private fun setBounds(call: MethodCall) {
+        val sv = handle(call)?.surfaceView ?: return
+        val left = call.argument<Number>("left")?.toInt() ?: return
+        val top = call.argument<Number>("top")?.toInt() ?: return
+        val width = call.argument<Number>("width")?.toInt() ?: return
+        val height = call.argument<Number>("height")?.toInt() ?: return
+        if (width <= 0 || height <= 0) return
+        val lp = sv.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (lp.width == width && lp.height == height &&
+            lp.leftMargin == left && lp.topMargin == top
+        ) {
+            return
+        }
+        lp.width = width
+        lp.height = height
+        lp.leftMargin = left
+        lp.topMargin = top
+        sv.layoutParams = lp
+    }
+
     private fun applyBufferCap(h: Handle, width: Int, height: Int) {
+        val entry = h.entry ?: return
         if (width <= 0 || height <= 0) return
         var tw = width
         var th = height
@@ -208,7 +288,7 @@ class TvTrailerTexturePlayer(
             th = cap
         }
         try {
-            h.entry.surfaceTexture().setDefaultBufferSize(tw, th)
+            entry.surfaceTexture().setDefaultBufferSize(tw, th)
         } catch (_: Exception) {
         }
     }
@@ -229,11 +309,16 @@ class TvTrailerTexturePlayer(
         } catch (_: Exception) {
         }
         try {
-            handle.surface.release()
+            handle.surface?.release()
         } catch (_: Exception) {
         }
         try {
-            handle.entry.release()
+            handle.entry?.release()
+        } catch (_: Exception) {
+        }
+        // Underlay: drop the view (and its punched-through window region).
+        try {
+            handle.surfaceView?.let { (it.parent as? ViewGroup)?.removeView(it) }
         } catch (_: Exception) {
         }
     }

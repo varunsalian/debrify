@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../services/app_route_observer.dart';
 import '../services/main_page_bridge.dart';
+import '../services/storage_service.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'trailer_engine.dart';
@@ -194,20 +195,40 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// buffer window the parent falls back to launching the standalone player.
   bool get canPromote => _engine != null && _videoVisible;
 
-  /// TV (Android) gets the native ExoPlayer-into-a-Texture engine — libmpv
-  /// stutters decoding the trailer on weak TV SoCs. Everything else keeps the
-  /// proven media_kit path.
+  /// TV underlay preference (Settings → Home Page → Native Trailer Surface).
+  /// Loaded async in initState; engines are only created after [startDelay],
+  /// long after this resolves. Off-TV it is never read.
+  bool _underlayPref = false;
+
+  /// TV (Android) gets the native ExoPlayer engine — libmpv stutters decoding
+  /// the trailer on weak TV SoCs. By default (pref on) it renders in underlay
+  /// mode: a native SurfaceView *behind* a translucent Flutter surface, its
+  /// own hardware overlay plane, so Flutter never composites video frames —
+  /// the Texture path re-rasterized the scene at video framerate, which is
+  /// what stuttered. Underlay needs the blur-free config (a Flutter gaussian
+  /// can't touch pixels that aren't in the Flutter surface); every TV call
+  /// site passes sigma 0. Everything else keeps the proven media_kit path.
   TrailerEngine _createEngine() {
     final useExo =
         !kIsWeb && Platform.isAndroid && PlatformUtil.isAndroidTvCached;
     return useExo
-        ? ExoTrailerEngine(maxHeight: _tvTrailerMaxHeight)
+        ? ExoTrailerEngine(
+            maxHeight: _tvTrailerMaxHeight,
+            underlay: _underlayPref && widget.videoBlurSigma <= 0,
+          )
         : MediaKitTrailerEngine();
   }
 
   @override
   void initState() {
     super.initState();
+    if (!kIsWeb && Platform.isAndroid && PlatformUtil.isAndroidTvCached) {
+      // AtLaunch (not the live pref): must match the surface mode the activity
+      // was created with — see StorageService.getTvTrailerUnderlayEnabledAtLaunch.
+      StorageService.getTvTrailerUnderlayEnabledAtLaunch().then((v) {
+        if (mounted) _underlayPref = v;
+      });
+    }
     WidgetsBinding.instance.addObserver(this);
     MainPageBridge.addExternalPlayerLaunchListener(_onExternalPlayerLaunched);
     MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunching);
@@ -627,10 +648,19 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     final engine = _engine;
     final t = _fg.value; // 0 ambient → 1 foreground
     final videoBlur = lerpDouble(widget.videoBlurSigma, 0, t)!;
+    final underlay = engine?.rendersUnderlay ?? false;
 
     return Stack(
       fit: StackFit.expand,
       children: [
+        // Underlay engine: the video is a native surface BEHIND Flutter, so
+        // its slot goes at the bottom of the stack — a punched-through hole
+        // (revealed with the first frame) plus bounds reporting. It must not
+        // sit under any Opacity/filter of ours (a saveLayer would localize the
+        // hole's BlendMode.clear and break the punch-through), so the
+        // crossfade runs inverted: the static image ABOVE fades out instead.
+        if (engine != null && underlay)
+          engine.buildVideo(fit: BoxFit.cover, revealed: _videoVisible),
         // Static backdrop — always present, so the crossfade has a floor and a
         // missing/late trailer simply shows the poster. When a heroTag is set
         // this layer doubles as the shared-element destination: the tapped
@@ -646,14 +676,25 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         // free. [imageBlurSigma] <= 0 requests an even smaller decode with no
         // filter at all (the weak-TV path); > 0 keeps a light gaussian on top
         // to hide upscale artifacts on capable GPUs.
-        if (widget.imageUrl != null) _withHero(_buildStaticBackdrop()),
-        // Trailer, crossfaded in once it produces frames. When the widget is
-        // CONFIGURED blur-free (TV), the ImageFiltered layer is omitted — it
-        // costs a per-frame filter pass over the video surface even at sigma
-        // 0. Branch on the static config, never the animated [videoBlur]: a
-        // mid-promotion branch flip would re-parent the live Video widget and
-        // flash the texture.
-        if (engine != null)
+        if (widget.imageUrl != null)
+          underlay
+              ? AnimatedOpacity(
+                  // Underlay crossfade: the video can't fade in (it isn't
+                  // Flutter pixels), so the poster fades OUT over the
+                  // already-running surface behind it.
+                  opacity: _videoVisible ? 0 : 1,
+                  duration: const Duration(milliseconds: 650),
+                  curve: Curves.easeOut,
+                  child: _withHero(_buildStaticBackdrop()),
+                )
+              : _withHero(_buildStaticBackdrop()),
+        // Texture/media_kit engines: trailer crossfaded in over the image once
+        // it produces frames. When the widget is CONFIGURED blur-free (TV),
+        // the ImageFiltered layer is omitted — it costs a per-frame filter
+        // pass over the video surface even at sigma 0. Branch on the static
+        // config, never the animated [videoBlur]: a mid-promotion branch flip
+        // would re-parent the live Video widget and flash the texture.
+        if (engine != null && !underlay)
           AnimatedOpacity(
             opacity: _videoVisible ? 1 : 0,
             duration: const Duration(milliseconds: 650),

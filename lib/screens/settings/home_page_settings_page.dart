@@ -32,6 +32,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   bool _heroTrailerEnabled = true;
   bool _heroTrailerAudioEnabled = true;
   int _heroTrailerVolume = 70;
+  bool _tvTrailerUnderlayEnabled = true;
   List<StremioAddon> _addons = [];
 
   @override
@@ -65,6 +66,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final heroTrailerAudioEnabled =
           await StorageService.getHomeHeroTrailerAudioEnabled();
       final heroTrailerVolume = await StorageService.getHomeHeroTrailerVolume();
+      final tvTrailerUnderlayEnabled =
+          await StorageService.getTvTrailerUnderlayEnabled();
       final traktListType = await StorageService.getHomeDefaultTraktListType();
       final traktContentType =
           await StorageService.getHomeDefaultTraktContentType();
@@ -100,6 +103,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         // Off-grid stored values are injected as an extra dropdown option
         // (see _volumeOptions), so nothing silently changes on load.
         _heroTrailerVolume = heroTrailerVolume;
+        _tvTrailerUnderlayEnabled = tvTrailerUnderlayEnabled;
         _loading = false;
       });
       // TV: land DPAD focus on the first row so users aren't stranded.
@@ -667,6 +671,38 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           ),
                         ),
                     ],
+                    // TV only: which surface the ambient trailers render on.
+                    // Underlay (default) = native hardware plane behind a
+                    // translucent Flutter surface, the smooth path; off =
+                    // legacy Flutter-Texture compositing, the escape hatch.
+                    if (PlatformUtil.isAndroidTvCached)
+                      SettingsToggleTile(
+                        icon: Icons.layers_rounded,
+                        title: 'Native Trailer Surface',
+                        subtitle:
+                            'Render trailers on a hardware surface for smoother '
+                            'playback. Turn off if trailers glitch. Takes '
+                            'effect after restarting the app.',
+                        subtitleMaxLines: 3,
+                        value: _tvTrailerUnderlayEnabled,
+                        onChanged: (value) async {
+                          try {
+                            await StorageService.setTvTrailerUnderlayEnabled(
+                              value,
+                            );
+                            if (!mounted) return;
+                            setState(() => _tvTrailerUnderlayEnabled = value);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to save setting: $e'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
                   ],
                 ),
                 const SizedBox(height: 16),

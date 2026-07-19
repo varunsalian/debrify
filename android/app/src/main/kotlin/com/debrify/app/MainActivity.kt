@@ -10,8 +10,11 @@ import android.app.UiModeManager
 import android.content.res.Configuration
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.TransparencyMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -25,8 +28,60 @@ class MainActivity : FlutterActivity() {
     private val ANDROID_TV_CHANNEL = "com.debrify.app/android_tv_player"
     private val REMOTE_CONTROL_CHANNEL = "com.debrify.app/remote_control"
 
-    // Inline texture-based ExoPlayer for the ambient trailer backdrop on TV.
+    // Inline ExoPlayer for the ambient trailer backdrop on TV.
     private var tvTrailerPlayer: com.debrify.app.tv.TvTrailerTexturePlayer? = null
+
+    // Full-window layer UNDER the FlutterView hosting the trailer underlay
+    // SurfaceView(s). See trailerUnderlayContainer().
+    private var trailerUnderlayContainer: FrameLayout? = null
+
+    private fun isTelevision(): Boolean = try {
+        (getSystemService(UI_MODE_SERVICE) as UiModeManager)
+            .currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+    } catch (e: Exception) {
+        false
+    }
+
+    /** The Dart-owned setting (Settings → Home Page → Native Trailer Surface),
+     *  read from the shared_preferences plugin's store. Must be checked here
+     *  too: the transparency mode is fixed at activity creation, so flipping
+     *  the toggle takes effect on the next app start. */
+    private fun trailerUnderlayEnabled(): Boolean =
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .getBoolean("flutter.tv_trailer_underlay_enabled", true)
+
+    /**
+     * TV: make the Flutter surface translucent so the ambient trailer can play
+     * on a native SurfaceView *behind* it (its own hardware overlay plane —
+     * Flutter never composites the video frames; see TvTrailerTexturePlayer's
+     * underlay mode). This keeps the fast SurfaceView render path — RenderMode
+     * stays `surface` because the background mode is untouched — the Flutter
+     * surface just gets a TRANSLUCENT format and sits Z-above the window. The
+     * window, launch theme and every non-TV platform are unchanged, and the app
+     * paints opaque UI everywhere except the trailer hole, so nothing else is
+     * visibly different.
+     */
+    override fun getTransparencyMode(): TransparencyMode =
+        if (isTelevision() && trailerUnderlayEnabled()) TransparencyMode.transparent
+        else super.getTransparencyMode()
+
+    /** Lazily creates the underlay container at content-view index 0 (below the
+     *  FlutterView). Called from the platform thread on first underlay create. */
+    private fun trailerUnderlayContainer(): FrameLayout? {
+        trailerUnderlayContainer?.let { return it }
+        val content = findViewById<ViewGroup>(android.R.id.content) ?: return null
+        val container = FrameLayout(this)
+        content.addView(
+            container,
+            0,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        trailerUnderlayContainer = container
+        return container
+    }
 
     companion object {
         @JvmStatic
@@ -305,17 +360,12 @@ class MainActivity : FlutterActivity() {
         // again on a reused engine without an intervening onDestroy.
         tvTrailerPlayer?.releaseAll()
         tvTrailerPlayer = null
-        val isTelevision = try {
-            (getSystemService(UI_MODE_SERVICE) as UiModeManager)
-                .currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
-        } catch (e: Exception) {
-            false
-        }
-        if (isTelevision) {
+        if (isTelevision()) {
             tvTrailerPlayer = com.debrify.app.tv.TvTrailerTexturePlayer(
                 this,
                 flutterEngine.renderer,
                 flutterEngine.dartExecutor.binaryMessenger,
+                { trailerUnderlayContainer() },
             )
         }
 
