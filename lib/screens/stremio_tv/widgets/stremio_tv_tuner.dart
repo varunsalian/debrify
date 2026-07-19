@@ -298,7 +298,9 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     final idx = channels.indexWhere((c) => c.id == id);
     if (idx < 0) return;
     final width = widget.hideNowPlaying
-        ? 480
+        // Must mirror the Stage's hidden-mode decode exactly (96 on TV — the
+        // no-gaussian tiny decode) or the warm-up decodes a second copy.
+        ? (widget.isTelevision ? 96 : 480)
         : (widget.isTelevision
             ? HomeTheme.heroBackdropCacheWidthTv
             : HomeTheme.heroBackdropCacheWidth);
@@ -969,9 +971,12 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                   fit: BoxFit.cover,
                   // The Stage swaps a fresh full-bleed backdrop on every surf
                   // settle, so it uses the shared hero decode cap (1080 on
-                  // TV) rather than an oversized decode per step.
+                  // TV) rather than an oversized decode per step. Hidden mode
+                  // on TV decodes at 96px with NO gaussian pass (below): the
+                  // cover-fit upscale of a tiny decode reads as the same
+                  // obscuring blur for free — the hero backdrop's recipe.
                   memCacheWidth: blurArt
-                      ? 480
+                      ? (widget.isTelevision ? 96 : 480)
                       : (widget.isTelevision
                           ? HomeTheme.heroBackdropCacheWidthTv
                           : HomeTheme.heroBackdropCacheWidth),
@@ -983,7 +988,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                   fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 );
-                if (blurArt) {
+                if (blurArt && !widget.isTelevision) {
                   art = ImageFiltered(
                     imageFilter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
                     child: art,
@@ -1853,6 +1858,22 @@ class _DialCardState extends State<_DialCard> {
                       fadeOutDuration:
                           HomeTheme.imageFadeOut(widget.isTelevision),
                       placeholder: (_, __) => _placeholder(ident),
+                      errorWidget: (_, __, ___) => _placeholder(ident),
+                    )
+                  // Hidden mode, TV: a 16px decode upscaled by cover-fit is
+                  // the obscuring "blur" — no gaussian pass, so the card
+                  // costs the same as a plain poster on the weak GPU.
+                  else if (poster != null &&
+                      widget.hideNowPlaying &&
+                      widget.isTelevision)
+                    CachedNetworkImage(
+                      imageUrl: poster,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 16,
+                      fadeInDuration:
+                          HomeTheme.imageFadeIn(widget.isTelevision),
+                      fadeOutDuration:
+                          HomeTheme.imageFadeOut(widget.isTelevision),
                       errorWidget: (_, __, ___) => _placeholder(ident),
                     )
                   else if (poster != null && widget.hideNowPlaying)

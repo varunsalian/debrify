@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/dominant_color.dart';
+import '../utils/platform_util.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/playlist_view_mode.dart';
@@ -185,6 +186,26 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     debugLabel: 'merged-left-entry',
   );
 
+  /// Pane containment (two-pane layout). Each pane lives in its own
+  /// [FocusScope]: directional traversal only considers candidates inside the
+  /// focused node's nearest scope, so Up/Down can never geometry-jump across
+  /// the pane border (DOWN on the last episode used to land on a cast tile in
+  /// the info column). Crossing is explicit and horizontal only: LEFT from the
+  /// episodes pane → [_leftEntryFocusNode]; RIGHT from the info pane →
+  /// [_focusEpisodesPane] (the pane's last-focused row, remembered by its
+  /// scope).
+  final FocusScopeNode _infoPaneScope = FocusScopeNode(
+    debugLabel: 'merged-info-pane',
+  );
+  final FocusScopeNode _episodesPaneScope = FocusScopeNode(
+    debugLabel: 'merged-episodes-pane',
+  );
+
+  /// The floating back button — the info pane hands focus here when UP is
+  /// pressed at its top (it sits outside the pane scopes, so contained
+  /// traversal alone could never reach it).
+  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'merged-back');
+
   StremioMeta get _item => _enriched ?? widget.item;
 
   /// Primary-button resume state. Until loaded the button keeps its static
@@ -300,6 +321,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     appRouteObserver.unsubscribe(this);
     _infoScroll.dispose();
     _leftEntryFocusNode.dispose();
+    _infoPaneScope.dispose();
+    _episodesPaneScope.dispose();
+    _backButtonFocusNode.dispose();
     super.dispose();
   }
 
@@ -675,6 +699,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                                 Icons.arrow_back_rounded,
                                 () => Navigator.of(context).maybePop(),
                                 tooltip: 'Back',
+                                focusNode: _backButtonFocusNode,
                               ),
                             ),
                           ),
@@ -706,8 +731,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   /// TV + desktop: left info column (scrollable) + right episode column (full
-  /// height). Episodes own Up/Down + in-card Left/Right; the info column is
-  /// reached by Up to the season selector then Left, or from the back button.
+  /// height). Each pane is its own [FocusScope] so vertical traversal is
+  /// contained within it; panes are crossed only horizontally — LEFT from an
+  /// episode to the info column's primary action, RIGHT from the info column
+  /// back to the pane's remembered episode row.
   Widget _buildTwoPane(String? backdropUrl) {
     final w = MediaQuery.of(context).size.width;
     final leftW = (w * 0.42).clamp(320.0, 480.0);
@@ -717,31 +744,116 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // Left info column, darkened so text stays legible over any backdrop.
         SizedBox(
           width: leftW,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  _bg.withValues(alpha: 0.82),
-                  _bg.withValues(alpha: 0.5),
-                ],
+          child: FocusScope(
+            node: _infoPaneScope,
+            onKeyEvent: _handleInfoPaneKey,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    _bg.withValues(alpha: 0.82),
+                    _bg.withValues(alpha: 0.5),
+                  ],
+                ),
               ),
+              child: _buildInfoPane(),
             ),
-            child: _buildInfoPane(),
           ),
         ),
         Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: const Color(0xFF0E0B14).withValues(alpha: 0.82),
-              border: Border(left: BorderSide(color: _hair)),
+          child: FocusScope(
+            node: _episodesPaneScope,
+            onKeyEvent: _handleEpisodesPaneKey,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0E0B14).withValues(alpha: 0.82),
+                border: Border(left: BorderSide(color: _hair)),
+              ),
+              child: _buildEpisodesPanel(),
             ),
-            child: _buildEpisodesPanel(),
           ),
         ),
       ],
     );
+  }
+
+  /// Cross RIGHT into the episodes pane: the scope remembers its last-focused
+  /// row, so re-entry lands where the user left off (first traversable —
+  /// season header or first row — on a cold entry).
+  void _focusEpisodesPane() {
+    final scope = _episodesPaneScope;
+    FocusNode? target = scope.focusedChild;
+    if (target == null) {
+      final descendants = scope.traversalDescendants;
+      target = descendants.isEmpty ? null : descendants.first;
+    }
+    target?.requestFocus();
+  }
+
+  /// Info-pane key policy. These fire only for keys the focused child ignored
+  /// (buttons/tiles don't handle arrows), and always attempt an in-scope
+  /// directional move first — so Play → Trailer etc. still work — falling back
+  /// to the explicit pane behavior only at the pane's edge:
+  ///  • RIGHT at the right edge crosses into the episodes pane;
+  ///  • UP at the top goes to the floating back button;
+  ///  • DOWN at the bottom is a dead stop (never leaks into episodes).
+  KeyEventResult _handleInfoPaneKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (!primary.focusInDirection(TraversalDirection.right)) {
+        _focusEpisodesPane();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (!primary.focusInDirection(TraversalDirection.up)) {
+        _backButtonFocusNode.requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      primary.focusInDirection(TraversalDirection.down);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Episodes-pane key policy: Up/Down move within the pane only (dead stop at
+  /// the first/last row — the scope already contains directional traversal;
+  /// handling the key here just stops it from bubbling further). LEFT from the
+  /// season header (rows handle their own LEFT) falls through the header
+  /// controls and then crosses to the info column's primary action.
+  KeyEventResult _handleEpisodesPaneKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      primary.focusInDirection(
+        key == LogicalKeyboardKey.arrowUp
+            ? TraversalDirection.up
+            : TraversalDirection.down,
+      );
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (!primary.focusInDirection(TraversalDirection.left) &&
+          _leftEntryFocusNode.context != null) {
+        _leftEntryFocusNode.requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   Widget _buildInfoPane() {
@@ -757,7 +869,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ? item.description
         : extra?.plot;
 
-    final animate = !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
+    // No entrance stagger on TV: each _StaggerReveal animates Opacity (a
+    // saveLayer per element per frame) during the exact window the page is
+    // also hero-flying and resolving the trailer — the weak TV GPU pays for
+    // polish nobody perceives at 3m. Same gate as the Home hero's motion.
+    final animate =
+        !(MediaQuery.maybeOf(context)?.disableAnimations ?? false) &&
+        !widget.isTelevision;
     return SingleChildScrollView(
       controller: _infoScroll,
       padding: EdgeInsets.fromLTRB(
@@ -888,7 +1006,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // button). Bonus: with autoplay on, the ambient trailer now owns the whole
     // screen behind the page instead of stopping at a card edge. Top padding
     // clears the 46px floating back button.
-    final animate = !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
+    final animate =
+        !(MediaQuery.maybeOf(context)?.disableAnimations ?? false) &&
+        !widget.isTelevision;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         widget.isTelevision ? 40 : 24,
@@ -1520,9 +1640,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// DPAD-right at the build edge found no next card and the focus jumped clean
   /// out of the rail (into the episodes pane) mid-browse. With every card real,
   /// traversal walks the whole rail and the framework auto-scrolls each focused
-  /// card into view. The first/last cards trap LEFT/RIGHT so the rail's ends
-  /// are dead stops instead of teleports to unrelated controls.
+  /// card into view. The first card traps LEFT as a dead stop; the last card's
+  /// RIGHT crosses deterministically into the episodes pane in the series
+  /// two-pane layout (dead stop otherwise) — RIGHT is the sanctioned pane
+  /// crossing, so it should work from a rail end too.
   Widget _focusRail({required List<Widget> cards, required double gap}) {
+    final crossRight = (!_isMovie && _wide) ? _focusEpisodesPane : null;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -1532,6 +1655,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             _RailEdgeTrap(
               trapLeft: i == 0,
               trapRight: i == cards.length - 1,
+              onTrapRight: crossRight,
               child: cards[i],
             ),
           ],
@@ -1598,11 +1722,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 12)),
   );
 
-  Widget _circleButton(IconData icon, VoidCallback onTap, {String? tooltip}) {
+  Widget _circleButton(
+    IconData icon,
+    VoidCallback onTap, {
+    String? tooltip,
+    FocusNode? focusNode,
+  }) {
     return _RoundIconButton(
       icon: icon,
       onTap: onTap,
       tooltip: tooltip,
+      focusNode: focusNode,
       background: Colors.black.withValues(alpha: 0.35),
     );
   }
@@ -1703,7 +1833,11 @@ class _FocusHalo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 140),
+      // Snap on TV (house focus idiom): a 140ms ring fade per DPAD move makes
+      // held-key surfing repaint every element in flight on the weak GPU.
+      duration: PlatformUtil.isAndroidTvCached
+          ? Duration.zero
+          : const Duration(milliseconds: 140),
       foregroundDecoration: BoxDecoration(
         shape: radius == null ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: radius,
@@ -1726,10 +1860,15 @@ class _RailEdgeTrap extends StatelessWidget {
   final bool trapRight;
   final Widget child;
 
+  /// When set, RIGHT on the last card invokes this (pane crossing) instead of
+  /// dead-stopping.
+  final VoidCallback? onTrapRight;
+
   const _RailEdgeTrap({
     required this.trapLeft,
     required this.trapRight,
     required this.child,
+    this.onTrapRight,
   });
 
   @override
@@ -1747,6 +1886,7 @@ class _RailEdgeTrap extends StatelessWidget {
           return KeyEventResult.handled;
         }
         if (trapRight && key == LogicalKeyboardKey.arrowRight) {
+          onTrapRight?.call();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -1913,7 +2053,11 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
   @override
   Widget build(BuildContext context) {
     return AnimatedScale(
-      duration: const Duration(milliseconds: 140),
+      // Snap on TV: every frame of the scale pop re-rasters the pill AND its
+      // blur-18 glow shadow; instant scale keeps the glow a one-time paint.
+      duration: PlatformUtil.isAndroidTvCached
+          ? Duration.zero
+          : const Duration(milliseconds: 140),
       scale: _focused ? 1.05 : 1.0,
       child: _FocusHalo(
         focused: _focused,
@@ -2238,11 +2382,13 @@ class _RoundIconButton extends StatefulWidget {
   final VoidCallback onTap;
   final String? tooltip;
   final Color? background;
+  final FocusNode? focusNode;
   const _RoundIconButton({
     required this.icon,
     required this.onTap,
     this.tooltip,
     this.background,
+    this.focusNode,
   });
 
   @override
@@ -2263,6 +2409,7 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
         ),
         child: InkWell(
           customBorder: const CircleBorder(),
+          focusNode: widget.focusNode,
           onTap: widget.onTap,
           onFocusChange: (f) => setState(() => _focused = f),
           child: SizedBox(

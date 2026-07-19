@@ -9,6 +9,7 @@ import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/tvmaze_service.dart';
 import '../services/storage_service.dart';
+import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import 'episode_tile.dart';
@@ -999,7 +1000,11 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
       builder: (context, _) {
         final hasFocus = _episodeSeasonDropdownFocusNode.hasFocus;
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          // TV: snap the focus ring and skip the blurred glow — the animated
+          // blur shadow re-rasters every frame of the fade on the weak GPU.
+          duration: widget.isTelevision
+              ? Duration.zero
+              : const Duration(milliseconds: 150),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: hasFocus ? 0.12 : 0.06),
             borderRadius: BorderRadius.circular(12),
@@ -1009,7 +1014,7 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
                   : Colors.white.withValues(alpha: 0.10),
               width: hasFocus ? 2.0 : 1.0,
             ),
-            boxShadow: hasFocus
+            boxShadow: (hasFocus && !widget.isTelevision)
                 ? [
                     BoxShadow(
                       color: HomeTheme.focusGold.withValues(alpha: 0.32),
@@ -1494,7 +1499,9 @@ class _CatalogSelectSourceButtonState
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: PlatformUtil.isAndroidTvCached
+              ? Duration.zero
+              : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: widget.hasBoundSource
@@ -1509,7 +1516,7 @@ class _CatalogSelectSourceButtonState
                   : Colors.white.withValues(alpha: 0.14),
               width: _isFocused ? 2 : 1,
             ),
-            boxShadow: _isFocused
+            boxShadow: (_isFocused && !PlatformUtil.isAndroidTvCached)
                 ? [
                     BoxShadow(
                       color: HomeTheme.focusGold.withValues(alpha: 0.32),
@@ -1646,7 +1653,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
     final rating = (e.rating != null && e.rating! > 0) ? e.rating : null;
     final hasMeta = (airDate != null && airDate.isNotEmpty) || rating != null;
 
-    return Focus(
+    final row = Focus(
       focusNode: widget.focusNode,
       onFocusChange: (f) {
         if (mounted) setState(() => _focused = f);
@@ -1688,7 +1695,11 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
           onLongPress: widget.onOptions,
           behavior: HitTestBehavior.opaque,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
+            // Snap the focus ring on TV (house idiom) — held-DPAD scrolling
+            // otherwise animates two rows' fills/borders on every step.
+            duration: widget.isTelevision
+                ? Duration.zero
+                : const Duration(milliseconds: 140),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: _focused
@@ -1718,6 +1729,14 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                           CachedNetworkImage(
                             imageUrl: thumbUrl,
                             fit: BoxFit.cover,
+                            // 124-logical-px thumb — the show-poster fallback
+                            // is a full-size poster; never decode it full-res
+                            // for a row thumbnail (×N rows on a 2 GB box).
+                            memCacheWidth: 300,
+                            fadeInDuration:
+                                HomeTheme.imageFadeIn(widget.isTelevision),
+                            fadeOutDuration:
+                                HomeTheme.imageFadeOut(widget.isTelevision),
                             errorWidget: (_, __, ___) =>
                                 Container(color: const Color(0xFF1A1622)),
                           )
@@ -1896,5 +1915,8 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
         ),
       ),
     );
+    // RepaintBoundary: a focus move repaints only the two rows whose ring
+    // changed, not the whole episode column (thumbnails, scrims and all).
+    return RepaintBoundary(child: row);
   }
 }
