@@ -338,7 +338,10 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                   widget.onLongPress!();
                 },
           behavior: HitTestBehavior.opaque,
-          child: card,
+          // Isolate the tile's repaint: focus flips its shadow/ring/overlay,
+          // and without a boundary each DPAD move repaints the whole grid
+          // viewport layer instead of just the two affected tiles.
+          child: RepaintBoundary(child: card),
         ),
       ),
     );

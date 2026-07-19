@@ -199,8 +199,9 @@ class _PlContentState extends State<_PlContent>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    // Only drive the Ken Burns controller when there's a backdrop to animate.
-    if (!_reduceMotion && _hasPoster && !_kb.isAnimating) {
+    // Only drive the Ken Burns controller when there's a backdrop to animate
+    // (TV renders the static gradient backdrop — see _backdrop).
+    if (!_reduceMotion && !widget.isTv && _hasPoster && !_kb.isAnimating) {
       _kb.repeat(reverse: true);
     }
   }
@@ -235,7 +236,11 @@ class _PlContentState extends State<_PlContent>
 
   // ── Backdrop ────────────────────────────────────────────────────────────
   Widget _backdrop() {
-    if (!_hasPoster) {
+    // TV: the blurred Ken-Burns poster is a per-frame full-screen 26px blur —
+    // the single most expensive effect a weak TV GPU can be asked for. The
+    // gradient (the no-poster look) is free; the foreground poster card still
+    // carries the artwork.
+    if (!_hasPoster || widget.isTv) {
       return const DecoratedBox(
         decoration: BoxDecoration(
           gradient: RadialGradient(

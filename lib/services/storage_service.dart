@@ -6,6 +6,7 @@ import 'debrid_service.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/webdav_item.dart';
+import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 
 class StorageService {
@@ -704,7 +705,7 @@ class StorageService {
     final raw = prefs.getString(_continueWatchingKey);
     if (raw == null || raw.isEmpty) return [];
     try {
-      final List<dynamic> list = jsonDecode(raw);
+      final List<dynamic> list = await decodeJsonAsync(raw);
       final items = list
           .whereType<Map<String, dynamic>>()
           .map((e) => Map<String, dynamic>.from(e))
@@ -736,7 +737,7 @@ class StorageService {
     List<Map<String, dynamic>> items = [];
     if (raw != null && raw.isNotEmpty) {
       try {
-        final List<dynamic> list = jsonDecode(raw);
+        final List<dynamic> list = await decodeJsonAsync(raw);
         items = list
             .whereType<Map<String, dynamic>>()
             .map((e) => Map<String, dynamic>.from(e))
@@ -770,7 +771,7 @@ class StorageService {
     final raw = prefs.getString(_continueWatchingKey);
     if (raw == null || raw.isEmpty) return;
     try {
-      final List<dynamic> list = jsonDecode(raw);
+      final List<dynamic> list = await decodeJsonAsync(raw);
       final items = list
           .whereType<Map<String, dynamic>>()
           .map((e) => Map<String, dynamic>.from(e))
@@ -792,7 +793,7 @@ class StorageService {
     final raw = prefs.getString(_playbackStateKey);
     if (raw == null || raw.isEmpty) return {};
     try {
-      final decoded = jsonDecode(raw);
+      final decoded = await decodeJsonAsync(raw);
       if (decoded is Map<String, dynamic>) return decoded;
       return {};
     } catch (_) {
@@ -1111,7 +1112,7 @@ class StorageService {
     final raw = prefs.getString(_episodeTraktProgressKey);
     if (raw == null || raw.isEmpty) return {};
     try {
-      final decoded = jsonDecode(raw);
+      final decoded = await decodeJsonAsync(raw);
       if (decoded is! Map) return {};
       final series = decoded[_episodeTraktKeyFor(imdbId)];
       if (series is! Map) return {};
@@ -1138,7 +1139,7 @@ class StorageService {
     Map<String, dynamic> all = {};
     if (raw != null && raw.isNotEmpty) {
       try {
-        final decoded = jsonDecode(raw);
+        final decoded = await decodeJsonAsync(raw);
         if (decoded is Map<String, dynamic>) all = decoded;
       } catch (_) {}
     }
@@ -1705,7 +1706,7 @@ class StorageService {
     final raw = prefs.getString(_videoResumeKey);
     if (raw == null || raw.isEmpty) return {};
     try {
-      final decoded = jsonDecode(raw);
+      final decoded = await decodeJsonAsync(raw);
       if (decoded is Map<String, dynamic>) return decoded;
       return {};
     } catch (_) {
@@ -1943,7 +1944,7 @@ class StorageService {
     final raw = prefs.getString(_debrifyTvChannelsKey);
     if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
     try {
-      final List<dynamic> list = jsonDecode(raw) as List<dynamic>;
+      final List<dynamic> list = await decodeJsonAsync(raw) as List<dynamic>;
       return list
           .where((entry) => entry is Map)
           .map((entry) => Map<String, dynamic>.from(entry as Map))
@@ -1966,7 +1967,7 @@ class StorageService {
     final raw = prefs.getString(_playlistKey);
     if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
     try {
-      final List<dynamic> list = jsonDecode(raw);
+      final List<dynamic> list = await decodeJsonAsync(raw);
       return list
           .whereType<Map<String, dynamic>>()
           .map((e) => Map<String, dynamic>.from(e))
@@ -5026,7 +5027,7 @@ class StorageService {
     if (json == null) return [];
 
     try {
-      final list = jsonDecode(json) as List<dynamic>;
+      final list = await decodeJsonAsync(json) as List<dynamic>;
       return list.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
       debugPrint('Error reading Stremio TV local catalogs: $e');

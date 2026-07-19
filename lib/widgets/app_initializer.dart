@@ -1,7 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
-import '../services/android_native_downloader.dart';
 import '../services/app_migration_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/remote_control/remote_control_state.dart';
@@ -30,13 +30,16 @@ class _AppInitializerState extends State<AppInitializer>
   void initState() {
     super.initState();
 
+    // Snappy reveal: the painter is progress-driven, so the same
+    // drop-and-bounce plays at ~1.7x speed. The splash holds only as long as
+    // this animation (plus real init work) — no fixed delays.
     _revealController = AnimationController(
-      duration: const Duration(milliseconds: 1900),
+      duration: const Duration(milliseconds: 1100),
       vsync: this,
     );
 
     _exitController = AnimationController(
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 350),
       vsync: this,
     );
 
@@ -67,7 +70,8 @@ class _AppInitializerState extends State<AppInitializer>
 
   Future<void> _checkInitializationStatus() async {
     try {
-      _isAndroidTv = await AndroidNativeDownloader.isTelevision();
+      // Warmed in main() before runApp — resolves from cache instantly.
+      _isAndroidTv = await PlatformUtil.isAndroidTV();
     } catch (_) {
       _isAndroidTv = false;
     }
@@ -75,30 +79,56 @@ class _AppInitializerState extends State<AppInitializer>
     if (_isAndroidTv) {
       FocusManager.instance.highlightStrategy =
           FocusHighlightStrategy.alwaysTraditional;
-      await _startTvListenerEarly();
+      // Needs to be *started* early (discoverable during onboarding), not
+      // *finished* early — don't hold the splash on a socket bind + storage
+      // reads.
+      unawaited(_startTvListenerEarly());
     }
 
-    await AppMigrationService.runMigrations();
+    try {
+      // Returning users only pay two prefs reads here. The unseeded-addon
+      // path does network manifest fetches — time-box those so a slow or
+      // offline network can't hold the splash; seeding continues in the
+      // background and is retried next launch if it didn't finish.
+      await AppMigrationService.runMigrations().timeout(
+        const Duration(seconds: 4),
+      );
+    } on TimeoutException {
+      debugPrint('AppInitializer: migrations still running, not blocking UI');
+    }
 
     final hasCompleted = await StorageService.isInitialSetupComplete();
 
     if (!mounted) return;
 
+    // Hold the splash only until the reveal animation finishes (it runs
+    // concurrently with the init work above) — replaces the old fixed
+    // 2300ms/1700ms delays.
+    await _waitForReveal();
+    if (!mounted) return;
+
     if (!hasCompleted) {
-      await Future.delayed(const Duration(milliseconds: 1700));
-      if (!mounted) return;
-      await Future.delayed(const Duration(milliseconds: 200));
-      if (!mounted) return;
       await _showOnboarding();
     } else {
-      await Future.delayed(const Duration(milliseconds: 2300));
-      if (!mounted) return;
       await _exitController.forward();
       if (!mounted) return;
       setState(() {
         _onboardingComplete = true;
       });
     }
+  }
+
+  Future<void> _waitForReveal() async {
+    if (_revealController.isCompleted) return;
+    try {
+      // forward() continues from the current value; the timeout guards the
+      // ticker being cancelled mid-flight (widget disposed) so this await can
+      // never hang the init flow.
+      await _revealController.forward().timeout(
+        const Duration(milliseconds: 1400),
+        onTimeout: () {},
+      );
+    } catch (_) {}
   }
 
   Future<void> _showOnboarding() async {

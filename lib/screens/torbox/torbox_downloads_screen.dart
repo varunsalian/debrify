@@ -27,7 +27,19 @@ import '../../widgets/cloud/cloud_segmented_tabs.dart';
 import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../video_player_screen.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+
+/// TV: skip the dialog backdrop blur — the dialog panels here are fully
+/// opaque, so the blur only tints the thin margin ring around them, while its
+/// saveLayer costs a full-screen blur pass on weak TV GPUs.
+Widget _maybeBlur(Widget child, {double sigma = 12}) {
+  if (PlatformUtil.isAndroidTvCached) return child;
+  return BackdropFilter(
+    filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+    child: child,
+  );
+}
 
 class TorboxDownloadsScreen extends StatefulWidget {
   const TorboxDownloadsScreen({
@@ -524,9 +536,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       builder: (sheetContext) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
+          child: _maybeBlur(
+            Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
@@ -1379,9 +1390,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       builder: (dialogContext) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
+          child: _maybeBlur(
+            Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
@@ -2488,9 +2498,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: StatefulBuilder(
+          child: _maybeBlur(
+            sigma: 8,
+            StatefulBuilder(
               builder: (context, setSheetState) {
               final selectedEntries =
                   entries
@@ -3104,9 +3114,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       builder: (dialogContext) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
+          child: _maybeBlur(
+            Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(

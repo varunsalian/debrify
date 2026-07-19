@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
 /// TV-optimized compact button for top bar.
@@ -61,10 +62,15 @@ class _TvCompactButtonState extends State<TvCompactButton> {
         onTap: widget.onPressed,
         child: AnimatedScale(
           scale: _isFocused ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 150),
+          // TV: snap — see TvFocusableCard.
+          duration: PlatformUtil.isAndroidTvCached
+              ? Duration.zero
+              : const Duration(milliseconds: 150),
           curve: Curves.easeOut,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+            duration: PlatformUtil.isAndroidTvCached
+                ? Duration.zero
+                : const Duration(milliseconds: 150),
             height: 36,
             padding: EdgeInsets.symmetric(
               horizontal: widget.label != null ? 12 : 10,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
 /// A switch row widget with Android TV focus support.
@@ -46,7 +47,10 @@ class _SwitchRowState extends State<SwitchRow> {
         return KeyEventResult.ignored;
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+        // TV: snap — see TvFocusableCard.
+        duration: PlatformUtil.isAndroidTvCached
+            ? Duration.zero
+            : const Duration(milliseconds: 150),
         decoration: BoxDecoration(
           color: _isFocused ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(12),

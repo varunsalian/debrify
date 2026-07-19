@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
 /// TV-optimized focusable button.
@@ -47,13 +48,18 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
       },
       child: AnimatedScale(
         scale: _isFocused ? 1.1 : 1.0,
-        duration: const Duration(milliseconds: 200),
+        // TV: snap — animating the scale re-rasters the button (and its
+        // blurred shadow) for ~12 frames per focus move.
+        duration: PlatformUtil.isAndroidTvCached
+            ? Duration.zero
+            : const Duration(milliseconds: 200),
         curve: Curves.easeOut,
         child: Container(
           width: widget.width,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            boxShadow: _isFocused
+            // TV: the white border is the focus cue; skip the blurred glow.
+            boxShadow: _isFocused && !PlatformUtil.isAndroidTvCached
                 ? [
                     BoxShadow(
                       color: Colors.white.withOpacity(0.3),

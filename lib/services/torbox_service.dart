@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../models/torbox_torrent.dart';
 import '../models/torbox_user.dart';
 import '../models/torbox_web_download.dart';
+import '../utils/json_isolate.dart';
 
 class TorboxService {
   static const String _baseUrl = 'https://api.torbox.app/v1/api';
@@ -33,7 +34,7 @@ class TorboxService {
       }
 
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       final bool success = payload['success'] as bool? ?? false;
       if (!success) {
         final dynamic error = payload['error'];
@@ -98,7 +99,7 @@ class TorboxService {
       }
 
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       final bool success = payload['success'] as bool? ?? false;
       if (!success) {
         final dynamic error = payload['error'];
@@ -220,7 +221,7 @@ class TorboxService {
         }
 
         final Map<String, dynamic> payload =
-            json.decode(response.body) as Map<String, dynamic>;
+            await decodeJsonAsync(response.body) as Map<String, dynamic>;
         final bool success = payload['success'] as bool? ?? false;
         if (!success) {
           final dynamic error = payload['error'];
@@ -317,7 +318,7 @@ class TorboxService {
 
       // Parse the response body first
       final Map<String, dynamic> payload =
-          json.decode(body) as Map<String, dynamic>;
+          await decodeJsonAsync(body) as Map<String, dynamic>;
 
       // For 400 errors, the body contains useful error info (like DOWNLOAD_NOT_CACHED)
       // Return the payload so the caller can check the error field
@@ -429,7 +430,7 @@ class TorboxService {
       }
 
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       final bool success = payload['success'] as bool? ?? false;
       if (!success) {
         final dynamic error = payload['error'];
@@ -532,7 +533,7 @@ class TorboxService {
       }
 
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       final bool success = payload['success'] as bool? ?? false;
       if (!success) {
         final dynamic error = payload['error'];
@@ -615,7 +616,7 @@ class TorboxService {
       }
 
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       final bool success = payload['success'] as bool? ?? false;
       if (!success) {
         final dynamic error = payload['error'];
@@ -686,7 +687,7 @@ class TorboxService {
       );
 
       final Map<String, dynamic> payload =
-          json.decode(body) as Map<String, dynamic>;
+          await decodeJsonAsync(body) as Map<String, dynamic>;
 
       if (response.statusCode == 400) {
         return payload;
@@ -743,7 +744,7 @@ class TorboxService {
       }
 
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       final bool success = payload['success'] as bool? ?? false;
       if (!success) {
         final dynamic error = payload['error'];

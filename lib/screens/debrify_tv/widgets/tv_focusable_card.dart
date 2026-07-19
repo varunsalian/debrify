@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
 /// TV-optimized focusable card.
@@ -114,10 +115,16 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                 widget.onLongPress!();
               }
             : null,
-        child: Stack(
+        child: RepaintBoundary(
+          child: Stack(
           children: [
             AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              // TV: snap instead of animating — a 200ms tween of a blurred
+              // shadow + gradient repaints the card every frame of every
+              // focus move, the main jank source in the channel grid.
+              duration: PlatformUtil.isAndroidTvCached
+                  ? Duration.zero
+                  : const Duration(milliseconds: 200),
               width: double.infinity,
               height: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -134,7 +141,11 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                   color: _isFocused ? Colors.white : Colors.white12,
                   width: _isFocused ? 3 : 1,
                 ),
-                boxShadow: _isFocused
+                // TV: the 3px white border is the focus cue; blurred shadows
+                // are the expensive part of the repaint, so skip them there.
+                boxShadow: PlatformUtil.isAndroidTvCached
+                    ? null
+                    : _isFocused
                     ? [
                         BoxShadow(
                           color: Colors.white.withOpacity(0.2),
@@ -198,6 +209,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                 ),
               ),
           ],
+          ),
         ),
       ),
     );

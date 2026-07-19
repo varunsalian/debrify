@@ -114,12 +114,27 @@ class AndroidNativeDownloader {
     return _invokeBool('requestIgnoreBatteryOptimizationForApp');
   }
 
-  static Future<bool> isTelevision() async {
-    if (!Platform.isAndroid) return false;
-    try {
-      return (await _channel.invokeMethod<bool>('isTelevision')) ?? false;
-    } catch (_) {
-      return false;
-    }
+  // TV-ness never changes at runtime, but this is called from a dozen screens
+  // (including a MaterialApp.builder FutureBuilder) — cache so only the first
+  // call pays the MethodChannel round-trip. Concurrent first calls share one
+  // in-flight future instead of issuing duplicate channel calls.
+  static bool? _isTelevisionCached;
+  static Future<bool>? _isTelevisionInFlight;
+
+  static Future<bool> isTelevision() {
+    if (!Platform.isAndroid) return Future<bool>.value(false);
+    final cached = _isTelevisionCached;
+    if (cached != null) return Future<bool>.value(cached);
+    return _isTelevisionInFlight ??= () async {
+      try {
+        final result =
+            (await _channel.invokeMethod<bool>('isTelevision')) ?? false;
+        _isTelevisionCached = result;
+        return result;
+      } catch (_) {
+        _isTelevisionCached = false;
+        return false;
+      }
+    }();
   }
 }

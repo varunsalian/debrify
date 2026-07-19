@@ -143,11 +143,14 @@ Future<void> main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  // Set a sensible default orientation: phones stay portrait, Android TV uses landscape.
+  // Set a sensible default orientation: phones stay portrait, Android TV uses
+  // landscape. _initOrientation warms PlatformUtil's TV cache, so the
+  // _capImageCache call right after resolves without a second channel trip.
   await _initOrientation();
   await _capImageCache();
-  // Clean up old playback state data
-  await _cleanupPlaybackState();
+  // Old-playback-state cleanup is pure housekeeping — never block first frame
+  // on a storage sweep (slow flash on TV boxes).
+  unawaited(_cleanupPlaybackState());
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
@@ -163,7 +166,9 @@ Future<void> main() async {
 Future<void> _initOrientation() async {
   try {
     // If running on Android TV, prefer landscape. Otherwise allow all orientations (respect auto-rotate).
-    final isTv = await AndroidNativeDownloader.isTelevision();
+    // Via PlatformUtil so this single channel call also warms
+    // PlatformUtil.isAndroidTvCached for everything downstream.
+    final isTv = await PlatformUtil.isAndroidTV();
     _updateFocusHighlightStrategy(isTv);
     if (isTv) {
       await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
@@ -253,74 +258,63 @@ class DebrifyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       // Performance optimizations for TV with TV-aware text scaling
       builder: (context, child) {
-        // Use FutureBuilder to handle async TV detection
-        return FutureBuilder<bool>(
-          future: AndroidNativeDownloader.isTelevision(),
-          builder: (context, snapshot) {
-            // Default to false if detection fails or is pending
-            final isTv = snapshot.data ?? false;
+        // Synchronous TV flag — warmed in main() before runApp. The previous
+        // FutureBuilder here re-issued an isTelevision channel call and
+        // rebuilt the entire app subtree every time this builder ran.
+        final isTv = PlatformUtil.isAndroidTvCached;
 
-            // Debug logging to verify TV detection
-            if (snapshot.hasData) {
-              debugPrint(
-                'Debrify: TV mode detected: $isTv, text scale: ${isTv ? 1.0 : 1.3}',
-              );
-            }
-
-            // Wrap with global Escape key handler for desktop fullscreen exit
-            Widget content = child!;
-            if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
-              content = Focus(
-                autofocus: false,
-                canRequestFocus: false,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent &&
-                      event.logicalKey == LogicalKeyboardKey.escape) {
-                    // Check if in fullscreen and exit
-                    windowManager.isFullScreen().then((isFullScreen) {
-                      if (isFullScreen) {
-                        windowManager.setFullScreen(false);
-                      }
-                    });
-                    // Don't consume the event - let it propagate to video player etc.
-                    return KeyEventResult.ignored;
+        // Wrap with global Escape key handler for desktop fullscreen exit
+        Widget content = child!;
+        if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+          content = Focus(
+            autofocus: false,
+            canRequestFocus: false,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.escape) {
+                // Check if in fullscreen and exit
+                windowManager.isFullScreen().then((isFullScreen) {
+                  if (isFullScreen) {
+                    windowManager.setFullScreen(false);
                   }
-                  return KeyEventResult.ignored;
-                },
-                child: content,
-              );
-            }
+                });
+                // Don't consume the event - let it propagate to video player etc.
+                return KeyEventResult.ignored;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: content,
+          );
+        }
 
-            // Map the remote "OK" keycodes to widget activation app-wide.
-            // Flutter's default only maps enter/space to ActivateIntent, but TV
-            // remotes commonly send KEYCODE_DPAD_CENTER (select) or
-            // KEYCODE_BUTTON_A (gameButtonA), which otherwise leave plain
-            // Material controls (InkWell / IconButton / DropdownButton / ListTile)
-            // dead on OK. This mirrors [isActivateKey] and is purely additive —
-            // screens with their own onKeyEvent activation still take precedence
-            // (Focus.onKeyEvent runs before Shortcuts), so nothing regresses.
-            content = Shortcuts(
-              shortcuts: const <ShortcutActivator, Intent>{
-                SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
-              },
-              child: content,
-            );
-
-            return MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                // TV: No text scaling (1.0) to prevent zoom issues
-                // Mobile: Respect accessibility but cap at 1.3 for layout consistency
-                textScaler: TextScaler.linear(
-                  isTv
-                      ? 1.0
-                      : min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
-                ),
-              ),
-              child: content,
-            );
+        // Map the remote "OK" keycodes to widget activation app-wide.
+        // Flutter's default only maps enter/space to ActivateIntent, but TV
+        // remotes commonly send KEYCODE_DPAD_CENTER (select) or
+        // KEYCODE_BUTTON_A (gameButtonA), which otherwise leave plain
+        // Material controls (InkWell / IconButton / DropdownButton / ListTile)
+        // dead on OK. This mirrors [isActivateKey] and is purely additive —
+        // screens with their own onKeyEvent activation still take precedence
+        // (Focus.onKeyEvent runs before Shortcuts), so nothing regresses.
+        content = Shortcuts(
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+            SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+            SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
           },
+          child: content,
+        );
+
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            // TV: No text scaling (1.0) to prevent zoom issues
+            // Mobile: Respect accessibility but cap at 1.3 for layout consistency
+            textScaler: TextScaler.linear(
+              isTv
+                  ? 1.0
+                  : min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
+            ),
+          ),
+          child: content,
         );
       },
       scrollBehavior: const MaterialScrollBehavior().copyWith(
@@ -2157,8 +2151,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return FadeTransition(
       opacity: _fadeAnimation,
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 350),
+        // TV: short fade-only swap — the 350ms fade+slide animates two
+        // full-screen layers at once, which reads as lag on weak TV GPUs.
+        duration: Duration(milliseconds: _isAndroidTv ? 150 : 350),
         transitionBuilder: (child, animation) {
+          if (_isAndroidTv) {
+            return FadeTransition(opacity: animation, child: child);
+          }
           final offsetAnimation =
               Tween<Offset>(
                 begin: const Offset(0.02, 0.02),

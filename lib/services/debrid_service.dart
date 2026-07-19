@@ -7,6 +7,7 @@ import '../models/rd_file_node.dart';
 import '../services/storage_service.dart';
 import '../utils/concurrency.dart';
 import '../utils/file_utils.dart';
+import '../utils/json_isolate.dart';
 import '../utils/rd_folder_tree_builder.dart';
 
 /// Thrown when a torrent is added to Real-Debrid but is not cached (no links available).
@@ -49,7 +50,7 @@ class DebridService {
       if (response.statusCode == 200) {
         // Primary endpoint works - save it
         await StorageService.saveRdEndpoint(_primaryEndpoint);
-        final data = json.decode(response.body);
+        final data = await decodeJsonAsync(response.body);
         return {
           'success': true,
           'user': RDUser.fromJson(data),
@@ -89,7 +90,7 @@ class DebridService {
         if (response.statusCode == 200) {
           // Backup endpoint works - save it
           await StorageService.saveRdEndpoint(_backupEndpoint);
-          final data = json.decode(response.body);
+          final data = await decodeJsonAsync(response.body);
           return {
             'success': true,
             'user': RDUser.fromJson(data),
@@ -118,8 +119,6 @@ class DebridService {
         };
       }
     }
-
-    return {'success': false, 'error': 'Failed to validate API key'};
   }
 
   // Get user information
@@ -135,7 +134,7 @@ class DebridService {
       );
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = await decodeJsonAsync(response.body);
         return RDUser.fromJson(data);
       } else if (response.statusCode == 401) {
         throw Exception('Invalid API key');
@@ -186,7 +185,7 @@ class DebridService {
 
       if (response.statusCode == 200) {
         try {
-          final List<dynamic> data = json.decode(response.body);
+          final List<dynamic> data = await decodeJsonAsync(response.body);
           final downloads = data
               .map((json) => DebridDownload.fromJson(json))
               .toList();
@@ -254,7 +253,7 @@ class DebridService {
 
       if (response.statusCode == 200) {
         try {
-          final List<dynamic> data = json.decode(response.body);
+          final List<dynamic> data = await decodeJsonAsync(response.body);
           final torrents = data
               .map((json) => RDTorrent.fromJson(json))
               .toList();
@@ -303,7 +302,7 @@ class DebridService {
       );
 
       if (response.statusCode == 201) {
-        return json.decode(response.body);
+        return await decodeJsonAsync(response.body);
       } else if (response.statusCode == 401) {
         throw Exception('Invalid API key');
       } else {
@@ -330,7 +329,7 @@ class DebridService {
       );
 
       if (response.statusCode == 201) {
-        return json.decode(response.body);
+        return await decodeJsonAsync(response.body);
       } else if (response.statusCode == 401) {
         throw Exception('Invalid API key');
       } else {
@@ -364,7 +363,7 @@ class DebridService {
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        return await decodeJsonAsync(response.body);
       } else if (response.statusCode == 401) {
         throw Exception('Invalid API key');
       } else {
@@ -428,7 +427,7 @@ class DebridService {
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        return await decodeJsonAsync(response.body);
       } else if (response.statusCode == 401) {
         throw Exception('Invalid API key');
       } else {

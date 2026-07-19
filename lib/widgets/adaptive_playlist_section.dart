@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/platform_util.dart';
 import 'playlist_grid_card.dart';
 import 'horizontal_mouse_wheel.dart';
 
@@ -288,6 +289,30 @@ String _getDedupeKey(Map<String, dynamic> item) {
     );
   }
 
+  /// Subtle edge fade to hint at more content. TV: skipped — the ShaderMask
+  /// saveLayer re-rasterises the whole row on every scroll frame, and a 2%
+  /// edge fade is invisible at TV viewing distance.
+  Widget _edgeFade(Widget child) {
+    if (PlatformUtil.isAndroidTvCached) return child;
+    return ShaderMask(
+      shaderCallback: (Rect bounds) {
+        return LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: const [
+            Colors.transparent,
+            Colors.white,
+            Colors.white,
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.02, 0.98, 1.0],
+        ).createShader(bounds);
+      },
+      blendMode: BlendMode.dstIn,
+      child: child,
+    );
+  }
+
   /// Horizontal scrolling row with landscape cards (matching home screen)
   Widget _buildHorizontalRow(double screenWidth) {
     // Card dimensions - responsive, matching home screen Continue Watching
@@ -299,23 +324,8 @@ String _getDedupeKey(Map<String, dynamic> item) {
       height: cardHeight + 35, // Extra space for scale animation overflow + shadows
       child: HorizontalMouseWheel(
         controller: _scrollController,
-        child: ShaderMask(
-        // Subtle fade effect at edges to hint at more content
-        shaderCallback: (Rect bounds) {
-          return LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: const [
-              Colors.transparent,
-              Colors.white,
-              Colors.white,
-              Colors.transparent,
-            ],
-            stops: const [0.0, 0.02, 0.98, 1.0],
-          ).createShader(bounds);
-        },
-        blendMode: BlendMode.dstIn,
-        child: ListView.builder(
+        child: _edgeFade(
+        ListView.builder(
           controller: _scrollController,
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),

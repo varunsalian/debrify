@@ -8616,7 +8616,12 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Respect reduced-motion: hold the backdrop still, skip text cascades.
-    _motionOk = !MediaQuery.of(context).disableAnimations;
+    // TV gets the same treatment always: the Ken Burns drift re-rasterises
+    // the masked backdrop layer every frame, and the text cascade repaints on
+    // every DPAD step (each row-card focus swaps the hero). A still hero
+    // reads native on TV and costs nothing.
+    _motionOk =
+        !MediaQuery.of(context).disableAnimations && !widget.isTelevision;
     if (!_motionOk) {
       _ken.stop();
       _textFx.value = 1.0;
@@ -10086,16 +10091,21 @@ class _StremioCardState extends State<_StremioCard> {
           behavior: HitTestBehavior.opaque,
           // No title beneath the poster — Stremio lets the artwork carry the
           // rail; the title lives on the hero (focused) and the detail page.
-          child: widget.heroTag == null
-              ? posterCard
-              : Hero(
-                  tag: widget.heroTag!,
-                  // Card-side shuttle covers BOTH directions (the backdrop hero
-                  // defines none): the flight always shows the poster, growing
-                  // into the detail backdrop on push and shrinking home on pop.
-                  flightShuttleBuilder: _posterFlightShuttle,
-                  child: posterCard,
-                ),
+          //
+          // RepaintBoundary so the focus pop (scale tween + shadow flip)
+          // repaints only this card's layer, not the whole row viewport.
+          child: RepaintBoundary(
+            child: widget.heroTag == null
+                ? posterCard
+                : Hero(
+                    tag: widget.heroTag!,
+                    // Card-side shuttle covers BOTH directions (the backdrop hero
+                    // defines none): the flight always shows the poster, growing
+                    // into the detail backdrop on push and shrinking home on pop.
+                    flightShuttleBuilder: _posterFlightShuttle,
+                    child: posterCard,
+                  ),
+          ),
         ),
       ),
     );

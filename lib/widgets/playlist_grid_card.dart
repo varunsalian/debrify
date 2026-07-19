@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 
 /// Portrait playlist card optimized for grid layouts on desktop/tablet/mobile.
@@ -13,6 +14,16 @@ import '../utils/tv_keys.dart';
 /// - Progress indicator for in-progress items
 /// - Hover effects on desktop
 /// - DPAD navigation support with proper focus handling
+/// TV: skip the glass blur (see the action-sheet panel below — it swaps to an
+/// opaque fill there, so no BackdropFilter saveLayer on weak TV GPUs).
+Widget _maybeBlur(Widget child) {
+  if (PlatformUtil.isAndroidTvCached) return child;
+  return BackdropFilter(
+    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+    child: child,
+  );
+}
+
 class PlaylistGridCard extends StatefulWidget {
   final Map<String, dynamic> item;
   final Map<String, dynamic>? progressData;
@@ -606,11 +617,15 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                           margin: const EdgeInsets.all(12),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(20),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                              child: Container(
+                            // TV: solid panel instead of glass — the blur
+                            // re-rasterises during the sheet's slide/fade-in,
+                            // a full-screen saveLayer per frame on weak GPUs.
+                            child: _maybeBlur(
+                              Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
+                                  color: PlatformUtil.isAndroidTvCached
+                                      ? const Color(0xF5181820)
+                                      : Colors.white.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
                                     color: Colors.white.withValues(alpha: 0.15),

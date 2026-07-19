@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../utils/platform_util.dart';
+
 /// Wraps a child widget with an animated highlight border for Android TV focus indication.
 ///
 /// When [enabled] is true and a descendant widget has focus, displays an animated
@@ -76,7 +78,12 @@ class _FocusHighlightWrapperState extends State<FocusHighlightWrapper> {
       canRequestFocus: false,
       skipTraversal: true,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        // TV: snap and use the border alone as the focus cue — animating a
+        // blur-26 shadow repaints the wrapped subtree every frame of every
+        // focus move on hardware that can least afford it.
+        duration: PlatformUtil.isAndroidTvCached
+            ? Duration.zero
+            : const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
           borderRadius: widget.borderRadius,
@@ -84,7 +91,7 @@ class _FocusHighlightWrapperState extends State<FocusHighlightWrapper> {
             color: _hasFocusedDescendant ? highlightColor : Colors.transparent,
             width: 2,
           ),
-          boxShadow: _hasFocusedDescendant
+          boxShadow: _hasFocusedDescendant && !PlatformUtil.isAndroidTvCached
               ? [
                   BoxShadow(
                     color: highlightColor.withValues(alpha: 0.35),

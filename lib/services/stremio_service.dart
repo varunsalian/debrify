@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
 import '../utils/concurrency.dart';
+import '../utils/json_isolate.dart';
 
 class StremioAddonImportResult {
   final int discovered;
@@ -93,6 +94,17 @@ class StremioService {
   static const _seriesMetaCacheTtl = Duration(minutes: 15);
   static const _seriesMetaCacheMax = 10;
 
+  // Catalog pages, keyed by the full request URL (addon + type + id + genre +
+  // skip + extras). Short TTL so returning to the Home board doesn't
+  // re-download every row on each tab switch — the board screen is rebuilt on
+  // every visit. Empty pages are cached too: the board's batch loop probes
+  // catalogs sequentially until one is non-empty, so uncached empty results
+  // would cost a serial network round-trip per probe on every visit.
+  final Map<String, ({List<StremioMeta> metas, int rawCount, DateTime fetchedAt})>
+  _catalogCache = {};
+  static const _catalogCacheTtl = Duration(minutes: 5);
+  static const _catalogCacheMax = 80;
+
   // Addon ids that returned streams but zero recommendation links (e.g.
   // torrent indexers). Skipped on later recommendation queries so opening
   // a detail doesn't re-hit every stream addon. A genuine recommendation
@@ -137,7 +149,7 @@ class StremioService {
     }
 
     try {
-      final List<dynamic> jsonList = json.decode(jsonString);
+      final List<dynamic> jsonList = await decodeJsonAsync(jsonString);
       _addonsCache = jsonList
           .map((j) => StremioAddon.fromJson(j as Map<String, dynamic>))
           .toList();
@@ -173,6 +185,9 @@ class StremioService {
     _recommendationsCache.clear();
     _metaDetailsCache.clear();
     _nonRecommendationAddonIds.clear();
+    // Catalog pages too: a reconfigured addon can serve different content from
+    // the same catalog URL, so nothing cached before the change may survive it.
+    _catalogCache.clear();
     _notifyAddonsChanged();
   }
 
@@ -224,7 +239,7 @@ class StremioService {
   }) async {
     final dynamic decoded;
     try {
-      decoded = json.decode(jsonContent);
+      decoded = await decodeJsonAsync(jsonContent);
     } catch (e) {
       throw Exception('Invalid JSON file: $e');
     }
@@ -434,7 +449,9 @@ class StremioService {
         );
       }
 
-      final Map<String, dynamic> manifest = json.decode(response.body);
+      final Map<String, dynamic> manifest = await decodeJsonAsync(
+        response.body,
+      );
 
       // Validate required fields
       if (manifest['id'] == null || manifest['name'] == null) {
@@ -893,7 +910,7 @@ class StremioService {
         throw Exception('HTTP ${response.statusCode}');
       }
 
-      final Map<String, dynamic> data = json.decode(response.body);
+      final Map<String, dynamic> data = await decodeJsonAsync(response.body);
       final streamsRaw = data['streams'] as List<dynamic>?;
 
       if (streamsRaw == null || streamsRaw.isEmpty) {
@@ -1081,7 +1098,8 @@ class StremioService {
                 .timeout(const Duration(seconds: 8));
             final response = await http.Response.fromStream(streamed);
             if (response.statusCode != 200) return null;
-            final data = json.decode(response.body) as Map<String, dynamic>?;
+            final data =
+                await decodeJsonAsync(response.body) as Map<String, dynamic>?;
             final metaJson = data?['meta'] as Map<String, dynamic>?;
             if (metaJson == null) return null;
             return StremioMeta.fromJson(metaJson);
@@ -1357,6 +1375,9 @@ class StremioService {
     // (before invalid-id filtering), so callers can advance `skip` in step with
     // the addon's own paging rather than the filtered count.
     void Function(int rawCount)? onRawCount,
+    // Bypass the short-TTL page cache (explicit user refresh). The fresh
+    // result still overwrites the cached entry.
+    bool forceRefresh = false,
   }) async {
     // Build catalog URL: {baseUrl}/catalog/{type}/{catalogId}.json
     // With extra parameters: {baseUrl}/catalog/{type}/{catalogId}/genre=Action.json
@@ -1382,6 +1403,14 @@ class StremioService {
     }
     url += '.json';
 
+    final cached = forceRefresh ? null : _catalogCache[url];
+    if (cached != null &&
+        DateTime.now().difference(cached.fetchedAt) < _catalogCacheTtl) {
+      onRawCount?.call(cached.rawCount);
+      // Defensive copy — callers sort/filter the returned list.
+      return List.of(cached.metas);
+    }
+
     debugPrint('StremioService: Fetching catalog from $url');
 
     try {
@@ -1404,12 +1433,13 @@ class StremioService {
           return [];
         }
 
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = await decodeJsonAsync(response.body);
         final metasRaw = data['metas'] as List<dynamic>?;
         onRawCount?.call(metasRaw?.length ?? 0);
 
         if (metasRaw == null || metasRaw.isEmpty) {
           debugPrint('StremioService: Catalog returned no items');
+          _cacheCatalogPage(url, const [], 0);
           return [];
         }
 
@@ -1427,14 +1457,34 @@ class StremioService {
         debugPrint(
           'StremioService: Catalog returned ${metas.length} valid items',
         );
-        return metas;
+        _cacheCatalogPage(url, metas, metasRaw.length);
+        return List.of(metas);
       } finally {
         client.close();
       }
     } catch (e) {
+      // Errors are deliberately not cached — the next visit retries.
       debugPrint('StremioService: Error fetching catalog: $e');
       return [];
     }
+  }
+
+  void _cacheCatalogPage(String url, List<StremioMeta> metas, int rawCount) {
+    if (_catalogCache.length >= _catalogCacheMax) {
+      // Evict expired entries first, then the oldest, to stay under the cap.
+      final now = DateTime.now();
+      _catalogCache.removeWhere(
+        (_, e) => now.difference(e.fetchedAt) >= _catalogCacheTtl,
+      );
+      while (_catalogCache.length >= _catalogCacheMax) {
+        _catalogCache.remove(_catalogCache.keys.first);
+      }
+    }
+    _catalogCache[url] = (
+      metas: metas,
+      rawCount: rawCount,
+      fetchedAt: DateTime.now(),
+    );
   }
 
   /// Fetch full meta (including videos/episodes) from an addon's meta endpoint.
@@ -1479,7 +1529,8 @@ class StremioService {
           return null;
         }
 
-        final data = json.decode(response.body) as Map<String, dynamic>?;
+        final data =
+            await decodeJsonAsync(response.body) as Map<String, dynamic>?;
         final meta = data?['meta'] as Map<String, dynamic>?;
         final videos = meta?['videos'] as List<dynamic>?;
         if (videos == null || videos.isEmpty) return null;
@@ -1846,7 +1897,7 @@ class StremioService {
           return [];
         }
 
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = await decodeJsonAsync(response.body);
         final metasRaw = data['metas'] as List<dynamic>?;
         onRawCount?.call(metasRaw?.length ?? 0);
 
@@ -2054,5 +2105,6 @@ class StremioService {
   /// Invalidate cache (call after external changes)
   void invalidateCache() {
     _addonsCache = null;
+    _catalogCache.clear();
   }
 }

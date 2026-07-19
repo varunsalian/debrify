@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/iptv_playlist.dart';
 
@@ -212,6 +213,17 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
 
   // ─── Build ──────────────────────────────────────────────────────────
 
+  /// TV: skip the frosted-glass BackdropFilter. The panel fill is 97% opaque,
+  /// so the blur is barely visible — but its saveLayer re-blurs the live video
+  /// underneath on every frame, which weak TV GPUs can't afford.
+  Widget _frost(Widget child) {
+    if (PlatformUtil.isAndroidTvCached) return child;
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -246,9 +258,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                   topLeft: Radius.circular(28),
                   bottomLeft: Radius.circular(28),
                 ),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-                  child: Container(
+                child: _frost(
+                  Container(
                     decoration: BoxDecoration(
                       color: _surfaceDark.withOpacity(0.97),
                       borderRadius: const BorderRadius.only(

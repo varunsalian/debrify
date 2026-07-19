@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../utils/platform_util.dart';
+
 /// Fullscreen transition overlay shown while the next stream resolves.
 ///
 /// Minimal, premium "Apple TV" aesthetic: a frosted dark scrim with a depth
@@ -62,10 +64,16 @@ class _TransitionOverlayState extends State<TransitionOverlay>
           fit: StackFit.expand,
           children: [
             // Frosted dark scrim — blurs any peeking frame and adds depth.
-            BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-              child: const ColoredBox(color: Color(0xCC0B0B0F)),
-            ),
+            // TV: a BackdropFilter over the live video surface re-blurs every
+            // frame; a slightly more opaque plain scrim hides the peeking
+            // frame at zero GPU cost.
+            if (PlatformUtil.isAndroidTvCached)
+              const ColoredBox(color: Color(0xF20B0B0F))
+            else
+              BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                child: const ColoredBox(color: Color(0xCC0B0B0F)),
+              ),
 
             // Subtle radial vignette for a premium edge falloff.
             const DecoratedBox(

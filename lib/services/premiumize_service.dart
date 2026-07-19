@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/premiumize_user.dart';
 import '../models/premiumize_file.dart';
+import '../utils/json_isolate.dart';
 import '../models/premiumize_folder_item.dart';
 import '../models/premiumize_transfer.dart';
 
@@ -31,7 +31,7 @@ class PremiumizeService {
       }
 
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       final String status = payload['status']?.toString() ?? '';
       if (status != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
@@ -89,7 +89,7 @@ class PremiumizeService {
           );
           return;
         }
-        final payload = json.decode(response.body);
+        final payload = await decodeJsonAsync(response.body);
         if (payload is! Map || payload['status']?.toString() != 'success') {
           return;
         }
@@ -165,7 +165,7 @@ class PremiumizeService {
         throw Exception('Failed to resolve links: ${response.statusCode}');
       }
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
         throw Exception(message);
@@ -204,7 +204,7 @@ class PremiumizeService {
     try {
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return const _TransferLookup.pending();
-      final payload = json.decode(response.body);
+      final payload = await decodeJsonAsync(response.body);
       if (payload is! Map || payload['status']?.toString() != 'success') {
         return const _TransferLookup.pending();
       }
@@ -287,7 +287,7 @@ class PremiumizeService {
         throw Exception('HTTP ${response.statusCode}');
       }
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
         throw Exception(message);
@@ -329,7 +329,7 @@ class PremiumizeService {
         throw Exception('Failed to add transfer: ${response.statusCode}');
       }
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
         throw Exception(message);
@@ -359,7 +359,7 @@ class PremiumizeService {
         throw Exception('Failed to list folder: ${response.statusCode}');
       }
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
         throw Exception(message);
@@ -431,7 +431,7 @@ class PremiumizeService {
         throw Exception('Search failed: ${response.statusCode}');
       }
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
         throw Exception(message);
@@ -463,7 +463,7 @@ class PremiumizeService {
       final response = await http.get(uri).timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) return null;
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') return null;
       final link = payload['link']?.toString() ?? '';
       final stream = payload['stream_link']?.toString();
@@ -509,7 +509,7 @@ class PremiumizeService {
         throw Exception('HTTP ${response.statusCode}');
       }
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
         throw Exception(message);
@@ -540,7 +540,7 @@ class PremiumizeService {
         throw Exception('Failed to list transfers: ${response.statusCode}');
       }
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
         throw Exception(message);
@@ -573,7 +573,7 @@ class PremiumizeService {
         throw Exception('HTTP ${response.statusCode}');
       }
       final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
+          await decodeJsonAsync(response.body) as Map<String, dynamic>;
       if (payload['status']?.toString() != 'success') {
         final message = payload['message']?.toString() ?? 'unknown error';
         throw Exception(message);
