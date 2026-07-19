@@ -439,22 +439,30 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     return n;
   }
 
+  /// Discover TV styling: quiet text-segment filters on the glass stage, no
+  /// per-poster rating chips (the detail rail carries that information).
+  bool get _quiet => widget.embedded && widget.isTelevision;
+
   Widget _buildFilterBar() {
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: _handleFilterKeys,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
+        padding: _quiet
+            ? const EdgeInsets.fromLTRB(24, 16, 24, 10)
+            : const EdgeInsets.fromLTRB(24, 10, 24, 12),
         child: SeeAllFilterBar(
           isTelevision: widget.isTelevision,
           leading: widget.leading,
+          quiet: _quiet,
           activeCount: _activeFilterCount,
           buildChips: () => [
             StremioDropdown<String>(
               label: 'List',
               value: _primaryKey,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _listNode,
               options: [
                 for (final l in TraktSeeAllList.values)
@@ -471,6 +479,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
                 label: _group == 'custom' ? 'Custom' : 'Liked',
                 value: _list,
                 isTelevision: widget.isTelevision,
+                quiet: _quiet,
                 focusNode: _groupNode,
                 options: [
                   for (final c in _groupLists) StremioDropdownOption(c, c.label),
@@ -481,6 +490,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
               label: 'Show',
               value: _category,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _catNode,
               options: const [
                 StremioDropdownOption('all', 'All'),
@@ -493,6 +503,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
               label: 'Sort',
               value: _sort,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _sortNode,
               options: [
                 StremioDropdownOption(
@@ -511,6 +522,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
                 label: 'State',
                 value: _watch,
                 isTelevision: widget.isTelevision,
+                quiet: _quiet,
                 focusNode: _watchNode,
                 options: const [
                   StremioDropdownOption('all', 'All'),
@@ -569,7 +581,8 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       onQuickPlay: _isCw ? widget.onQuickPlay : null,
       onItemFocused: widget.onItemFocused,
       // Discover on TV has the detail rail naming the type — drop the badge there.
-      showTypeBadge: !(widget.embedded && widget.isTelevision),
+      showTypeBadge: !_quiet,
+      showRatingBadge: !_quiet,
       progressOf: _progressOf,
       isBound: widget.isBound,
       onLoadMore: () {},

@@ -776,6 +776,31 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // The playing trailer's (enriched) title — drives the fullscreen takeover's
   // name/meta overlay. Written by the rail alongside its streams.
   final ValueNotifier<StremioMeta?> _discTrailerMeta = ValueNotifier(null);
+  // What the rail is actually rendering (focused item merged with enrichment) —
+  // published by the rail, read by the full-frame glass stage that draws the
+  // title's backdrop behind both panes.
+  final ValueNotifier<StremioMeta?> _discShown = ValueNotifier(null);
+  // True while trailer frames are on the stage (set by DiscoverTrailerStage) —
+  // drives the AMBIENT chip in the page's status corner.
+  final ValueNotifier<bool> _discTrailerShowing = ValueNotifier(false);
+  // Theater: after a few seconds of uninterrupted playback the page commits to
+  // the trailer — veils thin to near-clear, rail and grid recede to ~15%. Armed
+  // by [_onDiscShowingChanged]; dropped the instant frames stop (any DPAD move
+  // clears the trailer, so browsing input always brings the lights back).
+  final ValueNotifier<bool> _discTheater = ValueNotifier(false);
+  Timer? _discTheaterTimer;
+  static const Duration _discTheaterDelay = Duration(seconds: 5);
+
+  void _onDiscShowingChanged() {
+    _discTheaterTimer?.cancel();
+    if (_discTrailerShowing.value) {
+      _discTheaterTimer = Timer(_discTheaterDelay, () {
+        if (mounted && _discTrailerShowing.value) _discTheater.value = true;
+      });
+    } else {
+      _discTheater.value = false;
+    }
+  }
 
   /// Relay the Discover takeover to the app shell so the TV sidebar hides in
   /// lock-step (a cinema has no menu) — the same signal the Home board uses.
@@ -854,9 +879,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       });
     }
     // Discover on TV: relay the trailer takeover to the sidebar chrome-dim so
-    // the rail hides when the trailer goes fullscreen.
+    // the rail hides when the trailer goes fullscreen. The showing listener
+    // arms the theater timer (deep lights-off a few seconds into playback).
     if (widget.discoverMode && widget.isTelevision) {
       _discTakeover.addListener(_relayDiscoverChromeDim);
+      _discTrailerShowing.addListener(_onDiscShowingChanged);
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     // Home board only: live-refresh when the Home Rows manager changes which
@@ -1107,6 +1134,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _discFocused.dispose();
     if (widget.discoverMode && widget.isTelevision) {
       _discTakeover.removeListener(_relayDiscoverChromeDim);
+      _discTrailerShowing.removeListener(_onDiscShowingChanged);
+      _discTheaterTimer?.cancel();
       // Never leave the sidebar hidden after Discover is torn down mid-takeover,
       // but reset AFTER this frame: dispose can run inside finalizeTree (tab
       // switch mid-takeover) while the tree is locked, and a synchronous write
@@ -1123,6 +1152,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _discTrailerVolume.dispose();
     _discTakeover.dispose();
     _discTrailerMeta.dispose();
+    _discShown.dispose();
+    _discTrailerShowing.dispose();
+    _discTheater.dispose();
     _boardScroll.dispose();
     _kwScroll.dispose();
     _kwPillFocus.dispose();
@@ -7139,46 +7171,64 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   Widget _buildDiscover() {
     final panel = _buildDiscoverPanel();
     // Touch has no persistent focus, so a reactive detail rail has nothing to
-    // react to — keep the full-width grid there. TV gets the two-pane layout.
+    // react to — keep the full-width grid there. TV gets the glass-stage
+    // two-pane layout.
     if (!widget.isTelevision) return panel;
     return LayoutBuilder(
       builder: (context, c) {
         // Guard a degenerate canvas: too narrow leaves no room for a usable grid
-        // beside the rail; too short and the rail's fixed backdrop + header can't
-        // fit (its Expanded plot collapses and the column overflows). Either way,
-        // fall back to the full-width panel.
+        // beside the rail; too short and the rail's fixed identity block can't
+        // fit. Either way, fall back to the full-width panel.
         if (c.maxWidth < 720 || c.maxHeight < 420) {
-          // The trailer stage (which drives _discTakeover → sidebar chrome-dim)
-          // is unmounted in this branch. If a takeover was in progress, clear it
-          // post-frame so the sidebar doesn't stay stuck hidden.
-          if (_discTakeover.value != 0) {
+          // The trailer stage (which drives _discTakeover → sidebar chrome-dim,
+          // and _discTrailerShowing → the AMBIENT chip) is unmounted in this
+          // branch. Clear both post-frame so nothing sticks across the drop.
+          if (_discTakeover.value != 0 ||
+              _discTrailerShowing.value ||
+              _discTheater.value) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _discTakeover.value = 0;
+              if (!mounted) return;
+              _discTakeover.value = 0;
+              _discTrailerShowing.value = false;
+              _discTheater.value = false;
             });
           }
           return panel;
         }
-        final railW = (c.maxWidth * 0.34).clamp(300.0, 460.0);
+        final railW = (c.maxWidth * 0.375).clamp(320.0, 460.0);
         final panelW = c.maxWidth - railW;
         final mq = MediaQuery.of(context);
-        // The rail's backdrop box within this Stack: rail padding (20 left,
-        // 18 top) + a 16:9 box. The trailer stage windows the video here while
-        // ambient, then grows it to fill.
-        final boxW = railW - 38;
-        final railRect = Rect.fromLTWH(20, 18, boxW, boxW * 9 / 16);
         final twoPane = Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
               width: railW,
-              child: ValueListenableBuilder<StremioMeta?>(
-                valueListenable: _discFocused,
-                builder: (_, item, __) => DiscoverDetailRail(
-                  item: item,
-                  trailerStreams: _discTrailerStreams,
-                  trailerLoading: _discTrailerLoading,
-                  trailerVolume: _discTrailerVolume,
-                  trailerMeta: _discTrailerMeta,
+              // Theater: the identity block ghosts to 15% so the trailer owns
+              // the art zone. AnimatedOpacity is acceptable here — the layer is
+              // rail-sized (not full-screen), pays its saveLayer only during
+              // the ~1.2s ease, and composites as a cached raster once settled.
+              // It wraps a SIBLING of the video layer, so the underlay punch is
+              // untouched. Lights-up is fast to match the veils' cadence.
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _discTheater,
+                child: ValueListenableBuilder<StremioMeta?>(
+                  valueListenable: _discFocused,
+                  builder: (_, item, __) => DiscoverDetailRail(
+                    item: item,
+                    trailerStreams: _discTrailerStreams,
+                    trailerLoading: _discTrailerLoading,
+                    trailerVolume: _discTrailerVolume,
+                    trailerMeta: _discTrailerMeta,
+                    shownItem: _discShown,
+                  ),
+                ),
+                builder: (_, theater, child) => AnimatedOpacity(
+                  opacity: theater ? 0.15 : 1.0,
+                  duration: theater
+                      ? const Duration(milliseconds: 1200)
+                      : const Duration(milliseconds: 250),
+                  curve: Curves.easeInOutCubic,
+                  child: child,
                 ),
               ),
             ),
@@ -7187,20 +7237,69 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             // instead of the full screen and overflowing.
             SizedBox(
               width: panelW,
-              child: MediaQuery(
-                data: mq.copyWith(size: Size(panelW, mq.size.height)),
-                child: panel,
+              // Theater: the grid itself ghosts to ~12% — fading the CONTENT is
+              // the only way to unveil the trailer on this side (any ink wash
+              // painted over the panel darkens the video with it, and the
+              // opaque posters block it regardless). Same layer rules as the
+              // rail's fade: sibling of the video layer (punch untouched),
+              // saveLayer only during the ~1.2s ease, cached raster after.
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _discTheater,
+                child: MediaQuery(
+                  data: mq.copyWith(size: Size(panelW, mq.size.height)),
+                  child: panel,
+                ),
+                builder: (_, theater, child) => AnimatedOpacity(
+                  opacity: theater ? 0.12 : 1.0,
+                  duration: theater
+                      ? const Duration(milliseconds: 1200)
+                      : const Duration(milliseconds: 250),
+                  curve: Curves.easeInOutCubic,
+                  child: child,
+                ),
               ),
             ),
           ],
         );
+        // The glass stage (bottom → top): base ink wash → the focused title's
+        // full-frame backdrop → the ambient trailer (which replaces the still,
+        // frame one, across the whole canvas) → the tint veils that keep both
+        // panes legible (direct translucent paint — never an Opacity layer, and
+        // safe over the underlay video's punched hole, exactly like the Home
+        // hero's feathers) → the panes themselves → status chips.
         return Stack(
           fit: StackFit.expand,
           children: [
+            const DecoratedBox(decoration: HomeTheme.pageBackground),
+            _DiscoverStageBackdrop(shown: _discShown),
+            DiscoverTrailerStage(
+              trailer: _discTrailerStreams,
+              loading: _discTrailerLoading,
+              volume: _discTrailerVolume,
+              meta: _discTrailerMeta,
+              railRect: Rect.zero,
+              takeover: _discTakeover,
+              fullStage: true,
+              showing: _discTrailerShowing,
+            ),
+            _DiscoverStageVeils(
+              showing: _discTrailerShowing,
+              theater: _discTheater,
+            ),
             twoPane,
+            // Lights-off over the grid side while the trailer plays — the Home
+            // rows' recede, transplanted. Above the panes (it dims the posters
+            // and filter line), feathered on its left edge so no seam cuts the
+            // stage. Animated as a baked color (direct paint), never Opacity.
+            _DiscoverGridDim(
+              showing: _discTrailerShowing,
+              theater: _discTheater,
+              leftInset: railW,
+            ),
             // Recede the two-pane as the trailer takes over — a baked scrim, not
             // an Opacity layer (whose mid-values force a per-frame full-screen
-            // saveLayer on weak TV GPUs).
+            // saveLayer on weak TV GPUs). Dormant while the takeover stays
+            // disabled, kept wired for its revival.
             ValueListenableBuilder<double>(
               valueListenable: _discTakeover,
               builder: (_, t, __) => t <= 0.001
@@ -7215,16 +7314,32 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       ),
                     ),
             ),
-            // The full-screen trailer: windowed over [railRect] while ambient,
-            // promoting to fullscreen after a few seconds' watch. Non-interactive
-            // — DPAD keeps flowing to the grid underneath.
-            DiscoverTrailerStage(
-              trailer: _discTrailerStreams,
-              loading: _discTrailerLoading,
-              volume: _discTrailerVolume,
-              meta: _discTrailerMeta,
-              railRect: railRect,
-              takeover: _discTakeover,
+            // Status corner: the Home hero's chip pair, handing over in place —
+            // equalizer TRAILER pill while resolving/buffering, AMBIENT chip
+            // once frames are up. Anchored bottom-left, in the rail column's
+            // permanently-empty zone (the plot is capped at 6 lines, so the
+            // identity block never reaches it) — the top-right corner belongs
+            // to the filter line, which can wrap two rows on 5-segment sources.
+            Positioned(
+              bottom: 22,
+              left: 24,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _discTrailerLoading,
+                builder: (_, loading, __) =>
+                    _HeroTrailerLoadingPill(visible: loading),
+              ),
+            ),
+            Positioned(
+              bottom: 22,
+              left: 24,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _discTrailerShowing,
+                builder: (_, showing, __) => ValueListenableBuilder<bool>(
+                  valueListenable: _discTrailerLoading,
+                  builder: (_, loading, __) =>
+                      _HeroAmbientChip(visible: showing && !loading),
+                ),
+              ),
             ),
           ],
         );
@@ -7237,6 +7352,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       label: 'Source',
       value: _discSource,
       isTelevision: widget.isTelevision,
+      // TV: a quiet violet segment leading the filter line — the row's identity
+      // color (chrome accent), distinct from the white filter values.
+      quiet: widget.isTelevision,
+      quietAccent: true,
       focusNode: _discSourceNode,
       options: [
         const StremioDropdownOption(_discCw, 'Continue Watching'),
@@ -7247,9 +7366,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       onSelected: (s) {
         if (s == _discSource) return;
         // Swapping source re-mounts the grid and drops DPAD focus back onto the
-        // Source dropdown — clear the rail so it shows its prompt, not a stale
-        // title from the previous source, until a new tile is focused.
+        // Source dropdown — clear the rail (and the stage backdrop behind it)
+        // so they show the prompt/ink, not a stale title from the previous
+        // source, until a new tile is focused.
         _discFocused.value = null;
+        _discShown.value = null;
         setState(() => _discSource = s);
         // The swap re-mounts the embedded panel (new ValueKey), which re-attaches
         // this shared node; pin the DPAD ring back on the Source dropdown so it
@@ -13794,6 +13915,243 @@ class _KeywordSourcesDialogState extends State<_KeywordSourcesDialog> {
       onEnableAll: _engines.isEmpty ? null : () => _setAll(true),
       onDisableAll: _engines.isEmpty ? null : () => _setAll(false),
       body: body,
+    );
+  }
+}
+
+/// The Discover glass stage's still backdrop: the focused (rail-shown) title's
+/// backdrop drawn full-frame behind both panes, veiled by [_DiscoverStageVeils]
+/// above it. Adoption is dwell-debounced (~380ms) so rapid DPAD arrowing never
+/// decodes a full-bleed image per step — the first artwork after an empty stage
+/// paints immediately. Only real `background` art is used (never a blown-up
+/// poster); titles without it browse on the plain ink wash.
+class _DiscoverStageBackdrop extends StatefulWidget {
+  final ValueListenable<StremioMeta?> shown;
+
+  const _DiscoverStageBackdrop({required this.shown});
+
+  @override
+  State<_DiscoverStageBackdrop> createState() => _DiscoverStageBackdropState();
+}
+
+class _DiscoverStageBackdropState extends State<_DiscoverStageBackdrop> {
+  String? _url;
+  Timer? _dwell;
+
+  static String? _bgOf(StremioMeta? m) {
+    final bg = m?.background;
+    return (bg != null && bg.isNotEmpty) ? bg : null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.shown.addListener(_onShown);
+    _url = _bgOf(widget.shown.value);
+  }
+
+  @override
+  void dispose() {
+    _dwell?.cancel();
+    widget.shown.removeListener(_onShown);
+    super.dispose();
+  }
+
+  void _onShown() {
+    final next = _bgOf(widget.shown.value);
+    if (next == _url) return;
+    _dwell?.cancel();
+    // Cleared (source swap) or the focused title has no backdrop: drop to ink
+    // now — holding another title's art behind the wrong detail reads wrong.
+    if (next == null) {
+      setState(() => _url = null);
+      return;
+    }
+    // First art onto an empty stage: no dwell, the page should dress itself
+    // promptly. Subsequent moves debounce.
+    if (_url == null) {
+      setState(() => _url = next);
+      return;
+    }
+    _dwell = Timer(const Duration(milliseconds: 380), () {
+      if (!mounted) return;
+      final cur = _bgOf(widget.shown.value);
+      if (cur != null && cur != _url) setState(() => _url = cur);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _url;
+    if (url == null) return const SizedBox.shrink();
+    // Snap swaps (fade Duration.zero): a per-image opacity crossfade is a
+    // full-screen saveLayer on weak TV GPUs — same rule as the Home hero
+    // backdrop. Slight upward bias keeps faces/titles in the art's clear zone.
+    return CachedNetworkImage(
+      key: ValueKey(url),
+      imageUrl: url,
+      fit: BoxFit.cover,
+      alignment: const Alignment(0, -0.4),
+      memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (_, __) => const SizedBox.shrink(),
+      errorWidget: (_, __, ___) => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// The Discover glass stage's tint veils — the mock's gradient recipe, painted
+/// in the page ink so the art dissolves into the canvas: loudest art behind the
+/// detail column, near-opaque under the grid, plus a vertical top kiss and deep
+/// bottom melt.
+///
+/// Three states on a lights ladder, eased between so every step feels staged:
+/// browse (art dressed in the mock's tint), playback ([showing] — art-zone
+/// stops thin to ~.35 so the video actually reads, 900ms in), and theater
+/// ([theater], a few seconds into uninterrupted playback — the veils fall to
+/// near-clear (~.12) and the whole page commits to the picture, on a slow
+/// 1.2s ease). Lights-up from any state is a snappy 250ms (a DPAD move means
+/// the user is browsing again). Direct translucent paint (DecoratedBox with
+/// lerped colors, never an Opacity layer), so it is safe over the underlay
+/// trailer's punched hole; the gradient only re-paints during the transitions,
+/// never at idle.
+class _DiscoverStageVeils extends StatelessWidget {
+  final ValueListenable<bool> showing;
+  final ValueListenable<bool> theater;
+
+  const _DiscoverStageVeils({required this.showing, required this.theater});
+
+  /// Page ink at an alpha walked along the browse→playback→theater ladder by
+  /// [phase] (0..2).
+  static Color _ink(double browse, double play, double deep, double phase) {
+    final a = phase <= 1.0
+        ? browse + (play - browse) * phase
+        : play + (deep - play) * (phase - 1.0);
+    return const Color(0xFF0D0B1A).withValues(alpha: a);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ValueListenableBuilder<bool>(
+        valueListenable: showing,
+        builder: (_, on, __) => ValueListenableBuilder<bool>(
+          valueListenable: theater,
+          builder: (_, deep, __) => TweenAnimationBuilder<double>(
+            tween: Tween(end: deep ? 2.0 : (on ? 1.0 : 0.0)),
+            duration: deep
+                ? const Duration(milliseconds: 1200)
+                : on
+                    ? const Duration(milliseconds: 900)
+                    : const Duration(milliseconds: 250),
+            curve: Curves.easeInOutCubic,
+            builder: (_, t, __) => Stack(
+              fit: StackFit.expand,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        _ink(0.58, 0.34, 0.10, t), // art zone / rail text
+                        _ink(0.62, 0.38, 0.12, t),
+                        // Theater goes near-clear on the grid side too — the
+                        // panel content fades itself, so the video must not be
+                        // buried under ink there ("black right side").
+                        _ink(0.84, 0.68, 0.18, t), // the pane divide
+                        _ink(0.94, 0.86, 0.24, t), // under the grid
+                        _ink(1.0, 0.92, 0.30, t),
+                      ],
+                      stops: const [0.0, 0.34, 0.52, 0.74, 1.0],
+                    ),
+                  ),
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        _ink(0.34, 0.15, 0.06, t), // settle the top edge
+                        const Color(0x000D0B1A),
+                        const Color(0x000D0B1A),
+                        _ink(0.88, 0.58, 0.28, t), // melt into the bottom
+                      ],
+                      stops: const [0.0, 0.26, 0.55, 0.92],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lights-off over the grid while the trailer PLAYS (pre-theater): an animated
+/// baked-color wash covering the panel side (posters + filter line recede,
+/// Home-rows style), feathered over its first 15% so no hard seam cuts the
+/// stage at the pane divide. In THEATER the wash dissolves back to zero — there
+/// the panel content fades itself (host-side AnimatedOpacity) and ink here
+/// would just bury the now-unveiled video. Sits ABOVE the two-pane. Any DPAD
+/// move drops the signals and the lights snap back up in 250ms.
+class _DiscoverGridDim extends StatelessWidget {
+  final ValueListenable<bool> showing;
+  final ValueListenable<bool> theater;
+  final double leftInset;
+
+  const _DiscoverGridDim({
+    required this.showing,
+    required this.theater,
+    required this.leftInset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: leftInset,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      child: IgnorePointer(
+        child: ValueListenableBuilder<bool>(
+          valueListenable: showing,
+          builder: (_, on, __) => ValueListenableBuilder<bool>(
+            valueListenable: theater,
+            builder: (_, deep, __) => TweenAnimationBuilder<double>(
+              tween: Tween(end: deep ? 2.0 : (on ? 1.0 : 0.0)),
+              duration: deep
+                  ? const Duration(milliseconds: 1200)
+                  : on
+                      ? const Duration(milliseconds: 900)
+                      : const Duration(milliseconds: 250),
+              curve: Curves.easeInOutCubic,
+              builder: (_, t, __) {
+                // 0→1: 0 → .52 (playback); 1→2: .52 → 0 (theater unveils).
+                final a = t <= 1.0 ? 0.52 * t : 0.52 * (2.0 - t);
+                if (a <= 0.001) return const SizedBox.shrink();
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        const Color(0xFF0D0B1A).withValues(alpha: 0.0),
+                        const Color(0xFF0D0B1A).withValues(alpha: a),
+                      ],
+                      stops: const [0.0, 0.15],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

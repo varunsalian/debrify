@@ -54,9 +54,14 @@ class SeeAllGridMetrics {
     final width = MediaQuery.of(context).size.width;
     final target = isTelevision ? 132.0 : 178.0;
     final usable = (width - _hPad).clamp(0.0, double.infinity);
+    // TV floor is 4, not 5: the Discover two-pane hands the grid a ~565px
+    // panel where 5 forced columns would shrink posters to ~90px; 4 gives the
+    // ~117px cards the design wants. Full-width TV canvases still resolve to
+    // 5+ columns from the target size, so standalone See-All pages are
+    // unaffected.
     final cols = ((usable + columnGap) / (target + columnGap))
         .floor()
-        .clamp(isTelevision ? 5 : 3, 10);
+        .clamp(isTelevision ? 4 : 3, 10);
     // Size each cell = a 2:3 poster + a fixed 2-line title band below (matching
     // the board rails and Stremio), sized off the actual column width so the
     // poster stays 2:3 regardless of title length.
@@ -101,6 +106,10 @@ class SeeAllPosterGrid extends StatefulWidget {
   /// where the detail rail already names the type). Defaults to showing it.
   final bool showTypeBadge;
 
+  /// Forwarded to each tile — false drops the ★-rating chip (Discover TV, where
+  /// the detail rail shows the rating). Defaults to showing it.
+  final bool showRatingBadge;
+
   /// Optional resume progress (0..1) per item — draws the red bar.
   final double? Function(StremioMeta item)? progressOf;
 
@@ -127,6 +136,7 @@ class SeeAllPosterGrid extends StatefulWidget {
     this.onQuickPlay,
     this.onItemFocused,
     this.showTypeBadge = true,
+    this.showRatingBadge = true,
     this.progressOf,
     this.isBound,
     this.onExitTop,
@@ -306,6 +316,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                           progress: widget.progressOf?.call(item),
                           showInlineTitle: false,
                           showTypeBadge: widget.showTypeBadge,
+                          showRatingBadge: widget.showRatingBadge,
                         ),
                       ),
                       const SizedBox(height: titleGap),

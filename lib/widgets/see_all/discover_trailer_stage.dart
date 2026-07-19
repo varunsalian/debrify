@@ -46,6 +46,19 @@ class DiscoverTrailerStage extends StatefulWidget {
   /// it so the cards dim out as the trailer takes over.
   final ValueNotifier<double>? takeover;
 
+  /// Full-stage mode (the Discover glass-stage design): the video is rendered
+  /// across the WHOLE canvas from the first frame — no rail window, no rounded
+  /// clip — and sits UNDER the host's tint veils and panes in the host's Stack,
+  /// so it reads as the stage art coming alive behind the tint. [railRect] is
+  /// ignored and the internal loading pill is suppressed (the host shows the
+  /// Home-style TRAILER/AMBIENT chip pair instead, driven by [loading] and
+  /// [showing]).
+  final bool fullStage;
+
+  /// True while trailer frames are actually on screen — the host's AMBIENT
+  /// chip reads it. Reset to false whenever the video unmounts.
+  final ValueNotifier<bool>? showing;
+
   const DiscoverTrailerStage({
     super.key,
     required this.trailer,
@@ -54,6 +67,8 @@ class DiscoverTrailerStage extends StatefulWidget {
     required this.meta,
     required this.railRect,
     this.takeover,
+    this.fullStage = false,
+    this.showing,
   });
 
   @override
@@ -132,6 +147,11 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
     widget.meta.removeListener(_onMetaChanged);
     HardwareKeyboard.instance.removeHandler(_onTakeoverKey);
     _promote.dispose();
+    // NOTE: [showing] is deliberately NOT reset here — on a full host teardown
+    // the notifier is disposed in the same pass and a deferred write would land
+    // on a dead notifier. The one case where this stage unmounts while the host
+    // lives (the sub-threshold-canvas fallback) resets it host-side, next to
+    // its matching takeover reset.
     super.dispose();
   }
 
@@ -162,6 +182,7 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
       _promote.animateBack(0.0, duration: _collapseDuration);
     } else {
       _promote.value = 0;
+      widget.showing?.value = false;
       setState(() {
         _held = null;
         _heldMeta = null;
@@ -173,6 +194,7 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
     if (status == AnimationStatus.dismissed && _collapsing) {
       _collapsing = false;
       if (mounted && widget.trailer.value == null) {
+        widget.showing?.value = false;
         setState(() {
           _held = null;
           _heldMeta = null;
@@ -186,6 +208,7 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
     // Fullscreen takeover is disabled — the trailer stays windowed in the rail.
     // (The promote controller/overlay/scrim/chrome-dim remain wired but are
     // never driven; _promote sits at 0.)
+    widget.showing?.value = playing;
     if (playing) widget.loading.value = false; // frames are up — drop the pill
   }
 
@@ -244,8 +267,13 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
                 child: RepaintBoundary(child: video),
                 builder: (context, child) {
                   final t = _promoteT;
-                  final rect = Rect.lerp(widget.railRect, fullRect, t)!;
-                  final radius = lerpDouble(14.0, 0.0, t)!;
+                  // Full-stage: the video owns the whole canvas from frame one
+                  // (the host's veils above it supply the tint).
+                  final rect = widget.fullStage
+                      ? fullRect
+                      : Rect.lerp(widget.railRect, fullRect, t)!;
+                  final radius =
+                      widget.fullStage ? 0.0 : lerpDouble(14.0, 0.0, t)!;
                   // Windowed render: the fixed full-size surface scaled by the
                   // FittedBox into the (rail-box) rect — the video never re-fits,
                   // only its paint transform changes. (Fullscreen takeover is
@@ -298,20 +326,23 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
                 },
               ),
               // "Trailer" loading pill — pinned to the ambient window's corner.
-              Positioned.fromRect(
-                rect: widget.railRect,
-                child: Align(
-                  alignment: Alignment.topRight,
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: ValueListenableBuilder<bool>(
-                      valueListenable: widget.loading,
-                      builder: (_, loading, __) =>
-                          _TrailerLoadingPill(visible: loading),
+              // Full-stage mode drops it: the host's TRAILER/AMBIENT chip pair
+              // owns the status corner.
+              if (!widget.fullStage)
+                Positioned.fromRect(
+                  rect: widget.railRect,
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: widget.loading,
+                        builder: (_, loading, __) =>
+                            _TrailerLoadingPill(visible: loading),
+                      ),
                     ),
                   ),
                 ),
-              ),
               // Fullscreen takeover identity — the kinetic lower-third. Reads
               // the held meta (not the raw notifier) so it survives and fades
               // out with the graceful collapse.

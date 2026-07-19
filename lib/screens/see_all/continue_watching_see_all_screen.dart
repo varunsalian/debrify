@@ -306,22 +306,30 @@ class _ContinueWatchingSeeAllScreenState
     return n;
   }
 
+  /// Discover TV styling: quiet text-segment filters on the glass stage, no
+  /// per-poster rating chips (the detail rail carries that information).
+  bool get _quiet => widget.embedded && widget.isTelevision;
+
   Widget _buildFilterBar() {
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: _handleFilterKeys,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
+        padding: _quiet
+            ? const EdgeInsets.fromLTRB(24, 16, 24, 10)
+            : const EdgeInsets.fromLTRB(24, 10, 24, 12),
         child: SeeAllFilterBar(
           isTelevision: widget.isTelevision,
           leading: widget.leading,
+          quiet: _quiet,
           activeCount: _activeFilterCount,
           buildChips: () => [
             StremioDropdown<String>(
               label: 'Show',
               value: _category,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _catNode,
               options: const [
                 StremioDropdownOption('all', 'All'),
@@ -334,6 +342,7 @@ class _ContinueWatchingSeeAllScreenState
               label: 'Sort',
               value: _sort,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _sortNode,
               options: const [
                 StremioDropdownOption(_CwSort.lastWatched, 'Last Watched'),
@@ -346,6 +355,7 @@ class _ContinueWatchingSeeAllScreenState
               label: 'State',
               value: _watch,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _watchNode,
               options: const [
                 StremioDropdownOption('all', 'All'),
@@ -396,8 +406,10 @@ class _ContinueWatchingSeeAllScreenState
       onOpen: widget.onOpen,
       onQuickPlay: widget.onQuickPlay,
       onItemFocused: widget.onItemFocused,
-      // Discover on TV has the detail rail naming the type — drop the badge there.
-      showTypeBadge: !(widget.embedded && widget.isTelevision),
+      // Discover on TV has the detail rail naming the type and carrying the
+      // rating — drop both badges there.
+      showTypeBadge: !_quiet,
+      showRatingBadge: !_quiet,
       progressOf: widget.progressOf,
       isBound: widget.isBound,
       onLoadMore: () {},

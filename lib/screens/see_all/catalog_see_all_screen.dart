@@ -362,6 +362,10 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   /// of the grid.
   bool get _showingEmpty => !_loadingInitial && _items.isEmpty;
 
+  /// Discover TV styling: quiet text-segment filters on the glass stage, no
+  /// per-poster rating chips (the detail rail carries that information).
+  bool get _quiet => widget.embedded && widget.isTelevision;
+
   KeyEventResult _handleFilterKeys(FocusNode _, KeyEvent event) {
     if (!widget.isTelevision) return KeyEventResult.ignored;
     return handleSeeAllFilterArrows(
@@ -425,16 +429,20 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       skipTraversal: true,
       onKeyEvent: _handleFilterKeys,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
+        padding: _quiet
+            ? const EdgeInsets.fromLTRB(24, 16, 24, 10)
+            : const EdgeInsets.fromLTRB(24, 10, 24, 12),
         child: SeeAllFilterBar(
           isTelevision: widget.isTelevision,
           leading: widget.leading,
+          quiet: _quiet,
           activeCount: (_genre != null ? 1 : 0) + (_sort != _sortDefault ? 1 : 0),
           buildChips: () => [
             StremioDropdown<String>(
               label: 'Type',
               value: _type,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _typeNode,
               options: [
                 for (final t in _types) StremioDropdownOption(t, typeLabel(t)),
@@ -445,6 +453,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
               label: 'Catalog',
               value: _catalog,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _catalogNode,
               options: [
                 for (final c in catalogs) StremioDropdownOption(c, c.name),
@@ -458,6 +467,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                 // real selection — null means dismissed).
                 value: _genre ?? '',
                 isTelevision: widget.isTelevision,
+                quiet: _quiet,
                 focusNode: _genreNode,
                 options: [
                   const StremioDropdownOption<String>('', 'All'),
@@ -470,6 +480,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
               label: 'Sort',
               value: _sort,
               isTelevision: widget.isTelevision,
+              quiet: _quiet,
               focusNode: _sortNode,
               options: const [
                 StremioDropdownOption(_sortDefault, 'Default'),
@@ -563,8 +574,10 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       onOpen: widget.onOpenItem,
       onQuickPlay: widget.onQuickPlay,
       onItemFocused: widget.onItemFocused,
-      // Discover on TV has the detail rail naming the type — drop the badge there.
-      showTypeBadge: !(widget.embedded && widget.isTelevision),
+      // Discover on TV has the detail rail naming the type and carrying the
+      // rating — drop both badges there.
+      showTypeBadge: !_quiet,
+      showRatingBadge: !_quiet,
       isBound: widget.isBound,
       onLoadMore: _loadMore,
       onExitTop: widget.isTelevision ? () => _typeNode.requestFocus() : null,

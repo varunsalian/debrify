@@ -25,12 +25,19 @@ class SeeAllFilterBar extends StatefulWidget {
   /// collapsed button. 0 hides the badge.
   final int activeCount;
 
+  /// Quiet styling (Discover TV): the equal-width column row of boxed pills
+  /// becomes a single left-packed line of bare text segments separated by dots,
+  /// sitting directly on the glass stage. The chips themselves must be built
+  /// quiet too (StremioDropdown.quiet).
+  final bool quiet;
+
   const SeeAllFilterBar({
     super.key,
     required this.isTelevision,
     required this.buildChips,
     this.leading,
     this.activeCount = 0,
+    this.quiet = false,
   });
 
   @override
@@ -158,6 +165,37 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
         if (widget.leading != null) widget.leading!,
         ...widget.buildChips(),
       ];
+      // Quiet (Discover): a left-packed text line, dot-separated — the grid
+      // owns the canvas, the filters whisper above it. A Wrap of intrinsic
+      // units, NOT a flex Row: Flexible caps every segment at an equal share
+      // even when siblings leave slack, truncating "Continue Watching" beside
+      // a roomy "All". Here every value renders in full; a rare long combo
+      // folds onto a second line instead of ellipsizing.
+      if (widget.quiet) {
+        return Wrap(
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (var i = 0; i < items.length; i++)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (i > 0)
+                    Container(
+                      width: 3,
+                      height: 3,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  items[i],
+                ],
+              ),
+          ],
+        );
+      }
       return Row(
         children: [
           for (var i = 0; i < items.length; i++) ...[

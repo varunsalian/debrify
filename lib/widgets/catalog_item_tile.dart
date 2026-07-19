@@ -43,6 +43,11 @@ class CatalogItemTile extends StatefulWidget {
   /// results) so mixed-type grids keep their at-a-glance type label.
   final bool showTypeBadge;
 
+  /// When false the ★-rating chip is dropped — used by the Discover two-pane on
+  /// TV, where the detail rail shows the focused title's IMDb rating, so a chip
+  /// on every poster is noise against the glass stage.
+  final bool showRatingBadge;
+
   const CatalogItemTile({
     super.key,
     required this.item,
@@ -55,6 +60,7 @@ class CatalogItemTile extends StatefulWidget {
     this.progress,
     this.showInlineTitle = true,
     this.showTypeBadge = true,
+    this.showRatingBadge = true,
   });
 
   @override
@@ -177,7 +183,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                   child: _GlassChip(label: typeLabel),
                 ),
 
-              if (rating != null)
+              if (rating != null && widget.showRatingBadge)
                 Positioned(
                   top: 10,
                   right: 10,

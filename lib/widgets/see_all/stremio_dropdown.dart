@@ -32,6 +32,16 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
   /// need it (the Discover filter bar).
   final VoidCallback? onUpArrowPressed;
 
+  /// Quiet styling (Discover TV): the boxed glass pill becomes a bare
+  /// value + chevron text segment on the stage — no panel, no border box. The
+  /// DPAD focus state is a soft violet pill (constant-size decoration, so focus
+  /// never reflows the row). The popup menu is unchanged.
+  final bool quiet;
+
+  /// Quiet mode only: render the value in the violet accent — marks the leading
+  /// Source segment as the row's identity, per the Discover design.
+  final bool quietAccent;
+
   const StremioDropdown({
     super.key,
     required this.value,
@@ -41,6 +51,8 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
     this.isTelevision = false,
     this.focusNode,
     this.onUpArrowPressed,
+    this.quiet = false,
+    this.quietAccent = false,
   });
 
   @override
@@ -151,7 +163,9 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
           // the right edge, ellipsizing the value. Otherwise stay intrinsic (the
           // Wrap/Row usages everywhere else are unaffected — they pass loose or
           // unbounded width, so `hasTightWidth` is false).
-          child: LayoutBuilder(
+          child: widget.quiet
+              ? _buildQuiet(active)
+              : LayoutBuilder(
             builder: (context, constraints) {
               final stretch = constraints.hasTightWidth;
               final valueText = Text(
@@ -213,6 +227,77 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
             },
           ),
         ),
+      ),
+    );
+  }
+
+  /// The quiet segment: value text + a small chevron sitting directly on the
+  /// stage. Distinctive values (a source, catalog or type name) stand alone;
+  /// generic ones ("All" / "Default") are rewritten to self-describe — "All
+  /// types", "Any state" — so two Alls in one line stay tellable apart without
+  /// small-caps label prefixes eating the row's width.
+  String get _quietDisplay {
+    final label = widget.label?.toLowerCase();
+    if (_valueLabel == 'All') {
+      switch (label) {
+        case 'show':
+        case 'type':
+          return 'All types';
+        case 'state':
+          return 'Any state';
+        case 'genre':
+          return 'All genres';
+      }
+      return 'All';
+    }
+    if (_valueLabel == 'Default' && label == 'sort') return 'Default order';
+    return _valueLabel;
+  }
+
+  Widget _buildQuiet(bool active) {
+    return Container(
+      key: _btnKey,
+      padding: const EdgeInsets.fromLTRB(9, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: _focused
+            ? kSeeAllAccent.withValues(alpha: 0.30)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
+        // Constant thickness — only the color changes on focus, so the row
+        // never reflows on DPAD moves (same rule as the boxed pill).
+        border: Border.all(
+          width: 1.2,
+          color: _focused
+              ? kSeeAllAccent2.withValues(alpha: 0.45)
+              : (active ? kSeeAllAccentBorder : Colors.transparent),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Hard cap (the quiet row is a Wrap of intrinsic units, so this is
+          // the only guard against a pathologically long addon/list name).
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 190),
+            child: Text(
+              _quietDisplay,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: _focused
+                    ? Colors.white
+                    : widget.quietAccent
+                        ? kSeeAllAccent2
+                        : Colors.white.withValues(alpha: 0.78),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 3),
+          Icon(Icons.keyboard_arrow_down_rounded,
+              size: 15, color: Colors.white.withValues(alpha: 0.45)),
+        ],
       ),
     );
   }

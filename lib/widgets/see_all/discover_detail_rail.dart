@@ -45,6 +45,12 @@ class DiscoverDetailRail extends StatefulWidget {
   /// [trailerStreams] (set on publish, nulled on teardown).
   final ValueNotifier<StremioMeta?> trailerMeta;
 
+  /// What the rail is actually rendering (focused item merged with enrichment)
+  /// — published so the host's full-frame glass stage can draw this title's
+  /// backdrop behind both panes. Written post-frame (the rail adopts items
+  /// during build, when marking the already-built stage dirty would assert).
+  final ValueNotifier<StremioMeta?> shownItem;
+
   const DiscoverDetailRail({
     super.key,
     required this.item,
@@ -52,6 +58,7 @@ class DiscoverDetailRail extends StatefulWidget {
     required this.trailerLoading,
     required this.trailerVolume,
     required this.trailerMeta,
+    required this.shownItem,
   });
 
   @override
@@ -193,8 +200,19 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     // setState.
     final cached = _cachedFor(m);
     _shown = cached ?? m;
+    _publishShown();
     if (m != null && cached == null) _scheduleEnrich(m);
     _evaluateTrailer();
+  }
+
+  /// Mirror [_shown] to the host's stage, deferred a frame: _adopt runs during
+  /// build (initState/didUpdateWidget), and the stage — built earlier in the
+  /// host's Stack — may already be laid out this frame. Reading [_shown] at fire
+  /// time means queued callbacks all publish the latest value (idempotent).
+  void _publishShown() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.shownItem.value = _shown;
+    });
   }
 
   @override
@@ -239,6 +257,9 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
       // either way, so a later revisit still benefits).
       if (widget.item?.imdbId != key) return;
       setState(() => _shown = merged);
+      // Async context (Timer) — safe to publish directly; the stage picks up
+      // the enriched backdrop.
+      widget.shownItem.value = merged;
       // If this title's trailer is already published, refresh the takeover meta
       // with the now-enriched details (the setter only wrote it at publish time,
       // which may have been the thin list item if enrichment landed late).
@@ -380,24 +401,18 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
         runtime: base.runtime ?? enr.runtime,
         sourceAddon: base.sourceAddon ?? enr.sourceAddon,
         trailerYtId: base.trailerYtId ?? enr.trailerYtId,
+        logo: base.logo ?? enr.logo,
       );
 
   @override
   Widget build(BuildContext context) {
     final item = _shown;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: kSeeAllBg,
-        border: Border(
-          right: BorderSide(color: kSeeAllLine, width: 1),
-        ),
-      ),
-      // Swap instantly, no crossfade: a saveLayer over the whole rail on every
-      // DPAD move is the exact jank the grid avoids by disabling its own
-      // per-poster fade on TV. The backdrop still eases in on its own (once,
-      // post-dwell) via CachedNetworkImage's fadeInDuration.
-      child: item == null ? const _RailEmpty() : _RailContent(item: item),
-    );
+    // No panel, no border: the rail is an open glass column floating on the
+    // host's full-frame stage (the stage's veils supply the legibility, the
+    // host draws the backdrop). Swaps stay instant — no crossfade, a saveLayer
+    // over the whole rail on every DPAD move is the exact jank the grid avoids
+    // by disabling its own per-poster fade on TV.
+    return item == null ? const _RailEmpty() : _RailContent(item: item);
   }
 }
 
@@ -408,93 +423,36 @@ class _RailContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backdrop = item.background ?? item.poster;
     final rating = item.imdbRating;
     final runtime = item.runtimeDisplay;
     final year = item.year;
     final genres = item.genres ?? const [];
 
-    final meta = <Widget>[
-      if (year != null && year.isNotEmpty) _MetaText(year),
-      if (rating != null)
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.star_rounded, size: 14, color: Color(0xFFFACC15)),
-          const SizedBox(width: 3),
-          _MetaText(rating.toStringAsFixed(1)),
-        ]),
-      if (runtime != null) _MetaText(runtime),
-      _MetaText(item.type == 'series' ? 'Series' : 'Movie'),
+    // year · runtime, dot-separated (the type gets its own badge, the rating
+    // its own IMDb chip — mock grammar).
+    final facts = <String>[
+      if (year != null && year.isNotEmpty) year,
+      if (runtime != null && runtime.isNotEmpty) runtime,
     ];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 18, 18),
+      padding: const EdgeInsets.fromLTRB(24, 0, 18, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Backdrop stage.
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (backdrop != null && backdrop.isNotEmpty)
-                    CachedNetworkImage(
-                      imageUrl: backdrop,
-                      fit: BoxFit.cover,
-                      memCacheWidth: 640,
-                      fadeInDuration: const Duration(milliseconds: 200),
-                      placeholder: (_, __) => const _BackdropFallback(),
-                      errorWidget: (_, __, ___) => const _BackdropFallback(),
-                    )
-                  else
-                    const _BackdropFallback(),
-                  // The trailer itself is rendered by the full-screen
-                  // DiscoverTrailerStage layered over the two-pane (so it can
-                  // grow to a fullscreen takeover). It sits exactly over this box
-                  // while ambient — this still shows through until its video
-                  // fades in, then it takes over the box.
-                  // Bottom fade so the backdrop marries into the panel.
-                  const Positioned.fill(
-                    child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Color(0xE60D0B1A)],
-                            stops: [0.45, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            item.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.4,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 10),
-          // Metadata row, dot-separated.
+          // Sit the identity block in the stage art's clear zone — matches the
+          // mock's ~1/5-down anchor on a 540 canvas without starving short
+          // canvases (fixed spacer, not proportional: the column never jumps).
+          const SizedBox(height: 92),
+          _RailTitleArt(item: item),
+          const SizedBox(height: 18),
           Wrap(
-            spacing: 8,
-            runSpacing: 4,
+            spacing: 9,
+            runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              for (var i = 0; i < meta.length; i++) ...[
+              _TypeBadge(item.type == 'series' ? 'SERIES' : 'MOVIE'),
+              for (var i = 0; i < facts.length; i++) ...[
                 if (i > 0)
                   Container(
                     width: 3,
@@ -504,17 +462,17 @@ class _RailContent extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                   ),
-                meta[i],
+                _MetaText(facts[i]),
               ],
+              if (rating != null) _ImdbChip(rating),
             ],
           ),
-          const SizedBox(height: 14),
-          // Plot + genres fill the remaining height. The genre block is bottom
-          // content but the lower priority, so it gets a fixed, clipped budget
-          // (two wrapped rows) and the plot's line count is computed from
-          // whatever's left — so the chips are never shoved under the fold and
-          // the plot ellipsis-truncates to fit. The outer ClipRect guarantees no
-          // overflow stripes even if font metrics round a line over budget.
+          const SizedBox(height: 16),
+          // Plot + genres. The genre chips follow the plot directly (mock), and
+          // the plot is capped to a readable block rather than filling the
+          // column — the stage art behind is part of the design now, not dead
+          // space to cover. The ClipRect still guarantees no overflow stripes
+          // on short canvases.
           Expanded(
             child: ClipRect(
               child: LayoutBuilder(
@@ -531,7 +489,7 @@ class _RailContent extends StatelessWidget {
                       cons.maxHeight.isFinite ? cons.maxHeight : 400.0;
                   final descLines = ((avail - reserve) / lineHeight)
                       .floor()
-                      .clamp(1, 40);
+                      .clamp(1, 6);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -542,10 +500,16 @@ class _RailContent extends StatelessWidget {
                             item.description!,
                             maxLines: descLines,
                             overflow: TextOverflow.ellipsis,
+                            // Shadow: legibility over the trailer, which plays
+                            // under a much thinner veil (~.35) than the browse
+                            // tint — invisible against the dark browse state.
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.72),
                               fontSize: 13.5,
                               height: 1.5,
+                              shadows: const [
+                                Shadow(color: Colors.black87, blurRadius: 8),
+                              ],
                             ),
                           ),
                         )
@@ -586,6 +550,158 @@ class _RailContent extends StatelessWidget {
   }
 }
 
+/// The rail's title, IMAGE-FIRST — the same contract as the Home hero's title
+/// art: the studio title-treatment when a logo URL is known (from the item, or
+/// derived from the IMDb id — metahub serves `/logo/medium/{tt}/img` for
+/// almost every title), the plain text title only when art is genuinely
+/// unavailable. While art is in flight the slot holds EMPTY, never the text —
+/// text-flashing-then-swapping reads as a glitch. Failed URLs are remembered
+/// for the session so logo-less titles show text immediately on revisit.
+class _RailTitleArt extends StatefulWidget {
+  final StremioMeta item;
+
+  const _RailTitleArt({required this.item});
+
+  @override
+  State<_RailTitleArt> createState() => _RailTitleArtState();
+}
+
+class _RailTitleArtState extends State<_RailTitleArt> {
+  /// Session-wide memo of logo URLs that 404'd.
+  static final Set<String> _deadLogoUrls = <String>{};
+
+  String? get _logoUrl {
+    final item = widget.item;
+    if (item.logo?.isNotEmpty == true) return item.logo;
+    final imdb =
+        item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
+    if (imdb == null) return null;
+    return 'https://images.metahub.space/logo/medium/$imdb/img';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = _logoUrl;
+    if (logo == null || _deadLogoUrls.contains(logo)) {
+      return SizedBox(
+        height: 68,
+        width: double.infinity,
+        child: Align(
+          alignment: Alignment.bottomLeft,
+          child: Text(
+            widget.item.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.4,
+              height: 1.1,
+              shadows: [
+                Shadow(
+                  color: Colors.black87,
+                  blurRadius: 10,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    // Fixed-height slot, left-aligned: successive titles keep one anchor as
+    // DPAD focus flies. Empty placeholder AND empty errorWidget — the slot
+    // stays blank until art lands; a failure flips (via the memo + rebuild) to
+    // the full text path above, not a cramped in-slot fallback.
+    return SizedBox(
+      height: 68,
+      width: double.infinity,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: CachedNetworkImage(
+            imageUrl: logo,
+            fit: BoxFit.contain,
+            alignment: Alignment.centerLeft,
+            memCacheWidth: 480,
+            fadeInDuration: const Duration(milliseconds: 180),
+            placeholder: (_, __) => const SizedBox.shrink(),
+            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+            errorListener: (_) {
+              _deadLogoUrls.add(logo);
+              if (mounted) setState(() {});
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hairline-outlined type capsule — "SERIES" / "MOVIE" (mock grammar).
+class _TypeBadge extends StatelessWidget {
+  final String label;
+  const _TypeBadge(this.label);
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.32)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.82),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          ),
+        ),
+      );
+}
+
+/// The gold IMDb mark + rating (mock grammar) — replaces the generic ★.
+class _ImdbChip extends StatelessWidget {
+  final double rating;
+  const _ImdbChip(this.rating);
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5C518),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'IMDb',
+              style: TextStyle(
+                color: Color(0xFF161616),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            rating.toStringAsFixed(1),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      );
+}
+
 class _MetaText extends StatelessWidget {
   final String text;
   const _MetaText(this.text);
@@ -598,6 +714,7 @@ class _MetaText extends StatelessWidget {
           fontSize: 12.5,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.2,
+          shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
         ),
       );
 }
@@ -621,24 +738,6 @@ class _GenreChip extends StatelessWidget {
             fontSize: 11.5,
             fontWeight: FontWeight.w600,
           ),
-        ),
-      );
-}
-
-class _BackdropFallback extends StatelessWidget {
-  const _BackdropFallback();
-
-  @override
-  Widget build(BuildContext context) => const DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [kSeeAllPanel2, kSeeAllBg],
-          ),
-        ),
-        child: Center(
-          child: Icon(Icons.movie_rounded, size: 34, color: Color(0x33FFFFFF)),
         ),
       );
 }
