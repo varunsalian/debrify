@@ -148,16 +148,16 @@ class IptvService {
     return channels.where((c) => c.group == category).toList();
   }
 
-  /// Search channels by name
+  /// Search channels by name or group (case-insensitive). Matches against the
+  /// channel's precomputed [IptvChannel.searchKey] so a keystroke over a huge
+  /// playlist is one contains() per channel, not fresh toLowerCase() copies of
+  /// every name and group.
   List<IptvChannel> searchChannels(List<IptvChannel> channels, String query) {
     if (query.isEmpty) {
       return channels;
     }
     final lowerQuery = query.toLowerCase();
-    return channels.where((c) =>
-      c.name.toLowerCase().contains(lowerQuery) ||
-      (c.group?.toLowerCase().contains(lowerQuery) ?? false)
-    ).toList();
+    return channels.where((c) => c.searchKey.contains(lowerQuery)).toList();
   }
 
   /// Clear cache for a specific URL or all

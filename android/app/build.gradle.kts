@@ -77,6 +77,10 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.media3:media3-exoplayer:1.8.0")
     implementation("androidx.media3:media3-exoplayer-dash:1.8.0")
+    // HLS for IPTV (.m3u8) — DefaultMediaSourceFactory finds it by reflection.
+    // Was only present transitively via the video_player plugin; pin it so the
+    // native players don't silently lose HLS if that plugin ever goes away.
+    implementation("androidx.media3:media3-exoplayer-hls:1.8.0")
     implementation("androidx.media3:media3-ui:1.8.0")
     implementation("androidx.media3:media3-session:1.8.0")
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.8.0+1")

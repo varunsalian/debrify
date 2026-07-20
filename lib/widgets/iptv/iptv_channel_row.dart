@@ -26,6 +26,9 @@ class IptvChannelRow extends StatefulWidget {
   final VoidCallback onTap;
   final ValueChanged<bool>? onFavoriteToggle;
 
+  /// Fired when this row gains DPAD focus — drives the TV preview stage.
+  final VoidCallback? onFocused;
+
   const IptvChannelRow({
     super.key,
     required this.channel,
@@ -34,6 +37,7 @@ class IptvChannelRow extends StatefulWidget {
     this.focusNode,
     this.isFavorited = false,
     this.onFavoriteToggle,
+    this.onFocused,
   });
 
   @override
@@ -204,6 +208,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       onFocusChange: (f) {
         setState(() => _focused = f);
         if (f) {
+          widget.onFocused?.call();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             Scrollable.ensureVisible(
@@ -409,6 +414,10 @@ class _LogoChip extends StatelessWidget {
             ? CachedNetworkImage(
                 imageUrl: logoUrl!,
                 fit: BoxFit.contain,
+                // IPTV logos are often 1000px+ PNGs going into a ~36px slot —
+                // uncapped decodes janked scrolling and thrashed the TV's
+                // small image cache (re-decoding on every scroll-back).
+                memCacheHeight: 96,
                 placeholder: (_, __) => _fallback(),
                 errorWidget: (_, __, ___) => _fallback(),
               )

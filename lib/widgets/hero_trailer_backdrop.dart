@@ -80,6 +80,14 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// layers never re-parent, so trailer state is untouched by the flight.
   final String? heroTag;
 
+  /// [videoUrl] is a LIVE stream (the IPTV channel preview), not a finite
+  /// trailer clip: no looping, and none of the trailer-shaped seek machinery
+  /// runs (the intro-skip jump and the loop-restart re-skip both assume a
+  /// seekable clip; seeking a live window is at best a no-op and at worst an
+  /// error). Everything else — engine selection, underlay mode, the decoder
+  /// discipline, URL-change restarts — applies unchanged.
+  final bool live;
+
   const HeroTrailerBackdrop({
     super.key,
     required this.imageUrl,
@@ -94,6 +102,7 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.startDelay = const Duration(milliseconds: 1400),
     this.ambientVolume = _defaultAmbientVolume,
     this.heroTag,
+    this.live = false,
   });
 
   /// See [ambientVolume]. 70% — audible but under the UI, matching the Home
@@ -358,7 +367,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       final dur = _duration;
       final longEnough =
           dur == Duration.zero || dur > const Duration(seconds: 8);
-      if (!widget.foreground && longEnough) engine.seek(_introSkip);
+      if (!widget.live && !widget.foreground && longEnough) {
+        engine.seek(_introSkip);
+      }
       setState(() => _videoVisible = true);
       _syncPlayingNotification();
     });
@@ -372,7 +383,8 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _posSub = engine.positionStream.listen((p) {
       // Loop restart (position wrapped back to the start) → skip the intro
       // again. Ambient only: never fight a manual scrub or foreground seek.
-      if (!widget.foreground &&
+      if (!widget.live &&
+          !widget.foreground &&
           !_scrubbing &&
           _lastPos > const Duration(seconds: 6) &&
           p < const Duration(seconds: 1)) {
@@ -407,7 +419,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         // path the main player uses for high-res YouTube).
         audioUrl: widget.audioUrl,
         volume: _userMuted ? 0 : widget.ambientVolume,
-        loop: true,
+        loop: !widget.live,
       );
       if (_engine != engine) return;
       if (widget.foreground) _applyVolume(foreground: true);
@@ -437,6 +449,14 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     // off→on) always opens with play:true, so a leftover pause from the
     // previous trailer must not suppress the new one's resume paths.
     _pausedByUser = false;
+    // Silence playback NOW — pause is a direct platform call that needs no
+    // Flutter frame. The full release below can be frame-deferred, and a
+    // covered/backgrounded app produces no frames: without this, a teardown
+    // landing after the cover left the stream audibly playing behind the real
+    // player. (Must run before detach() — that flips the engine's no-op flag.
+    // Fire-and-forget: the dispose racing it is harmless, just don't let its
+    // error surface as an unhandled async exception.)
+    engine?.pause().catchError((_) {});
     // Flip the engine's disposed flag NOW (sync) so any in-flight open() bails
     // and stale control calls no-op — but defer the surface release below.
     engine?.detach();
@@ -455,9 +475,40 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         (_) => widget.onRequestClose?.call(),
       );
     }
-    // Dispose only after this frame's rebuild has dropped the Video/Texture, so
-    // it never renders against a disposed controller.
-    WidgetsBinding.instance.addPostFrameCallback((_) => engine.dispose());
+    // Dispose only after this frame's rebuild has dropped the Video/Texture,
+    // so it never renders against a disposed controller — except when no
+    // frames are coming (see _disposeEngineSoon).
+    _disposeEngineSoon(engine);
+  }
+
+  /// Engines whose native release was deferred to the next frame (so the frame
+  /// that drops their Video/Texture renders first). A paused/covered app
+  /// produces NO frames, so a deferred dispose would never run — holding the
+  /// hardware decoder (starving the real player on weak TV SoCs) until the app
+  /// resumed. When the app is already paused the release happens immediately
+  /// (nothing is rendering), and [didChangeAppLifecycleState] flushes any
+  /// still-parked engines on pause. Engine dispose is idempotent, so the
+  /// original post-frame callback firing later is a harmless no-op.
+  final List<TrailerEngine> _pendingDispose = [];
+
+  void _disposeEngineSoon(TrailerEngine engine) {
+    if (_appPaused) {
+      engine.dispose();
+      return;
+    }
+    _pendingDispose.add(engine);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pendingDispose.remove(engine);
+      engine.dispose();
+    });
+  }
+
+  void _flushPendingDisposes() {
+    if (_pendingDispose.isEmpty) return;
+    for (final e in List.of(_pendingDispose)) {
+      e.dispose();
+    }
+    _pendingDispose.clear();
   }
 
   // ── Foreground promotion ────────────────────────────────────────────────────
@@ -599,6 +650,10 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       } else {
         _engine?.pause();
       }
+      // An earlier teardown may have parked its engine for a frame that will
+      // now never come — release those before the covering player needs the
+      // decoder.
+      _flushPendingDisposes();
     }
   }
 
@@ -618,6 +673,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _errorSub?.cancel();
     _fg.dispose();
     _engine?.dispose();
+    // Engines parked for a post-frame release die with the widget — don't
+    // leave them to a frame that may never render.
+    _flushPendingDisposes();
     super.dispose();
   }
 

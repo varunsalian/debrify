@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
 import '../../utils/tv_keys.dart';
+import '../see_all/see_all_theme.dart';
 
 /// IPTV filter bar with playlist and category dropdowns
 class IptvFiltersBar extends StatelessWidget {
@@ -244,14 +245,14 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          // House glass chip (kSeeAll board language). Constant border width —
+          // a 1→2px focus ring resizes the chip and reflows the whole bar.
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+            color: kSeeAllPanel,
+            borderRadius: BorderRadius.circular(11),
             border: Border.all(
-              color: _isFocused
-                  ? colorScheme.primary
-                  : colorScheme.outline.withOpacity(0.3),
-              width: _isFocused ? 2 : 1,
+              width: 2,
+              color: _isFocused ? kSeeAllAccent : kSeeAllLine,
             ),
           ),
           child: Row(
@@ -264,7 +265,7 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
                         ? Icons.folder
                         : Icons.playlist_play,
                 size: 16,
-                color: colorScheme.onSurfaceVariant,
+                color: kSeeAllAccent2,
               ),
               const SizedBox(width: 6),
               Flexible(
@@ -387,13 +388,11 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+            color: kSeeAllPanel,
+            borderRadius: BorderRadius.circular(11),
             border: Border.all(
-              color: _isFocused
-                  ? colorScheme.primary
-                  : colorScheme.outline.withOpacity(0.3),
-              width: _isFocused ? 2 : 1,
+              width: 2,
+              color: _isFocused ? kSeeAllAccent : kSeeAllLine,
             ),
           ),
           child: Row(
@@ -520,13 +519,11 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+            color: kSeeAllPanel,
+            borderRadius: BorderRadius.circular(11),
             border: Border.all(
-              color: _isFocused
-                  ? colorScheme.primary
-                  : colorScheme.outline.withOpacity(0.3),
-              width: _isFocused ? 2 : 1,
+              width: 2,
+              color: _isFocused ? kSeeAllAccent : kSeeAllLine,
             ),
           ),
           child: Row(
@@ -537,8 +534,8 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
                 duration: const Duration(milliseconds: 150),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: isLive ? colorScheme.primary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
+                  color: isLive ? kSeeAllAccent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(7),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -546,13 +543,13 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
                     Icon(
                       Icons.live_tv,
                       size: 14,
-                      color: isLive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                      color: isLive ? Colors.white : colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       'Live',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: isLive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                        color: isLive ? Colors.white : colorScheme.onSurfaceVariant,
                         fontWeight: isLive ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
@@ -564,8 +561,8 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
                 duration: const Duration(milliseconds: 150),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: !isLive ? colorScheme.primary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
+                  color: !isLive ? kSeeAllAccent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(7),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -573,13 +570,13 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
                     Icon(
                       Icons.movie,
                       size: 14,
-                      color: !isLive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                      color: !isLive ? Colors.white : colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       'Movies',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: !isLive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                        color: !isLive ? Colors.white : colorScheme.onSurfaceVariant,
                         fontWeight: !isLive ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
@@ -798,30 +795,32 @@ class _CategoryPickerSheet extends StatefulWidget {
 }
 
 class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
-  final List<FocusNode> _focusNodes = [];
+  /// Lazily created, keyed by option index (0 = "All Categories") — a big
+  /// playlist has hundreds of categories, and pre-creating a FocusNode (and
+  /// tile) for every one froze the sheet open. Nodes exist only for tiles the
+  /// lazy list has actually built; DPAD only ever asks for a neighbor of a
+  /// built tile, which the list's cache extent has already built too.
+  final Map<int, FocusNode> _focusNodes = {};
+
+  int get _optionCount => widget.categories.length + 1;
+
+  FocusNode _nodeFor(int index) => _focusNodes.putIfAbsent(
+        index,
+        () => FocusNode(debugLabel: 'iptv-category-$index'),
+      );
 
   @override
   void initState() {
     super.initState();
-    _initFocusNodes();
-  }
-
-  void _initFocusNodes() {
-    // +1 for "All Categories" option
-    for (int i = 0; i < widget.categories.length + 1; i++) {
-      _focusNodes.add(FocusNode(debugLabel: 'iptv-category-$i'));
-    }
     // Auto-focus first item after build
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _focusNodes.isNotEmpty) {
-        _focusNodes[0].requestFocus();
-      }
+      if (mounted) _nodeFor(0).requestFocus();
     });
   }
 
   @override
   void dispose() {
-    for (final node in _focusNodes) {
+    for (final node in _focusNodes.values) {
       node.dispose();
     }
     super.dispose();
@@ -843,12 +842,12 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowUp && index > 0) {
-      _focusNodes[index - 1].requestFocus();
+      _nodeFor(index - 1).requestFocus();
       return KeyEventResult.handled;
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown && index < _focusNodes.length - 1) {
-      _focusNodes[index + 1].requestFocus();
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown && index < _optionCount - 1) {
+      _nodeFor(index + 1).requestFocus();
       return KeyEventResult.handled;
     }
 
@@ -897,41 +896,41 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
             ),
             const SizedBox(height: 8),
 
-            // Options
+            // Options — built lazily; index 0 is "All Categories". shrinkWrap
+            // only for short lists (it forces building every child): big lists
+            // trade a full-height sheet for an instant open.
             Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  // All Categories option
-                  _FocusablePickerTile(
-                    focusNode: _focusNodes.isNotEmpty ? _focusNodes[0] : null,
-                    label: 'All Categories',
-                    icon: widget.selectedCategory == null ? Icons.check_circle : Icons.folder_outlined,
-                    isSelected: widget.selectedCategory == null,
-                    onTap: () => Navigator.of(context).pop(''),
-                    onKeyEvent: (node, event) => _handleKeyEvent(
-                      node, event, 0, () => Navigator.of(context).pop(''),
-                    ),
-                  ),
-
-                  // Category options
-                  ...widget.categories.asMap().entries.map((entry) {
-                    final index = entry.key + 1; // +1 for "All Categories"
-                    final category = entry.value;
-                    final isSelected = category == widget.selectedCategory;
-
+              child: ListView.builder(
+                shrinkWrap: widget.categories.length <= 40,
+                itemCount: _optionCount,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
                     return _FocusablePickerTile(
-                      focusNode: index < _focusNodes.length ? _focusNodes[index] : null,
-                      label: category,
-                      icon: isSelected ? Icons.check_circle : Icons.folder_outlined,
-                      isSelected: isSelected,
-                      onTap: () => Navigator.of(context).pop(category),
+                      focusNode: _nodeFor(0),
+                      label: 'All Categories',
+                      icon: widget.selectedCategory == null
+                          ? Icons.check_circle
+                          : Icons.folder_outlined,
+                      isSelected: widget.selectedCategory == null,
+                      onTap: () => Navigator.of(context).pop(''),
                       onKeyEvent: (node, event) => _handleKeyEvent(
-                        node, event, index, () => Navigator.of(context).pop(category),
+                        node, event, 0, () => Navigator.of(context).pop(''),
                       ),
                     );
-                  }),
-                ],
+                  }
+                  final category = widget.categories[index - 1];
+                  final isSelected = category == widget.selectedCategory;
+                  return _FocusablePickerTile(
+                    focusNode: _nodeFor(index),
+                    label: category,
+                    icon: isSelected ? Icons.check_circle : Icons.folder_outlined,
+                    isSelected: isSelected,
+                    onTap: () => Navigator.of(context).pop(category),
+                    onKeyEvent: (node, event) => _handleKeyEvent(
+                      node, event, index, () => Navigator.of(context).pop(category),
+                    ),
+                  );
+                },
               ),
             ),
 

@@ -17,6 +17,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.flutter.plugin.common.BinaryMessenger
@@ -199,8 +200,15 @@ class TvTrailerTexturePlayer(
                 // video/audio duration mismatch in YouTube adaptive streams.
                 player.setMediaSource(MergingMediaSource(true, true, videoSource, audioSource))
             } else {
+                // Single muxed URL. Unlike the YouTube merge above, this may be
+                // ANY container — the IPTV channel preview feeds HLS (.m3u8)
+                // and raw-TS live streams through here — so infer the source
+                // type like the main player does instead of assuming a
+                // progressive file (ProgressiveMediaSource can't parse an HLS
+                // playlist: the stream errors out and the preview never shows).
                 player.setMediaSource(
-                    ProgressiveMediaSource.Factory(dataSourceFactory)
+                    DefaultMediaSourceFactory(context)
+                        .setDataSourceFactory(dataSourceFactory)
                         .createMediaSource(MediaItem.fromUri(videoUrl))
                 )
             }

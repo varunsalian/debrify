@@ -71,7 +71,7 @@ class IptvChannel {
   final String? contentType; // 'live', 'vod', or null (M3U channels)
   final Map<String, String> attributes; // Additional tvg-* attributes
 
-  const IptvChannel({
+  IptvChannel({
     required this.name,
     required this.url,
     this.logoUrl,
@@ -80,6 +80,13 @@ class IptvChannel {
     this.contentType,
     this.attributes = const {},
   });
+
+  /// Lowercased "name\ngroup" haystack for search, built once per channel on
+  /// first use. Searching used to call toLowerCase() on every channel's name
+  /// AND group per keystroke — tens of thousands of string allocations per
+  /// keypress against a 10k-channel playlist on weak TV CPUs.
+  late final String searchKey =
+      '${name.toLowerCase()}\n${group?.toLowerCase() ?? ''}';
 
   /// Check if this is a live stream. Xtream Codes channels carry an explicit
   /// content type; M3U channels fall back to the duration heuristic.
