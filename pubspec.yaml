@@ -73,6 +73,9 @@ dependencies:
   
   # Image caching for episode posters
   cached_network_image: ^3.3.1
+  # Direct dep so we can configure a bigger disk cache than the 200-object
+  # default (already transitive via cached_network_image)
+  flutter_cache_manager: ^3.4.1
 
   # App version info
   package_info_plus: ^8.0.0

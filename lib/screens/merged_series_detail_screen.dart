@@ -11,6 +11,7 @@ import '../models/advanced_search_selection.dart';
 import '../models/playlist_view_mode.dart';
 import '../services/analytics_service.dart';
 import '../services/app_route_observer.dart';
+import '../services/debrify_image_cache.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/storage_service.dart';
@@ -1959,9 +1960,12 @@ class _CastTileState extends State<_CastTile> {
                       ? CachedNetworkImage(
                           imageUrl: m.imageUrl!,
                           fit: BoxFit.cover,
+                          cacheManager: DebrifyImageCache.manager,
                           // 56 logical px avatar (up to dpr 3 on phones) —
                           // never decode a full-res headshot.
                           memCacheWidth: 180,
+                          placeholder: (_, __) =>
+                              Container(color: widget.fallback),
                           errorWidget: (_, __, ___) =>
                               Container(color: widget.fallback),
                         )
@@ -2033,9 +2037,12 @@ class _RecCardState extends State<_RecCard> {
                   ? CachedNetworkImage(
                       imageUrl: rec.poster!,
                       fit: BoxFit.cover,
+                      cacheManager: DebrifyImageCache.manager,
                       // 100 logical px card (up to dpr 3 on phones) — decode
                       // small so ten posters at once don't lean on a 2GB box.
                       memCacheWidth: 300,
+                      placeholder: (_, __) =>
+                          Container(color: widget.fallback),
                       errorWidget: (_, __, ___) =>
                           Container(color: widget.fallback),
                     )

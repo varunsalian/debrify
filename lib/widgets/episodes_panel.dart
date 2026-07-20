@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
+import '../services/debrify_image_cache.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
@@ -412,7 +413,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       final title = (v['title'] as String?) ?? (v['name'] as String?) ?? '';
       final overview = v['overview'] as String?;
       final released = v['released'] as String?;
-      final thumbnail = v['thumbnail'] as String?;
+      final thumbnail = _downsizeMetahubThumb(v['thumbnail'] as String?);
       final ratingRaw = v['imdbRating'] ?? v['rating'];
       final rating = ratingRaw is num
           ? ratingRaw.toDouble()
@@ -442,6 +443,15 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         episodes: episodes,
       );
     }).toList()..sort(_seasonsSpecialsLast);
+  }
+
+  /// Cinemeta episode stills come as episodes.metahub.space/…/w780.jpg — a 301
+  /// to the full-width TMDB image (~50 KB) for a 124-logical-px row thumb. The
+  /// size token maps straight to TMDB sizes, so ask for w300 (~11 KB) instead;
+  /// on TV-grade WiFi that's the difference between a snap and a trickle.
+  static String? _downsizeMetahubThumb(String? url) {
+    if (url == null || !url.contains('episodes.metahub.space')) return url;
+    return url.replaceFirst(RegExp(r'/w\d+\.jpg$'), '/w300.jpg');
   }
 
   /// Sort seasons ascending, but with Specials (season 0) at the very end —
@@ -478,7 +488,34 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     _episodeFocusNodes.clear();
 
     try {
-      final seasons = await _fetchSeasons(show);
+      // The seasons fetch, Trakt's "next episode" lookup, and (on the Trakt
+      // path) the TVMaze thumbnail map are independent — fire all of them now
+      // instead of serializing three network round trips before content shows.
+      // Each side future swallows its own errors so a failure can neither
+      // bubble to the outer catch nor go unhandled if we bail on a stale
+      // generation before awaiting it.
+      final seasonsFuture = _fetchSeasons(show);
+
+      // Trakt "next episode" — drives the up-next tile highlight and the
+      // landing target. Instant/null without a Trakt account (no token → no
+      // request).
+      final nextEpisodeFuture = _traktService
+          .fetchNextEpisode(show.effectiveImdbId ?? show.id)
+          .catchError((Object e) {
+        debugPrint('EpisodesPanel: next-episode fetch failed: $e');
+        return null;
+      });
+
+      // Trakt-sourced items carry a stub addon (no base URL) and their
+      // episodes arrive without stills — warm the TVMaze map alongside the
+      // seasons fetch so tiles can show real stills at (or right after) first
+      // paint instead of swapping in seconds later.
+      final addonHasMeta = widget.addon.baseUrl.isNotEmpty ||
+          widget.addon.manifestUrl.isNotEmpty;
+      final prefetchedThumbs =
+          addonHasMeta ? null : _fetchTvmazeThumbMap(show.effectiveImdbId);
+
+      final seasons = await seasonsFuture;
       if (!mounted || generation != _episodeModeGeneration) return;
 
       if (seasons.isEmpty) {
@@ -500,18 +537,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       int? effectiveSeason = initialSeason;
       int? effectiveEpisode = initialEpisode;
 
-      // 2. Trakt "next episode". Also drives the up-next tile highlight. This
-      //    is instant/null without a Trakt account (no token → no request).
-      //    Guarded so a Trakt failure can never bubble to the outer catch and
-      //    drop us to torrent search — the episode list is already loaded.
-      ({int season, int episode})? nextEpisode;
-      try {
-        nextEpisode = await _traktService.fetchNextEpisode(
-          show.effectiveImdbId ?? show.id,
-        );
-      } catch (e) {
-        debugPrint('EpisodesPanel: next-episode fetch failed: $e');
-      }
+      // 2. Trakt "next episode" — already in flight (fired alongside the
+      //    seasons fetch above); errors resolve to null there, so this await
+      //    can never bubble to the outer catch and drop us to torrent search.
+      final nextEpisode = await nextEpisodeFuture;
       if (!mounted || generation != _episodeModeGeneration) return;
       // Keep the raw value for the up-next highlight (it self-limits to a
       // displayed tile). Only adopt it as the landing target when its season is
@@ -520,7 +549,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       if (effectiveSeason == null &&
           effectiveEpisode == null &&
           nextEpisode != null &&
-          seasons.any((s) => s.number == nextEpisode!.season)) {
+          seasons.any((s) => s.number == nextEpisode.season)) {
         effectiveSeason = nextEpisode.season;
         effectiveEpisode = nextEpisode.episode;
       }
@@ -570,8 +599,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       // Fill in per-episode thumbnails from TVMaze for any episode that didn't
       // come with one (Trakt-sourced items have none; addon items keep theirs).
-      // Non-blocking — tiles render immediately with the show-poster fallback.
-      _enrichEpisodeThumbnails(show, seasons, generation);
+      // Non-blocking — and on the Trakt path the map was prefetched alongside
+      // the seasons, so stills usually land within a frame of first paint.
+      _enrichEpisodeThumbnails(
+        show,
+        seasons,
+        generation,
+        prefetched: prefetchedThumbs,
+      );
 
       // Backfill per-episode ratings from Trakt when the addon didn't supply
       // real ones (Cinemeta sends rating:0). Non-blocking — ratings pop in.
@@ -651,38 +686,19 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
   }
 
-  /// Fill in per-episode thumbnails from TVMaze, keyed off the show's IMDb id.
-  ///
-  /// Only episodes that arrived without a thumbnail are touched, so addon
-  /// meta-provided stills are preserved and Trakt-sourced episodes (which have
-  /// none) get filled. Best-effort: any failure leaves the show-poster
-  /// fallback in place.
-  Future<void> _enrichEpisodeThumbnails(
-    StremioMeta show,
-    List<TraktSeason> seasons,
-    int generation,
-  ) async {
-    final imdbId = show.effectiveImdbId;
-    if (imdbId == null) return;
-    // Nothing to do if every episode already has a thumbnail (addon path).
-    final needsThumbnails = seasons.any(
-      (s) => s.episodes.any(
-        (e) => e.thumbnailUrl == null || e.thumbnailUrl!.isEmpty,
-      ),
-    );
-    if (!needsThumbnails) return;
-
+  /// Fetch the TVMaze `"S-E"` → still-URL map for [imdbId]. Never throws —
+  /// resolves to null when TVMaze doesn't know the show or the fetch fails,
+  /// so it's safe to fire-and-forget before its consumer exists.
+  Future<Map<String, String>?> _fetchTvmazeThumbMap(String? imdbId) async {
+    if (imdbId == null) return null;
     try {
       final showData = await TVMazeService.lookupByImdbId(imdbId);
-      if (!mounted || generation != _episodeModeGeneration) return;
       final tvmazeId = showData?['id'] as int?;
-      if (tvmazeId == null) return;
+      if (tvmazeId == null) return null;
 
       final tvmazeEpisodes = await TVMazeService.getEpisodes(tvmazeId);
-      if (!mounted || generation != _episodeModeGeneration) return;
-      if (tvmazeEpisodes.isEmpty) return;
+      if (tvmazeEpisodes.isEmpty) return null;
 
-      // Build lookup: "S-E" → image URL.
       final imageMap = <String, String>{};
       for (final ep in tvmazeEpisodes) {
         final s = ep['season'] as int?;
@@ -693,28 +709,56 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           imageMap['$s-$e'] = url;
         }
       }
-      if (imageMap.isEmpty) return;
+      return imageMap.isEmpty ? null : imageMap;
+    } catch (e) {
+      debugPrint('EpisodesPanel: TVMaze thumbnail fetch failed: $e');
+      return null;
+    }
+  }
 
-      var changed = false;
-      for (final season in seasons) {
-        for (final episode in season.episodes) {
-          if (episode.thumbnailUrl != null &&
-              episode.thumbnailUrl!.isNotEmpty) {
-            continue;
-          }
-          final url = imageMap['${episode.season}-${episode.number}'];
-          if (url != null) {
-            episode.thumbnailUrl = url;
-            changed = true;
-          }
+  /// Fill in per-episode thumbnails from TVMaze, keyed off the show's IMDb id.
+  ///
+  /// Only episodes that arrived without a thumbnail are touched, so addon
+  /// meta-provided stills are preserved and Trakt-sourced episodes (which have
+  /// none) get filled. Best-effort: any failure leaves the show-poster
+  /// fallback in place. [prefetched] is the map fired alongside the seasons
+  /// fetch on the Trakt path; when absent (addon path that still came up
+  /// short) the fetch happens here.
+  Future<void> _enrichEpisodeThumbnails(
+    StremioMeta show,
+    List<TraktSeason> seasons,
+    int generation, {
+    Future<Map<String, String>?>? prefetched,
+  }) async {
+    // Nothing to do if every episode already has a thumbnail (addon path).
+    final needsThumbnails = seasons.any(
+      (s) => s.episodes.any(
+        (e) => e.thumbnailUrl == null || e.thumbnailUrl!.isEmpty,
+      ),
+    );
+    if (!needsThumbnails) return;
+
+    final imageMap =
+        await (prefetched ?? _fetchTvmazeThumbMap(show.effectiveImdbId));
+    if (imageMap == null) return;
+    if (!mounted || generation != _episodeModeGeneration) return;
+
+    var changed = false;
+    for (final season in seasons) {
+      for (final episode in season.episodes) {
+        if (episode.thumbnailUrl != null && episode.thumbnailUrl!.isNotEmpty) {
+          continue;
+        }
+        final url = imageMap['${episode.season}-${episode.number}'];
+        if (url != null) {
+          episode.thumbnailUrl = url;
+          changed = true;
         }
       }
+    }
 
-      if (changed && mounted && generation == _episodeModeGeneration) {
-        setState(() {});
-      }
-    } catch (e) {
-      debugPrint('EpisodesPanel: TVMaze thumbnail enrichment failed: $e');
+    if (changed) {
+      setState(() {});
     }
   }
 
@@ -1741,6 +1785,10 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                           CachedNetworkImage(
                             imageUrl: thumbUrl,
                             fit: BoxFit.cover,
+                            // Long-lived shared cache — the 200-object default
+                            // evicts these within one TV browsing session,
+                            // forcing a re-download on every visit.
+                            cacheManager: DebrifyImageCache.manager,
                             // 124-logical-px thumb — the show-poster fallback
                             // is a full-size poster; never decode it full-res
                             // for a row thumbnail (×N rows on a 2 GB box).
@@ -1749,6 +1797,10 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                                 HomeTheme.imageFadeIn(widget.isTelevision),
                             fadeOutDuration:
                                 HomeTheme.imageFadeOut(widget.isTelevision),
+                            // Solid fill while loading — without it the tile
+                            // is a transparent hole until the bytes land.
+                            placeholder: (_, __) =>
+                                Container(color: const Color(0xFF1A1622)),
                             errorWidget: (_, __, ___) =>
                                 Container(color: const Color(0xFF1A1622)),
                           )
