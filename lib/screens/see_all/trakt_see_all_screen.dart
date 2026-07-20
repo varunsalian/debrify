@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
@@ -9,6 +11,7 @@ import '../../services/trakt/trakt_list_source.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
+import '../../widgets/see_all/see_all_random_button.dart';
 import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 
@@ -117,8 +120,17 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   final FocusNode _catNode = FocusNode(debugLabel: 'tsa_category');
   final FocusNode _sortNode = FocusNode(debugLabel: 'tsa_sort');
   final FocusNode _watchNode = FocusNode(debugLabel: 'tsa_watch');
+  final FocusNode _randomNode = FocusNode(debugLabel: 'tsa_random');
+
+  final Random _random = Random();
 
   bool get _isCw => _list.isContinueWatching;
+
+  /// The Random button is a Discover affordance: only the embedded host wires
+  /// Quick Play (and hides it in PikPak-only mode by passing null). Works on
+  /// every list — the host resolves CW items to their resume point and plays
+  /// fetched-list items like catalog titles.
+  bool get _showRandom => widget.embedded && widget.onQuickPlay != null;
 
   /// The State (Watched/Unwatched) filter only makes sense where we have
   /// per-item progress — i.e. Continue Watching.
@@ -140,6 +152,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
         _catNode,
         _sortNode,
         if (_showState) _watchNode,
+        if (_showRandom) _randomNode,
       ];
 
   @override
@@ -213,6 +226,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     _catNode.dispose();
     _sortNode.dispose();
     _watchNode.dispose();
+    _randomNode.dispose();
     super.dispose();
   }
 
@@ -273,6 +287,17 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       change();
       _recompute();
     });
+  }
+
+  /// Quick-play a random title from the filtered view. [_visible] already has
+  /// the Show/State dropdowns applied, and the whole list is in memory — no
+  /// paging — so a plain in-list pick is uniform.
+  void _playRandom() {
+    final play = widget.onQuickPlay;
+    if (play == null || _visible.isEmpty) return;
+    AnalyticsService.trackInBackground(
+        'discover_random_play', {'source': 'trakt_cw'});
+    play(_visible[_random.nextInt(_visible.length)]);
   }
 
   // ── List selection (primary dropdown + group dropdown) ──────────────────────
@@ -457,6 +482,14 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
           leading: widget.leading,
           quiet: _quiet,
           activeCount: _activeFilterCount,
+          trailing: _showRandom
+              ? SeeAllRandomButton(
+                  quiet: _quiet,
+                  enabled: _visible.isNotEmpty,
+                  focusNode: _randomNode,
+                  onPressed: _playRandom,
+                )
+              : null,
           buildChips: () => [
             StremioDropdown<String>(
               label: 'List',
@@ -575,10 +608,9 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       loadingMore: false,
       exhausted: true, // finite, in-memory list — no paging
       onOpen: widget.onOpen,
-      // Quick-play resolves a resume point from the host's cached CW rows; a
-      // fetched-list item isn't in that map, so the button would silently open
-      // the detail instead of playing. Only offer it where it works.
-      onQuickPlay: _isCw ? widget.onQuickPlay : null,
+      // Quick-play works on every list: the host resolves CW items to their
+      // resume point and plays fetched-list items like catalog titles.
+      onQuickPlay: widget.onQuickPlay,
       onItemFocused: widget.onItemFocused,
       // Discover on TV has the detail rail naming the type — drop the badge there.
       showTypeBadge: !_quiet,

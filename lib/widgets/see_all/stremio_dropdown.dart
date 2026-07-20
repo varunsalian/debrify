@@ -180,7 +180,19 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
     final active = _focused || _hovered;
     return Focus(
       focusNode: widget.focusNode,
-      onFocusChange: (f) => setState(() => _focused = f),
+      onFocusChange: (f) {
+        setState(() => _focused = f);
+        // Quiet segments live on a single never-wrapping line that scrolls
+        // horizontally when too wide — keep the focused one in view (no-op
+        // while the line fits, or outside any scrollable).
+        if (f && widget.quiet) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+          );
+        }
+      },
       onKeyEvent: _onKey,
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),

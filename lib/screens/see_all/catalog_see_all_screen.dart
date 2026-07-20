@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,6 +12,7 @@ import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
+import '../../widgets/see_all/see_all_random_button.dart';
 import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 
@@ -110,6 +113,11 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   bool _loadingMore = false;
   bool _exhausted = false;
 
+  // Random (Discover): true while the random-page probe is in flight — the
+  // button shows a spinner and further presses are ignored.
+  bool _randomBusy = false;
+  final Random _random = Random();
+
   // Bumped on every reset so an in-flight page from a stale catalog/genre is
   // discarded when it returns.
   int _reqToken = 0;
@@ -121,6 +129,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   final FocusNode _catalogNode = FocusNode(debugLabel: 'seeall_catalog');
   final FocusNode _genreNode = FocusNode(debugLabel: 'seeall_genre');
   final FocusNode _sortNode = FocusNode(debugLabel: 'seeall_sort');
+  final FocusNode _randomNode = FocusNode(debugLabel: 'seeall_random');
   // The empty-state Retry button — the only recovery affordance when a filter
   // yields nothing, so it must be DPAD-reachable.
   final FocusNode _retryNode = FocusNode(debugLabel: 'seeall_retry');
@@ -154,6 +163,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     _catalogNode.dispose();
     _genreNode.dispose();
     _sortNode.dispose();
+    _randomNode.dispose();
     _retryNode.dispose();
     super.dispose();
   }
@@ -293,6 +303,49 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     }
   }
 
+  // ── Random (Discover) ──────────────────────────────────────────────────────
+
+  /// The Random button is a Discover affordance: only the embedded host wires
+  /// Quick Play (and hides it in PikPak-only mode by passing null).
+  bool get _showRandom => widget.embedded && widget.onQuickPlay != null;
+
+  /// Pick a random item honouring the current Type/Catalog/Genre selection and
+  /// Quick-Play it. Sampling only the loaded pages would bias every press
+  /// toward the catalog's head, so probe a random offset through [_fetchPage]
+  /// (which bakes the filters in): catalog depth is unknowable up front, so a
+  /// deep probe first, then a shallow one for addons that don't page that far,
+  /// then the already-loaded items as the last resort. Addons that ignore
+  /// `skip` just return their first page — the in-page pick still randomizes.
+  Future<void> _playRandom() async {
+    if (_randomBusy || _loadingInitial || _items.isEmpty) return;
+    final play = widget.onQuickPlay;
+    if (play == null) return;
+    AnalyticsService.trackInBackground(
+        'discover_random_play', {'source': 'catalog'});
+    final token = _reqToken;
+    setState(() => _randomBusy = true);
+    StremioMeta? pick;
+    try {
+      for (final depth in const [400, 60]) {
+        final page = await _fetchPage(_random.nextInt(depth), (_) {});
+        // A filter changed mid-probe — the page (and any fallback below) no
+        // longer matches what's on screen, so drop the press entirely.
+        if (!mounted || token != _reqToken) return;
+        if (page.isNotEmpty) {
+          pick = page[_random.nextInt(page.length)];
+          break;
+        }
+      }
+      pick ??= _items.isEmpty ? null : _items[_random.nextInt(_items.length)];
+    } catch (_) {
+      if (!mounted || token != _reqToken) return;
+      pick = _items.isEmpty ? null : _items[_random.nextInt(_items.length)];
+    } finally {
+      if (mounted) setState(() => _randomBusy = false);
+    }
+    if (pick != null) play(pick);
+  }
+
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   // Filter changes stay in the current mode: while searching, switching
@@ -356,6 +409,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
         _catalogNode,
         if (_catalog.supportsGenre) _genreNode,
         _sortNode,
+        if (_showRandom) _randomNode,
       ];
 
   /// Whether the empty-state (with the Retry button) is currently shown instead
@@ -437,6 +491,15 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
           leading: widget.leading,
           quiet: _quiet,
           activeCount: (_genre != null ? 1 : 0) + (_sort != _sortDefault ? 1 : 0),
+          trailing: _showRandom
+              ? SeeAllRandomButton(
+                  quiet: _quiet,
+                  enabled: !_loadingInitial && _items.isNotEmpty,
+                  busy: _randomBusy,
+                  focusNode: _randomNode,
+                  onPressed: _playRandom,
+                )
+              : null,
           buildChips: () => [
             StremioDropdown<String>(
               label: 'Type',

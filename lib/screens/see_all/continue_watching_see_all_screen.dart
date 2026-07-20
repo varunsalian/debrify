@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
@@ -8,6 +10,7 @@ import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
+import '../../widgets/see_all/see_all_random_button.dart';
 import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 
@@ -100,6 +103,13 @@ class _ContinueWatchingSeeAllScreenState
   final FocusNode _catNode = FocusNode(debugLabel: 'cwsa_category');
   final FocusNode _sortNode = FocusNode(debugLabel: 'cwsa_sort');
   final FocusNode _watchNode = FocusNode(debugLabel: 'cwsa_watch');
+  final FocusNode _randomNode = FocusNode(debugLabel: 'cwsa_random');
+
+  final Random _random = Random();
+
+  /// The Random button is a Discover affordance: only the embedded host wires
+  /// Quick Play (and hides it in PikPak-only mode by passing null).
+  bool get _showRandom => widget.embedded && widget.onQuickPlay != null;
 
   @override
   void initState() {
@@ -156,7 +166,8 @@ class _ContinueWatchingSeeAllScreenState
           if ((widget.leadingNode?.hasFocus ?? false) ||
               _catNode.hasFocus ||
               _sortNode.hasFocus ||
-              _watchNode.hasFocus) {
+              _watchNode.hasFocus ||
+              _randomNode.hasFocus) {
             return;
           }
           (widget.leadingNode ?? _catNode).requestFocus();
@@ -191,6 +202,7 @@ class _ContinueWatchingSeeAllScreenState
     _catNode.dispose();
     _sortNode.dispose();
     _watchNode.dispose();
+    _randomNode.dispose();
     super.dispose();
   }
 
@@ -233,6 +245,17 @@ class _ContinueWatchingSeeAllScreenState
     });
   }
 
+  /// Quick-play a random title from the filtered view. [_visible] already has
+  /// the Show/State dropdowns applied, and the whole list is in memory — no
+  /// paging — so a plain in-list pick is uniform.
+  void _playRandom() {
+    final play = widget.onQuickPlay;
+    if (play == null || _visible.isEmpty) return;
+    AnalyticsService.trackInBackground(
+        'discover_random_play', {'source': 'continue_watching'});
+    play(_visible[_random.nextInt(_visible.length)]);
+  }
+
   // ── TV filter-bar focus wiring ──────────────────────────────────────────────
 
   KeyEventResult _handleFilterKeys(FocusNode _, KeyEvent event) {
@@ -244,6 +267,7 @@ class _ContinueWatchingSeeAllScreenState
         _catNode,
         _sortNode,
         _watchNode,
+        if (_showRandom) _randomNode,
       ],
       onDown: () => _gridKey.currentState?.focusFirst(),
       // Embedded (Discover tab) has no back button above the bar, so
@@ -324,6 +348,14 @@ class _ContinueWatchingSeeAllScreenState
           leading: widget.leading,
           quiet: _quiet,
           activeCount: _activeFilterCount,
+          trailing: _showRandom
+              ? SeeAllRandomButton(
+                  quiet: _quiet,
+                  enabled: _visible.isNotEmpty,
+                  focusNode: _randomNode,
+                  onPressed: _playRandom,
+                )
+              : null,
           buildChips: () => [
             StremioDropdown<String>(
               label: 'Show',

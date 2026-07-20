@@ -2528,7 +2528,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   Future<void> _playTraktItem(StremioMeta item) async {
     final cwItem = _traktByImdb[_imdbOf(item)];
     if (cwItem == null) {
-      _openTraktItem(item);
+      // Not in Continue Watching — a fetched Trakt list title (Trending,
+      // Watchlist, …). Play it like a catalog title: addon-stream resolution
+      // with the same Trakt-first resume the detail page's Play button uses.
+      await _onCatalogPlay(
+        item,
+        _addonForContinue(item.sourceAddon?.id),
+        isTraktSource: true,
+        preferTraktResume: true,
+      );
       return;
     }
     final sel = await TraktContinueWatchingService.instance.selectionForItem(

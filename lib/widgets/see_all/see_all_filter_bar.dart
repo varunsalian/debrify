@@ -17,6 +17,11 @@ class SeeAllFilterBar extends StatefulWidget {
   /// the standalone See-All pages.
   final Widget? leading;
 
+  /// Always-visible trailing control (the Discover Random button), or null.
+  /// Like [leading] it stays inline when the chips collapse into the sheet —
+  /// it's an action, not a filter, so it must not be buried there.
+  final Widget? trailing;
+
   /// Builds the screen's own filter chips fresh on each call, so the open sheet
   /// reflects live filter changes (see [didUpdateWidget]).
   final List<Widget> Function() buildChips;
@@ -36,6 +41,7 @@ class SeeAllFilterBar extends StatefulWidget {
     required this.isTelevision,
     required this.buildChips,
     this.leading,
+    this.trailing,
     this.activeCount = 0,
     this.quiet = false,
   });
@@ -164,36 +170,37 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
       final items = <Widget>[
         if (widget.leading != null) widget.leading!,
         ...widget.buildChips(),
+        if (widget.trailing != null) widget.trailing!,
       ];
       // Quiet (Discover): a left-packed text line, dot-separated — the grid
-      // owns the canvas, the filters whisper above it. A Wrap of intrinsic
-      // units, NOT a flex Row: Flexible caps every segment at an equal share
-      // even when siblings leave slack, truncating "Continue Watching" beside
-      // a roomy "All". Here every value renders in full; a rare long combo
-      // folds onto a second line instead of ellipsizing.
+      // owns the canvas, the filters whisper above it. A single row of
+      // intrinsic units, NOT a flex Row: Flexible caps every segment at an
+      // equal share even when siblings leave slack, truncating "Continue
+      // Watching" beside a roomy "All". Every value renders in full and the
+      // bar NEVER wraps — a rare too-wide combo scrolls horizontally instead
+      // (each segment pulls itself into view on DPAD focus), so the filters
+      // can't fold onto a second line and push the grid down.
       if (widget.quiet) {
-        return Wrap(
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            for (var i = 0; i < items.length; i++)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (i > 0)
-                    Container(
-                      width: 3,
-                      height: 3,
-                      margin: const EdgeInsets.symmetric(horizontal: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        shape: BoxShape.circle,
-                      ),
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0)
+                  Container(
+                    width: 3,
+                    height: 3,
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      shape: BoxShape.circle,
                     ),
-                  items[i],
-                ],
-              ),
-          ],
+                  ),
+                items[i],
+              ],
+            ],
+          ),
         );
       }
       return Row(
@@ -230,6 +237,7 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
               _FiltersButton(count: widget.activeCount, onTap: _openSheet)
             else
               ...widget.buildChips(),
+            if (widget.trailing != null) widget.trailing!,
           ],
         );
       },
