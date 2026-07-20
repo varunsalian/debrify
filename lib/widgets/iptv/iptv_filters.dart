@@ -12,6 +12,11 @@ class IptvFiltersBar extends StatelessWidget {
   final String? selectedCategory;
   final int channelCount;
   final bool isLoading;
+
+  /// Channels are streaming in (progressive Stremio load): the count is real
+  /// but not final, so it renders with a spinner instead of as a settled
+  /// total.
+  final bool isLoadingMore;
   final ValueChanged<IptvPlaylist?> onPlaylistChanged;
   final ValueChanged<String?> onCategoryChanged;
   final VoidCallback? onAddPlaylist;
@@ -34,6 +39,7 @@ class IptvFiltersBar extends StatelessWidget {
     required this.selectedCategory,
     required this.channelCount,
     required this.isLoading,
+    this.isLoadingMore = false,
     required this.onPlaylistChanged,
     required this.onCategoryChanged,
     this.onAddPlaylist,
@@ -131,11 +137,25 @@ class IptvFiltersBar extends StatelessWidget {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 else if (selectedPlaylist != null)
-                  Text(
-                    '$channelCount channel${channelCount != 1 ? 's' : ''}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isLoadingMore) ...[
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Text(
+                        '$channelCount channel${channelCount != 1 ? 's' : ''}'
+                        '${isLoadingMore ? '…' : ''}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ],

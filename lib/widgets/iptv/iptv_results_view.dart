@@ -71,6 +71,16 @@ class IptvResultsViewState extends State<IptvResultsView>
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Progressive (Stremio-addon) loads: [_loadTicket] orphans a superseded
+  // load's batches AND its final result, and doubles as the cancel signal
+  // that stops its catalog walk; [_isLoadingMore] is true from the first
+  // streamed batch until the walk completes — every "N channels" readout and
+  // empty state must stay honest while it's set (the list is still growing,
+  // so a search can have matches on the way).
+  int _loadTicket = 0;
+  bool _isLoadingMore = false;
+  DateTime? _lastProgressiveApply;
+
   // Favorites
   Set<String> _favoriteUrls = {};
 
@@ -266,8 +276,11 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _loadPlaylist(IptvPlaylist playlist) async {
+    final ticket = ++_loadTicket;
+    _lastProgressiveApply = null;
     setState(() {
       _isLoading = true;
+      _isLoadingMore = false;
       _errorMessage = null;
       _allChannels = [];
       _filteredChannels = [];
@@ -293,7 +306,15 @@ class IptvResultsViewState extends State<IptvResultsView>
               categories: [],
               error: 'Broken addon playlist',
             )
-          : await StremioIptvService.instance.fetchChannels(addonId);
+          // Progressive: the first catalog page renders as soon as it lands
+          // and the list keeps growing batch by batch; switching playlists
+          // (or leaving the page) cancels the rest of the walk.
+          : await StremioIptvService.instance.fetchChannels(
+              addonId,
+              isCancelled: () => !mounted || ticket != _loadTicket,
+              onProgress: (channels, categories) =>
+                  _applyProgressiveBatch(ticket, channels, categories),
+            );
     } else if (playlist.isXtreamCodes) {
       final xcService = XtreamCodesService.instance;
       if (_selectedContentType == 'vod') {
@@ -307,11 +328,12 @@ class IptvResultsViewState extends State<IptvResultsView>
       result = await _iptvService.fetchPlaylist(playlist.url);
     }
 
-    if (!mounted) return;
+    if (!mounted || ticket != _loadTicket) return;
 
     if (result.hasError) {
       setState(() {
         _isLoading = false;
+        _isLoadingMore = false;
         _errorMessage = result.error;
       });
       return;
@@ -322,13 +344,14 @@ class IptvResultsViewState extends State<IptvResultsView>
     // the stars line up.
     await StorageService.reconcileIptvFavoriteUrls(result.channels);
     await _loadFavorites();
-    if (!mounted) return;
+    if (!mounted || ticket != _loadTicket) return;
 
     // Focus nodes are created lazily per channel (keyed by URL) in the
     // grid's itemBuilder via _focusNodeFor.
 
     setState(() {
       _isLoading = false;
+      _isLoadingMore = false;
       _allChannels = result.channels;
       _categories = result.categories;
     });
@@ -341,6 +364,34 @@ class IptvResultsViewState extends State<IptvResultsView>
       );
     }
 
+    _applyFilters();
+  }
+
+  /// A page of Stremio channels landed while the catalog walk is still
+  /// running. Batches are cumulative snapshots, so skipped intermediate ones
+  /// lose nothing — throttle the repaints and let the next batch (or the
+  /// final result) true everything up.
+  void _applyProgressiveBatch(
+    int ticket,
+    List<IptvChannel> channels,
+    List<String> categories,
+  ) {
+    if (!mounted || ticket != _loadTicket) return;
+    final now = DateTime.now();
+    final last = _lastProgressiveApply;
+    final firstBatch = !_isLoadingMore;
+    if (!firstBatch &&
+        last != null &&
+        now.difference(last) < const Duration(milliseconds: 300)) {
+      return;
+    }
+    _lastProgressiveApply = now;
+    setState(() {
+      _isLoading = false; // first batch swaps the spinner for real rows
+      _isLoadingMore = true;
+      _allChannels = channels;
+      _categories = categories;
+    });
     _applyFilters();
   }
 
@@ -554,6 +605,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           selectedCategory: _selectedCategory,
           channelCount: _filteredChannels.length,
           isLoading: _isLoading,
+          isLoadingMore: _isLoadingMore,
           onPlaylistChanged: _onPlaylistChanged,
           onCategoryChanged: _onCategoryChanged,
           onAddPlaylist: _navigateToSettings,
@@ -669,7 +721,10 @@ class IptvResultsViewState extends State<IptvResultsView>
             _isLoading
                 ? 'Loading…'
                 : '${_filteredChannels.length} channel'
-                    '${_filteredChannels.length == 1 ? '' : 's'}',
+                    '${_filteredChannels.length == 1 ? '' : 's'}'
+                    // The list is still streaming in — never present a
+                    // partial count as final.
+                    '${_isLoadingMore ? ' • loading more…' : ''}',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.40),
               fontSize: 12,
@@ -919,8 +974,42 @@ class IptvResultsViewState extends State<IptvResultsView>
       );
     }
 
-    // No channels found
+    // No channels matched. While a progressive load is still streaming in,
+    // a definitive "No channels found" would be a lie — matches may simply
+    // not have arrived yet, so say that instead.
     if (_filteredChannels.isEmpty) {
+      if (_isLoadingMore) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                widget.searchQuery.isNotEmpty
+                    ? 'No matches yet — channels are still loading'
+                    : _selectedCategory != null
+                        ? 'Nothing in this category yet — still loading'
+                        : 'Loading channels…',
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${_allChannels.length} channel'
+                '${_allChannels.length == 1 ? '' : 's'} loaded so far',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -957,7 +1046,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final w = MediaQuery.of(context).size.width;
     final hPadding = tvPane ? 10.0 : (w >= 900 ? 28.0 : 12.0);
 
-    return TvFocusScrollWrapper(
+    final grid = TvFocusScrollWrapper(
       child: FocusTraversalGroup(
         child: GridView.builder(
           controller: _scrollController,
@@ -988,6 +1077,49 @@ class IptvResultsViewState extends State<IptvResultsView>
           },
         ),
       ),
+    );
+    if (!_isLoadingMore) return grid;
+
+    // Streamed load still running: a quiet, non-focusable line keeps the
+    // visible (possibly filtered) rows honest about being a partial list.
+    final subtle = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(hPadding + 4, 6, hPadding, 0),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 11,
+                height: 11,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.6,
+                  color: subtle.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.searchQuery.isNotEmpty
+                      ? 'Still loading (${_allChannels.length} so far) — '
+                          'search results may be incomplete'
+                      : 'Still loading channels — '
+                          '${_allChannels.length} so far',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: subtle,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: grid),
+      ],
     );
   }
 }

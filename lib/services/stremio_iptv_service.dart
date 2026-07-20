@@ -41,14 +41,18 @@ class StremioIptvService {
   static const String playlistIdPrefix = 'stremio-addon:';
   static const String playlistUrlScheme = 'stremio-addon://';
 
-  // Pagination guards: addons that ignore `skip` would otherwise loop forever,
-  // and a runaway catalog shouldn't OOM the channel list.
-  static const int _maxPagesPerCatalog = 20;
-  static const int _maxChannelsPerAddon = 5000;
+  // Safety valves, not practical limits. The real end-of-catalog signals are
+  // an empty page and a page that contributes nothing new (addons that ignore
+  // `skip` serve the same page forever); these only stop a truly pathological
+  // addon from fetching without end. Channels stream to the UI as pages land
+  // (see [fetchChannels]), so a huge catalog costs patience, not a spinner.
+  static const int _maxPagesPerCatalog = 200;
+  static const int _maxChannelsPerAddon = 50000;
 
-  /// Genre fan-out cap for catalogs whose `genre` extra is *required* (common
-  /// for live-TV addons that use genre = country/category).
-  static const int _maxRequiredGenres = 30;
+  /// Genre fan-out valve for catalogs whose `genre` extra is *required*
+  /// (common for live-TV addons that use genre = country/category). Genres
+  /// come from the manifest, so this only guards absurd manifests.
+  static const int _maxRequiredGenres = 100;
 
   static const Duration _candidatesTtl = Duration(minutes: 5);
   static const Duration _winnerTtl = Duration(minutes: 15);
@@ -124,9 +128,20 @@ class StremioIptvService {
 
   /// Fetch every channel the addon's tv catalogs expose, as an
   /// [IptvParseResult] the IPTV page renders unchanged.
+  ///
+  /// Catalog pages arrive over the network one at a time. When [onProgress]
+  /// is given it fires after every page that contributed channels, with
+  /// cumulative snapshots (safe to keep — the service won't mutate them), so
+  /// the caller can render the first page immediately and keep growing the
+  /// list while the walk continues. [isCancelled] is polled between requests;
+  /// once it returns true the walk stops, the partial result is returned
+  /// UN-cached, and no further [onProgress] fires.
   Future<IptvParseResult> fetchChannels(
     String addonId, {
     bool forceRefresh = false,
+    void Function(List<IptvChannel> channels, List<String> categories)?
+        onProgress,
+    bool Function()? isCancelled,
   }) async {
     final cached = _channelsCache[addonId];
     if (!forceRefresh &&
@@ -165,8 +180,14 @@ class StremioIptvService {
     final categories = <String>[];
     final multiCatalog = catalogs.length > 1;
     var truncated = false;
+    // Latched: once cancellation is observed the walk never resumes, even if
+    // the caller's predicate were to flap back.
+    var cancelled = false;
+    bool checkCancelled() =>
+        cancelled = cancelled || (isCancelled?.call() ?? false);
 
     for (final catalog in catalogs) {
+      if (checkCancelled()) break;
       if (channels.length >= _maxChannelsPerAddon) {
         truncated = true;
         break;
@@ -185,6 +206,7 @@ class StremioIptvService {
       }
 
       for (final genre in genres) {
+        if (checkCancelled()) break;
         if (channels.length >= _maxChannelsPerAddon) {
           truncated = true;
           break;
@@ -198,6 +220,17 @@ class StremioIptvService {
           seenIds: seenIds,
           into: channels,
           forceRefresh: forceRefresh,
+          isCancelled: checkCancelled,
+          // The category must exist by the time its first channels reach the
+          // caller, or a mid-load category filter couldn't offer the group.
+          onPage: onProgress == null
+              ? null
+              : () {
+                  if (group != null && !categories.contains(group)) {
+                    categories.add(group);
+                  }
+                  onProgress(List.of(channels), List.of(categories));
+                },
         );
         if (added > 0 && group != null && !categories.contains(group)) {
           categories.add(group);
@@ -215,14 +248,17 @@ class StremioIptvService {
           ? 'Channel list truncated at $_maxChannelsPerAddon'
           : null,
     );
-    if (channels.isNotEmpty) {
+    // A cancelled walk is incomplete — caching it would serve a silently
+    // short list for the next 5 minutes.
+    if (channels.isNotEmpty && !cancelled) {
       _channelsCache[addonId] = (result: result, at: DateTime.now());
     }
     return result;
   }
 
   /// Walk one catalog (optionally one genre of it) page by page. Returns the
-  /// number of channels appended to [into].
+  /// number of channels appended to [into]. [onPage] fires after every page
+  /// that contributed at least one new channel.
   Future<int> _fetchCatalogPages(
     StremioAddon addon,
     StremioAddonCatalog catalog, {
@@ -231,11 +267,14 @@ class StremioIptvService {
     required Set<String> seenIds,
     required List<IptvChannel> into,
     required bool forceRefresh,
+    required bool Function() isCancelled,
+    void Function()? onPage,
   }) async {
     var added = 0;
     var skip = 0;
     for (var page = 0; page < _maxPagesPerCatalog; page++) {
       if (into.length >= _maxChannelsPerAddon) break;
+      if (isCancelled()) break;
       var rawCount = 0;
       final metas = await _stremio.fetchCatalog(
         addon,
@@ -245,6 +284,9 @@ class StremioIptvService {
         forceRefresh: forceRefresh,
         onRawCount: (c) => rawCount = c,
       );
+      // Cancellation can land while the request was in flight — drop the
+      // page rather than emit progress the caller no longer wants.
+      if (isCancelled()) break;
       if (metas.isEmpty) break;
 
       var newThisPage = 0;
@@ -266,6 +308,7 @@ class StremioIptvService {
       // An addon that ignores `skip` serves the same page forever — stop as
       // soon as a page contributes nothing new.
       if (newThisPage == 0) break;
+      onPage?.call();
       if (rawCount <= 0) break;
       skip += rawCount;
     }
