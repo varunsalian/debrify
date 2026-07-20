@@ -316,7 +316,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
                   _buildSection(
                     context,
                     title: 'Size',
-                    subtitle: 'Movies & keyword search — ignored for series',
+                    subtitle: 'Skipped for TV series — pack sizes are unreliable',
                     children: _buildSizeChips(),
                   ),
                   const SizedBox(height: 20),
