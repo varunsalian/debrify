@@ -3,8 +3,14 @@ import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
 
-/// Stremio-themed collapsible sidebar for Android TV. Collapsed to an icon rail
-/// by default; expands (labels slide/fade in) when focused.
+/// Cyan pole of the liquid-glass chromatic accents (edge rim + focus ring).
+const _kRimCyan = Color(0xFF54D6FF);
+
+/// "Liquid glass" collapsible sidebar for Android TV. At rest it's barely
+/// there — a smoke gradient melting off the left edge, each tab icon in its
+/// own glass puck (the current tab's puck lit purple). When focused it expands
+/// into a translucent pane with a rounded right edge, a diagonal specular
+/// streak and a purple→cyan chromatic rim; labels slide/fade in.
 ///
 /// Performance: this is designed to be laid out as an OVERLAY (a Stack sibling
 /// over the content, inset by [collapsedWidth]) — NOT a Row sibling. As a Row
@@ -45,7 +51,6 @@ class TvSidebarNav extends StatefulWidget {
 
 class TvSidebarNavState extends State<TvSidebarNav>
     with SingleTickerProviderStateMixin {
-  static const _bg = Color(0xFF0D0B1A); // kStremioBg
   static const _accent = Color(0xFF7B5CFF); // kStremioAccent
   static const _accentSoft = Color(0xFFA78BFA);
 
@@ -279,62 +284,43 @@ class TvSidebarNavState extends State<TvSidebarNav>
                         eased.withValues(alpha: 1.0),
                         amt * eased.a,
                       )!;
+                // LIQUID GLASS shell. Collapsed: only a smoke gradient
+                // melting off the left edge (the pucks per item carry the
+                // rest). Expanded: a translucent pane — diagonal glass wash,
+                // specular streak, purple→cyan rim — whose alphas all ride
+                // [t]. The Home board lays blurred art behind the rail, so
+                // translucency reads as glass for free (no BackdropFilter —
+                // banned on TV). Everything here is plain gradients baked per
+                // frame: no Opacity layers, same cost class as the old fill.
+                final smoke = tinted(const Color(0xFF0A0816), 0.35);
+                final paneMid = tinted(const Color(0xFF120D26), 0.40);
+                final paneDeep = tinted(const Color(0xFF0A0816), 0.30);
                 return Container(
                   width: width,
+                  // antiAlias (not hardEdge): the open pane clips a 26px
+                  // rounded corner, and a hard-edge clip draws that curve
+                  // jagged on a TV panel.
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    // GLASS panel: the Home board lays the focused title's
-                    // blurred art behind this rail, so a TRANSLUCENT fill
-                    // reads as frosted glass for free (no BackdropFilter —
-                    // banned on TV; the blur is already in the background).
-                    // A faint white glint at the very top sells the gloss;
-                    // opacity rises with expansion so labels stay legible on
-                    // the open panel. Plain gradient fill — same cost as the
-                    // old opaque one.
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color.lerp(
-                          tinted(
-                            Color.lerp(const Color(0xFF1B1636), _bg, 0.15)!,
-                            0.45,
-                          ),
-                          Colors.white,
-                          0.10,
-                        )!.withValues(alpha: 0.62 + t * 0.28),
-                        tinted(
-                          Color.lerp(const Color(0xFF1B1636), _bg, 0.15)!,
-                          0.45,
-                        ).withValues(alpha: 0.58 + t * 0.32),
-                        tinted(
-                          Color.lerp(
-                            const Color(0xFF14112A),
-                            _bg,
-                            0.5 - t * 0.2,
-                          )!,
-                          0.32,
-                        ).withValues(alpha: 0.55 + t * 0.35),
-                        // Foot stays near _bg so the rail still melts into the
-                        // page bottom; a whisper of tint keeps it cohesive.
-                        tinted(_bg, 0.18).withValues(alpha: 0.52 + t * 0.38),
-                      ],
-                      stops: const [0.0, 0.08, 0.46, 1.0],
+                    // Rounded right edge grows in with the pane; at rest the
+                    // smoke fades to nothing, so no corner is visible anyway.
+                    borderRadius: BorderRadius.horizontal(
+                      right: Radius.circular(26 * t),
                     ),
-                    border: Border(
-                      right: BorderSide(
-                        // faint hairline, brightening as it opens; picks up the
-                        // hero tint so the rail edge matches the stage.
-                        color: tinted(_accent, 0.5)
-                            .withValues(alpha: 0.10 + t * 0.10),
-                        width: 1,
-                      ),
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        smoke.withValues(alpha: 0.46 * (1 - t)),
+                        smoke.withValues(alpha: 0.0),
+                      ],
                     ),
                     boxShadow: t > 0.02
                         ? [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.5 * t),
-                              blurRadius: 28,
-                              offset: const Offset(8, 0),
+                              blurRadius: 36,
+                              offset: const Offset(10, 0),
                             ),
                             BoxShadow(
                               color: tinted(_accent, 0.5)
@@ -345,8 +331,82 @@ class TvSidebarNavState extends State<TvSidebarNav>
                           ]
                         : null,
                   ),
-                  clipBehavior: Clip.hardEdge,
-                  child: inner,
+                  // The glass layers are in the tree UNCONDITIONALLY (at rest
+                  // their alphas are 0, painting nothing). Gating them on [t]
+                  // would shift the menu's slot in this list the moment the
+                  // expand starts, re-inflating the whole menu subtree — which
+                  // resets the scroll position to the top and drops focus/
+                  // label state mid-open.
+                  child: Stack(
+                    children: [
+                      // The pane: brightest at the top-left corner — the "lit"
+                      // edge of the glass.
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.white.withValues(alpha: 0.10 * t),
+                                paneMid.withValues(alpha: 0.36 * t),
+                                paneDeep.withValues(alpha: 0.46 * t),
+                              ],
+                              stops: const [0.0, 0.40, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: inner ?? const SizedBox.shrink(),
+                      ),
+                      // Specular streak OVER the content — the gloss. Capped
+                      // at 10% white so labels stay legible beneath it.
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.0),
+                                  Colors.white.withValues(alpha: 0.10 * t),
+                                  Colors.white.withValues(alpha: 0.02 * t),
+                                  Colors.white.withValues(alpha: 0.0),
+                                ],
+                                stops: const [0.30, 0.42, 0.55, 0.62],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Chromatic rim on the open edge — replaces the old
+                      // hairline border.
+                      Positioned(
+                        right: 0,
+                        top: 20,
+                        bottom: 20,
+                        width: 1.5,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(2),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  _accentSoft.withValues(alpha: 0.70 * t),
+                                  _kRimCyan.withValues(alpha: 0.40 * t),
+                                  _accentSoft.withValues(alpha: 0.15 * t),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               },
             );
@@ -361,14 +421,6 @@ class TvSidebarNavState extends State<TvSidebarNav>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildBranding(),
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Container(
-                  height: 1,
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
-              ),
               const SizedBox(height: 8),
               Expanded(
                 child: LayoutBuilder(
@@ -480,10 +532,14 @@ class TvSidebarNavState extends State<TvSidebarNav>
   }
 }
 
-/// A single nav row. Stateless: the focus "pill" is a plain Container that
-/// snaps instantly on focus move (no per-move animation — animated blur janks a
-/// weak TV GPU), with a static glow painted once when focus lands; the label
-/// fades via the shared expand animation. No per-item AnimationController.
+/// A single nav row, liquid-glass edition. Stateless: collapsed, the icon sits
+/// in a 36px glass puck (the current tab's puck lit purple); expanded, the row
+/// becomes a stadium pill — a purple→cyan gradient ring with a static glow
+/// when focused, faint glass when selected. Both visuals bake the shared
+/// expand value into their colors (AnimatedBuilder rebuilds, no Opacity
+/// layers), and focus state still snaps instantly on focus move (no per-move
+/// animation — animated blur janks a weak TV GPU). No per-item
+/// AnimationController.
 class _TvNavItemWidget extends StatelessWidget {
   final TvNavItem item;
 
@@ -517,8 +573,10 @@ class _TvNavItemWidget extends StatelessWidget {
     final Color iconColor = isFocused
         ? Colors.white
         : isSelected
-        ? accentSoft
-        : Colors.white.withValues(alpha: 0.4);
+        // Light lavender: legible both on the lit puck (collapsed) and the
+        // faint glass pill (expanded).
+        ? const Color(0xFFD8CDFF)
+        : Colors.white.withValues(alpha: 0.42);
     final Color labelColor = isFocused
         ? Colors.white
         : isSelected
@@ -531,51 +589,130 @@ class _TvNavItemWidget extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        // Plain Container (not AnimatedContainer): the highlight snaps instantly
-        // as focus moves between items — that feels responsive on a remote, and
-        // it avoids re-animating the blur shadow every frame (animated blur is
-        // what made item-to-item navigation sluggish on the weak TV GPU). The
-        // glow below is now static: painted once when focus lands, not tweened.
-        child: Container(
+        // Highlights snap instantly as focus moves between items (no per-move
+        // animation — animated blur is what made item-to-item navigation
+        // sluggish on the weak TV GPU); glows are static, painted when focus
+        // lands. Only the puck↔pill cross-dissolve animates, riding the shared
+        // 200ms expand with alphas baked into the colors.
+        child: SizedBox(
           height: 42,
-          decoration: BoxDecoration(
-            // Focus = accent gradient pill with a soft glow; selected = a faint
-            // glass tint; idle = nothing.
-            gradient: isFocused
-                ? LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [
-                      accent.withValues(alpha: 0.32),
-                      accent.withValues(alpha: 0.08),
-                    ],
-                  )
-                : isSelected
-                ? LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [
-                      Colors.white.withValues(alpha: 0.07),
-                      Colors.white.withValues(alpha: 0.02),
-                    ],
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(11),
-            border: isFocused
-                ? Border.all(color: accent.withValues(alpha: 0.6), width: 1.5)
-                : null,
-            boxShadow: isFocused
-                ? [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.28),
-                      blurRadius: 12,
-                      spreadRadius: -3,
-                    ),
-                  ]
-                : null,
-          ),
           child: Stack(
             children: [
+              // COLLAPSED visual: the glass puck behind the icon. Alphas are
+              // premultiplied by (1 - t) so it dissolves as the pane pours in.
+              Positioned(
+                left: 4, // (44-wide icon box − 36 puck) / 2
+                top: 3,
+                child: AnimatedBuilder(
+                  animation: expand,
+                  builder: (context, _) {
+                    final k = 1.0 - expand.value;
+                    if (k < 0.01) {
+                      return const SizedBox(width: 36, height: 36);
+                    }
+                    return Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: isSelected
+                              ? [
+                                  accent.withValues(alpha: 0.34 * k),
+                                  accent.withValues(alpha: 0.18 * k),
+                                ]
+                              : [
+                                  Colors.white.withValues(alpha: 0.10 * k),
+                                  Colors.white.withValues(alpha: 0.03 * k),
+                                ],
+                        ),
+                        border: Border.all(
+                          color: isSelected
+                              ? accentSoft.withValues(alpha: 0.55 * k)
+                              : Colors.white.withValues(alpha: 0.10 * k),
+                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: accent.withValues(alpha: 0.45 * k),
+                                  blurRadius: 14,
+                                  spreadRadius: -2,
+                                ),
+                              ]
+                            : null,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              // EXPANDED visual: the stadium pill behind the whole row —
+              // liquid purple→cyan ring + glow for focus, faint glass for the
+              // selected tab. Alphas ride t so the collapsed rail stays clean
+              // (the pill would otherwise peek out from behind the puck).
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: expand,
+                  builder: (context, _) {
+                    final t = expand.value;
+                    if (t < 0.01 || !active) return const SizedBox.shrink();
+                    if (isFocused) {
+                      return Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(21),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              accentSoft.withValues(alpha: t),
+                              _kRimCyan.withValues(alpha: t),
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: accent.withValues(alpha: 0.45 * t),
+                              blurRadius: 20,
+                              spreadRadius: -3,
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(1.4),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                const Color(
+                                  0xFF241B4D,
+                                ).withValues(alpha: 0.94 * t),
+                                const Color(
+                                  0xFF1A1338,
+                                ).withValues(alpha: 0.94 * t),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                    return Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(21),
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.08 * t),
+                            Colors.white.withValues(alpha: 0.02 * t),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
               Row(
                 children: [
                   SizedBox(
@@ -638,26 +775,34 @@ class _TvNavItemWidget extends StatelessWidget {
                   ),
                 ],
               ),
-              // Leading accent bar — the active-tab marker. Overlaid so the icon
-              // stays centered; bright + glowing when focused, dimmer when the
-              // current tab isn't focused.
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: Container(
-                    width: active ? 3.5 : 0,
-                    height: isFocused ? 21 : (isSelected ? 15 : 0),
-                    decoration: BoxDecoration(
-                      color: isFocused ? accent : accent.withValues(alpha: 0.75),
-                      borderRadius: const BorderRadius.horizontal(
-                        right: Radius.circular(4),
-                      ),
-                    ),
+              // Leading tick — active-tab marker, expanded only (collapsed,
+              // the lit puck marks the tab). Focused rows drop it: the
+              // gradient ring is the marker there.
+              if (isSelected && !isFocused)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: AnimatedBuilder(
+                    animation: expand,
+                    builder: (context, _) {
+                      final t = expand.value;
+                      if (t < 0.01) return const SizedBox.shrink();
+                      return Center(
+                        child: Container(
+                          width: 3.5,
+                          height: 15,
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.75 * t),
+                            borderRadius: const BorderRadius.horizontal(
+                              right: Radius.circular(4),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
-              ),
             ],
           ),
         ),
