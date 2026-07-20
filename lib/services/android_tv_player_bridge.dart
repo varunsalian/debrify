@@ -9,6 +9,7 @@ import 'package:flutter/material.dart' show debugPrint;
 import '../utils/movie_parser.dart';
 import 'analytics_service.dart';
 import 'movie_metadata_service.dart';
+import 'stremio_iptv_service.dart';
 import 'stremio_service.dart';
 import 'subtitle_font_service.dart';
 
@@ -407,6 +408,50 @@ class AndroidTvPlayerBridge {
           }
           // Clear any unconsumed quick play next result to prevent stale state
           _quickPlayNextEpisodeResult = null;
+          return null;
+        case 'requestIptvStreamUrls':
+          // Native IPTV player hit a Stremio-addon channel (its `url` is a
+          // stremio-tv:// key, not a stream). Resolve the ordered candidate
+          // list; the native side tries them serially. Stateless — no
+          // per-session provider, the resolver service holds the caches.
+          final iptvArgs = call.arguments;
+          String? iptvChannelUrl;
+          if (iptvArgs is Map) {
+            final raw = iptvArgs['channelUrl'];
+            if (raw is String) iptvChannelUrl = raw;
+          }
+          if (iptvChannelUrl == null ||
+              !StremioIptvService.isStremioChannelUrl(iptvChannelUrl)) {
+            return null;
+          }
+          try {
+            final urls = await StremioIptvService.instance
+                .resolveCandidates(iptvChannelUrl);
+            return {'urls': urls};
+          } catch (e) {
+            throw PlatformException(
+              code: 'iptv_stream_resolve_failed',
+              message: e.toString(),
+            );
+          }
+        case 'reportIptvStreamResult':
+          // Feedback from the native serial ladder: cache the URL that
+          // actually played, or drop the stale candidate list when every
+          // candidate died so the next attempt re-resolves fresh links.
+          final reportArgs = call.arguments;
+          if (reportArgs is Map) {
+            final channelUrl = reportArgs['channelUrl'];
+            final playedUrl = reportArgs['url'];
+            final success = reportArgs['success'] == true;
+            if (channelUrl is String &&
+                StremioIptvService.isStremioChannelUrl(channelUrl)) {
+              if (success && playedUrl is String && playedUrl.isNotEmpty) {
+                StremioIptvService.instance.markWinner(channelUrl, playedUrl);
+              } else if (!success) {
+                StremioIptvService.instance.invalidate(channelUrl);
+              }
+            }
+          }
           return null;
         case 'requestTorrentStream':
           debugPrint(

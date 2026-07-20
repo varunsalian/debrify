@@ -888,6 +888,17 @@ class StremioService {
     return imdbId;
   }
 
+  /// Fetch usable streams for an arbitrary content id from one addon —
+  /// public entry for non-IMDb lookups (the IPTV bridge resolving live-TV
+  /// channels via `/stream/tv/<id>.json`). Errors surface to the caller.
+  Future<List<StremioStream>> fetchStreamsForContentId(
+    StremioAddon addon,
+    String type,
+    String contentId, {
+    Duration? timeout,
+  }) =>
+      _fetchStreamsFromAddon(addon, type, contentId, timeout: timeout);
+
   /// Fetch streams from a single addon
   Future<List<StremioStream>> _fetchStreamsFromAddon(
     StremioAddon addon,

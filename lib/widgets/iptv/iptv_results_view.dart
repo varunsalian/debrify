@@ -8,6 +8,8 @@ import '../browse/browse_results_focus.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_service.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/stremio_iptv_service.dart';
+import '../../services/stremio_service.dart';
 import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
@@ -89,6 +91,20 @@ class IptvResultsViewState extends State<IptvResultsView>
       ValueNotifier<IptvChannel?>(null);
   final ValueNotifier<bool> _previewShowing = ValueNotifier<bool>(false);
   final ValueNotifier<int> _previewEpoch = ValueNotifier<int>(0);
+
+  // The URL the preview stage actually plays. For M3U/Xtream channels this is
+  // just the channel URL; for Stremio-addon channels it is the current rung of
+  // the candidate ladder (resolved async on focus, advanced by
+  // [_onPreviewPlaybackFailed] until one plays or the list runs out). Null =
+  // nothing to play, the stage shows only its static floor.
+  final ValueNotifier<String?> _previewStreamUrl = ValueNotifier<String?>(null);
+
+  /// Candidate URLs for the focused Stremio channel; null while a non-Stremio
+  /// channel is focused (their failures keep the old silent-floor behavior).
+  List<String>? _previewCandidates;
+
+  /// Guards async resolves against focus moving on before they land.
+  int _previewResolveTicket = 0;
   // Keyed by channel URL (stable identity) rather than list position, so
   // focus survives category/search filtering of the grid.
   final Map<String, FocusNode> _cardFocusNodes = {};
@@ -110,8 +126,14 @@ class IptvResultsViewState extends State<IptvResultsView>
       WidgetsBinding.instance.addObserver(this);
       MainPageBridge.addTvSidebarFocusListener(_onTvSidebarFocusChanged);
     }
+    // Virtual Stremio playlists come and go with the installed addon set.
+    StremioService.instance.addAddonsChangedListener(_onStremioAddonsChanged);
     _loadSettings();
     _loadFavorites();
+  }
+
+  void _onStremioAddonsChanged() {
+    if (mounted) _loadSettings();
   }
 
   Future<void> _loadFavorites() async {
@@ -163,6 +185,12 @@ class IptvResultsViewState extends State<IptvResultsView>
       await StorageService.setIptvDefaultPlaylist(defaultPlaylistId);
       await StorageService.setIptvDefaultsInitialized(true);
     }
+
+    // Installed Stremio addons with live-TV catalogs appear as (non-stored)
+    // virtual playlists after the user's own entries.
+    final virtualPlaylists =
+        await StremioIptvService.instance.getVirtualPlaylists();
+    playlists = [...playlists, ...virtualPlaylists];
 
     if (!mounted) return;
 
@@ -220,6 +248,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       WidgetsBinding.instance.removeObserver(this);
       MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     }
+    StremioService.instance
+        .removeAddonsChangedListener(_onStremioAddonsChanged);
     _searchDebounce?.cancel();
     _scrollController.dispose();
     _playlistFilterFocusNode.dispose();
@@ -228,6 +258,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     _previewShown.dispose();
     _previewShowing.dispose();
     _previewEpoch.dispose();
+    _previewStreamUrl.dispose();
     for (final node in _cardFocusNodes.values) {
       node.dispose();
     }
@@ -250,11 +281,20 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     _cardFocusNodes.clear();
     // The stage's channel belongs to the outgoing playlist.
-    _previewShown.value = null;
+    _clearPreview();
 
-    // Determine source: XC API, local file, or URL
+    // Determine source: Stremio addon, XC API, local file, or URL
     final IptvParseResult result;
-    if (playlist.isXtreamCodes) {
+    if (playlist.isStremioAddon) {
+      final addonId = StremioIptvService.addonIdFromPlaylist(playlist);
+      result = addonId == null
+          ? const IptvParseResult(
+              channels: [],
+              categories: [],
+              error: 'Broken addon playlist',
+            )
+          : await StremioIptvService.instance.fetchChannels(addonId);
+    } else if (playlist.isXtreamCodes) {
       final xcService = XtreamCodesService.instance;
       if (_selectedContentType == 'vod') {
         result = await xcService.fetchVodStreams(playlist.serverUrl!, playlist.username!, playlist.password!);
@@ -361,7 +401,39 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// DPADs through while still launching instantly.
   static const int _kMaxPlayerChannels = 1500;
 
+  /// Latch across the resolve+launch window: resolving a Stremio channel
+  /// takes real time, and repeated OK presses on a seemingly-idle row must
+  /// not stack player launches.
+  bool _launchingChannel = false;
+
   Future<void> _playChannel(IptvChannel channel) async {
+    if (_launchingChannel) return;
+    _launchingChannel = true;
+    try {
+      await _playChannelInner(channel);
+    } finally {
+      _launchingChannel = false;
+    }
+  }
+
+  Future<void> _playChannelInner(IptvChannel channel) async {
+    // Stremio channels have no stream URL yet — resolve the ladder now (the
+    // preview's winner cache usually makes this instant) and launch on the
+    // best candidate. The in-player guide still gets the full mixed list;
+    // both players resolve further stremio-keyed channels on switch.
+    var initialUrl = channel.url;
+    if (StremioIptvService.isStremioChannelUrl(channel.url)) {
+      final candidates =
+          await StremioIptvService.instance.resolveCandidates(channel.url);
+      if (!mounted) return;
+      if (candidates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${channel.name} is not playable right now')),
+        );
+        return;
+      }
+      initialUrl = candidates.first;
+    }
     // The in-player guide mirrors what the user was browsing: the current
     // category/search filter, not the whole playlist. (Also what keeps the
     // launch payload small when a filter is active.)
@@ -378,7 +450,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
-        videoUrl: channel.url,
+        videoUrl: initialUrl,
         title: channel.name,
         subtitle: channel.group ?? 'IPTV',
         viewMode: PlaylistViewMode.sorted,
@@ -416,7 +488,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// the backdrop, which releases its engine synchronously; refocusing a
   /// channel row re-arms the stage.
   void _onTvSidebarFocusChanged(bool focused) {
-    if (focused) _previewShown.value = null;
+    if (focused) _clearPreview();
   }
 
   void _navigateToSettings() {
@@ -620,6 +692,81 @@ class IptvResultsViewState extends State<IptvResultsView>
     _flushPreviewRearm();
     if (_previewShown.value?.url == channel.url) return;
     _previewShown.value = channel;
+    _retunePreview(channel);
+  }
+
+  /// Point the stage at the focused channel's stream. M3U/Xtream channels
+  /// carry their URL; Stremio channels resolve theirs first (the 900ms dwell
+  /// hides most of that latency) and start the candidate ladder.
+  void _retunePreview(IptvChannel channel) {
+    _previewResolveTicket++;
+    final ticket = _previewResolveTicket;
+    _previewCandidates = null;
+    if (!StremioIptvService.isStremioChannelUrl(channel.url)) {
+      _previewStreamUrl.value = channel.url;
+      return;
+    }
+    // Unmounting the backdrop skips its teardown notification — reset the
+    // "has frames" chip state ourselves or it would keep reading LIVE.
+    _previewStreamUrl.value = null;
+    _previewShowing.value = false;
+    StremioIptvService.instance.resolveCandidates(channel.url).then((urls) {
+      if (!mounted || ticket != _previewResolveTicket) return;
+      // No playable streams — the stage stays on its floor, exactly like a
+      // dead M3U channel.
+      if (urls.isEmpty) return;
+      _previewCandidates = urls;
+      _previewStreamUrl.value = urls.first;
+    });
+  }
+
+  /// The stage's current stream genuinely failed (refused to open, errored, or
+  /// stalled past the first-frame timeout). Stremio channels step down their
+  /// candidate ladder; anything else keeps the old behavior (silent floor).
+  /// [ticket] is the ladder generation the failing backdrop was built for —
+  /// the notification is post-frame, so by the time it lands the focus may
+  /// already be on another channel whose ladder must not be touched.
+  void _onPreviewPlaybackFailed(int ticket) {
+    if (ticket != _previewResolveTicket) return;
+    final candidates = _previewCandidates;
+    final current = _previewStreamUrl.value;
+    if (candidates == null || current == null) return;
+    final next = candidates.indexOf(current) + 1;
+    if (next <= 0) return; // stale failure for a URL we've already moved off
+    if (next >= candidates.length) {
+      // Every candidate is dead: drop back to the floor and forget the cached
+      // list so a later attempt re-resolves fresh links.
+      final shown = _previewShown.value;
+      if (shown != null) StremioIptvService.instance.invalidate(shown.url);
+      _previewStreamUrl.value = null;
+      _previewShowing.value = false;
+      return;
+    }
+    _previewStreamUrl.value = candidates[next];
+  }
+
+  /// First frames arrived — remember which candidate actually plays so the
+  /// next preview/play of this channel starts there. Same staleness guard as
+  /// the failure path: frames from a previous channel's engine must not
+  /// crown the new channel's candidate.
+  void _markPreviewWinner(int ticket) {
+    if (ticket != _previewResolveTicket) return;
+    final shown = _previewShown.value;
+    final current = _previewStreamUrl.value;
+    if (shown == null || current == null || _previewCandidates == null) return;
+    if (StremioIptvService.isStremioChannelUrl(shown.url)) {
+      StremioIptvService.instance.markWinner(shown.url, current);
+    }
+  }
+
+  /// Empty the stage entirely (playlist switch, sidebar open) and abandon any
+  /// in-flight resolve.
+  void _clearPreview() {
+    _previewResolveTicket++;
+    _previewCandidates = null;
+    _previewShown.value = null;
+    _previewStreamUrl.value = null;
+    _previewShowing.value = false;
   }
 
   Widget _buildPreviewRail() {
@@ -658,20 +805,43 @@ class IptvResultsViewState extends State<IptvResultsView>
             // the punch-through (house underlay invariant).
             _IptvStageFloor(channel: ch),
             if (ch != null)
-              HeroTrailerBackdrop(
-                key: ValueKey('iptv-preview-$epoch'),
-                imageUrl: null,
-                videoUrl: ch.url,
-                enabled: true,
-                live: true,
-                imageBlurSigma: 0,
-                videoBlurSigma: 0,
-                // The dwell: arrowing down the guide never opens a stream
-                // until focus rests. Live streams also open slower than
-                // trailer clips, so a slightly longer debounce than Home's.
-                startDelay: const Duration(milliseconds: 900),
-                ambientVolume: 100,
-                onPlayingChanged: (p) => _previewShowing.value = p,
+              ValueListenableBuilder<String?>(
+                valueListenable: _previewStreamUrl,
+                builder: (context, streamUrl, _) {
+                  // Null while a Stremio channel resolves (or when every
+                  // candidate died) — only the floor shows.
+                  if (streamUrl == null) return const SizedBox.shrink();
+                  // Ladder generation these callbacks belong to — they fire
+                  // post-frame, possibly after focus moved to another channel.
+                  final ticket = _previewResolveTicket;
+                  return HeroTrailerBackdrop(
+                    key: ValueKey('iptv-preview-$epoch'),
+                    imageUrl: null,
+                    videoUrl: streamUrl,
+                    enabled: true,
+                    live: true,
+                    imageBlurSigma: 0,
+                    videoBlurSigma: 0,
+                    // The dwell: arrowing down the guide never opens a stream
+                    // until focus rests. Live streams also open slower than
+                    // trailer clips, so a slightly longer debounce than Home's.
+                    startDelay: const Duration(milliseconds: 900),
+                    ambientVolume: 100,
+                    onPlayingChanged: (p) {
+                      if (ticket == _previewResolveTicket) {
+                        _previewShowing.value = p;
+                      }
+                      if (p) _markPreviewWinner(ticket);
+                    },
+                    onPlaybackFailed: () => _onPreviewPlaybackFailed(ticket),
+                    // Stremio ladder needs stalls to count as failures, or a
+                    // silent-dead candidate would block the walk to the next.
+                    firstFrameTimeout:
+                        StremioIptvService.isStremioChannelUrl(ch.url)
+                            ? const Duration(seconds: 12)
+                            : null,
+                  );
+                },
               ),
             // Status chip — top-left, direct paint over the stage.
             Positioned(

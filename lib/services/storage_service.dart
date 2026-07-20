@@ -2760,6 +2760,10 @@ class StorageService {
   /// percent-encoded credentials, .m3u8 vs .ts extension), so favorites are
   /// matched on a format-insensitive key rather than the raw string.
   static String canonicalIptvChannelKey(String url) {
+    // Stremio-addon channel keys (stremio-tv://addon/meta) are already
+    // stable synthetic identities — never normalize them (Uri would
+    // lowercase the addon-id "host" and decode the meta id).
+    if (url.startsWith('stremio-tv://')) return url;
     final uri = Uri.tryParse(url);
     if (uri == null || uri.host.isEmpty) return url;
     // pathSegments are percent-decoded, which normalizes credential encoding.

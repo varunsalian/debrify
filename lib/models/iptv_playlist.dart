@@ -28,6 +28,11 @@ class IptvPlaylist {
   /// Returns true if this is an Xtream Codes playlist
   bool get isXtreamCodes => serverUrl != null && serverUrl!.isNotEmpty;
 
+  /// Returns true if this is a virtual playlist backed by an installed
+  /// Stremio addon's live-TV catalogs (never persisted — derived from the
+  /// installed addon list each session).
+  bool get isStremioAddon => url.startsWith('stremio-addon://');
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,

@@ -26,6 +26,7 @@ import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/series_source_service.dart';
+import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
 import '../services/storage_service.dart';
@@ -2017,16 +2018,50 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// Play an IPTV favourite. Unlike the TV channels there's no bridge/tab
   /// handoff — the stream launches directly in the player (same as Home).
-  void _playIptvChannel(IptvChannel channel) {
-    VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: channel.url,
-        title: channel.name,
-        subtitle: channel.group ?? 'IPTV',
-        viewMode: PlaylistViewMode.sorted,
-      ),
-    );
+  /// Stremio-addon favourites carry a stremio-tv:// key instead of a stream
+  /// URL — resolve it first, and hand the channel through the IPTV path so
+  /// both players can walk the remaining candidates if the first one dies.
+  /// Latch across the resolve window — repeated OK presses while a Stremio
+  /// favourite resolves must not stack player launches.
+  bool _iptvFavLaunching = false;
+
+  Future<void> _playIptvChannel(IptvChannel channel) async {
+    if (_iptvFavLaunching) return;
+    _iptvFavLaunching = true;
+    try {
+      var videoUrl = channel.url;
+      List<IptvChannel>? iptvChannels;
+      int? iptvStartIndex;
+      if (StremioIptvService.isStremioChannelUrl(channel.url)) {
+        final candidates =
+            await StremioIptvService.instance.resolveCandidates(channel.url);
+        if (!mounted) return;
+        if (candidates.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${channel.name} is not playable right now'),
+            ),
+          );
+          return;
+        }
+        videoUrl = candidates.first;
+        iptvChannels = [channel];
+        iptvStartIndex = 0;
+      }
+      VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: videoUrl,
+          title: channel.name,
+          subtitle: channel.group ?? 'IPTV',
+          viewMode: PlaylistViewMode.sorted,
+          iptvChannels: iptvChannels,
+          iptvStartIndex: iptvStartIndex,
+        ),
+      );
+    } finally {
+      _iptvFavLaunching = false;
+    }
   }
 
   /// Load the user's saved playlist items for the leading Playlist row. Applies

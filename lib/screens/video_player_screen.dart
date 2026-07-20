@@ -22,6 +22,7 @@ import '../utils/movie_parser.dart';
 import '../services/episode_info_service.dart';
 import '../services/movie_metadata_service.dart';
 import '../models/iptv_playlist.dart';
+import '../services/stremio_iptv_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
@@ -2390,10 +2391,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  /// Monotonic ticket for IPTV channel switches. The Stremio candidate ladder
+  /// can hold [_switchToIptvChannel] open for many seconds; a newer switch
+  /// must strand the older one (no opens, no winner marks) or an abandoned
+  /// ladder would hijack playback back to its channel.
+  int _iptvSwitchTicket = 0;
+
   /// Switch to IPTV channel at given index
   Future<void> _switchToIptvChannel(int index) async {
     final channels = widget.iptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
+    final ticket = ++_iptvSwitchTicket;
 
     _hideIptvChannelSheet();
 
@@ -2409,13 +2417,47 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _player.pause();
     } catch (_) {}
 
-    try {
-      await _player.open(mk.Media(channel.url), play: true);
-    } catch (e) {
-      debugPrint('Player: IPTV channel switch failed: $e');
+    if (StremioIptvService.isStremioChannelUrl(channel.url)) {
+      // Mirror the native path: the UI has already committed to the new
+      // channel, so clear the outgoing stream now — a failed or empty
+      // resolve must not leave the previous channel's frozen frame sitting
+      // under the new channel's title/index.
+      try {
+        await _player.stop();
+      } catch (_) {}
+      // Stremio-addon channel: resolve its candidate URLs and walk them until
+      // one produces playback — the same serial ladder the IPTV preview runs.
+      final candidates =
+          await StremioIptvService.instance.resolveCandidates(channel.url);
+      var opened = false;
+      for (final url in candidates) {
+        if (!mounted || ticket != _iptvSwitchTicket) return;
+        final ok = await _tryOpenLiveStream(url);
+        // A newer switch superseded this ladder mid-probe: its success/failure
+        // belongs to the other channel's playback now — don't credit it here.
+        if (ticket != _iptvSwitchTicket) return;
+        if (ok) {
+          StremioIptvService.instance.markWinner(channel.url, url);
+          opened = true;
+          break;
+        }
+      }
+      if (ticket != _iptvSwitchTicket) return;
+      if (!opened) {
+        // Dead channel — forget the stale candidates so a later attempt
+        // re-resolves. Playback just stays down, like a dead M3U channel.
+        StremioIptvService.instance.invalidate(channel.url);
+        debugPrint('Player: no playable stream for ${channel.name}');
+      }
+    } else {
+      try {
+        await _player.open(mk.Media(channel.url), play: true);
+      } catch (e) {
+        debugPrint('Player: IPTV channel switch failed: $e');
+      }
     }
 
-    if (!mounted) return;
+    if (!mounted || ticket != _iptvSwitchTicket) return;
 
     // Directly trigger transition overlay cleanup sequence.
     // Unlike debrid channel switching (where _playSub listener handles
@@ -2436,6 +2478,50 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _rainbowActive = false;
       if (mounted) setState(() {});
     });
+  }
+
+  /// Open [url] and wait until it demonstrably plays (a decoded video size or
+  /// advancing position) or demonstrably fails (player error, open() throw,
+  /// or the timeout — live streams can stall without ever erroring). Used by
+  /// the Stremio channel ladder to decide whether to try the next candidate.
+  Future<bool> _tryOpenLiveStream(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
+    final completer = Completer<bool>();
+    void finish(bool ok) {
+      if (!completer.isCompleted) completer.complete(ok);
+    }
+
+    // Position/error events only count after open() returns — the stream can
+    // still be draining the previous media's positions (or a dead outgoing
+    // channel's queued error) before then. Genuine pre-open failures are
+    // covered by the open() throw and the timeout.
+    var openDone = false;
+    final subs = <StreamSubscription>[
+      _player.stream.error.listen((_) {
+        if (openDone) finish(false);
+      }),
+      _player.stream.width.listen((w) {
+        if (openDone && w != null && w > 0) finish(true);
+      }),
+      _player.stream.position.listen((p) {
+        if (openDone && p > Duration.zero) finish(true);
+      }),
+    ];
+    try {
+      await _player.open(mk.Media(url), play: true);
+      openDone = true;
+    } catch (e) {
+      debugPrint('Player: stremio candidate failed to open: $e');
+      finish(false);
+    }
+    final ok = await completer.future
+        .timeout(timeout, onTimeout: () => false);
+    for (final s in subs) {
+      unawaited(s.cancel());
+    }
+    return ok;
   }
 
   // ─── Stremio Source Sheet ───────────────────────────────────────────

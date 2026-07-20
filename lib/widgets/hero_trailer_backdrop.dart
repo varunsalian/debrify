@@ -56,6 +56,19 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// watch" state on its Trailer button.
   final ValueChanged<bool>? onPlayingChanged;
 
+  /// Fired (post-frame) when playback genuinely fails — the stream refused to
+  /// open, errored mid-play, or produced no frame within [firstFrameTimeout].
+  /// Benign teardowns (route cover, app pause, URL switch, disable) never
+  /// fire it. Lets a parent try the next candidate URL (the IPTV serial
+  /// ladder); without it the backdrop just falls back to the static floor.
+  final VoidCallback? onPlaybackFailed;
+
+  /// If set, a stream that opens but renders no frame within this window
+  /// counts as failed (torn down + [onPlaybackFailed]). Live streams can
+  /// stall forever without erroring — event-driven failure alone would leave
+  /// a serial ladder stuck on them. Null keeps the wait unbounded.
+  final Duration? firstFrameTimeout;
+
   /// Blur applied to the static image (the app's "one lit surface" wash).
   final double imageBlurSigma;
 
@@ -97,6 +110,8 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.foreground = false,
     this.onRequestClose,
     this.onPlayingChanged,
+    this.onPlaybackFailed,
+    this.firstFrameTimeout,
     this.imageBlurSigma = 42,
     this.videoBlurSigma = 8,
     this.startDelay = const Duration(milliseconds: 1400),
@@ -135,6 +150,10 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   StreamSubscription<Duration>? _durSub;
   StreamSubscription<void>? _errorSub;
   Timer? _startTimer;
+
+  /// Arms when open() begins, cancelled by the first rendered frame or any
+  /// teardown. See [HeroTrailerBackdrop.firstFrameTimeout].
+  Timer? _firstFrameTimer;
 
   /// Auto-hides the foreground chrome (pause/seek/mute) a few seconds after the
   /// last interaction; a click/tap brings it back.
@@ -353,6 +372,19 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     final engine = _createEngine();
     _engine = engine;
 
+    // Stall watchdog: no rendered frame within the window = a dead-but-silent
+    // stream. Only genuine stalls fire — the timer is cancelled by the first
+    // frame and by every teardown path.
+    final timeout = widget.firstFrameTimeout;
+    if (timeout != null) {
+      _firstFrameTimer?.cancel();
+      _firstFrameTimer = Timer(timeout, () {
+        if (!mounted || _engine != engine || _videoVisible) return;
+        _teardownPlayer();
+        _notifyPlaybackFailed();
+      });
+    }
+
     // Subscribe synchronously, before any await, so a teardown landing in the
     // await window below cancels these subscriptions instead of orphaning them.
     _playingSub = engine.playingStream.listen((playing) {
@@ -366,6 +398,8 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     // early and crossfade onto a black/buffering surface.
     engine.firstFrameRendered.then((_) {
       if (!mounted || _engine != engine || _videoVisible) return;
+      _firstFrameTimer?.cancel();
+      _firstFrameTimer = null;
       // Jump past the intro/rating card so the ambient loop shows footage.
       // Skip only when the clip is comfortably longer than the cut (or its
       // duration isn't known yet — trailers are minutes long, so assume it is).
@@ -383,7 +417,10 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     // drop back to the poster (and, if foregrounded, back the user out) rather
     // than freezing on the last frame.
     _errorSub = engine.errorStream.listen((_) {
-      if (mounted && _engine == engine) _teardownPlayer();
+      if (mounted && _engine == engine) {
+        _teardownPlayer();
+        _notifyPlaybackFailed();
+      }
     });
     _posSub = engine.positionStream.listen((p) {
       // Loop restart (position wrapped back to the start) → skip the intro
@@ -432,13 +469,28 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       // Bot-blocked / dead stream → stay on the static poster. Guarded: a
       // STALE engine's error (e.g. its open() aborting after a URL switch
       // already tore it down) must not destroy the replacement engine.
-      if (_engine == engine) _teardownPlayer();
+      if (_engine == engine) {
+        _teardownPlayer();
+        _notifyPlaybackFailed();
+      }
     }
+  }
+
+  /// See [HeroTrailerBackdrop.onPlaybackFailed]. Post-frame so a failure
+  /// landing inside a parent build can't re-enter setState mid-build.
+  void _notifyPlaybackFailed() {
+    final cb = widget.onPlaybackFailed;
+    if (cb == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) cb();
+    });
   }
 
   void _teardownPlayer() {
     _startTimer?.cancel();
     _startTimer = null;
+    _firstFrameTimer?.cancel();
+    _firstFrameTimer = null;
     _playingSub?.cancel();
     _playingSub = null;
     _posSub?.cancel();
@@ -711,6 +763,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     );
     MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunching);
     _startTimer?.cancel();
+    _firstFrameTimer?.cancel();
     _controlsTimer?.cancel();
     _playingSub?.cancel();
     _posSub?.cancel();

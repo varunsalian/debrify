@@ -35,6 +35,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
@@ -214,6 +215,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvChannelAdapter: IptvChannelAdapter? = null
     private var iptvGuideVisible = false
 
+    // Stremio-addon IPTV channels: their `url` is a stremio-tv:// key, not a
+    // stream — Flutter resolves it into an ordered candidate URL list on
+    // demand, and playback walks the candidates serially on error until one
+    // plays or the list runs out (then the channel goes quiet, like a dead
+    // M3U stream). Token guards stale async resolves after a channel switch.
+    private var iptvStremioToken = 0
+    private var iptvStremioChannelKey: String? = null
+    private var iptvStremioCandidates: List<String> = emptyList()
+    private var iptvStremioCandidateIndex = 0
+    private var iptvStremioWinnerReported = false
+    // Per-candidate stall watchdog: live streams can buffer forever without
+    // ever erroring, and the ladder only advances on error — this converts a
+    // never-READY candidate into a failure. Cancelled by STATE_READY.
+    private var iptvStremioStallRunnable: Runnable? = null
+
     // Stremio Sources state
     private var stremioSources = mutableListOf<StremioSource>()
     private var currentStremioSourceIndex = 0
@@ -385,6 +401,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             when (playbackState) {
                 Player.STATE_READY -> {
                     hasEverBeenReady = true
+                    reportIptvStremioWinnerIfNeeded()
                     hideBufferingIndicator()
                     // Furthest-watched resume (same rule as the Dart player): seek
                     // the DEEPER of the local position and the Trakt percent so
@@ -534,6 +551,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             updatePauseButtonLabel()
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            // Stremio-addon IPTV channels: a dead candidate URL is expected —
+            // step down the ladder. Everything else keeps the pre-existing
+            // behavior (no handler existed; playback simply stops).
+            // playerError gate: if the stall watchdog already advanced (its
+            // prepare() cleared the error), a stale queued delivery for the
+            // previous candidate arrives with playerError null — advancing
+            // again would skip the candidate the watchdog just started.
+            if (isIptvMode && player?.playerError != null && tryNextIptvStremioCandidate()) return
+            android.util.Log.e("AndroidTvPlayer", "Player error: ${error.errorCodeName}")
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -5035,23 +5064,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Clear subtitle identity/results when changing channels from the guide.
         resetSubtitleState()
 
-        // Swap ExoPlayer media item
-        val metadata = MediaMetadata.Builder()
-            .setTitle(entry.name)
-            .setArtist(entry.group ?: "IPTV")
-            .build()
-
-        val mediaItem = MediaItem.Builder()
-            .setUri(entry.url)
-            .setMediaMetadata(metadata)
-            .build()
-
-        player?.apply {
-            setMediaItem(mediaItem)
-            prepare()
-            playWhenReady = true
-            play()
-        }
+        // Swap ExoPlayer media item (Stremio channels resolve first).
+        beginIptvPlayback(entry)
 
         // Update title
         titleView.text = entry.name
@@ -5073,13 +5087,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Clear subtitle identity/results when changing channels.
         resetSubtitleState()
 
+        beginIptvPlayback(entry)
+
+        // Show title briefly
+        titleView.text = entry.name
+        titleOttContainer.visibility = View.GONE
+        titleContainer.visibility = View.VISIBLE
+    }
+
+    // ── Stremio-addon IPTV channels (resolve-on-demand + serial ladder) ──────
+
+    private fun isStremioIptvUrl(url: String): Boolean = url.startsWith("stremio-tv://")
+
+    /** The shared ExoPlayer media-item swap both IPTV entry points use. */
+    private fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String) {
         val metadata = MediaMetadata.Builder()
             .setTitle(entry.name)
             .setArtist(entry.group ?: "IPTV")
             .build()
 
         val mediaItem = MediaItem.Builder()
-            .setUri(entry.url)
+            .setUri(streamUrl)
             .setMediaMetadata(metadata)
             .build()
 
@@ -5089,11 +5117,164 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             playWhenReady = true
             play()
         }
+    }
 
-        // Show title briefly
-        titleView.text = entry.name
-        titleOttContainer.visibility = View.GONE
-        titleContainer.visibility = View.VISIBLE
+    /**
+     * Start playback for an IPTV channel. Plain channels play their URL
+     * directly; Stremio-addon channels first resolve their candidate stream
+     * URLs through the Flutter bridge (cached on the Dart side), then play
+     * candidate 0 — [tryNextIptvStremioCandidate] walks the rest on error.
+     */
+    private fun beginIptvPlayback(entry: IptvChannelEntry) {
+        iptvStremioToken++
+        val token = iptvStremioToken
+        iptvStremioChannelKey = null
+        iptvStremioCandidates = emptyList()
+        iptvStremioCandidateIndex = 0
+        iptvStremioWinnerReported = false
+        cancelIptvStremioStallWatchdog()
+
+        if (!isStremioIptvUrl(entry.url)) {
+            setIptvMediaItem(entry, entry.url)
+            return
+        }
+
+        // The guide/title/index already committed to this channel — stop the
+        // outgoing stream now so a slow (or failed) resolve can't leave the
+        // previous channel playing under the new channel's UI state.
+        player?.stop()
+
+        requestIptvStreamUrls(entry.url) { urls ->
+            runOnUiThread {
+                if (token != iptvStremioToken || isFinishing) return@runOnUiThread
+                if (urls.isEmpty()) {
+                    android.util.Log.w("AndroidTvPlayer", "No playable streams for ${entry.name}")
+                    Toast.makeText(this, "${entry.name} is not playable right now", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+                iptvStremioChannelKey = entry.url
+                iptvStremioCandidates = urls
+                iptvStremioCandidateIndex = 0
+                setIptvMediaItem(entry, urls[0])
+                armIptvStremioStallWatchdog()
+            }
+        }
+    }
+
+    /**
+     * Advance the serial candidate ladder after a playback error. Returns
+     * false when the current playback isn't a Stremio channel (the error
+     * isn't ours to handle).
+     */
+    private fun tryNextIptvStremioCandidate(): Boolean {
+        val key = iptvStremioChannelKey ?: return false
+        val candidates = iptvStremioCandidates
+        if (candidates.isEmpty()) return false
+        val next = iptvStremioCandidateIndex + 1
+        if (next >= candidates.size) {
+            // Every candidate died: have Flutter forget the stale list so a
+            // later attempt re-resolves fresh links, then go quiet.
+            cancelIptvStremioStallWatchdog()
+            reportIptvStreamResult(key, null, false)
+            iptvStremioChannelKey = null
+            iptvStremioCandidates = emptyList()
+            val name = iptvChannels.getOrNull(currentIptvIndex)?.name ?: "Channel"
+            Toast.makeText(this, "$name is not playable right now", Toast.LENGTH_SHORT).show()
+            return true
+        }
+        iptvStremioCandidateIndex = next
+        iptvStremioWinnerReported = false
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
+        android.util.Log.d(
+            "AndroidTvPlayer",
+            "IPTV stremio ladder: trying candidate ${next + 1}/${candidates.size} for ${entry.name}"
+        )
+        setIptvMediaItem(entry, candidates[next])
+        armIptvStremioStallWatchdog()
+        return true
+    }
+
+    /** See [iptvStremioStallRunnable]. Re-armed per candidate. */
+    private fun armIptvStremioStallWatchdog() {
+        cancelIptvStremioStallWatchdog()
+        val token = iptvStremioToken
+        val candidateIndex = iptvStremioCandidateIndex
+        val runnable = Runnable {
+            if (isFinishing || isDestroyed) return@Runnable
+            if (token != iptvStremioToken || candidateIndex != iptvStremioCandidateIndex) return@Runnable
+            if (iptvStremioWinnerReported || iptvStremioChannelKey == null) return@Runnable
+            android.util.Log.w(
+                "AndroidTvPlayer",
+                "IPTV stremio ladder: candidate ${candidateIndex + 1} never reached READY, advancing"
+            )
+            tryNextIptvStremioCandidate()
+        }
+        iptvStremioStallRunnable = runnable
+        progressHandler.postDelayed(runnable, 20_000)
+    }
+
+    private fun cancelIptvStremioStallWatchdog() {
+        iptvStremioStallRunnable?.let { progressHandler.removeCallbacks(it) }
+        iptvStremioStallRunnable = null
+    }
+
+    /** First READY on a Stremio candidate — cache the winner on the Dart side. */
+    private fun reportIptvStremioWinnerIfNeeded() {
+        if (iptvStremioWinnerReported) return
+        val key = iptvStremioChannelKey ?: return
+        val url = iptvStremioCandidates.getOrNull(iptvStremioCandidateIndex) ?: return
+        iptvStremioWinnerReported = true
+        cancelIptvStremioStallWatchdog()
+        reportIptvStreamResult(key, url, true)
+    }
+
+    /** Ask Flutter to resolve a stremio-tv:// channel key into stream URLs. */
+    private fun requestIptvStreamUrls(channelUrl: String, callback: (List<String>) -> Unit) {
+        try {
+            val args = hashMapOf<String, Any?>("channelUrl" to channelUrl)
+            val channel = MainActivity.getAndroidTvPlayerChannel()
+            if (channel == null) {
+                callback(emptyList())
+                return
+            }
+            channel.invokeMethod(
+                "requestIptvStreamUrls",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        val map = result as? Map<*, *>
+                        val urls = (map?.get("urls") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                        callback(urls)
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        android.util.Log.e("AndroidTvPlayer", "requestIptvStreamUrls error: $errorCode - $errorMessage")
+                        callback(emptyList())
+                    }
+
+                    override fun notImplemented() {
+                        callback(emptyList())
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "requestIptvStreamUrls exception: ${e.message}", e)
+            callback(emptyList())
+        }
+    }
+
+    /** Fire-and-forget outcome report (winner caching / invalidation). */
+    private fun reportIptvStreamResult(channelUrl: String, url: String?, success: Boolean) {
+        try {
+            val args = hashMapOf<String, Any?>(
+                "channelUrl" to channelUrl,
+                "url" to url,
+                "success" to success,
+            )
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("reportIptvStreamResult", args)
+        } catch (e: Exception) {
+            android.util.Log.w("AndroidTvPlayer", "reportIptvStreamResult failed: ${e.message}")
+        }
     }
 
     // Track selection
