@@ -2992,7 +2992,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// mounted cell. A horizontal ListView.builder unmounts off-screen cells, and
   /// requestFocus() on an unmounted FocusNode is a silent no-op — so a naive
   /// nodes[desired].requestFocus() leaves focus stranded on the previous row.
-  void _requestRowFocus(List<FocusNode> nodes, int desired) {
+  void _requestRowFocus(List<FocusNode> nodes, int desired, {int hops = 0}) {
     // NB: FocusNode.context stays non-null after the owning Focus unmounts
     // (detach() doesn't clear it), so the element's own `mounted` flag — which
     // flips false on unmount — is the reliable "can this node take focus" test.
@@ -3013,8 +3013,30 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return;
       }
     }
-    // Nothing mounted (shouldn't happen while the row is on-screen) — try anyway.
-    nodes[desired].requestFocus();
+    // The whole row is unmounted: it sits beyond the board's deliberately
+    // small vertical cacheExtent (300) — the live case is DPAD-down off the
+    // last Continue Watching row while TWO Trakt skeleton rows (~380px of
+    // focusless shimmer) separate it from the favourites/catalog row below.
+    // requestFocus on a detached node would only latch a focus grab for
+    // whenever that cell happens to build (a later yank, not a move — the old
+    // "blocked DOWN"), so instead nudge the board forward and retry next
+    // frame until the row builds. Down-only on purpose: an unmounted target
+    // ABOVE can't happen from row-by-row DPAD moves (the row above was just
+    // on screen, still inside the cache). Bounded so the total travel stays
+    // within the cache above the origin cell — it can't unmount mid-journey —
+    // and a settled miss just leaves focus where it was.
+    if (hops >= 3 || !_boardScroll.hasClients) return;
+    final pos = _boardScroll.position;
+    if (pos.pixels >= pos.maxScrollExtent) return;
+    _boardScroll.jumpTo(
+      (pos.pixels + pos.viewportDimension * 0.45).clamp(
+        0.0,
+        pos.maxScrollExtent,
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _requestRowFocus(nodes, desired, hops: hops + 1);
+    });
   }
 
   // ── Hero ─────────────────────────────────────────────────────────────────
