@@ -38,9 +38,7 @@ import 'services/trakt/trakt_service.dart';
 import 'widgets/app_initializer.dart';
 
 import 'widgets/animated_background.dart';
-import 'widgets/premium_nav_bar.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'widgets/premium_top_nav.dart';
 import 'services/main_page_bridge.dart';
 import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
@@ -610,7 +608,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _allDebridHiddenFromNav = false;
   // Whether a Trakt account is connected — gates the Trakt Calendar tab (19).
   bool _traktAuthenticated = false;
-  bool _isAndroidTv = false;
+  // Seeded from the cache warmed in main() before runApp, so the very first
+  // frame already builds the right layout branch — waiting for the async
+  // platform check here used to flash the non-TV chrome (the old top bar) on
+  // TV for a frame or two before setState flipped the flag.
+  bool _isAndroidTv = PlatformUtil.isAndroidTvCached;
 
   // Back button press tracking for Android TV exit
   DateTime? _lastBackPressTime;
@@ -2327,13 +2329,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final visibleIndices = _computeVisibleNavIndices();
-    final navItems = [
-      for (final index in visibleIndices)
-        NavItem(_icons[index], _titles[index]),
-    ];
-    final navBadges = List<int>.filled(navItems.length, 0);
-    final selectedNavIndex = visibleIndices.indexOf(_selectedIndex);
-    final currentNavIndex = selectedNavIndex == -1 ? 0 : selectedNavIndex;
 
     return Stack(
       children: [
@@ -2396,9 +2391,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             isTelevision: _isAndroidTv,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // Show floating nav on mobile (narrow screens), but not on TV
-                final isMobile = constraints.maxWidth < 600 && !_isAndroidTv;
-
                 // TV Layout: Sidebar + Content
                 if (_isAndroidTv) {
                   // Keep the bridge's active-tab index in lock-step with the tab
@@ -2558,9 +2550,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   );
                 }
 
-                // Wide desktop: persistent left sidebar instead of top nav.
+                // Non-TV above phone width: persistent left sidebar. This also
+                // absorbs the old 600–1000 "mid-width" band that used to get
+                // the retired AppBar/PremiumTopNav top bar.
                 final isDesktopWide =
-                    !_isAndroidTv && constraints.maxWidth >= 1000;
+                    !_isAndroidTv && constraints.maxWidth >= 600;
                 if (isDesktopWide) {
                   final sidebarIndices = _sidebarOrderedIndices(visibleIndices);
                   final sidebarSelected = sidebarIndices.indexOf(
@@ -2624,38 +2618,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   );
                 }
 
-                // Mobile & Desktop Layout. The top bar (mid-width desktop)
-                // stays a flat list; the mobile floating menu is grouped
+                // Mobile (phone-width, non-TV): floating nav menu, grouped
                 // into the same sections as the rails.
                 final mobileIndices = _sidebarOrderedIndices(visibleIndices);
                 final mobileSelected = mobileIndices.indexOf(_selectedIndex);
                 return Scaffold(
                   backgroundColor: Colors.transparent,
-                  // Hide AppBar on mobile - we'll use floating nav instead
-                  appBar: isMobile
-                      ? null
-                      : AppBar(
-                          title: WindowDragArea(
-                            child: PremiumTopNav(
-                              currentIndex: currentNavIndex,
-                              items: navItems,
-                              onTap: (relativeIndex) {
-                                final actualIndex =
-                                    visibleIndices[relativeIndex];
-                                _onItemTapped(actualIndex);
-                              },
-                              badges: navBadges,
-                              haptics: true,
-                            ),
-                          ),
-                          automaticallyImplyLeading: false,
-                        ),
                   body: Stack(
                     children: [
                       SafeArea(child: _buildAnimatedPage()),
-                      // Floating nav on mobile
-                      if (isMobile)
-                        MobileFloatingNav(
+                      MobileFloatingNav(
                           currentIndex: mobileSelected == -1
                               ? 0
                               : mobileSelected,
