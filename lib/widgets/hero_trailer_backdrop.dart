@@ -175,6 +175,11 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   bool _userMuted = false;
   bool _playing = true;
   bool _controlsVisible = true;
+
+  /// Phone only: the user tapped the rotate button, forcing the device into
+  /// landscape for a bigger trailer. Reset (and orientation restored) when the
+  /// fullscreen trailer closes or the widget is disposed.
+  bool _forcedLandscape = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
 
@@ -526,6 +531,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   void _exitForeground() {
     _controlsTimer?.cancel();
+    // Closing the fullscreen trailer hands rotation back to the OS so the
+    // detail page isn't stuck sideways.
+    _restoreOrientation();
     _fg.reverse();
     // Settle back to the quiet ambient level (respecting the mute chip).
     _applyVolume(foreground: false);
@@ -559,6 +567,43 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _applyVolume(foreground: widget.foreground);
     _showControlsTemporarily();
   }
+
+  /// A hand-held phone (not TV, desktop or web) — the only surface where
+  /// forcing device rotation for a bigger trailer makes sense.
+  bool get _isPhone =>
+      !kIsWeb &&
+      (Platform.isAndroid || Platform.isIOS) &&
+      !PlatformUtil.isAndroidTvCached;
+
+  /// Phone rotate button: swing the device into landscape for a full-width
+  /// trailer, or back to upright. Restored to free rotation on close/dispose.
+  void _toggleOrientation() {
+    setState(() => _forcedLandscape = !_forcedLandscape);
+    SystemChrome.setPreferredOrientations(
+      _forcedLandscape
+          ? const <DeviceOrientation>[
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]
+          : _allOrientations,
+    );
+    _showControlsTemporarily();
+  }
+
+  /// Hand orientation control back to the OS (device auto-rotate), matching the
+  /// app's default phone posture set at startup.
+  void _restoreOrientation() {
+    if (!_forcedLandscape) return;
+    _forcedLandscape = false;
+    SystemChrome.setPreferredOrientations(_allOrientations);
+  }
+
+  static const List<DeviceOrientation> _allOrientations = <DeviceOrientation>[
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ];
 
   /// Is the ambient backdrop trailer *actively playing right now* — frames on
   /// screen, playing, and not promoted to fullscreen. This is what the parent
@@ -671,6 +716,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _posSub?.cancel();
     _durSub?.cancel();
     _errorSub?.cancel();
+    // If the page is torn down while the trailer was forced landscape, don't
+    // leave the OS locked sideways for the next screen.
+    _restoreOrientation();
     _fg.dispose();
     _engine?.dispose();
     // Engines parked for a post-frame release die with the widget — don't
@@ -903,6 +951,17 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
                             tooltip: _userMuted ? 'Unmute' : 'Mute',
                             onTap: _toggleMute,
                           ),
+                          // Phone only: rotate the device for a full-width view.
+                          if (_isPhone)
+                            _CircleControl(
+                              icon: _forcedLandscape
+                                  ? Icons.screen_lock_rotation_rounded
+                                  : Icons.screen_rotation_rounded,
+                              tooltip: _forcedLandscape
+                                  ? 'Portrait'
+                                  : 'Rotate to fullscreen',
+                              onTap: _toggleOrientation,
+                            ),
                         ],
                       ),
                     ),
