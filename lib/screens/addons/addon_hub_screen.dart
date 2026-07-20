@@ -948,11 +948,36 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     if (_searchFocus.hasFocus) return KeyEventResult.ignored;
     final primary = FocusManager.instance.primaryFocus;
     if (primary == null) return KeyEventResult.ignored;
-    final moved = primary.focusInDirection(TraversalDirection.left);
-    if (!moved && MainPageBridge.focusTvSidebar != null) {
+    // Move within the hub ONLY when there's a focusable genuinely to the left
+    // in the same horizontal band (e.g. Configure → Install). We can't lean on
+    // focusInDirection's return value here: it's greedy and, from a card's
+    // leftmost button (Install), jumps diagonally up to the filter bar and
+    // reports moved=true — which would swallow the deliberate LEFT exit to the
+    // sidebar. So gate on a real in-band left neighbour instead.
+    if (_hasLeftNeighbour(primary)) {
+      primary.focusInDirection(TraversalDirection.left);
+      return KeyEventResult.handled;
+    }
+    if (MainPageBridge.focusTvSidebar != null) {
       MainPageBridge.focusTvSidebar!();
     }
     return KeyEventResult.handled;
+  }
+
+  /// True if any focusable in this scope sits to the LEFT of [primary] while
+  /// vertically overlapping its row band — i.e. a real left move exists and
+  /// LEFT should stay inside the hub rather than exit to the sidebar.
+  bool _hasLeftNeighbour(FocusNode primary) {
+    final rect = primary.rect;
+    final scope = primary.enclosingScope;
+    if (scope == null) return false;
+    for (final n in scope.traversalDescendants) {
+      if (n == primary) continue;
+      final r = n.rect;
+      final overlapsVertically = r.top < rect.bottom && r.bottom > rect.top;
+      if (overlapsVertically && r.center.dx < rect.center.dx - 1) return true;
+    }
+    return false;
   }
 
   @override
