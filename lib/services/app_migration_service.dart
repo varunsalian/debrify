@@ -20,6 +20,8 @@ class AppMigrationService {
   static const String _cinemetaSeededKey = 'essential_addon_cinemeta_seeded';
   static const String _openSubtitlesSeededKey =
       'essential_addon_opensubtitles_seeded';
+  static const String _officialOpenSubtitlesSeededKey =
+      'essential_addon_opensubtitles_official_seeded';
   static const String _watchNextSeededKey =
       'essential_addon_watch_next_seeded';
 
@@ -28,8 +30,19 @@ class AppMigrationService {
       'https://v3-cinemeta.strem.io/manifest.json';
 
   /// OpenSubtitles addon manifest URL - provides subtitles for movies and shows
+  /// NOTE: the base64 path segment is this addon's configuration and it pins
+  /// languages — this URL serves ENGLISH ONLY. The backend caps configs at 10
+  /// languages, so it can never cover everyone; full language coverage comes
+  /// from [officialOpenSubtitlesManifestUrl] instead.
   static const String openSubtitlesManifestUrl =
       'https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIl0sInNvdXJjZSI6ImFsbCIsImFpVHJhbnNsYXRlZCI6dHJ1ZSwiYXV0b0FkanVzdG1lbnQiOmZhbHNlfQ==/manifest.json';
+
+  /// Official Stremio OpenSubtitles v3 addon - serves subtitles in EVERY
+  /// language with no configuration (it's what Stremio itself preinstalls).
+  /// Seeded alongside the PRO addon above: PRO gives a deep English pool,
+  /// this one guarantees non-English users get their language out of the box.
+  static const String officialOpenSubtitlesManifestUrl =
+      'https://opensubtitles-v3.strem.io/manifest.json';
 
   /// Watch Next addon manifest URL - provides "watch next" recommendations
   static const String watchNextManifestUrl =
@@ -105,6 +118,7 @@ class AppMigrationService {
   static Future<void> _ensureEssentialAddons(SharedPreferences prefs) async {
     await _ensureCinemetaAddon(prefs);
     await _ensureOpenSubtitlesAddon(prefs);
+    await _ensureOfficialOpenSubtitlesAddon(prefs);
     await _ensureWatchNextAddon(prefs);
   }
 
@@ -158,10 +172,15 @@ class AppMigrationService {
       final stremioService = StremioService.instance;
       final addons = await stremioService.getAddons();
 
-      // Check if OpenSubtitles is already installed (by ID pattern)
+      // Check if OpenSubtitles is already installed (by ID pattern). The
+      // official addon we seed ourselves is excluded: its presence doesn't
+      // mean the user chose an OpenSubtitles variant, and matching it would
+      // permanently skip PRO if PRO's first add failed while official's
+      // succeeded (they're on different servers).
       final hasOpenSubtitles = addons.any((addon) =>
           addon.manifestUrl == openSubtitlesManifestUrl ||
-          addon.id.toLowerCase().contains('opensubtitles'));
+          (addon.id.toLowerCase().contains('opensubtitles') &&
+              addon.id != 'org.stremio.opensubtitlesv3'));
 
       if (hasOpenSubtitles) {
         debugPrint('AppMigrationService: OpenSubtitles addon already installed');
@@ -178,6 +197,47 @@ class AppMigrationService {
       // Don't fail migration if addon can't be added (network issues, etc.).
       // Leave the seeded flag unset so we retry next launch.
       debugPrint('AppMigrationService: Failed to add OpenSubtitles addon: $e');
+    }
+  }
+
+  /// Ensure the official Stremio OpenSubtitles v3 addon is installed.
+  ///
+  /// Unlike the PRO addon above (whose URL-embedded config is pinned to
+  /// English), the official addon serves every language, so non-English users
+  /// get working subtitles by default. The match here is deliberately EXACT —
+  /// the PRO addon's id also contains "opensubtitles", and it must NOT satisfy
+  /// this check or existing installs would never receive the official addon.
+  static Future<void> _ensureOfficialOpenSubtitlesAddon(
+      SharedPreferences prefs) async {
+    // Already seeded once — never auto-add again (respects user removal).
+    if (prefs.getBool(_officialOpenSubtitlesSeededKey) ?? false) return;
+
+    try {
+      final stremioService = StremioService.instance;
+      final addons = await stremioService.getAddons();
+
+      final hasOfficial = addons.any((addon) =>
+          addon.manifestUrl == officialOpenSubtitlesManifestUrl ||
+          addon.id == 'org.stremio.opensubtitlesv3');
+
+      if (hasOfficial) {
+        debugPrint(
+            'AppMigrationService: Official OpenSubtitles addon already installed');
+        await prefs.setBool(_officialOpenSubtitlesSeededKey, true);
+        return;
+      }
+
+      debugPrint('AppMigrationService: Adding official OpenSubtitles addon...');
+      final addon =
+          await stremioService.addAddon(officialOpenSubtitlesManifestUrl);
+      debugPrint(
+          'AppMigrationService: Official OpenSubtitles addon added: ${addon.name}');
+      await prefs.setBool(_officialOpenSubtitlesSeededKey, true);
+    } catch (e) {
+      // Don't fail migration if addon can't be added (network issues, etc.).
+      // Leave the seeded flag unset so we retry next launch.
+      debugPrint(
+          'AppMigrationService: Failed to add official OpenSubtitles addon: $e');
     }
   }
 

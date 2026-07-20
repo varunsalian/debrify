@@ -45,6 +45,23 @@ data class StremioSubtitle(
             "ukr" to "Ukrainian", "bul" to "Bulgarian", "hrv" to "Croatian",
             "srp" to "Serbian", "slk" to "Slovak", "slv" to "Slovenian",
             "est" to "Estonian", "lav" to "Latvian", "lit" to "Lithuanian",
+            "fas" to "Persian", "tel" to "Telugu", "tam" to "Tamil",
+            "mal" to "Malayalam", "kan" to "Kannada", "mar" to "Marathi",
+            "guj" to "Gujarati", "pan" to "Punjabi", "ben" to "Bengali",
+            "urd" to "Urdu", "sin" to "Sinhalese", "cat" to "Catalan",
+            "glg" to "Galician", "eus" to "Basque", "isl" to "Icelandic",
+            "mkd" to "Macedonian", "bos" to "Bosnian", "sqi" to "Albanian",
+            "hye" to "Armenian", "kat" to "Georgian", "aze" to "Azerbaijani",
+            "kaz" to "Kazakh", "mya" to "Burmese", "khm" to "Khmer",
+            // ISO 639-2/B variants (OpenSubtitles mixes B and T codes, e.g. "fre")
+            "fre" to "French", "ger" to "German", "dut" to "Dutch",
+            "gre" to "Greek", "cze" to "Czech", "rum" to "Romanian",
+            "per" to "Persian", "slo" to "Slovak", "may" to "Malay",
+            "ice" to "Icelandic", "alb" to "Albanian", "arm" to "Armenian",
+            "baq" to "Basque", "geo" to "Georgian", "mac" to "Macedonian",
+            "bur" to "Burmese", "wel" to "Welsh",
+            // OpenSubtitles-specific codes
+            "pob" to "Portuguese (BR)", "pb" to "Portuguese (BR)",
             // ISO 639-1 codes (2-letter)
             "en" to "English", "es" to "Spanish", "pt" to "Portuguese",
             "fr" to "French", "de" to "German", "it" to "Italian",
@@ -58,7 +75,15 @@ data class StremioSubtitle(
             "ms" to "Malay", "uk" to "Ukrainian", "bg" to "Bulgarian",
             "hr" to "Croatian", "sr" to "Serbian", "sk" to "Slovak",
             "sl" to "Slovenian", "et" to "Estonian", "lv" to "Latvian",
-            "lt" to "Lithuanian"
+            "lt" to "Lithuanian", "fa" to "Persian", "te" to "Telugu",
+            "ta" to "Tamil", "ml" to "Malayalam", "kn" to "Kannada",
+            "mr" to "Marathi", "gu" to "Gujarati", "pa" to "Punjabi",
+            "bn" to "Bengali", "ur" to "Urdu", "si" to "Sinhalese",
+            "ca" to "Catalan", "gl" to "Galician", "eu" to "Basque",
+            "is" to "Icelandic", "mk" to "Macedonian", "bs" to "Bosnian",
+            "sq" to "Albanian", "hy" to "Armenian", "ka" to "Georgian",
+            "az" to "Azerbaijani", "kk" to "Kazakh", "my" to "Burmese",
+            "km" to "Khmer"
         )
 
         fun formatLanguageCode(code: String): String {
