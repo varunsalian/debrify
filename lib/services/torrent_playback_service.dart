@@ -770,8 +770,9 @@ class TorrentPlaybackService {
     // Quick-play filter ladder: saved default filters as a tiered preference
     // (full match → relax language → relax rip → anything). Inactive when no
     // filters are set or the Filter Settings toggle is off — then every
-    // ladder call below is a no-op and behavior is unchanged.
-    final ladder = await loadLadder();
+    // ladder call below is a no-op and behavior is unchanged. Size buckets are
+    // movie-only (pack sizes are per-episode), so they're stripped for series.
+    final ladder = await loadLadder(includeSize: isMovie);
     if (cancel.cancelled) return; // Cancel during the prefs read
     if (!context.mounted) {
       closeLoading();
@@ -958,11 +959,16 @@ class TorrentPlaybackService {
   /// "Apply filters to Quick Play" or has no default filters saved.
   /// Public only for tests (the kill-switch gate).
   @visibleForTesting
-  static Future<FilterLadder> loadLadder() async {
+  static Future<FilterLadder> loadLadder({bool includeSize = true}) async {
     if (!await StorageService.getQuickPlayHonorsFilters()) {
       return FilterLadder(const TorrentFilterState.empty());
     }
-    return FilterLadder.fromSavedDefaults();
+    final ladder = await FilterLadder.fromSavedDefaults();
+    // Size buckets only make sense for movies: addon packs report a single
+    // episode's size, so honoring a size default on a series/episode play
+    // would rank against a misleading number. Strip it for non-movies.
+    if (includeSize) return ladder;
+    return FilterLadder(ladder.filters.copyWith(sizes: const <SizeBucket>{}));
   }
 
   /// The loader narration line for what the ladder found (plan §3.5), or
@@ -1198,8 +1204,8 @@ class TorrentPlaybackService {
       return;
     }
     // Same filter ladder as the torrent path — addon streams rank by how
-    // well their labels match the saved filters.
-    final ladder = await loadLadder();
+    // well their labels match the saved filters. Size is movie-only.
+    final ladder = await loadLadder(includeSize: isMovie);
     if (cancel.cancelled) return; // Cancel during the prefs read
     if (!context.mounted) {
       closeLoading();

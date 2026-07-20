@@ -20,11 +20,13 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
   final Set<QualityTier> _selectedQualities = {};
   final Set<RipSourceCategory> _selectedSources = {};
   final Set<AudioLanguage> _selectedLanguages = {};
+  final Set<SizeBucket> _selectedSizes = {};
 
   // Focus nodes for D-pad navigation
   final List<FocusNode> _qualityFocusNodes = [];
   final List<FocusNode> _sourceFocusNodes = [];
   final List<FocusNode> _languageFocusNodes = [];
+  final List<FocusNode> _sizeFocusNodes = [];
   final FocusNode _clearAllFocusNode = FocusNode(debugLabel: 'clear-all');
   bool _clearAllFocused = false;
 
@@ -58,6 +60,10 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     for (int i = 0; i < _languageOptions.length; i++) {
       _languageFocusNodes.add(FocusNode(debugLabel: 'language-$i'));
     }
+    // Size focus nodes
+    for (int i = 0; i < _sizeOptions.length; i++) {
+      _sizeFocusNodes.add(FocusNode(debugLabel: 'size-$i'));
+    }
   }
 
   @override
@@ -73,6 +79,9 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     for (final node in _languageFocusNodes) {
       node.dispose();
     }
+    for (final node in _sizeFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -81,6 +90,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
       final qualities = await StorageService.getDefaultFilterQualities();
       final sources = await StorageService.getDefaultFilterRipSources();
       final languages = await StorageService.getDefaultFilterLanguages();
+      final sizes = await StorageService.getDefaultFilterSizes();
       final quickPlayHonors = await StorageService.getQuickPlayHonorsFilters();
 
       setState(() {
@@ -101,6 +111,10 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
               .where((e) => e.name == l)
               .firstOrNull;
           if (lang != null) _selectedLanguages.add(lang);
+        }
+        for (final s in sizes) {
+          final bucket = SizeBucket.values.where((e) => e.name == s).firstOrNull;
+          if (bucket != null) _selectedSizes.add(bucket);
         }
         _loading = false;
       });
@@ -154,6 +168,15 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     await _saveLanguages();
   }
 
+  Future<void> _toggleSize(SizeBucket bucket) async {
+    setState(() {
+      if (!_selectedSizes.add(bucket)) {
+        _selectedSizes.remove(bucket);
+      }
+    });
+    await _saveSizes();
+  }
+
   Future<void> _saveQualities() async {
     await StorageService.setDefaultFilterQualities(
       _selectedQualities.map((e) => e.name).toList(),
@@ -172,6 +195,12 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     );
   }
 
+  Future<void> _saveSizes() async {
+    await StorageService.setDefaultFilterSizes(
+      _selectedSizes.map((e) => e.name).toList(),
+    );
+  }
+
   Future<void> _clearAll() async {
     // Clearing unmounts the AppBar "Clear All" button (it's only built while
     // filters exist) — if it held DPAD/keyboard focus, hand focus to the
@@ -181,6 +210,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
       _selectedQualities.clear();
       _selectedSources.clear();
       _selectedLanguages.clear();
+      _selectedSizes.clear();
     });
     if (reseedFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -189,7 +219,12 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         }
       });
     }
-    await Future.wait([_saveQualities(), _saveSources(), _saveLanguages()]);
+    await Future.wait([
+      _saveQualities(),
+      _saveSources(),
+      _saveLanguages(),
+      _saveSizes(),
+    ]);
   }
 
   @override
@@ -204,7 +239,8 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     final hasFilters =
         _selectedQualities.isNotEmpty ||
         _selectedSources.isNotEmpty ||
-        _selectedLanguages.isNotEmpty;
+        _selectedLanguages.isNotEmpty ||
+        _selectedSizes.isNotEmpty;
 
     return SettingsPageScaffold(
       title: 'Filter Settings',
@@ -275,6 +311,13 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
                     title: 'Language',
                     subtitle: 'Filter by audio language',
                     children: _buildLanguageChips(),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildSection(
+                    context,
+                    title: 'Size',
+                    subtitle: 'Movies only — ignored for series',
+                    children: _buildSizeChips(),
                   ),
                   const SizedBox(height: 20),
                   SettingsSection(
@@ -373,6 +416,20 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         label: option.title,
         selected: _selectedLanguages.contains(option.value),
         onSelected: () => _toggleLanguage(option.value),
+      );
+    }).toList();
+  }
+
+  List<Widget> _buildSizeChips() {
+    return _sizeOptions.asMap().entries.map((entry) {
+      final index = entry.key;
+      final option = entry.value;
+      return _DpadFilterChip(
+        focusNode: _sizeFocusNodes[index],
+        label: option.title,
+        subtitle: option.subtitle,
+        selected: _selectedSizes.contains(option.value),
+        onSelected: () => _toggleSize(option.value),
       );
     }).toList();
   }
@@ -490,6 +547,13 @@ class _LanguageOption {
   const _LanguageOption(this.value, this.title);
 }
 
+class _SizeOption {
+  final SizeBucket value;
+  final String title;
+  final String subtitle;
+  const _SizeOption(this.value, this.title, this.subtitle);
+}
+
 // Options lists
 const _qualityOptions = <_QualityOption>[
   _QualityOption(QualityTier.ultraHd, '4K / 2160p', 'UHD, 2160p, 4K'),
@@ -533,4 +597,17 @@ const _languageOptions = <_LanguageOption>[
   _LanguageOption(AudioLanguage.portuguese, 'Portuguese'),
   _LanguageOption(AudioLanguage.arabic, 'Arabic'),
   _LanguageOption(AudioLanguage.multiAudio, 'Multi-Audio'),
+];
+
+const _sizeOptions = <_SizeOption>[
+  _SizeOption(SizeBucket.under500mb, '< 500 MB', 'Tiny'),
+  _SizeOption(SizeBucket.mb500to1gb, '500 MB – 1 GB', 'Small'),
+  _SizeOption(SizeBucket.gb1to1p5, '1 – 1.5 GB', 'SD / light HD'),
+  _SizeOption(SizeBucket.gb1p5to2p5, '1.5 – 2.5 GB', 'Standard HD'),
+  _SizeOption(SizeBucket.gb2p5to4, '2.5 – 4 GB', 'HD'),
+  _SizeOption(SizeBucket.gb4to6, '4 – 6 GB', 'High bitrate'),
+  _SizeOption(SizeBucket.gb6to10, '6 – 10 GB', 'Full HD+'),
+  _SizeOption(SizeBucket.gb10to20, '10 – 20 GB', 'Very large'),
+  _SizeOption(SizeBucket.gb20to40, '20 – 40 GB', 'Remux'),
+  _SizeOption(SizeBucket.over40gb, '> 40 GB', 'Huge / 4K remux'),
 ];

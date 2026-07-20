@@ -242,6 +242,7 @@ class StorageService {
       'default_filter_rip_sources_v1';
   static const String _defaultFilterLanguagesKey =
       'default_filter_languages_v1';
+  static const String _defaultFilterSizesKey = 'default_filter_sizes_v1';
   static const String _quickPlayHonorsFiltersKey =
       'quick_play_honors_filters_v1';
 
@@ -2278,6 +2279,7 @@ class StorageService {
     await prefs.remove(_defaultFilterQualitiesKey);
     await prefs.remove(_defaultFilterRipSourcesKey);
     await prefs.remove(_defaultFilterLanguagesKey);
+    await prefs.remove(_defaultFilterSizesKey);
     await prefs.remove(_defaultTorrentProviderKey);
   }
 
@@ -4255,6 +4257,18 @@ class StorageService {
   static Future<void> setDefaultFilterLanguages(List<String> languages) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_defaultFilterLanguagesKey, jsonEncode(languages));
+  }
+
+  static Future<List<String>> getDefaultFilterSizes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_defaultFilterSizesKey);
+    if (json == null) return [];
+    return List<String>.from(jsonDecode(json));
+  }
+
+  static Future<void> setDefaultFilterSizes(List<String> sizes) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_defaultFilterSizesKey, jsonEncode(sizes));
   }
 
   // Default Torrent Provider methods

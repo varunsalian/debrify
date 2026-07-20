@@ -7,7 +7,17 @@ import '../utils/tv_keys.dart';
 class TorrentFiltersSheet extends StatefulWidget {
   final TorrentFilterState initialState;
 
-  const TorrentFiltersSheet({super.key, required this.initialState});
+  /// Optional caption shown under the Size section. Callers use it to warn
+  /// that the size facet won't apply in the current context — e.g. the Sources
+  /// screen passes "Applies to movies only — ignored for series." Null hides
+  /// the caption (keyword search, where size applies to everything).
+  final String? sizeNote;
+
+  const TorrentFiltersSheet({
+    super.key,
+    required this.initialState,
+    this.sizeNote,
+  });
 
   @override
   State<TorrentFiltersSheet> createState() => _TorrentFiltersSheetState();
@@ -17,15 +27,18 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
   late Set<QualityTier> _selectedQualities;
   late Set<RipSourceCategory> _selectedSources;
   late Set<AudioLanguage> _selectedLanguages;
+  late Set<SizeBucket> _selectedSizes;
   final FocusNode _clearButtonFocusNode = FocusNode();
   final FocusNode _closeButtonFocusNode = FocusNode();
   final FocusNode _applyButtonFocusNode = FocusNode();
   final List<FocusNode> _qualityChipFocusNodes = [];
   final List<FocusNode> _ripChipFocusNodes = [];
   final List<FocusNode> _languageChipFocusNodes = [];
+  final List<FocusNode> _sizeChipFocusNodes = [];
   final List<bool> _qualityChipFocusStates = [];
   final List<bool> _ripChipFocusStates = [];
   final List<bool> _languageChipFocusStates = [];
+  final List<bool> _sizeChipFocusStates = [];
 
   @override
   void initState() {
@@ -33,6 +46,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
     _selectedQualities = widget.initialState.qualities.toSet();
     _selectedSources = widget.initialState.ripSources.toSet();
     _selectedLanguages = widget.initialState.languages.toSet();
+    _selectedSizes = widget.initialState.sizes.toSet();
 
     // Create focus nodes for quality chips
     for (int i = 0; i < _qualityOptions.length; i++) {
@@ -76,6 +90,20 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       _languageChipFocusStates.add(false);
     }
 
+    // Create focus nodes for size chips
+    for (int i = 0; i < _sizeOptions.length; i++) {
+      final node = FocusNode(debugLabel: 'size-chip-$i');
+      node.addListener(() {
+        if (mounted) {
+          setState(() {
+            _sizeChipFocusStates[i] = node.hasFocus;
+          });
+        }
+      });
+      _sizeChipFocusNodes.add(node);
+      _sizeChipFocusStates.add(false);
+    }
+
     // Auto-focus first quality chip after sheet is fully built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _qualityChipFocusNodes.isNotEmpty) {
@@ -96,6 +124,9 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       node.dispose();
     }
     for (final node in _languageChipFocusNodes) {
+      node.dispose();
+    }
+    for (final node in _sizeChipFocusNodes) {
       node.dispose();
     }
     super.dispose();
@@ -125,13 +156,28 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
     });
   }
 
+  void _toggleSize(SizeBucket bucket) {
+    setState(() {
+      if (!_selectedSizes.add(bucket)) {
+        _selectedSizes.remove(bucket);
+      }
+    });
+  }
+
   void _clearAll() {
     setState(() {
       _selectedQualities.clear();
       _selectedSources.clear();
       _selectedLanguages.clear();
+      _selectedSizes.clear();
     });
   }
+
+  bool get _hasSelection =>
+      _selectedQualities.isNotEmpty ||
+      _selectedSources.isNotEmpty ||
+      _selectedLanguages.isNotEmpty ||
+      _selectedSizes.isNotEmpty;
 
   void _apply() {
     Navigator.of(context).pop(
@@ -139,6 +185,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
         qualities: _selectedQualities.toSet(),
         ripSources: _selectedSources.toSet(),
         languages: _selectedLanguages.toSet(),
+        sizes: _selectedSizes.toSet(),
       ),
     );
   }
@@ -180,7 +227,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                           if (event is KeyDownEvent &&
                               (isActivateKey(event.logicalKey) ||
                                   event.logicalKey == LogicalKeyboardKey.space)) {
-                            if (_selectedQualities.isNotEmpty || _selectedSources.isNotEmpty || _selectedLanguages.isNotEmpty) {
+                            if (_hasSelection) {
                               _clearAll();
                               return KeyEventResult.handled;
                             }
@@ -188,12 +235,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                           return KeyEventResult.ignored;
                         },
                         child: TextButton(
-                          onPressed:
-                              _selectedQualities.isEmpty &&
-                                  _selectedSources.isEmpty &&
-                                  _selectedLanguages.isEmpty
-                              ? null
-                              : _clearAll,
+                          onPressed: _hasSelection ? _clearAll : null,
                           child: const Text('Clear'),
                         ),
                       ),
@@ -410,6 +452,82 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                             )
                             .toList(),
                       ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Size',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (widget.sizeNote != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.sizeNote!,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.45),
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _sizeOptions
+                            .asMap()
+                            .entries
+                            .map(
+                              (entry) {
+                                final index = entry.key;
+                                final option = entry.value;
+                                final isFocused = _sizeChipFocusStates[index];
+                                return Focus(
+                                  focusNode: _sizeChipFocusNodes[index],
+                                  onKeyEvent: (node, event) {
+                                    if (event is KeyDownEvent &&
+                                        (isActivateKey(event.logicalKey) ||
+                                            event.logicalKey == LogicalKeyboardKey.space)) {
+                                      _toggleSize(option.value);
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: isFocused
+                                          ? Border.all(
+                                              color: const Color(0xFF3B82F6),
+                                              width: 2,
+                                            )
+                                          : null,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: FilterChip(
+                                      label: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(option.title),
+                                          Text(
+                                            option.subtitle,
+                                            style: const TextStyle(fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                      selected: _selectedSizes.contains(
+                                        option.value,
+                                      ),
+                                      onSelected: (_) => _toggleSize(option.value),
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                            .toList(),
+                      ),
                     ],
                   ),
                 ),
@@ -485,6 +603,19 @@ const _ripOptions = <_ChipOption<RipSourceCategory>>[
   _ChipOption(RipSourceCategory.dvdrip, 'DVDRip', 'DVD sources, SD rips'),
   _ChipOption(RipSourceCategory.cam, 'CAM / TS', 'CAM, HDCAM, telesync'),
   _ChipOption(RipSourceCategory.other, 'Other', 'Unclassified / scene'),
+];
+
+const _sizeOptions = <_ChipOption<SizeBucket>>[
+  _ChipOption(SizeBucket.under500mb, '< 500 MB', 'Tiny'),
+  _ChipOption(SizeBucket.mb500to1gb, '500 MB – 1 GB', 'Small'),
+  _ChipOption(SizeBucket.gb1to1p5, '1 – 1.5 GB', 'SD / light HD'),
+  _ChipOption(SizeBucket.gb1p5to2p5, '1.5 – 2.5 GB', 'Standard HD'),
+  _ChipOption(SizeBucket.gb2p5to4, '2.5 – 4 GB', 'HD'),
+  _ChipOption(SizeBucket.gb4to6, '4 – 6 GB', 'High bitrate'),
+  _ChipOption(SizeBucket.gb6to10, '6 – 10 GB', 'Full HD+'),
+  _ChipOption(SizeBucket.gb10to20, '10 – 20 GB', 'Very large'),
+  _ChipOption(SizeBucket.gb20to40, '20 – 40 GB', 'Remux'),
+  _ChipOption(SizeBucket.over40gb, '> 40 GB', 'Huge / 4K remux'),
 ];
 
 class _LanguageOption {

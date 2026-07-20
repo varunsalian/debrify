@@ -29,6 +29,13 @@ class TorrentFilterMatcher {
       final l = detectAudioLanguage(t.name);
       if (l == null || !f.languages.contains(l)) return false;
     }
+    if (f.sizes.isNotEmpty) {
+      // Unknown size (bucket == null) matches no bucket, so a size filter
+      // hides sizeless results. Callers gate this facet off for series, where
+      // pack sizes are per-episode and misleading (see the Search tab).
+      final bucket = sizeBucketForBytes(t.sizeBytes);
+      if (bucket == null || !f.sizes.contains(bucket)) return false;
+    }
     return true;
   }
 

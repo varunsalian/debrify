@@ -30,6 +30,7 @@ class FilterLadder {
       StorageService.getDefaultFilterQualities(),
       StorageService.getDefaultFilterRipSources(),
       StorageService.getDefaultFilterLanguages(),
+      StorageService.getDefaultFilterSizes(),
     ]);
     final qualities = <QualityTier>{
       for (final q in results[0])
@@ -43,11 +44,16 @@ class FilterLadder {
       for (final l in results[2])
         ...AudioLanguage.values.where((e) => e.name == l),
     };
+    final sizes = <SizeBucket>{
+      for (final s in results[3])
+        ...SizeBucket.values.where((e) => e.name == s),
+    };
     return FilterLadder(
       TorrentFilterState(
         qualities: qualities,
         ripSources: ripSources,
         languages: languages,
+        sizes: sizes,
       ),
     );
   }
@@ -63,20 +69,22 @@ class FilterLadder {
     final tiers = <TorrentFilterState>[f];
     var current = f;
     // Relaxation order (plan §3.1): language first — name-based language
-    // detection is the least reliable signal — then rip source, keeping the
-    // most user-visible dimension (quality) honored the longest.
+    // detection is the least reliable signal — then rip source, then quality.
+    // Size is a hard byte count (the most reliable dimension), so it's honored
+    // the longest — relaxed last, just before the unrestricted floor.
     if (current.languages.isNotEmpty) {
-      current = TorrentFilterState(
-        qualities: current.qualities,
-        ripSources: current.ripSources,
-      );
+      current = current.copyWith(languages: const <AudioLanguage>{});
       tiers.add(current);
     }
     if (current.ripSources.isNotEmpty) {
-      current = TorrentFilterState(qualities: current.qualities);
+      current = current.copyWith(ripSources: const <RipSourceCategory>{});
       tiers.add(current);
     }
     if (current.qualities.isNotEmpty) {
+      current = current.copyWith(qualities: const <QualityTier>{});
+      tiers.add(current);
+    }
+    if (current.sizes.isNotEmpty) {
       tiers.add(const TorrentFilterState.empty());
     }
     return tiers;
@@ -102,7 +110,7 @@ class FilterLadder {
         selected.contains(AudioLanguage.english);
   }
 
-  bool _matchesTier(String name, TorrentFilterState tier) {
+  bool _matchesTier(String name, int sizeBytes, TorrentFilterState tier) {
     if (tier.qualities.isNotEmpty &&
         !tier.qualities.contains(qualityTierForName(name))) {
       return false;
@@ -115,6 +123,13 @@ class FilterLadder {
     if (tier.languages.isNotEmpty && !langMatches(name, tier.languages)) {
       return false;
     }
+    if (tier.sizes.isNotEmpty) {
+      // Unknown size (bucket == null, e.g. addon streams with no size) matches
+      // no bucket, so it fails size-bearing tiers and sinks to the relaxed
+      // "any size" tier — never dropped, since the ladder only reorders.
+      final bucket = sizeBucketForBytes(sizeBytes);
+      if (bucket == null || !tier.sizes.contains(bucket)) return false;
+    }
     return true;
   }
 
@@ -123,7 +138,7 @@ class FilterLadder {
   /// [allowCamFloor] is off for addon/IPTV streams (see [tierOf]) whose
   /// labels aren't scene names — a stream called "channel.ts" is a transport
   /// stream, not a telesync, and must not sink below everything.
-  int tierOfName(String name, {bool allowCamFloor = true}) {
+  int tierOfName(String name, {bool allowCamFloor = true, int sizeBytes = 0}) {
     if (!isActive) return 0;
     if (allowCamFloor &&
         !filters.ripSources.contains(RipSourceCategory.cam) &&
@@ -132,7 +147,7 @@ class FilterLadder {
       return tierCount; // §3.3c: cams never outrank a real rip.
     }
     for (var i = 0; i < _tiers.length; i++) {
-      if (_matchesTier(name, _tiers[i])) return i;
+      if (_matchesTier(name, sizeBytes, _tiers[i])) return i;
     }
     // Unreachable — the last tier is unrestricted — but stay total.
     return tierCount - 1;
@@ -144,6 +159,7 @@ class FilterLadder {
         // names; addon/IPTV stream labels false-positive on it (".ts" files,
         // "TC" channel tags), so non-torrent streams skip the floor.
         allowCamFloor: t.streamType == StreamType.torrent,
+        sizeBytes: t.sizeBytes,
       );
 
   /// Stable tier sort: in-tier order (relevance/seeders from curation) is
@@ -174,6 +190,7 @@ class FilterLadder {
       ...filters.qualities.map(_qualityLabel),
       ...filters.ripSources.map(_ripLabel),
       ...filters.languages.map(_languageLabel),
+      ...filters.sizes.map(_sizeLabel),
     ];
     return parts.join(' · ');
   }
@@ -191,6 +208,9 @@ class FilterLadder {
     }
     if (filters.ripSources.isNotEmpty && _tiers[tier].ripSources.isEmpty) {
       dropped.add('source type');
+    }
+    if (filters.sizes.isNotEmpty && _tiers[tier].sizes.isEmpty) {
+      dropped.add('size');
     }
     if (dropped.isEmpty) return null;
     return 'without ${dropped.join(' or ')} match';
@@ -215,5 +235,18 @@ class FilterLadder {
   static String _languageLabel(AudioLanguage l) => switch (l) {
     AudioLanguage.multiAudio => 'Multi-audio',
     _ => l.name[0].toUpperCase() + l.name.substring(1),
+  };
+
+  static String _sizeLabel(SizeBucket s) => switch (s) {
+    SizeBucket.under500mb => '<500MB',
+    SizeBucket.mb500to1gb => '500MB–1GB',
+    SizeBucket.gb1to1p5 => '1–1.5GB',
+    SizeBucket.gb1p5to2p5 => '1.5–2.5GB',
+    SizeBucket.gb2p5to4 => '2.5–4GB',
+    SizeBucket.gb4to6 => '4–6GB',
+    SizeBucket.gb6to10 => '6–10GB',
+    SizeBucket.gb10to20 => '10–20GB',
+    SizeBucket.gb20to40 => '20–40GB',
+    SizeBucket.over40gb => '>40GB',
   };
 }

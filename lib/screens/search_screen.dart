@@ -3523,11 +3523,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       final qualities = await StorageService.getDefaultFilterQualities();
       final sources = await StorageService.getDefaultFilterRipSources();
       final languages = await StorageService.getDefaultFilterLanguages();
+      final sizes = await StorageService.getDefaultFilterSizes();
       if (!mounted) return;
 
       final qualitySet = <QualityTier>{};
       final sourceSet = <RipSourceCategory>{};
       final languageSet = <AudioLanguage>{};
+      final sizeSet = <SizeBucket>{};
       for (final q in qualities) {
         for (final e in QualityTier.values) {
           if (e.name == q) qualitySet.add(e);
@@ -3543,15 +3545,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           if (e.name == l) languageSet.add(e);
         }
       }
+      for (final s in sizes) {
+        for (final e in SizeBucket.values) {
+          if (e.name == s) sizeSet.add(e);
+        }
+      }
 
-      if (qualitySet.isEmpty && sourceSet.isEmpty && languageSet.isEmpty) {
+      if (qualitySet.isEmpty &&
+          sourceSet.isEmpty &&
+          languageSet.isEmpty &&
+          sizeSet.isEmpty) {
         return;
       }
       // If the user already picked filters while these async reads were in
       // flight, don't clobber their choice with the saved defaults.
       if (_kwFilters.qualities.isNotEmpty ||
           _kwFilters.ripSources.isNotEmpty ||
-          _kwFilters.languages.isNotEmpty) {
+          _kwFilters.languages.isNotEmpty ||
+          _kwFilters.sizes.isNotEmpty) {
         return;
       }
       setState(() {
@@ -3559,6 +3570,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           qualities: qualitySet,
           ripSources: sourceSet,
           languages: languageSet,
+          sizes: sizeSet,
         );
       });
       // If results are already on screen (defaults resolved after a fast
@@ -12856,7 +12868,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (_sourceFilter != null) {
       list = list.where((t) => t.source == _sourceFilter).toList();
     }
-    list = TorrentFilterMatcher.apply(list, _filters);
+    // Size buckets are meaningless for series: addon packs report a single
+    // episode's size, so a size filter would match against a misleading
+    // number. Drop the facet before matching when browsing a series.
+    final effectiveFilters = widget.selection.isSeries
+        ? _filters.copyWith(sizes: const <SizeBucket>{})
+        : _filters;
+    list = TorrentFilterMatcher.apply(list, effectiveFilters);
     if (_sortBy != 'relevance') {
       list = List<Torrent>.from(list);
       int cmp(Torrent a, Torrent b) {
@@ -13305,7 +13323,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       context: context,
       builder: (_) => Dialog(
         backgroundColor: Colors.transparent,
-        child: TorrentFiltersSheet(initialState: _filters),
+        child: TorrentFiltersSheet(
+          initialState: _filters,
+          sizeNote: widget.selection.isSeries
+              ? 'Not applied to series — pack sizes are per-episode.'
+              : 'Applies to movies only — ignored for series.',
+        ),
       ),
     );
     if (!mounted || result == null || result == _filters) return;
