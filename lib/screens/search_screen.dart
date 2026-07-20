@@ -2395,6 +2395,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
       return origIndex[a]!.compareTo(origIndex[b]!);
     });
+    // Whether the board already showed Trakt rows before this load — only a
+    // fresh appearance (skeleton → content) announces itself below; a refresh
+    // of rows the user can already see stays quiet.
+    final hadTraktRows = _traktMovies.isNotEmpty || _traktSeries.isNotEmpty;
     _syncCwNodes(_traktMovieNodes, movieMetas.length, 'tmovie');
     _syncCwNodes(_traktSeriesNodes, showMetas.length, 'tseries');
     setState(() {
@@ -2413,7 +2417,66 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ..addAll(byImdb);
     });
     _maybeAutoFocusBoard();
+    if (!hadTraktRows) _maybeAnnounceTraktRows();
     if (refreshBound) unawaited(_refreshBoundSources());
+  }
+
+  /// The Trakt rows just landed (skeleton → content), usually seconds after
+  /// the rest of the board — if the user is already browsing elsewhere, point
+  /// them at the new rows with a small toast, with the direction worked out
+  /// from where DPAD focus currently sits (local Continue Watching renders
+  /// above the Trakt rows; favourites and catalog rows below).
+  void _maybeAnnounceTraktRows() {
+    if (!mounted || !widget.isTelevision) return;
+    if (widget.searchMode || widget.discoverMode) return;
+    // Still on the brand loading stage: the rows will simply be there when the
+    // board first paints — nothing to announce.
+    if (_loading) return;
+    // Only the board the user is actually looking at announces (not one
+    // reloading under a detail page/player or on an inactive tab).
+    if (MainPageBridge.activeTvTabIndex != _tabIndex) return;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    // Rows hidden by the Home Rows manager never reached the screen.
+    final visible =
+        (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies')) ||
+        (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows'));
+    if (!visible) return;
+    final primary = FocusManager.instance.primaryFocus;
+    bool onRow(List<FocusNode> nodes) =>
+        primary != null && nodes.contains(primary);
+    String? dir;
+    if (onRow(_traktMovieNodes) || onRow(_traktSeriesNodes)) {
+      return; // already looking at them
+    } else if (onRow(_cwMovieNodes) || onRow(_cwSeriesNodes)) {
+      dir = 'down';
+    } else {
+      for (final kind in _favRowKinds) {
+        if (onRow(_favNodesFor(kind))) {
+          dir = 'up';
+          break;
+        }
+      }
+      if (dir == null) {
+        for (final row in _rowNodes) {
+          if (onRow(row)) {
+            dir = 'up';
+            break;
+          }
+        }
+      }
+    }
+    final msg = dir == null
+        ? 'Trakt Continue Watching loaded'
+        : 'Trakt loaded — scroll $dir to view';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        width: 420,
+      ),
+    );
   }
 
   /// Open a Trakt Continue Watching title as a normal detail page.
@@ -2920,9 +2983,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Board tab with nothing focusable (empty catalogs). The search field is in
     // the tree on desktop/mobile (persistent bar) but not on the chrome-free TV
     // board — bounce to the sidebar there so the remote never lands nowhere.
+    // While the board is still LOADING, though, do nothing: content (and the
+    // arrival auto-focus) is moments away, and bouncing to the rail here is
+    // exactly the "sidebar opened by itself" the dead-focus recovery used to
+    // produce when an arrow landed mid-load.
     if (!widget.isTelevision) {
       _searchFocusNode.requestFocus();
-    } else {
+    } else if (!_loading) {
       MainPageBridge.focusTvSidebar?.call();
     }
   }
@@ -3260,6 +3327,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   @override
   void didPopNext() {
+    // A board reload UNDER a detail page/player can dispose the focused node;
+    // the reclaim listener fires while covered and bails on route.isCurrent,
+    // and no focus event re-fires it on the way back — re-run the dead check
+    // now that the board is the top route again.
+    _onGlobalFocusChange();
     if (!_heroTrailerActive || !_heroTrailerEnabled) return;
     final item = _heroItem.value;
     if (item != null) _scheduleHeroTrailer(item);

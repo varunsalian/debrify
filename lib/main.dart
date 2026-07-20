@@ -990,6 +990,22 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (sidebar == null || sidebar.hasFocus) return false;
     final ctx = _tvSidebarKey.currentContext;
     if (ctx == null || !(ModalRoute.of(ctx)?.isCurrent ?? false)) return false;
+    // LEFT keeps the house rule — it's the ONE key that opens the rail, so a
+    // dead-focus LEFT still lands there (and stays the escape hatch on a tab
+    // with genuinely nothing focusable).
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      sidebar.requestFocus();
+      return true;
+    }
+    // Every other arrow prefers re-entering the active tab's content:
+    // focusing the rail EXPANDS it, so recovering there reads as "the sidebar
+    // opened by itself" — and every later auto-focus pass then declines to
+    // steal focus back off it. A tab's handler places focus on its entry
+    // element, or deliberately no-ops while the tab is still loading (nothing
+    // focusable yet); either way the arrow is spent and the tab's own arrival
+    // auto-focus lands once content exists. The rail stays the last resort
+    // for tabs that never registered a handler.
+    if (MainPageBridge.requestTvContentFocus()) return true;
     sidebar.requestFocus();
     return true;
   }
