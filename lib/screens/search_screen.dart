@@ -7414,15 +7414,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               // untouched. Lights-up is fast to match the veils' cadence.
               child: ValueListenableBuilder<bool>(
                 valueListenable: _discTheater,
-                child: ValueListenableBuilder<StremioMeta?>(
-                  valueListenable: _discFocused,
-                  builder: (_, item, __) => DiscoverDetailRail(
-                    item: item,
-                    trailerStreams: _discTrailerStreams,
-                    trailerLoading: _discTrailerLoading,
-                    trailerVolume: _discTrailerVolume,
-                    trailerMeta: _discTrailerMeta,
-                    shownItem: _discShown,
+                // RepaintBoundary: the rail rebuilds on every DPAD step (new
+                // title, logo, plot) — keep that raster confined to the rail
+                // column instead of dirtying the stage layer behind it.
+                child: RepaintBoundary(
+                  child: ValueListenableBuilder<StremioMeta?>(
+                    valueListenable: _discFocused,
+                    builder: (_, item, __) => DiscoverDetailRail(
+                      item: item,
+                      trailerStreams: _discTrailerStreams,
+                      trailerLoading: _discTrailerLoading,
+                      trailerVolume: _discTrailerVolume,
+                      trailerMeta: _discTrailerMeta,
+                      shownItem: _discShown,
+                    ),
                   ),
                 ),
                 builder: (_, theater, child) => AnimatedOpacity(
@@ -7448,9 +7453,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               // saveLayer only during the ~1.2s ease, cached raster after.
               child: ValueListenableBuilder<bool>(
                 valueListenable: _discTheater,
-                child: MediaQuery(
-                  data: mq.copyWith(size: Size(panelW, mq.size.height)),
-                  child: panel,
+                // RepaintBoundary: the filter line's focus pills repaint on
+                // every DPAD move across it (the grid viewport below is its own
+                // boundary already) — keep panel chrome out of the stage layer.
+                child: RepaintBoundary(
+                  child: MediaQuery(
+                    data: mq.copyWith(size: Size(panelW, mq.size.height)),
+                    child: panel,
+                  ),
                 ),
                 builder: (_, theater, child) => AnimatedOpacity(
                   opacity: theater ? 0.12 : 1.0,
@@ -7470,11 +7480,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // panes legible (direct translucent paint — never an Opacity layer, and
         // safe over the underlay video's punched hole, exactly like the Home
         // hero's feathers) → the panes themselves → status chips.
+        //
+        // Layer discipline (the Home hero's): each stage stratum sits in its
+        // own RepaintBoundary so a rail swap (every DPAD step) or a veil
+        // transition frame re-rasters only itself. Without the boundaries they
+        // all share one picture and every keypress re-records + re-rasters the
+        // full-screen backdrop AND both veil gradients on the weak TV GPU —
+        // the whole page reads as laggy. These are plain composited layers,
+        // not saveLayers, so the underlay video's punch is unaffected.
         return Stack(
           fit: StackFit.expand,
           children: [
             const DecoratedBox(decoration: HomeTheme.pageBackground),
-            _DiscoverStageBackdrop(shown: _discShown),
+            RepaintBoundary(child: _DiscoverStageBackdrop(shown: _discShown)),
             DiscoverTrailerStage(
               trailer: _discTrailerStreams,
               loading: _discTrailerLoading,
@@ -7485,9 +7503,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               fullStage: true,
               showing: _discTrailerShowing,
             ),
-            _DiscoverStageVeils(
-              showing: _discTrailerShowing,
-              theater: _discTheater,
+            RepaintBoundary(
+              child: _DiscoverStageVeils(
+                showing: _discTrailerShowing,
+                theater: _discTheater,
+              ),
             ),
             twoPane,
             // Lights-off over the grid side while the trailer plays — the Home
@@ -14323,37 +14343,42 @@ class _DiscoverGridDim extends StatelessWidget {
       top: 0,
       right: 0,
       bottom: 0,
-      child: IgnorePointer(
-        child: ValueListenableBuilder<bool>(
-          valueListenable: showing,
-          builder: (_, on, __) => ValueListenableBuilder<bool>(
-            valueListenable: theater,
-            builder: (_, deep, __) => TweenAnimationBuilder<double>(
-              tween: Tween(end: deep ? 2.0 : (on ? 1.0 : 0.0)),
-              duration: deep
-                  ? const Duration(milliseconds: 1200)
-                  : on
-                      ? const Duration(milliseconds: 900)
-                      : const Duration(milliseconds: 250),
-              curve: Curves.easeInOutCubic,
-              builder: (_, t, __) {
-                // 0→1: 0 → .52 (playback); 1→2: .52 → 0 (theater unveils).
-                final a = t <= 1.0 ? 0.52 * t : 0.52 * (2.0 - t);
-                if (a <= 0.001) return const SizedBox.shrink();
-                return DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        const Color(0xFF0D0B1A).withValues(alpha: 0.0),
-                        const Color(0xFF0D0B1A).withValues(alpha: a),
-                      ],
-                      stops: const [0.0, 0.15],
+      // RepaintBoundary inside the Positioned (which must stay a direct Stack
+      // child): the dim animates a panel-wide gradient per frame during the
+      // 250/900ms transitions — keep those frames off the stage layer.
+      child: RepaintBoundary(
+        child: IgnorePointer(
+          child: ValueListenableBuilder<bool>(
+            valueListenable: showing,
+            builder: (_, on, __) => ValueListenableBuilder<bool>(
+              valueListenable: theater,
+              builder: (_, deep, __) => TweenAnimationBuilder<double>(
+                tween: Tween(end: deep ? 2.0 : (on ? 1.0 : 0.0)),
+                duration: deep
+                    ? const Duration(milliseconds: 1200)
+                    : on
+                        ? const Duration(milliseconds: 900)
+                        : const Duration(milliseconds: 250),
+                curve: Curves.easeInOutCubic,
+                builder: (_, t, __) {
+                  // 0→1: 0 → .52 (playback); 1→2: .52 → 0 (theater unveils).
+                  final a = t <= 1.0 ? 0.52 * t : 0.52 * (2.0 - t);
+                  if (a <= 0.001) return const SizedBox.shrink();
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          const Color(0xFF0D0B1A).withValues(alpha: 0.0),
+                          const Color(0xFF0D0B1A).withValues(alpha: a),
+                        ],
+                        stops: const [0.0, 0.15],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),

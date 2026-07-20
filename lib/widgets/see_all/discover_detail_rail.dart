@@ -626,7 +626,10 @@ class _RailTitleArtState extends State<_RailTitleArt> {
             fit: BoxFit.contain,
             alignment: Alignment.centerLeft,
             memCacheWidth: 480,
-            fadeInDuration: const Duration(milliseconds: 180),
+            // No fade: the rail is TV-only, and an in-place crossfade is a
+            // saveLayer per logo landing — which happens on every DPAD step.
+            fadeInDuration: Duration.zero,
+            fadeOutDuration: Duration.zero,
             placeholder: (_, __) => const SizedBox.shrink(),
             errorWidget: (_, __, ___) => const SizedBox.shrink(),
             errorListener: (_) {

@@ -277,8 +277,12 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
     return CustomScrollView(
       controller: _scroll,
       // Pre-warm offscreen posters so DPAD scrolling doesn't decode on-screen
-      // mid-scroll (matches the board's cacheExtent).
-      cacheExtent: widget.isTelevision ? 800 : 250,
+      // mid-scroll. ~1.5 rows of lookahead: a DPAD-down target row is always
+      // already built (requestFocus on an unbuilt tile's detached node is a
+      // silent no-op — dead DPAD), while the old 800px window mounted ~16 extra
+      // offscreen tiles on every grid mount, a real slice of the Discover tab's
+      // entry cost on TV.
+      cacheExtent: widget.isTelevision ? 400 : 250,
       slivers: [
         SliverPadding(
           padding: SeeAllGridMetrics.padding,
