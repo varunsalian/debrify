@@ -206,6 +206,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// traversal alone could never reach it).
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'merged-back');
 
+  /// Reaches the hosted panel so [didPopNext] can refresh its watched
+  /// ticks/progress after inline playback (episode quick-play, hero Resume)
+  /// pops back onto this screen. Single key is safe: only one layout (two-pane
+  /// or stacked) builds the panel at a time.
+  final GlobalKey<EpisodesPanelState> _episodesPanelKey =
+      GlobalKey<EpisodesPanelState>();
+
   StremioMeta get _item => _enriched ?? widget.item;
 
   /// Primary-button resume state. Until loaded the button keeps its static
@@ -259,6 +266,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // Watched state (and thus the resume label / badges) may have changed while
     // away — re-read the Trakt status too.
     _loadTraktStatus();
+    // And the episode list's ticks/progress: episode quick-play now plays on
+    // top of this screen (like Resume), so the list is still alive when the
+    // player pops back and must reflect the session that just ended.
+    _episodesPanelKey.currentState?.refreshWatchProgress();
   }
 
   /// Resolve the user's Trakt relationship to this title so the menu shows
@@ -1374,6 +1385,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   Widget _buildEpisodesPanel() {
     return EpisodesPanel(
+      key: _episodesPanelKey,
       show: widget.item,
       addon: widget.addon,
       initialSeason: widget.initialSeason,
@@ -1384,7 +1396,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // PikPak-only. Only the hero Resume (≙ detail "Play") is PikPak-gated.
       showQuickPlay: true,
       isTraktSource: widget.isTraktSource,
-      onItemSelected: widget.onItemSelected,
+      // Sources / fallback-search render in-tab on the Search host, so tear
+      // down every merged/detail route first — popUntil the route name because
+      // a single pop would leave a *parent* merged screen (series A →
+      // recommended series B → pick episode) underneath instead of returning
+      // to Search (every merged/detail route shares kCatalogDetailRouteName).
+      // Mirrors the standalone EpisodesScreen._popToHost.
+      onItemSelected: widget.onItemSelected == null
+          ? null
+          : (selection) {
+              _popToHost();
+              widget.onItemSelected!(selection);
+            },
+      // Quick-play deliberately does NOT pop: the host pushes the player on
+      // top of this screen (same as the hero Resume), so playback pops back to
+      // the episode list here — didPopNext then refreshes the ticks.
       onQuickPlay: widget.onQuickPlay,
       boundSourceCount: widget.boundSourceCount,
       onSelectSource: widget.onSelectSource,
@@ -1397,16 +1423,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           ? () => _leftEntryFocusNode.requestFocus()
           : null,
       onBack: () => Navigator.of(context).maybePop(),
-      // Terminal episode selection: tear down every merged/detail route back to
-      // the Search host, then dispatch — mirroring the standalone
-      // EpisodesScreen._popToHost. A single pop would leave a *parent* merged
-      // screen (series A → recommended series B → pick episode) underneath
-      // instead of returning to Search; popUntil the route name tears down any
-      // depth (every merged/detail route shares kCatalogDetailRouteName).
-      onBeforeTerminalDispatch: () => Navigator.of(
-        context,
-      ).popUntil((r) => r.settings.name != kCatalogDetailRouteName),
     );
+  }
+
+  /// Tear every merged/detail route (any drill-down depth) back down to the
+  /// Search host, so a selection it renders in-tab isn't hidden behind them.
+  void _popToHost() {
+    Navigator.of(
+      context,
+    ).popUntil((r) => r.settings.name != kCatalogDetailRouteName);
   }
 
   /// Stacked layout — mobile only. Compact hero (with Play/Bind/More) → a

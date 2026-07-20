@@ -118,10 +118,13 @@ class EpisodesPanel extends StatefulWidget {
   });
 
   @override
-  State<EpisodesPanel> createState() => _EpisodesPanelState();
+  State<EpisodesPanel> createState() => EpisodesPanelState();
 }
 
-class _EpisodesPanelState extends State<EpisodesPanel> {
+/// Public so a host that keeps this panel alive across playback (the merged
+/// detail page plays on top of itself) can reach [refreshWatchProgress] via a
+/// GlobalKey when the player pops back.
+class EpisodesPanelState extends State<EpisodesPanel> {
   final StremioService _stremioService = StremioService.instance;
   final TraktService _traktService = TraktService.instance;
 
@@ -240,6 +243,15 @@ class _EpisodesPanelState extends State<EpisodesPanel> {
     if (mounted && generation == _episodeModeGeneration) {
       setState(() => _episodeWatchProgress = merged);
     }
+  }
+
+  /// Re-read watch progress (local + Trakt) for the current show. Called by the
+  /// merged detail host when the player pops back onto it, so the just-watched
+  /// episode's tick/progress bar updates without leaving the list.
+  Future<void> refreshWatchProgress() async {
+    final show = _selectedShow;
+    if (show == null) return;
+    await _loadEpisodeWatchProgress(show, _episodeModeGeneration);
   }
 
   /// Resolve whether a Trakt account is connected (gates the episode menu).
