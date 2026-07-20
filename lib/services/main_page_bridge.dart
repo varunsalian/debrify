@@ -366,6 +366,15 @@ class MainPageBridge {
     }
   }
 
+  /// Latched true the first time the Home board reaches a settled state —
+  /// first row batch painted, or a terminal error/empty board (any state where
+  /// holding a loading screen longer helps nobody). AppInitializer keeps the
+  /// launch splash animating over MainPage until this fires, so the user never
+  /// sees the board's own loading state on a cold start. Never reset: it means
+  /// "home has been ready at least once this process", not "home is loaded
+  /// right now".
+  static final ValueNotifier<bool> homeBoardReady = ValueNotifier<bool>(false);
+
   /// Chrome dim level (0 = normal → 1 = cinema takeover), published by the
   /// Home board while its ambient trailer recedes/takes over the screen.
   /// main.dart's TV shell listens and dims the sidebar rail in lock-step with

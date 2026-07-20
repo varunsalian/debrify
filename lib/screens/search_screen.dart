@@ -929,6 +929,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _loadDiscoverAddons();
       _primeDiscoverRows();
     } else {
+      // TV board: last-resort focus reclaim. Several load/reload paths dispose
+      // FocusNodes wholesale (_applySections rebuilds every catalog row's
+      // nodes; CW rows re-sync after playback) and any of them can kill the
+      // node holding primary focus — leaving the remote dead with no DPAD
+      // press able to recover (the shell's recovery only fires when the scope
+      // has NO traversable descendants, and the board always has plenty).
+      // Watch the FocusManager and re-anchor onto the board when focus dies.
+      if (widget.isTelevision) {
+        FocusManager.instance.addListener(_onGlobalFocusChange);
+      }
       // Kick off every leading-content load. Auto-focus settles to the top as
       // these complete; once they've ALL settled the arrival window is over and
       // re-anchoring latches off (see [_settleAutoFocusAfter]), so a later
@@ -1078,6 +1088,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (widget.searchMode) {
       MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
     }
+    // Safe no-op in the variants that never registered it.
+    FocusManager.instance.removeListener(_onGlobalFocusChange);
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
     MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
@@ -1252,6 +1264,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (!mounted) return;
       _homeSections = first;
       setState(() => _loading = false);
+      MainPageBridge.homeBoardReady.value = true;
       _applySections(first);
       _maybeAutoFocusBoard();
       _maybeAutoFillBoard();
@@ -1261,6 +1274,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _error = e.toString();
         _loading = false;
       });
+      // Terminal state too — the launch splash must not outlive the board's
+      // loading phase just because it ended in an error screen.
+      MainPageBridge.homeBoardReady.value = true;
     }
   }
 
@@ -1351,6 +1367,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // there would corrupt the search view. They'll reappear on _restoreHome.
         if (_catalogQuery.isEmpty && !_catalogSearching) {
           _appendSections(more);
+          // A DPAD-down past the last row may be waiting on this batch.
+          _maybeCompleteDeferredDown();
         }
       }
     } finally {
@@ -1619,31 +1637,54 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _maybeAutoFocusBoard();
   }
 
-  /// Resize a Continue Watching row's focus-node list to [count], reusing the
-  /// existing nodes when the length already matches.
+  /// Resize a Continue Watching row's focus-node list to [count], preserving
+  /// the surviving prefix. This used to dispose-and-recreate ALL the row's
+  /// nodes on any length change — and these re-sync on every return from
+  /// playback/detail (the CW list almost always changes then), so it destroyed
+  /// the very node focus was sitting on: primary focus died with it and the
+  /// remote went dead until app relaunch. Now only a shrinking tail is
+  /// disposed, and if focus sat in that tail it's handed to the nearest
+  /// survivor.
   void _syncCwNodes(List<FocusNode> nodes, int count, String tag) {
     if (nodes.length == count) return;
-    for (final n in nodes) {
-      n.dispose();
+    if (count < nodes.length) {
+      var tailHadFocus = false;
+      for (var i = count; i < nodes.length; i++) {
+        if (nodes[i].hasFocus) {
+          tailHadFocus = true;
+          break;
+        }
+      }
+      while (nodes.length > count) {
+        nodes.removeLast().dispose();
+      }
+      // After the disposal so the dying node can't fight the handoff; a row
+      // emptied to zero has no survivor — the dead-focus reclaim listener
+      // picks that case up. Mounted-aware move: the last survivor's cell may
+      // be virtualized out, and requestFocus on a detached node latches a
+      // focus-when-reparented that would yank focus when it scrolls back in.
+      if (tailHadFocus && count > 0) {
+        _requestRowFocus(nodes, count - 1);
+      }
+    } else {
+      for (var i = nodes.length; i < count; i++) {
+        nodes.add(FocusNode(debugLabel: 'search_cw_${tag}_$i'));
+      }
     }
-    nodes
-      ..clear()
-      ..addAll(
-        List.generate(
-          count,
-          (i) => FocusNode(debugLabel: 'search_cw_${tag}_$i'),
-        ),
-      );
   }
 
   /// Focus a card in the Continue Watching row at [cwIndex] (index into the
-  /// visible CW rows), clamping the column to that row's length.
-  void _focusCwRow(int cwIndex, int column) {
+  /// visible CW rows), clamping the column to that row's length. Returns
+  /// whether a focus move was actually attempted — false means the target row
+  /// doesn't exist (yet), so callers can fall through or defer instead of
+  /// silently swallowing the DPAD press.
+  bool _focusCwRow(int cwIndex, int column) {
     final rows = _cwRows;
-    if (cwIndex < 0 || cwIndex >= rows.length) return;
+    if (cwIndex < 0 || cwIndex >= rows.length) return false;
     final nodes = rows[cwIndex].nodes;
-    if (nodes.isEmpty) return;
+    if (nodes.isEmpty) return false;
     _requestRowFocus(nodes, column.clamp(0, nodes.length - 1));
+    return true;
   }
 
   // The leading favourites rows (between Continue Watching and the catalog) are
@@ -1699,13 +1740,88 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// Focus a card in the favourites row at [favIndex] (index into the visible
-  /// favourites rows), clamping the column to that row's length.
-  void _focusFavRowAt(int favIndex, int column) {
+  /// favourites rows), clamping the column to that row's length. Returns false
+  /// when no such row is focusable (same contract as [_focusCwRow]).
+  bool _focusFavRowAt(int favIndex, int column) {
     final kinds = _favRowKinds;
-    if (favIndex < 0 || favIndex >= kinds.length) return;
+    if (favIndex < 0 || favIndex >= kinds.length) return false;
     final nodes = _favNodesFor(kinds[favIndex]);
-    if (nodes.isEmpty) return;
+    if (nodes.isEmpty) return false;
     _requestRowFocus(nodes, column.clamp(0, nodes.length - 1));
+    return true;
+  }
+
+  // A DPAD-down pressed while everything below was still loading (Trakt row a
+  // focusless skeleton, favourites absent, first catalog batch in flight) used
+  // to be swallowed with focus frozen in place — the cell handler had already
+  // reported the key handled. Instead the press is remembered briefly and
+  // completed the moment a row below lands. Origin node is compared by
+  // IDENTITY only (never dereferenced — it may be disposed by then): if focus
+  // moved elsewhere meanwhile, the deferred move is dropped, so a late load
+  // can never yank focus away from the user.
+  FocusNode? _pendingDownOrigin;
+  int _pendingDownCwIndex = -1; // set when pressed on the last CW row
+  int _pendingDownRowIndex = -1; // set when pressed on a catalog row
+  int _pendingDownCol = 0;
+  DateTime? _pendingDownAt;
+  static const Duration _pendingDownMaxAge = Duration(seconds: 3);
+
+  /// DPAD-down off the LAST Continue Watching row: favourites first, then the
+  /// catalog, else remember the press for when a row below loads.
+  void _focusBelowCw(int cwIndex, int col) {
+    if (_focusFavRowAt(0, col)) return;
+    if (_focusRow(0, col)) return;
+    _deferDownMove(cwIndex: cwIndex, column: col);
+  }
+
+  void _deferDownMove({int cwIndex = -1, int rowIndex = -1, required int column}) {
+    _pendingDownOrigin = FocusManager.instance.primaryFocus;
+    if (_pendingDownOrigin == null) return;
+    _pendingDownCwIndex = cwIndex;
+    _pendingDownRowIndex = rowIndex;
+    _pendingDownCol = column;
+    _pendingDownAt = DateTime.now();
+  }
+
+  void _clearDeferredDown() {
+    _pendingDownOrigin = null;
+    _pendingDownAt = null;
+  }
+
+  /// Complete a recent deferred DPAD-down, called whenever a row load settles.
+  /// Post-frame: the freshly-loaded row's cells only mount on the next build,
+  /// and [_requestRowFocus] needs mounted cells.
+  void _maybeCompleteDeferredDown() {
+    if (_pendingDownAt == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final at = _pendingDownAt;
+      final origin = _pendingDownOrigin;
+      if (at == null || origin == null) return;
+      if (DateTime.now().difference(at) > _pendingDownMaxAge) {
+        _clearDeferredDown();
+        return;
+      }
+      if (!identical(FocusManager.instance.primaryFocus, origin)) {
+        _clearDeferredDown();
+        return;
+      }
+      final col = _pendingDownCol;
+      final bool moved;
+      if (_pendingDownCwIndex >= 0) {
+        // From the last CW row: the row that loaded in below it may be a new
+        // Trakt CW row, a favourites row, or the first catalog row.
+        moved = _focusCwRow(_pendingDownCwIndex + 1, col) ||
+            _focusFavRowAt(0, col) ||
+            _focusRow(0, col);
+      } else if (_pendingDownRowIndex >= 0) {
+        moved = _focusRow(_pendingDownRowIndex + 1, col);
+      } else {
+        // From the last favourites row.
+        moved = _focusRow(0, col);
+      }
+      if (moved) _clearDeferredDown();
+    });
   }
 
   /// DPAD-up target for a favourites row: the previous favourites row, else the
@@ -1718,11 +1834,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             : () => _leaveBoardTop());
 
   /// DPAD-down target for a favourites row: the next favourites row, else the
-  /// first catalog row (a no-op if none have loaded yet).
+  /// first catalog row (deferred until one loads if none has yet).
   VoidCallback _favRowOnDown(int favIndex, int column) =>
       favIndex < _favRowCount - 1
       ? () => _focusFavRowAt(favIndex + 1, column)
-      : () => _focusRow(0, column);
+      : () {
+          if (!_focusRow(0, column)) _deferDownMove(column: column);
+        };
 
   /// Load the user's starred Debrify TV channels for the leading favourites row.
   /// Silently leaves the row empty on any error (it just won't render).
@@ -2578,6 +2696,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   ///
   /// TV-only, homepage board only. Deferred a frame so the target row is mounted.
   void _maybeAutoFocusBoard() {
+    // Every row-load settle path funnels through here, which makes it the one
+    // hook needed to complete a DPAD-down deferred while that row was loading.
+    // Runs before the settle latch below — deferred moves are USER presses and
+    // must work long after auto-focus has handed over control.
+    _maybeCompleteDeferredDown();
     if (_autoFocusSettled || _autoFocusScheduled) return;
     if (!widget.isTelevision) return;
     if (widget.searchMode || widget.discoverMode) return;
@@ -2677,6 +2800,60 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return _rowNodes.first.first;
     }
     return null;
+  }
+
+  bool _focusReclaimScheduled = false;
+
+  /// FocusManager listener (TV board only): fires on every app-wide focus
+  /// change, so the common path must bail out in a comparison or two. Only a
+  /// DEAD state — primary focus fell back to a bare scope (the focused node
+  /// was disposed) — schedules the post-frame reclaim pass.
+  void _onGlobalFocusChange() {
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary != null && primary is! FocusScopeNode) return;
+    if (_focusReclaimScheduled) return;
+    _focusReclaimScheduled = true;
+    // Post-frame: the disposal that killed focus is usually mid-rebuild; the
+    // board's surviving cells are attached again by the frame's end.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusReclaimScheduled = false;
+      _reclaimDeadFocus();
+    });
+  }
+
+  /// Re-anchor focus onto the board after it died. Deliberately picks the
+  /// first MOUNTED cell (Continue Watching → favourites → catalog order) — if
+  /// the user was deep in the board, the top rows' cells are unmounted and
+  /// requestFocus on them is a silent no-op, so walking to a mounted node also
+  /// lands focus near where they were looking.
+  void _reclaimDeadFocus() {
+    if (!mounted) return;
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary != null && primary is! FocusScopeNode) return; // recovered
+    if (MainPageBridge.activeTvTabIndex != _tabIndex) return;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    if (MainPageBridge.isTvSidebarFocused?.call() ?? false) return;
+
+    bool tryRow(List<FocusNode> nodes) {
+      for (final n in nodes) {
+        if (n.context?.mounted ?? false) {
+          n.requestFocus();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    for (final row in _cwRows) {
+      if (tryRow(row.nodes)) return;
+    }
+    for (final kind in _favRowKinds) {
+      if (tryRow(_favNodesFor(kind))) return;
+    }
+    for (final row in _rowNodes) {
+      if (tryRow(row)) return;
+    }
   }
 
   /// DPAD-up from the top row. On the dedicated Search tab the field sits above
@@ -2791,20 +2968,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
-  void _focusRow(int row, int column) {
+  /// Returns false when the target catalog row isn't loaded/focusable (after
+  /// kicking the next batch load if one is available) — same contract as
+  /// [_focusCwRow], so DPAD wiring can defer the move instead of eating it.
+  bool _focusRow(int row, int column) {
     if (row >= _rowNodes.length) {
       // DPAD-down past the last loaded row on TV: pull the next board batch.
       if (_boardHasMore) _loadMoreBoard();
-      return;
+      return false;
     }
-    if (row < 0) return;
+    if (row < 0) return false;
     final nodes = _rowNodes[row];
-    if (nodes.isEmpty) return;
+    if (nodes.isEmpty) return false;
     // Land on the row's own remembered column, not the source column, so
     // returning to a row you'd scrolled right goes back where you left it (that
     // cell is still mounted). First visit falls back to the incoming column.
     final desired = (_rowCol[row] ?? column).clamp(0, nodes.length - 1);
     _requestRowFocus(nodes, desired);
+    return true;
   }
 
   /// Focus [desired] in [nodes] if its cell is mounted; otherwise the nearest
@@ -8329,8 +8510,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                 ? () => _focusCwRow(_cwRows.length - 1, col)
                                 : () => _leaveBoardTop()))
                     : () => _focusRow(rowIndex - 1, col);
-                VoidCallback down(int col) =>
-                    () => _focusRow(rowIndex + 1, col);
+                // Down past the last loaded row kicks the next batch load
+                // (inside _focusRow) and defers the move until it lands.
+                VoidCallback down(int col) => () {
+                  if (!_focusRow(rowIndex + 1, col)) {
+                    _deferDownMove(rowIndex: rowIndex, column: col);
+                  }
+                };
                 return ListView.builder(
                   scrollDirection: Axis.horizontal,
                   // Clip the horizontal viewport so scrolled-off cards don't paint
@@ -8458,9 +8644,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   : () => _focusCwRow(cwIndex - 1, col);
               VoidCallback down(int col) => cwIndex < cwCount - 1
                   ? () => _focusCwRow(cwIndex + 1, col)
-                  : (favCount > 0
-                        ? () => _focusFavRowAt(0, col)
-                        : () => _focusRow(0, col));
+                  : () => _focusBelowCw(cwIndex, col);
               return ListView.builder(
                 scrollDirection: Axis.horizontal,
                 clipBehavior: Clip.hardEdge,
