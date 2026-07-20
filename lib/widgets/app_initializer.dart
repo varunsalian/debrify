@@ -20,11 +20,22 @@ class AppInitializer extends StatefulWidget {
 class _AppInitializerState extends State<AppInitializer>
     with TickerProviderStateMixin {
   bool _onboardingComplete = false;
+  // True once the splash overlay has fully faded off MainPage. Until then the
+  // splash keeps animating ON TOP of the (already-mounted, already-loading)
+  // main shell, so the user never sees the Home board's own loading state on
+  // a cold start — the splash IS the loading screen, held until home is ready.
+  bool _splashDone = false;
+  // Shows the loading sweep under the lockup during the hold-for-home phase.
+  bool _holdingForHome = false;
   bool _isAndroidTv = false;
 
   late AnimationController _revealController;
   late AnimationController _exitController;
+  // Drives the loading sweep while the splash waits for the Home board.
+  late AnimationController _idleController;
   late Animation<double> _exitAnimation;
+  Timer? _homeReadyTimeout;
+  bool _finishing = false;
 
   @override
   void initState() {
@@ -40,6 +51,11 @@ class _AppInitializerState extends State<AppInitializer>
 
     _exitController = AnimationController(
       duration: const Duration(milliseconds: 350),
+      vsync: this,
+    );
+
+    _idleController = AnimationController(
+      duration: const Duration(milliseconds: 1400),
       vsync: this,
     );
 
@@ -59,8 +75,11 @@ class _AppInitializerState extends State<AppInitializer>
 
   @override
   void dispose() {
+    MainPageBridge.homeBoardReady.removeListener(_onHomeBoardReady);
+    _homeReadyTimeout?.cancel();
     _revealController.dispose();
     _exitController.dispose();
+    _idleController.dispose();
     super.dispose();
   }
 
@@ -110,12 +129,46 @@ class _AppInitializerState extends State<AppInitializer>
     if (!hasCompleted) {
       await _showOnboarding();
     } else {
-      await _exitController.forward();
-      if (!mounted) return;
+      // Returning user: mount MainPage UNDER the still-covering splash (so the
+      // Home board starts loading immediately) and switch the splash into its
+      // loading phase — the lockup stays put and a sweep animates beneath it —
+      // until the board reports its first painted rows, then fade off.
       setState(() {
         _onboardingComplete = true;
+        _holdingForHome = true;
       });
+      _idleController.repeat();
+      if (MainPageBridge.homeBoardReady.value) {
+        _finishSplash();
+      } else {
+        MainPageBridge.homeBoardReady.addListener(_onHomeBoardReady);
+        // Safety valve: if the board never settles (hung network with no
+        // timeout of its own, or a future tab-order change breaking the
+        // signal), don't strand the user on the splash.
+        _homeReadyTimeout = Timer(const Duration(seconds: 10), _finishSplash);
+      }
     }
+  }
+
+  void _onHomeBoardReady() {
+    if (MainPageBridge.homeBoardReady.value) _finishSplash();
+  }
+
+  Future<void> _finishSplash() async {
+    if (_finishing) return;
+    _finishing = true;
+    MainPageBridge.homeBoardReady.removeListener(_onHomeBoardReady);
+    _homeReadyTimeout?.cancel();
+    // The ready signal fires when the board's first sections are SET, one
+    // frame before they paint — and that first paint is the board's heaviest.
+    // A short grace lets it land while still fully hidden, so the fade reveals
+    // settled rows instead of a mid-jank frame.
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    await _exitController.forward();
+    if (!mounted) return;
+    _idleController.stop();
+    setState(() => _splashDone = true);
   }
 
   Future<void> _waitForReveal() async {
@@ -148,7 +201,10 @@ class _AppInitializerState extends State<AppInitializer>
     if (!mounted) return;
 
     setState(() {
+      // Fresh install: the user just walked through onboarding, so there's no
+      // cold-start moment to bridge — skip the hold-for-home overlay phase.
       _onboardingComplete = true;
+      _splashDone = true;
     });
     _showPendingPostSetupSnackBarIfNeeded();
   }
@@ -196,37 +252,122 @@ class _AppInitializerState extends State<AppInitializer>
 
   @override
   Widget build(BuildContext context) {
-    if (_onboardingComplete) {
-      return const MainPage();
+    if (!_onboardingComplete) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF020617),
+        body: _buildSplashBody(),
+      );
     }
+    // MainPage stays child 0 of this Stack for BOTH overlay phases (splash up /
+    // splash gone) so removing the overlay never reparents it — a reparent
+    // would remount the whole shell and restart the loads the splash just
+    // waited for.
+    return Stack(
+      children: [
+        const MainPage(),
+        if (!_splashDone)
+          Positioned.fill(
+            // Absorb, don't ignore: the shell underneath is fully live, and a
+            // tap during the hold phase must not activate an invisible button.
+            child: AbsorbPointer(child: _buildSplashBody()),
+          ),
+      ],
+    );
+  }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF020617),
-      body: FadeTransition(
-        opacity: _exitAnimation,
-        child: DecoratedBox(
-          // Subtle radial lift in the backdrop reads richer than flat black.
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment.center,
-              radius: 1.1,
-              colors: [Color(0xFF0B1026), Color(0xFF020617)],
-              stops: [0.0, 0.9],
+  Widget _buildSplashBody() {
+    return FadeTransition(
+      opacity: _exitAnimation,
+      child: DecoratedBox(
+        // Subtle radial lift in the backdrop reads richer than flat black.
+        // Opaque colors on purpose: as an overlay this must fully cover the
+        // shell until the exit fade runs.
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment.center,
+            radius: 1.1,
+            colors: [Color(0xFF0B1026), Color(0xFF020617)],
+            stops: [0.0, 0.9],
+          ),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Boundary so the sweep's 60fps ticks don't re-rasterize the
+            // (settled) lockup every frame during the hold-for-home phase.
+            RepaintBoundary(
+              child: AnimatedBuilder(
+                animation: _revealController,
+                builder: (context, child) {
+                  return CustomPaint(
+                    size: Size.infinite,
+                    painter: _DropBouncePainter(_revealController.value),
+                  );
+                },
+              ),
             ),
-          ),
-          child: AnimatedBuilder(
-            animation: _revealController,
-            builder: (context, child) {
-              return CustomPaint(
-                size: Size.infinite,
-                painter: _DropBouncePainter(_revealController.value),
-              );
-            },
-          ),
+            Align(
+              // Proportional placement clears the lockup's bottom edge on both
+              // the TV's 16:9 canvas and phone portrait.
+              alignment: const Alignment(0, 0.55),
+              child: AnimatedOpacity(
+                opacity: _holdingForHome ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 350),
+                child: RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: _idleController,
+                    builder: (context, child) => CustomPaint(
+                      size: const Size(220, 4),
+                      painter: _LoadingSweepPainter(_idleController.value),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+/// The indeterminate sweep under the lockup while the splash holds for the
+/// Home board: a faint track with a bright accent segment gliding across it.
+/// Small fixed canvas + own RepaintBoundary = a cheap per-frame raster even on
+/// the weakest TV GPUs.
+class _LoadingSweepPainter extends CustomPainter {
+  final double t;
+  const _LoadingSweepPainter(this.t);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final track = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, (size.height - 3) / 2, size.width, 3),
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(
+      track,
+      Paint()..color = const Color(0xFFE9EDFF).withValues(alpha: 0.10),
+    );
+
+    final segW = size.width * 0.34;
+    final eased = Curves.easeInOutSine.transform(t);
+    final x = -segW + eased * (size.width + segW);
+    final segRect = Rect.fromLTWH(x, (size.height - 3) / 2, segW, 3);
+    canvas.save();
+    canvas.clipRRect(track);
+    canvas.drawRect(
+      segRect,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFF7B5CFF), Color(0xFF818CF8)],
+        ).createShader(segRect),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _LoadingSweepPainter old) => old.t != t;
 }
 
 // ---------------------------------------------------------------------------
