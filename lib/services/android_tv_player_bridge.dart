@@ -425,9 +425,13 @@ class AndroidTvPlayerBridge {
             return null;
           }
           try {
-            final urls = await StremioIptvService.instance
+            final candidates = await StremioIptvService.instance
                 .resolveCandidates(iptvChannelUrl);
-            return {'urls': urls};
+            return {
+              'candidates': [
+                for (final c in candidates) {'url': c.url, 'label': c.label},
+              ],
+            };
           } catch (e) {
             throw PlatformException(
               code: 'iptv_stream_resolve_failed',

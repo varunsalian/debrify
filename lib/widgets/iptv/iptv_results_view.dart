@@ -432,7 +432,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         );
         return;
       }
-      initialUrl = candidates.first;
+      initialUrl = candidates.first.url;
     }
     // The in-player guide mirrors what the user was browsing: the current
     // category/search filter, not the whole playlist. (Also what keeps the
@@ -710,11 +710,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     // "has frames" chip state ourselves or it would keep reading LIVE.
     _previewStreamUrl.value = null;
     _previewShowing.value = false;
-    StremioIptvService.instance.resolveCandidates(channel.url).then((urls) {
+    StremioIptvService.instance.resolveCandidates(channel.url).then((found) {
       if (!mounted || ticket != _previewResolveTicket) return;
       // No playable streams — the stage stays on its floor, exactly like a
       // dead M3U channel.
-      if (urls.isEmpty) return;
+      if (found.isEmpty) return;
+      final urls = [for (final c in found) c.url];
       _previewCandidates = urls;
       _previewStreamUrl.value = urls.first;
     });

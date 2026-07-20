@@ -6,6 +6,15 @@ import '../models/iptv_playlist.dart';
 import '../models/stremio_addon.dart';
 import 'stremio_service.dart';
 
+/// One playable link for a Stremio IPTV channel: the stream URL plus the
+/// addon's human label for it ("1080p • Server 2"). The label feeds the
+/// in-player source pickers; the ladder itself only needs [url].
+class StremioIptvCandidate {
+  final String url;
+  final String label;
+  const StremioIptvCandidate({required this.url, required this.label});
+}
+
 /// Bridges installed Stremio addons' live-TV catalogs into the IPTV page.
 ///
 /// Each enabled addon with at least one browsable `tv` catalog appears as a
@@ -46,9 +55,10 @@ class StremioIptvService {
   static const Duration _channelsTtl = Duration(minutes: 5);
 
   // Resolved stream candidates per channel key.
-  final Map<String, ({List<String> urls, DateTime at})> _candidatesCache = {};
+  final Map<String, ({List<StremioIptvCandidate> candidates, DateTime at})>
+      _candidatesCache = {};
   // In-flight resolves, shared so preview + play can't double-fetch.
-  final Map<String, Future<List<String>>> _inFlight = {};
+  final Map<String, Future<List<StremioIptvCandidate>>> _inFlight = {};
   // Preview-validated (or native-validated) URL per channel key.
   final Map<String, ({String url, DateTime at})> _winners = {};
   // Full channel lists per addon id (the catalog fan-out is expensive).
@@ -264,14 +274,16 @@ class StremioIptvService {
 
   // ── Stream resolution ─────────────────────────────────────────────────────
 
-  /// Resolve a channel key to its ordered candidate stream URLs (a validated
+  /// Resolve a channel key to its ordered candidate streams (a validated
   /// winner first when one is cached). Empty means "not playable right now" —
   /// callers treat that like a dead M3U channel. Never throws.
-  Future<List<String>> resolveCandidates(String channelKey) async {
+  Future<List<StremioIptvCandidate>> resolveCandidates(
+    String channelKey,
+  ) async {
     final cached = _candidatesCache[channelKey];
     if (cached != null &&
         DateTime.now().difference(cached.at) < _candidatesTtl) {
-      return _winnerFirst(channelKey, cached.urls);
+      return _winnerFirst(channelKey, cached.candidates);
     }
     final inFlight = _inFlight[channelKey];
     if (inFlight != null) return inFlight;
@@ -283,7 +295,7 @@ class StremioIptvService {
     return future;
   }
 
-  Future<List<String>> _resolve(String channelKey) async {
+  Future<List<StremioIptvCandidate>> _resolve(String channelKey) async {
     final key = parseChannelKey(channelKey);
     if (key == null) return const [];
     try {
@@ -305,26 +317,52 @@ class StremioIptvService {
       // Live channels only make sense as direct URLs — torrents can't be a
       // live feed and external links can't play in our players. Dedupe
       // preserving the addon's own ordering (its preference order).
-      final urls = <String>[];
+      final candidates = <StremioIptvCandidate>[];
+      final seen = <String>{};
       for (final s in streams) {
         final url = s.url;
         if (!s.isDirectUrl || url == null) continue;
-        if (!urls.contains(url)) urls.add(url);
+        if (!seen.add(url)) continue;
+        candidates.add(
+          StremioIptvCandidate(
+            url: url,
+            label: _candidateLabel(s, candidates.length),
+          ),
+        );
       }
-      _candidatesCache[channelKey] = (urls: urls, at: DateTime.now());
-      return _winnerFirst(channelKey, urls);
+      _candidatesCache[channelKey] =
+          (candidates: candidates, at: DateTime.now());
+      return _winnerFirst(channelKey, candidates);
     } catch (e) {
       debugPrint('StremioIptvService: resolve failed for $channelKey: $e');
       return const [];
     }
   }
 
-  List<String> _winnerFirst(String channelKey, List<String> urls) {
+  /// Human label for a stream: the addon's short `name` first, else the first
+  /// line of its `title`/description, else a positional fallback. Single line,
+  /// capped — these render as source-picker rows.
+  static String _candidateLabel(StremioStream s, int index) {
+    var label = s.name?.trim() ?? '';
+    if (label.isEmpty) label = s.title?.trim() ?? '';
+    label = label.split('\n').first.trim();
+    if (label.isEmpty) return 'Source ${index + 1}';
+    return label.length > 80 ? label.substring(0, 80) : label;
+  }
+
+  List<StremioIptvCandidate> _winnerFirst(
+    String channelKey,
+    List<StremioIptvCandidate> candidates,
+  ) {
     final winner = cachedWinner(channelKey);
-    if (winner == null || !urls.contains(winner) || urls.first == winner) {
-      return List.of(urls);
-    }
-    return [winner, ...urls.where((u) => u != winner)];
+    final winnerIdx = winner == null
+        ? -1
+        : candidates.indexWhere((c) => c.url == winner);
+    if (winnerIdx <= 0) return List.of(candidates);
+    return [
+      candidates[winnerIdx],
+      ...candidates.where((c) => c.url != winner),
+    ];
   }
 
   /// A URL from this channel's candidate list actually produced frames —

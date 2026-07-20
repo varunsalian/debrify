@@ -222,7 +222,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // M3U stream). Token guards stale async resolves after a channel switch.
     private var iptvStremioToken = 0
     private var iptvStremioChannelKey: String? = null
-    private var iptvStremioCandidates: List<String> = emptyList()
+    private var iptvStremioCandidates: List<IptvStremioCandidate> = emptyList()
     private var iptvStremioCandidateIndex = 0
     private var iptvStremioWinnerReported = false
     // Per-candidate stall watchdog: live streams can buffer forever without
@@ -5099,6 +5099,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun isStremioIptvUrl(url: String): Boolean = url.startsWith("stremio-tv://")
 
+    /** One playable link for a Stremio channel: stream URL + the addon's label. */
+    private data class IptvStremioCandidate(val url: String, val label: String)
+
     /** The shared ExoPlayer media-item swap both IPTV entry points use. */
     private fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String) {
         val metadata = MediaMetadata.Builder()
@@ -5133,6 +5136,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvStremioCandidateIndex = 0
         iptvStremioWinnerReported = false
         cancelIptvStremioStallWatchdog()
+        clearIptvStremioSources()
 
         if (!isStremioIptvUrl(entry.url)) {
             setIptvMediaItem(entry, entry.url)
@@ -5144,21 +5148,95 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // previous channel playing under the new channel's UI state.
         player?.stop()
 
-        requestIptvStreamUrls(entry.url) { urls ->
+        requestIptvStreamUrls(entry.url) { candidates ->
             runOnUiThread {
                 if (token != iptvStremioToken || isFinishing) return@runOnUiThread
-                if (urls.isEmpty()) {
+                if (candidates.isEmpty()) {
                     android.util.Log.w("AndroidTvPlayer", "No playable streams for ${entry.name}")
                     Toast.makeText(this, "${entry.name} is not playable right now", Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
                 iptvStremioChannelKey = entry.url
-                iptvStremioCandidates = urls
+                iptvStremioCandidates = candidates
                 iptvStremioCandidateIndex = 0
-                setIptvMediaItem(entry, urls[0])
+                populateIptvStremioSources()
+                setIptvMediaItem(entry, candidates[0].url)
                 armIptvStremioStallWatchdog()
             }
         }
+    }
+
+    /**
+     * Mirror the channel's candidate links into the existing Stremio sources
+     * panel (as direct streams, 1:1 with [iptvStremioCandidates] so the two
+     * index spaces stay interchangeable) — giving live channels the same
+     * manual source picker movie playback has.
+     */
+    private fun populateIptvStremioSources() {
+        stremioSources.clear()
+        iptvStremioCandidates.forEachIndexed { i, c ->
+            stremioSources.add(
+                StremioSource(
+                    index = i,
+                    name = c.label,
+                    infohash = "",
+                    directUrl = c.url,
+                    streamType = "directUrl",
+                    sizeBytes = 0L,
+                    seeders = 0,
+                    source = null,
+                    quality = iptvQualityFromLabel(c.label),
+                )
+            )
+        }
+        currentStremioSourceIndex = iptvStremioCandidateIndex
+        setupStremioSources()
+    }
+
+    private fun iptvQualityFromLabel(label: String): String {
+        val m = Regex("(2160p|4k|1080p|720p|480p)", RegexOption.IGNORE_CASE).find(label)
+        return when (m?.value?.lowercase()) {
+            "2160p", "4k" -> "4K"
+            "1080p" -> "1080p"
+            "720p" -> "720p"
+            "480p" -> "480p"
+            else -> "LIVE"
+        }
+    }
+
+    /** Leaving a Stremio channel (or re-resolving one) — retire its source rows. */
+    private fun clearIptvStremioSources() {
+        if (!isIptvMode || stremioSources.isEmpty()) return
+        stremioSources.clear()
+        currentStremioSourceIndex = 0
+        if (stremioSourcesVisible) hideStremioSourcesPanel()
+        stremioSourceBadge?.visibility = View.GONE
+    }
+
+    /**
+     * Manual pick from the sources panel while a Stremio IPTV channel plays.
+     * Keeps the ladder in step (an error after the pick advances from the
+     * picked link) and skips the movie path's position seek — meaningless on
+     * a live stream.
+     */
+    private fun switchToIptvStremioSource(url: String, sourceIndex: Int) {
+        android.util.Log.d("AndroidTvPlayer", "switchToIptvStremioSource: index=$sourceIndex")
+        iptvStremioCandidateIndex = sourceIndex
+        iptvStremioWinnerReported = false
+        currentStremioSourceIndex = sourceIndex
+        updateStremioQualityBadge()
+        updateStremioNowPlaying()
+        stremioSourceAdapter?.updateActiveSource(sourceIndex)
+        val entry = iptvChannels.getOrNull(currentIptvIndex)
+        if (entry != null) {
+            setIptvMediaItem(entry, url)
+        } else {
+            player?.setMediaItem(MediaItem.fromUri(url))
+            player?.prepare()
+            player?.play()
+        }
+        armIptvStremioStallWatchdog()
+        hideSourcesPanelWhenReady()
     }
 
     /**
@@ -5173,11 +5251,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val next = iptvStremioCandidateIndex + 1
         if (next >= candidates.size) {
             // Every candidate died: have Flutter forget the stale list so a
-            // later attempt re-resolves fresh links, then go quiet.
+            // later attempt re-resolves fresh links, then go quiet. KEEP the
+            // key and candidate rows though — the sources panel stays usable
+            // as a manual escape hatch (a pick routes back through the live
+            // switch; nulling the key here would send it down the movie
+            // pipeline, which seeks to a stale live position).
             cancelIptvStremioStallWatchdog()
             reportIptvStreamResult(key, null, false)
-            iptvStremioChannelKey = null
-            iptvStremioCandidates = emptyList()
+            iptvStremioWinnerReported = false
             val name = iptvChannels.getOrNull(currentIptvIndex)?.name ?: "Channel"
             Toast.makeText(this, "$name is not playable right now", Toast.LENGTH_SHORT).show()
             return true
@@ -5189,7 +5270,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "AndroidTvPlayer",
             "IPTV stremio ladder: trying candidate ${next + 1}/${candidates.size} for ${entry.name}"
         )
-        setIptvMediaItem(entry, candidates[next])
+        // Keep the sources panel's active row in step with the auto-advance.
+        if (stremioSources.isNotEmpty()) {
+            currentStremioSourceIndex = next
+            stremioSourceAdapter?.updateActiveSource(next)
+            updateStremioNowPlaying()
+        }
+        setIptvMediaItem(entry, candidates[next].url)
         armIptvStremioStallWatchdog()
         return true
     }
@@ -5222,14 +5309,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun reportIptvStremioWinnerIfNeeded() {
         if (iptvStremioWinnerReported) return
         val key = iptvStremioChannelKey ?: return
-        val url = iptvStremioCandidates.getOrNull(iptvStremioCandidateIndex) ?: return
+        val url = iptvStremioCandidates.getOrNull(iptvStremioCandidateIndex)?.url ?: return
         iptvStremioWinnerReported = true
         cancelIptvStremioStallWatchdog()
         reportIptvStreamResult(key, url, true)
     }
 
-    /** Ask Flutter to resolve a stremio-tv:// channel key into stream URLs. */
-    private fun requestIptvStreamUrls(channelUrl: String, callback: (List<String>) -> Unit) {
+    /** Ask Flutter to resolve a stremio-tv:// channel key into labeled stream links. */
+    private fun requestIptvStreamUrls(channelUrl: String, callback: (List<IptvStremioCandidate>) -> Unit) {
         try {
             val args = hashMapOf<String, Any?>("channelUrl" to channelUrl)
             val channel = MainActivity.getAndroidTvPlayerChannel()
@@ -5243,8 +5330,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 object : io.flutter.plugin.common.MethodChannel.Result {
                     override fun success(result: Any?) {
                         val map = result as? Map<*, *>
-                        val urls = (map?.get("urls") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
-                        callback(urls)
+                        val candidates = (map?.get("candidates") as? List<*>)?.mapNotNull { item ->
+                            val m = item as? Map<*, *> ?: return@mapNotNull null
+                            val u = (m["url"] as? String)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                            val label = (m["label"] as? String)?.takeIf { it.isNotBlank() } ?: "Source"
+                            IptvStremioCandidate(u, label)
+                        } ?: emptyList()
+                        callback(candidates)
                     }
 
                     override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
@@ -7154,6 +7246,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun switchToStremioSource(url: String, sourceIndex: Int) {
+        // Live Stremio IPTV channel: the movie path below seeks to the
+        // previous position and runs PikPak/YouTube bookkeeping — all wrong
+        // for a live stream. Route to the dedicated live switch.
+        if (isIptvMode && iptvStremioChannelKey != null) {
+            switchToIptvStremioSource(url, sourceIndex)
+            return
+        }
         android.util.Log.d("AndroidTvPlayer", "switchToStremioSource: index=$sourceIndex, url=${url.take(60)}...")
 
         // Capture current position for resume

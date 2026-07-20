@@ -588,6 +588,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentChannelNumber = widget.channelNumber;
     _currentIptvIndex = widget.iptvStartIndex ?? 0;
     _currentSourceIndex = widget.stremioCurrentSourceIndex ?? 0;
+    _initIptvStremioSources();
     _currentStremioTvChannelId = _findInitialStremioTvChannelId();
     _parseChannelDirectory();
     // The sync offset is per-subtitle and session-scoped, but it lives in a
@@ -2397,6 +2398,79 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// ladder would hijack playback back to its channel.
   int _iptvSwitchTicket = 0;
 
+  /// The stremio-tv:// key of the IPTV channel currently playing, when it is
+  /// a Stremio-addon channel — non-null routes source-sheet selections down
+  /// the live path instead of the movie source-switch pipeline.
+  String? _iptvChannelKey;
+
+  /// Surface a Stremio IPTV channel's candidate links in the existing source
+  /// sheet: the candidates become direct-URL [Torrent] rows via the override
+  /// the sheet already honors. Null/empty clears the sheet (plain M3U
+  /// channels have exactly one link — nothing to pick).
+  void _setIptvSources(
+    String? channelKey,
+    List<StremioIptvCandidate>? candidates, {
+    int currentIndex = 0,
+  }) {
+    if (!mounted) return;
+    _iptvChannelKey = channelKey;
+    if (channelKey == null || candidates == null || candidates.isEmpty) {
+      if (_stremioSourcesOverride != null ||
+          _resolveStremioSourceOverride != null) {
+        setState(() {
+          _stremioSourcesOverride = null;
+          _resolveStremioSourceOverride = null;
+        });
+      }
+      return;
+    }
+    final sources = <Torrent>[
+      for (var i = 0; i < candidates.length; i++)
+        Torrent(
+          rowid: i,
+          // Same synthetic-hash convention _convertToTorrents uses for
+          // direct-URL streams (stable per-URL dedupe key, not a real hash).
+          infohash:
+              'url:${candidates[i].url.hashCode.toRadixString(16).padLeft(40, '0')}',
+          name: candidates[i].label,
+          sizeBytes: 0,
+          createdUnix: 0,
+          seeders: 0,
+          leechers: 0,
+          completed: 0,
+          scrapedDate: 0,
+          source: 'stremio',
+          streamType: StreamType.directUrl,
+          directUrl: candidates[i].url,
+          hasRealInfoHash: false,
+        ),
+    ];
+    setState(() {
+      _stremioSourcesOverride = sources;
+      _resolveStremioSourceOverride = (t) async => t.directUrl;
+      _currentSourceIndex = currentIndex.clamp(0, sources.length - 1);
+    });
+  }
+
+  /// The launch already resolved the initial channel's URL, but the source
+  /// sheet wants the whole candidate list — fetch it (cache hit from the
+  /// launch resolve) and populate the override for the starting channel.
+  void _initIptvStremioSources() {
+    final channels = widget.iptvChannels;
+    final idx = widget.iptvStartIndex ?? 0;
+    if (channels == null || idx < 0 || idx >= channels.length) return;
+    final channel = channels[idx];
+    if (!StremioIptvService.isStremioChannelUrl(channel.url)) return;
+    StremioIptvService.instance.resolveCandidates(channel.url).then((found) {
+      if (!mounted || found.isEmpty) return;
+      // The user already zapped away (or a switch populated sources itself).
+      if (_iptvChannelKey != null || _currentIptvIndex != idx) return;
+      var current = found.indexWhere((c) => c.url == widget.videoUrl);
+      if (current < 0) current = 0;
+      _setIptvSources(channel.url, found, currentIndex: current);
+    });
+  }
+
   /// Switch to IPTV channel at given index
   Future<void> _switchToIptvChannel(int index) async {
     final channels = widget.iptvChannels;
@@ -2418,6 +2492,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {}
 
     if (StremioIptvService.isStremioChannelUrl(channel.url)) {
+      // Retire the outgoing channel's source rows NOW — during the resolve
+      // await below the sheet must not offer the previous channel's links
+      // (picking one would abort this switch's ladder and play the old
+      // channel under the new channel's identity).
+      _setIptvSources(null, null);
       // Mirror the native path: the UI has already committed to the new
       // channel, so clear the outgoing stream now — a failed or empty
       // resolve must not leave the previous channel's frozen frame sitting
@@ -2429,15 +2508,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // one produces playback — the same serial ladder the IPTV preview runs.
       final candidates =
           await StremioIptvService.instance.resolveCandidates(channel.url);
+      if (!mounted || ticket != _iptvSwitchTicket) return;
+      // The candidates double as the source sheet's rows for this channel.
+      _setIptvSources(channel.url, candidates);
       var opened = false;
-      for (final url in candidates) {
+      for (var i = 0; i < candidates.length; i++) {
         if (!mounted || ticket != _iptvSwitchTicket) return;
+        final url = candidates[i].url;
         final ok = await _tryOpenLiveStream(url);
         // A newer switch superseded this ladder mid-probe: its success/failure
         // belongs to the other channel's playback now — don't credit it here.
         if (ticket != _iptvSwitchTicket) return;
         if (ok) {
           StremioIptvService.instance.markWinner(channel.url, url);
+          if (mounted && _currentSourceIndex != i) {
+            setState(() => _currentSourceIndex = i);
+          }
           opened = true;
           break;
         }
@@ -2450,6 +2536,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('Player: no playable stream for ${channel.name}');
       }
     } else {
+      // Plain M3U/Xtream channel: single link, no source sheet.
+      _setIptvSources(null, null);
       try {
         await _player.open(mk.Media(channel.url), play: true);
       } catch (e) {
@@ -2555,6 +2643,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _handleSourceSelected(int index, String url) async {
+    // Live IPTV channel: the movie pipeline below seeks to the previous
+    // position and reloads subtitles — both meaningless (and harmful) for a
+    // live stream. Route to the dedicated live switch instead.
+    if (_iptvChannelKey != null) {
+      await _switchToIptvSource(index, url);
+      return;
+    }
     final pendingPlaylist = _pendingSourcePlaylist;
     _pendingSourcePlaylist = null;
     if (pendingPlaylist != null && pendingPlaylist.isNotEmpty) {
@@ -2562,6 +2657,54 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else {
       await _switchToStremioSource(index, url);
     }
+  }
+
+  /// Manual pick from the source sheet while a Stremio IPTV channel plays:
+  /// open the chosen link directly. No position seek, no subtitle
+  /// bookkeeping, and no auto-advance on failure — the user chose this link
+  /// deliberately, so a dead pick just leaves the channel down (they can
+  /// pick another from the sheet).
+  Future<void> _switchToIptvSource(int index, String url) async {
+    _hideSourceSheet();
+    final key = _iptvChannelKey;
+    final ticket = ++_iptvSwitchTicket;
+    final previousIndex = _currentSourceIndex;
+    _clearBufferingIndicator();
+    setState(() {
+      _isTransitioning = true;
+      _currentSourceIndex = index;
+    });
+    _startTransitionOverlay();
+    try {
+      await _player.pause();
+    } catch (_) {}
+    final ok = await _tryOpenLiveStream(url);
+    if (!mounted || ticket != _iptvSwitchTicket) return;
+    if (ok) {
+      if (key != null) {
+        StremioIptvService.instance.markWinner(key, url);
+      }
+    } else {
+      // Failed pick: restore the highlight — leaving it on the dead row
+      // would both show a false PLAYING badge and block retrying it (the
+      // sheet ignores selecting the "current" source).
+      setState(() => _currentSourceIndex = previousIndex);
+    }
+    // Same direct transition-overlay cleanup as _switchToIptvChannel — the
+    // 'playing' event is unreliable for HLS/live streams.
+    _transitionStopTimer?.cancel();
+    _transitionPhaseTimer?.cancel();
+    _transitionPhase = 2;
+    _transitionPhase2Started = DateTime.now();
+    setState(() {
+      _isTransitioning = false;
+    });
+    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
+      _rainbowController.stop();
+      _transitionRunning = false;
+      _rainbowActive = false;
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _switchToSourcePlaylist(

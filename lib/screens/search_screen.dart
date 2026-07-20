@@ -2044,7 +2044,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           );
           return;
         }
-        videoUrl = candidates.first;
+        videoUrl = candidates.first.url;
         iptvChannels = [channel];
         iptvStartIndex = 0;
       }
