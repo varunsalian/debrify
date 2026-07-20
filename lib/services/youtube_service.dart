@@ -285,9 +285,9 @@ class YoutubeService {
   static final Map<String, Future<YoutubeResolvedStreams?>> _resolveInFlight = {};
 
   /// Resolution cap for ambient backdrop trailers (Home hero, Discover rail).
-  /// They render in a small region, so a 480p decode looks identical there while
-  /// being far lighter than a 720/1080p decode+composite on weak TV silicon.
-  static const int ambientTrailerMaxHeight = 480;
+  /// 720p: crisp in the hero region (480p read soft once the edge feathers came
+  /// off) while still lighter than a 1080p decode+composite on weak TV silicon.
+  static const int ambientTrailerMaxHeight = 720;
 
   /// Resolve a YouTube [videoId] into playable/downloadable stream URLs.
   ///

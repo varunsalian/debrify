@@ -9311,8 +9311,8 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   /// full-bleed), and the surface the idle art's tinted feathers melt into
   /// (mid value ~0.30 meets their 0.34) — no half-poster seam, ever. During
   /// playback the lights-off veil above quenches this to near-black so the
-  /// video's neutral feathers match. Baked gradients only — no per-frame
-  /// layer. Boxed mode only.
+  /// video's slim neutral feathers match. Baked gradients only — no
+  /// per-frame layer. Boxed mode only.
   Widget _heroMoodField(ColorScheme scheme) {
     if (!widget.boxedTrailer) return const SizedBox.shrink();
     const base = Color(0xFF0D0B1A); // the board's own bg
@@ -9620,9 +9620,10 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           // sitting BELOW the identity block (the logo stays full-bright)
           // and below the trailer overlay's punch-through hole (which clears
           // every Flutter pixel under it in the region, veil included). With
-          // the tint quenched here, the video's NEUTRAL edge feathers land on
-          // a matching near-black — no colour anywhere near the picture; the
-          // title art and the moving image are the only lit things on stage.
+          // the tint quenched here, the video's slim NEUTRAL feathers land
+          // on a matching near-black — no colour anywhere near the picture;
+          // the title art and the moving image are the only lit things on
+          // stage.
           // Slow dim down, fast lights-up on any DPAD move. Paints nothing
           // when idle.
           if (widget.boxedTrailer && widget.trailerShowing != null)
@@ -9653,10 +9654,10 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               alignment: Alignment.bottomLeft,
               child: LayoutBuilder(
                 builder: (context, cons) {
-                  // Keep the identity block clear of the trailer's crisp part
-                  // (boxedTrailer): cap its width at the region's left edge (the
-                  // text ends where the trailer's left feather begins, so the
-                  // two blend rather than collide).
+                  // Keep the identity block clear of the trailer (boxedTrailer):
+                  // cap its width at the region's left edge (the text ends
+                  // where the trailer's slim left feather begins, so the two
+                  // blend rather than collide).
                   final defaultMax = isTelevision ? 640.0 : 520.0;
                   double maxTextW = defaultMax;
                   if (widget.boxedTrailer) {
@@ -9777,13 +9778,14 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     ),
   );
 
-  /// The idle key-art's edge dissolve — the same three eased feather shapes
-  /// the trailer paints over itself ([_HeroTrailerLayerState]), but TINTED
+  /// The idle key-art's edge dissolve — three eased feather shapes, TINTED
   /// (lerped 0.34 toward the board bg) because at rest the art sits on the
-  /// coloured mood field. The video's own feathers are NEUTRAL — by the time
-  /// they fade in, the lights-off veils have quenched the tint around the
-  /// region, so the handover still reads seamless. Recolours only when the
-  /// settled tint changes — never per frame.
+  /// coloured mood field. The live video paints the same shapes but NEUTRAL
+  /// and roughly half as wide (user call — heavy/tinted melt read as bleed
+  /// over the picture): by the time they fade in, the lights-off veils have
+  /// quenched the tint around the region, so slim near-black feathers land
+  /// seamlessly. Recolours only when the settled tint changes — never per
+  /// frame.
   Widget _regionArtFeathers(ColorScheme scheme) {
     return IgnorePointer(
       child: ValueListenableBuilder<Color?>(
@@ -9865,11 +9867,11 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
 
 /// Geometry of the Home hero's ambient-trailer REGION — a right-anchored slab
 /// that fills the hero band's height and bleeds to the right screen edge, into
-/// which the trailer is painted and then feathered (its left/top/bottom edges
-/// dissolve into the hero via baked gradients — no hard frame, the premium-OTT
-/// look). Shared by [_HeroSpotlight] (which keeps its title text clear of the
-/// region's crisp part) and [_HeroTrailerLayer] (which paints the video) so both
-/// agree on the rect. Origin is the hero band's own top-left.
+/// which the trailer is painted and lightly feathered (slim neutral melts at
+/// its left/top/bottom edges — no hard frame, but the picture stays
+/// essentially clear). Shared by [_HeroSpotlight] (which keeps its title text
+/// clear of the region) and [_HeroTrailerLayer] (which paints the video) so
+/// both agree on the rect. Origin is the hero band's own top-left.
 ///
 /// Width-led: ~56% of the hero, so the title keeps the left ~44%. Returns null
 /// for a band too short to read as a trailer (falls back to full-width text).
@@ -9886,10 +9888,25 @@ Rect? _heroTrailerRegionRect(double width, double heroH) {
   return Rect.fromLTWH(left, 0, regionW, heroH);
 }
 
-/// Fraction of the region's width over which its LEFT edge dissolves into the
-/// hero — the crisp trailer starts after this. The title text ends at the
-/// region's left, so it sits over the dark side of this feather.
+/// Fraction of the region's width over which the IDLE key-art's left edge
+/// dissolves into the hero (see [_regionArtFeathers]). The title text ends at
+/// the region's left, so at rest it sits over the dark side of this feather.
 const double _heroTrailerFeatherFrac = 0.34;
+
+/// Fraction for the LIVE video's left-edge melt — deliberately about half the
+/// idle art's [_heroTrailerFeatherFrac]. The balance (user-tuned): the old
+/// full-width feathers read as bleed over the picture, but fully crisp edges
+/// read as a legacy boxed player — a slim melt keeps the picture essentially
+/// untouched while its edges still dissolve into the stage.
+const double _heroTrailerVideoFeatherFrac = 0.16;
+
+/// Slight brightness lift painted flat over the live ambient trailer —
+/// trailers are graded dark and the ambient region has no other light on it.
+/// Low-alpha white: lifts the mids/shadows a touch without visibly milking
+/// the highlights. Works in BOTH engine modes: over the underlay hole it
+/// alpha-blends onto the native video via the system compositor; over the
+/// texture path it's an ordinary fill. Tune the alpha to taste (0 = off).
+const Color _heroTrailerBrightnessLift = Color(0x14FFFFFF);
 
 /// One edge-feather for the hero's art/trailer region: a gradient from opaque
 /// [c] at [begin] dissolving to transparent by [frac]. EASED stops (not a
@@ -9897,8 +9914,8 @@ const double _heroTrailerFeatherFrac = 0.34;
 /// starts): dense at the covered edge, long soft tail into the picture, the
 /// Nuvio/Netflix gradient recipe. Still one baked gradient fill — no shader
 /// mask, no per-frame cost — shared by the idle key-art and the live trailer
-/// so the two states dissolve identically and the crossfade between them is
-/// seamless.
+/// (the trailer at roughly half the art's fractions, so the picture stays
+/// essentially clear) so the two states dissolve alike at the handover.
 Widget _heroEdgeFeather(Alignment begin, Alignment end, Color c, double frac) {
   return DecoratedBox(
     decoration: BoxDecoration(
@@ -9920,9 +9937,9 @@ Widget _heroEdgeFeather(Alignment begin, Alignment end, Color c, double frac) {
 
 /// Full-board ambient trailer layer (TV Home board only). Sits ABOVE the hero +
 /// rows as an [IgnorePointer] overlay and paints the trailer into a right-
-/// anchored REGION of the hero band (see [_heroTrailerRegionRect]) whose edges
-/// dissolve into the hero — a live, frameless picture beside the title, the way
-/// premium OTT heroes blend a trailer into their key art. The region fades in
+/// anchored REGION of the hero band (see [_heroTrailerRegionRect]) — a live,
+/// near-untouched picture beside the title, its edges slim-feathered into the
+/// darkened stage. The region fades in
 /// when a trailer starts resolving and out when it clears; the title/backdrop
 /// underneath stay put (no crossfade-to-fullscreen), so the hero keeps its
 /// identity. [HeroTrailerBackdrop] cover-fills the region (clipped), and a
@@ -10083,19 +10100,25 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
     );
   }
 
-  /// The trailer region — NO frame. The video cover-fills a right-anchored slab
-  /// and its left/top/bottom edges DISSOLVE via baked NEUTRAL near-black
-  /// gradients into the lights-off stage around it, so it melts into the dark
-  /// instead of sitting in a box (the premium-OTT look). The right edge bleeds
-  /// off screen.
+  /// The trailer region — NO frame; the video cover-fills a right-anchored
+  /// slab whose edges melt into the stage via SLIM neutral feathers (see
+  /// [_heroTrailerVideoFeatherFrac] for the tuned balance: heavy feathers
+  /// read as bleed, none at all read as a legacy boxed player). The right
+  /// edge bleeds off screen.
   ///
-  /// Weak-TV safe: the feathers are plain gradient fills painted OVER the video
-  /// (no per-frame ShaderMask / saveLayer); the video keeps its own
-  /// RepaintBoundary so its texture updates never repaint the gradients or pill.
+  /// Under the feathers sits [_heroTrailerBrightnessLift] — a single flat
+  /// low-alpha white fill that lifts the ambient video slightly (trailers
+  /// are graded dark; a small lift keeps the region alive).
   ///
-  /// [playing] gates the feathers: while the trailer only resolves/buffers they
-  /// stay hidden so the poster shows through the region cleanly, then they fade
-  /// in with the picture.
+  /// Weak-TV safe: all overlays are constant fills/baked gradients (no
+  /// per-frame ShaderMask / saveLayer), and in underlay mode they composite
+  /// over the punch-through hole onto the native video. The video keeps its
+  /// own RepaintBoundary so its texture updates never repaint the overlays
+  /// or pill.
+  ///
+  /// [playing] gates the overlays: while the trailer only resolves/buffers
+  /// the poster shows through the region untouched, then they fade in with
+  /// the picture.
   Widget _buildRegion(
     YoutubeResolvedStreams? streams,
     bool loading,
@@ -10124,13 +10147,11 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
                 onPlayingChanged: _onPlaying,
               ),
             ),
-          // The feather — three NEUTRAL gradients melting the video's edges
-          // into the board's own near-black. Deliberately NOT tinted (user
-          // call): a coloured melt reads as "colour bleeding into the
-          // player", and during playback the whole stage goes lights-off
-          // dark anyway, so near-black is exactly what surrounds the picture.
-          // Constant colours = these never rebuild or re-raster once faded
-          // in. Hidden until the video actually plays.
+          // Overlays on the picture, gated on [playing] so the poster
+          // underneath is never touched while the trailer resolves:
+          // the flat brightness lift first, then the SLIM neutral edge
+          // feathers OVER it — so the melt still lands on the stage's true
+          // near-black, not a lifted one.
           IgnorePointer(
             child: AnimatedOpacity(
               opacity: playing ? 1.0 : 0.0,
@@ -10139,27 +10160,27 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Left: the crisp trailer starts after this — melts into
-                  // the darkened text zone on the left.
-                  _feather(
+                  const ColoredBox(color: _heroTrailerBrightnessLift),
+                  // Left: melt into the darkened text zone.
+                  _heroEdgeFeather(
                     Alignment.centerLeft,
                     Alignment.centerRight,
                     const Color(0xFF0D0B1A),
-                    _heroTrailerFeatherFrac,
+                    _heroTrailerVideoFeatherFrac,
                   ),
                   // Top: soften the upper edge into the hero.
-                  _feather(
+                  _heroEdgeFeather(
                     Alignment.topCenter,
                     Alignment.bottomCenter,
                     const Color(0xFF0D0B1A),
-                    0.16,
+                    0.10,
                   ),
                   // Bottom: melt down into the darkened rows.
-                  _feather(
+                  _heroEdgeFeather(
                     Alignment.bottomCenter,
                     Alignment.topCenter,
                     const Color(0xFF0D0B1A),
-                    0.36,
+                    0.20,
                   ),
                 ],
               ),
@@ -10183,10 +10204,6 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
     );
   }
 
-  /// One edge-feather over the video — the shared eased recipe, so the live
-  /// trailer dissolves exactly like the idle key-art it replaces.
-  Widget _feather(Alignment begin, Alignment end, Color c, double frac) =>
-      _heroEdgeFeather(begin, end, c, frac);
 }
 
 /// The hero's title, IMAGE-FIRST: the studio title-treatment art when a
