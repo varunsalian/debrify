@@ -33,6 +33,10 @@ class IptvPlaylist {
   /// installed addon list each session).
   bool get isStremioAddon => url.startsWith('stremio-addon://');
 
+  /// Returns true if this is the virtual Favorites playlist (never persisted —
+  /// backed by the starred-channel store instead of a fetch).
+  bool get isFavorites => url.startsWith('favorites://');
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,

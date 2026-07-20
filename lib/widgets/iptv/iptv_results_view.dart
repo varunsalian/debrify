@@ -86,6 +86,20 @@ class IptvResultsViewState extends State<IptvResultsView>
   // Favorites
   Set<String> _favoriteUrls = {};
 
+  /// Original playlistId each favorite was starred from (url → id). Toggling
+  /// a star inside the virtual Favorites view must keep the channel tied to
+  /// its real playlist, so deleting that playlist still sweeps the favorite.
+  Map<String, String> _favoritePlaylistIds = {};
+
+  /// Virtual "Favorites" playlist — never persisted; pinned to the top of the
+  /// picker and backed by the starred-channel store instead of a fetch.
+  static final IptvPlaylist _favoritesPlaylist = IptvPlaylist(
+    id: 'iptv-favorites',
+    name: 'Favorites',
+    url: 'favorites://',
+    addedAt: DateTime.fromMillisecondsSinceEpoch(0),
+  );
+
   // Focus nodes for DPAD
   final FocusNode _playlistFilterFocusNode = FocusNode(debugLabel: 'iptv-playlist-filter');
   final FocusNode _categoryFilterFocusNode = FocusNode(debugLabel: 'iptv-category-filter');
@@ -149,9 +163,15 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _loadFavorites() async {
-    final urls = await StorageService.getIptvFavoriteChannelUrls();
+    final favorites = await StorageService.getIptvFavoriteChannels();
     if (mounted) {
-      setState(() => _favoriteUrls = urls);
+      setState(() {
+        _favoriteUrls = favorites.keys.toSet();
+        _favoritePlaylistIds = {
+          for (final entry in favorites.entries)
+            entry.key: (entry.value['playlistId'] as String?) ?? '',
+        };
+      });
     }
   }
 
@@ -162,7 +182,9 @@ class IptvResultsViewState extends State<IptvResultsView>
       channelName: channel.name,
       logoUrl: channel.logoUrl,
       group: channel.group,
-      playlistId: _selectedPlaylist?.id,
+      playlistId: (_selectedPlaylist?.isFavorites ?? false)
+          ? _favoritePlaylistIds[channel.url]
+          : _selectedPlaylist?.id,
     );
     if (mounted) {
       setState(() {
@@ -204,17 +226,37 @@ class IptvResultsViewState extends State<IptvResultsView>
         await StremioIptvService.instance.getVirtualPlaylists();
     playlists = [...playlists, ...virtualPlaylists];
 
+    // The virtual Favorites playlist leads the picker. Hidden only when there
+    // is nothing at all (no playlists AND no favorites), so the add-a-playlist
+    // empty state can still do its job.
+    final hasFavorites =
+        (await StorageService.getIptvFavoriteChannelUrls()).isNotEmpty;
+    if (hasFavorites || playlists.isNotEmpty) {
+      playlists = [_favoritesPlaylist, ...playlists];
+    }
+
     if (!mounted) return;
 
-    // Determine the new selected playlist
+    // Determine the new selected playlist. With at least one starred channel,
+    // Favorites is the landing selection; otherwise fall back to the stored
+    // default (never landing on an empty Favorites view).
     IptvPlaylist? newSelectedPlaylist;
-    if (defaultPlaylistId != null && playlists.isNotEmpty) {
+    IptvPlaylist? firstRealPlaylist;
+    for (final p in playlists) {
+      if (!p.isFavorites) {
+        firstRealPlaylist = p;
+        break;
+      }
+    }
+    if (hasFavorites) {
+      newSelectedPlaylist = _favoritesPlaylist;
+    } else if (defaultPlaylistId != null && playlists.isNotEmpty) {
       newSelectedPlaylist = playlists.firstWhere(
         (p) => p.id == defaultPlaylistId,
-        orElse: () => playlists.first,
+        orElse: () => firstRealPlaylist ?? playlists.first,
       );
     } else if (playlists.isNotEmpty) {
-      newSelectedPlaylist = playlists.first;
+      newSelectedPlaylist = firstRealPlaylist ?? playlists.first;
     }
 
     // Check if playlist changed
@@ -298,9 +340,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     // The stage's channel belongs to the outgoing playlist.
     _clearPreview();
 
-    // Determine source: Stremio addon, XC API, local file, or URL
+    // Determine source: favorites store, Stremio addon, XC API, local file,
+    // or URL
     final IptvParseResult result;
-    if (playlist.isStremioAddon) {
+    if (playlist.isFavorites) {
+      result = await _buildFavoritesResult();
+    } else if (playlist.isStremioAddon) {
       final addonId = StremioIptvService.addonIdFromPlaylist(playlist);
       result = addonId == null
           ? const IptvParseResult(
@@ -343,8 +388,11 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     // Migrate favorites saved under older URL formats (e.g. before the
     // Xtream /live/ URL fix) to the freshly fetched URLs, then reload so
-    // the stars line up.
-    await StorageService.reconcileIptvFavoriteUrls(result.channels);
+    // the stars line up. (The Favorites view's channels ARE the store —
+    // nothing to migrate against.)
+    if (!playlist.isFavorites) {
+      await StorageService.reconcileIptvFavoriteUrls(result.channels);
+    }
     await _loadFavorites();
     if (!mounted || ticket != _loadTicket) return;
 
@@ -395,6 +443,33 @@ class IptvResultsViewState extends State<IptvResultsView>
       _categories = categories;
     });
     _applyFilters();
+  }
+
+  /// Build the virtual Favorites playlist from the starred-channel store.
+  /// Metadata was captured at star time, so no fetch is needed; Stremio-keyed
+  /// URLs still resolve on focus/play exactly like anywhere else.
+  Future<IptvParseResult> _buildFavoritesResult() async {
+    final favorites = await StorageService.getIptvFavoriteChannels();
+    final channels = favorites.entries.map((entry) {
+      final meta = entry.value;
+      final name = (meta['name'] as String?) ?? '';
+      final logoUrl = (meta['logoUrl'] as String?) ?? '';
+      final group = (meta['group'] as String?) ?? '';
+      return IptvChannel(
+        name: name.isEmpty ? 'Unknown Channel' : name,
+        url: entry.key,
+        logoUrl: logoUrl.isEmpty ? null : logoUrl,
+        group: group.isEmpty ? null : group,
+        duration: -1,
+      );
+    }).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final categories = <String>{
+      for (final channel in channels)
+        if (channel.group != null) channel.group!,
+    }.toList()
+      ..sort();
+    return IptvParseResult(channels: channels, categories: categories);
   }
 
   void _applyFilters() {
@@ -1028,18 +1103,24 @@ class IptvResultsViewState extends State<IptvResultsView>
           ),
         );
       }
+      final isFavoritesView = _selectedPlaylist?.isFavorites ?? false;
+      final unfiltered = widget.searchQuery.isEmpty && _selectedCategory == null;
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.live_tv_outlined,
+              isFavoritesView && unfiltered
+                  ? Icons.star_border
+                  : Icons.live_tv_outlined,
               size: 64,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
-              'No channels found',
+              isFavoritesView && unfiltered
+                  ? 'No favorites yet'
+                  : 'No channels found',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -1048,7 +1129,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                   ? 'Try a different search term'
                   : _selectedCategory != null
                       ? 'Try a different category'
-                      : 'This playlist appears to be empty',
+                      : isFavoritesView
+                          ? 'Star channels in any playlist and they show up here'
+                          : 'This playlist appears to be empty',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),

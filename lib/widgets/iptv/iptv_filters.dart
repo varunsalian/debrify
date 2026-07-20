@@ -279,11 +279,13 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                widget.selectedPlaylist?.isXtreamCodes == true
-                    ? Icons.login
-                    : widget.selectedPlaylist?.isLocalFile == true
-                        ? Icons.folder
-                        : Icons.playlist_play,
+                widget.selectedPlaylist?.isFavorites == true
+                    ? Icons.star_rounded
+                    : widget.selectedPlaylist?.isXtreamCodes == true
+                        ? Icons.login
+                        : widget.selectedPlaylist?.isLocalFile == true
+                            ? Icons.folder
+                            : Icons.playlist_play,
                 size: 16,
                 color: kSeeAllAccent2,
               ),
@@ -755,14 +757,18 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
                 return _FocusablePickerTile(
                   focusNode: index < _focusNodes.length ? _focusNodes[index] : null,
                   label: playlist.name,
-                  subtitle: playlist.isXtreamCodes
-                      ? 'Xtream Codes - ${playlist.serverUrl}'
-                      : playlist.isLocalFile ? 'Local file' : playlist.url,
+                  subtitle: playlist.isFavorites
+                      ? 'Your starred channels'
+                      : playlist.isXtreamCodes
+                          ? 'Xtream Codes - ${playlist.serverUrl}'
+                          : playlist.isLocalFile ? 'Local file' : playlist.url,
                   icon: isSelected
                       ? Icons.check_circle
-                      : playlist.isXtreamCodes
-                          ? Icons.login
-                          : (playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
+                      : playlist.isFavorites
+                          ? Icons.star_rounded
+                          : playlist.isXtreamCodes
+                              ? Icons.login
+                              : (playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
                   isSelected: isSelected,
                   onTap: () => Navigator.of(context).pop(playlist),
                   onKeyEvent: (node, event) => _handleKeyEvent(
