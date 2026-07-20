@@ -416,21 +416,34 @@ class AndroidTvPlayerBridge {
           // per-session provider, the resolver service holds the caches.
           final iptvArgs = call.arguments;
           String? iptvChannelUrl;
+          String? iptvChannelName;
           if (iptvArgs is Map) {
             final raw = iptvArgs['channelUrl'];
             if (raw is String) iptvChannelUrl = raw;
+            final rawName = iptvArgs['channelName'];
+            if (rawName is String && rawName.trim().isNotEmpty) {
+              iptvChannelName = rawName.trim();
+            }
           }
           if (iptvChannelUrl == null ||
               !StremioIptvService.isStremioChannelUrl(iptvChannelUrl)) {
             return null;
           }
           try {
+            // A native zap is an explicit play intent — bypass a cached-empty
+            // resolve. An empty answer ships a specific toast message
+            // (addon unreachable vs. no streams) for the native side to show.
             final candidates = await StremioIptvService.instance
-                .resolveCandidates(iptvChannelUrl);
+                .resolveCandidates(iptvChannelUrl, refreshIfEmpty: true);
             return {
               'candidates': [
                 for (final c in candidates) {'url': c.url, 'label': c.label},
               ],
+              if (candidates.isEmpty)
+                'message': StremioIptvService.instance.unplayableMessage(
+                  iptvChannelUrl,
+                  iptvChannelName ?? 'This channel',
+                ),
             };
           } catch (e) {
             throw PlatformException(

@@ -2033,13 +2033,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       List<IptvChannel>? iptvChannels;
       int? iptvStartIndex;
       if (StremioIptvService.isStremioChannelUrl(channel.url)) {
-        final candidates =
-            await StremioIptvService.instance.resolveCandidates(channel.url);
+        // Explicit play intent: bypass a cached-empty resolve and explain an
+        // empty answer specifically (addon unreachable vs. no streams).
+        final candidates = await StremioIptvService.instance
+            .resolveCandidates(channel.url, refreshIfEmpty: true);
         if (!mounted) return;
         if (candidates.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${channel.name} is not playable right now'),
+              content: Text(
+                StremioIptvService.instance
+                    .unplayableMessage(channel.url, channel.name),
+              ),
             ),
           );
           return;

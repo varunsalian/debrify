@@ -15,6 +15,24 @@ class StremioIptvCandidate {
   const StremioIptvCandidate({required this.url, required this.label});
 }
 
+/// Why a channel resolved to zero playable candidates. Drives the specific
+/// user-facing message at the explicit-play sites; the preview stage stays
+/// silent regardless of reason.
+enum StremioResolveFailure {
+  /// The addon behind the channel key is no longer installed.
+  notInstalled,
+
+  /// The stream request failed (network down, addon server unreachable).
+  unreachable,
+
+  /// The addon answered but has no streams for this channel.
+  noStreams,
+
+  /// The addon answered with streams, but none are direct URLs our players
+  /// can treat as a live feed (torrents / external links / YouTube ids).
+  noDirectStreams,
+}
+
 /// Bridges installed Stremio addons' live-TV catalogs into the IPTV page.
 ///
 /// Each enabled addon with at least one browsable `tv` catalog appears as a
@@ -68,6 +86,10 @@ class StremioIptvService {
   // Full channel lists per addon id (the catalog fan-out is expensive).
   final Map<String, ({IptvParseResult result, DateTime at})> _channelsCache =
       {};
+  // Why the latest resolve of a key came back empty (cleared on success) —
+  // consumed by [unplayableMessage].
+  final Map<String, ({StremioResolveFailure reason, String? addonName})>
+      _lastFailure = {};
 
   // ── Channel key codec ─────────────────────────────────────────────────────
 
@@ -319,14 +341,26 @@ class StremioIptvService {
 
   /// Resolve a channel key to its ordered candidate streams (a validated
   /// winner first when one is cached). Empty means "not playable right now" —
-  /// callers treat that like a dead M3U channel. Never throws.
+  /// callers treat that like a dead M3U channel ([unplayableMessage] explains
+  /// why). Never throws.
+  ///
+  /// [refreshIfEmpty] is for explicit play intents (OK press, channel zap):
+  /// a cached EMPTY resolve is dropped and the addon asked again — the user
+  /// said "try again", so a 5-minute-old "nothing" must not answer for the
+  /// addon. Cached non-empty lists are still served as-is, and passive
+  /// callers (the preview's focus sweeps) leave the flag off so they can't
+  /// hammer the addon.
   Future<List<StremioIptvCandidate>> resolveCandidates(
-    String channelKey,
-  ) async {
+    String channelKey, {
+    bool refreshIfEmpty = false,
+  }) async {
     final cached = _candidatesCache[channelKey];
     if (cached != null &&
         DateTime.now().difference(cached.at) < _candidatesTtl) {
-      return _winnerFirst(channelKey, cached.candidates);
+      if (cached.candidates.isNotEmpty || !refreshIfEmpty) {
+        return _winnerFirst(channelKey, cached.candidates);
+      }
+      _candidatesCache.remove(channelKey);
     }
     final inFlight = _inFlight[channelKey];
     if (inFlight != null) return inFlight;
@@ -341,16 +375,20 @@ class StremioIptvService {
   Future<List<StremioIptvCandidate>> _resolve(String channelKey) async {
     final key = parseChannelKey(channelKey);
     if (key == null) return const [];
+    StremioAddon? addon;
     try {
       final addons = await _stremio.getAddons();
-      StremioAddon? addon;
       for (final a in addons) {
         if (a.id == key.addonId) {
           addon = a;
           break;
         }
       }
-      if (addon == null) return const [];
+      if (addon == null) {
+        _lastFailure[channelKey] =
+            (reason: StremioResolveFailure.notInstalled, addonName: null);
+        return const [];
+      }
 
       final streams = await _stremio.fetchStreamsForContentId(
         addon,
@@ -373,12 +411,48 @@ class StremioIptvService {
           ),
         );
       }
+      if (candidates.isEmpty) {
+        _lastFailure[channelKey] = (
+          reason: streams.isEmpty
+              ? StremioResolveFailure.noStreams
+              : StremioResolveFailure.noDirectStreams,
+          addonName: addon.name,
+        );
+      } else {
+        _lastFailure.remove(channelKey);
+      }
       _candidatesCache[channelKey] =
           (candidates: candidates, at: DateTime.now());
       return _winnerFirst(channelKey, candidates);
     } catch (e) {
       debugPrint('StremioIptvService: resolve failed for $channelKey: $e');
+      _lastFailure[channelKey] = (
+        reason: StremioResolveFailure.unreachable,
+        addonName: addon?.name,
+      );
       return const [];
+    }
+  }
+
+  /// User-facing explanation for the latest empty resolve of [channelKey] —
+  /// specific when the reason is known, the old generic line otherwise.
+  /// [channelName] is the display name the user recognizes.
+  String unplayableMessage(String channelKey, String channelName) {
+    final failure = _lastFailure[channelKey];
+    final addonName = failure?.addonName;
+    switch (failure?.reason) {
+      case StremioResolveFailure.notInstalled:
+        return 'The addon behind $channelName is no longer installed';
+      case StremioResolveFailure.unreachable:
+        return "Couldn't reach ${addonName ?? 'the addon'} — "
+            'check your connection and try again';
+      case StremioResolveFailure.noStreams:
+        return "${addonName ?? 'The addon'} has no stream for "
+            '$channelName right now';
+      case StremioResolveFailure.noDirectStreams:
+        return "$channelName's streams aren't in a format Debrify can play";
+      case null:
+        return '$channelName is not playable right now';
     }
   }
 

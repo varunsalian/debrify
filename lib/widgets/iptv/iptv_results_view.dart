@@ -474,12 +474,20 @@ class IptvResultsViewState extends State<IptvResultsView>
     // both players resolve further stremio-keyed channels on switch.
     var initialUrl = channel.url;
     if (StremioIptvService.isStremioChannelUrl(channel.url)) {
-      final candidates =
-          await StremioIptvService.instance.resolveCandidates(channel.url);
+      // Explicit play intent: a cached "nothing playable" is re-checked
+      // fresh, and an empty answer explains itself (addon down vs. no
+      // streams) instead of a blanket "not playable".
+      final candidates = await StremioIptvService.instance
+          .resolveCandidates(channel.url, refreshIfEmpty: true);
       if (!mounted) return;
       if (candidates.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${channel.name} is not playable right now')),
+          SnackBar(
+            content: Text(
+              StremioIptvService.instance
+                  .unplayableMessage(channel.url, channel.name),
+            ),
+          ),
         );
         return;
       }

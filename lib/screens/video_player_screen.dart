@@ -2506,8 +2506,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } catch (_) {}
       // Stremio-addon channel: resolve its candidate URLs and walk them until
       // one produces playback — the same serial ladder the IPTV preview runs.
-      final candidates =
-          await StremioIptvService.instance.resolveCandidates(channel.url);
+      // A zap is an explicit play intent, so a cached-empty resolve is
+      // re-checked fresh instead of replaying a stale "nothing".
+      final candidates = await StremioIptvService.instance
+          .resolveCandidates(channel.url, refreshIfEmpty: true);
       if (!mounted || ticket != _iptvSwitchTicket) return;
       // The candidates double as the source sheet's rows for this channel.
       _setIptvSources(channel.url, candidates);

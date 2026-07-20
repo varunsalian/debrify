@@ -5148,12 +5148,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // previous channel playing under the new channel's UI state.
         player?.stop()
 
-        requestIptvStreamUrls(entry.url) { candidates ->
+        requestIptvStreamUrls(entry.url, entry.name) { candidates, message ->
             runOnUiThread {
                 if (token != iptvStremioToken || isFinishing) return@runOnUiThread
                 if (candidates.isEmpty()) {
                     android.util.Log.w("AndroidTvPlayer", "No playable streams for ${entry.name}")
-                    Toast.makeText(this, "${entry.name} is not playable right now", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this,
+                        message ?: "${entry.name} is not playable right now",
+                        Toast.LENGTH_LONG,
+                    ).show()
                     return@runOnUiThread
                 }
                 iptvStremioChannelKey = entry.url
@@ -5260,7 +5264,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             reportIptvStreamResult(key, null, false)
             iptvStremioWinnerReported = false
             val name = iptvChannels.getOrNull(currentIptvIndex)?.name ?: "Channel"
-            Toast.makeText(this, "$name is not playable right now", Toast.LENGTH_SHORT).show()
+            // Distinct from the "resolve came back empty" toast: links existed
+            // but every one died. Point at the escape hatch we kept alive.
+            val attempted = candidates.size
+            val message = if (attempted == 1)
+                "$name: its only source didn't play — pick it in Sources to retry"
+            else
+                "$name: tried all $attempted sources, none played — pick one in Sources to retry"
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             return true
         }
         iptvStremioCandidateIndex = next
@@ -5315,13 +5326,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         reportIptvStreamResult(key, url, true)
     }
 
-    /** Ask Flutter to resolve a stremio-tv:// channel key into labeled stream links. */
-    private fun requestIptvStreamUrls(channelUrl: String, callback: (List<IptvStremioCandidate>) -> Unit) {
+    /**
+     * Ask Flutter to resolve a stremio-tv:// channel key into labeled stream
+     * links. On an empty result the callback's second argument carries a
+     * user-facing reason ("Couldn't reach <addon>…") when Flutter knows one.
+     */
+    private fun requestIptvStreamUrls(
+        channelUrl: String,
+        channelName: String?,
+        callback: (List<IptvStremioCandidate>, String?) -> Unit,
+    ) {
         try {
-            val args = hashMapOf<String, Any?>("channelUrl" to channelUrl)
+            val args = hashMapOf<String, Any?>(
+                "channelUrl" to channelUrl,
+                "channelName" to channelName,
+            )
             val channel = MainActivity.getAndroidTvPlayerChannel()
             if (channel == null) {
-                callback(emptyList())
+                callback(emptyList(), null)
                 return
             }
             channel.invokeMethod(
@@ -5336,22 +5358,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             val label = (m["label"] as? String)?.takeIf { it.isNotBlank() } ?: "Source"
                             IptvStremioCandidate(u, label)
                         } ?: emptyList()
-                        callback(candidates)
+                        val message = (map?.get("message") as? String)?.takeIf { it.isNotBlank() }
+                        callback(candidates, message)
                     }
 
                     override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
                         android.util.Log.e("AndroidTvPlayer", "requestIptvStreamUrls error: $errorCode - $errorMessage")
-                        callback(emptyList())
+                        callback(emptyList(), null)
                     }
 
                     override fun notImplemented() {
-                        callback(emptyList())
+                        callback(emptyList(), null)
                     }
                 }
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "requestIptvStreamUrls exception: ${e.message}", e)
-            callback(emptyList())
+            callback(emptyList(), null)
         }
     }
 
