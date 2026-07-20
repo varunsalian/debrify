@@ -348,10 +348,16 @@ class TorrentPlaybackService {
     // [provider] when the caller resolved one (torrent chain); otherwise it
     // stays on the bound-sources → addon-stream path this play came from.
     Future<void> playDirect(Torrent direct) async {
-      if (ov != null) closeLoading();
-      await VideoPlayerLauncher.push(
-        context,
-        _playerArgs(
+      // The loader (when one is up) stays through the launch prep; the
+      // launcher dismisses it the moment the player takes the screen, and
+      // guarantees the dismissal on failure so it can never linger. The
+      // finally only covers a throw BEFORE push() takes the callback (args
+      // built up front for exactly that reason) — after which the launcher
+      // owns the dismissal.
+      final loader = ov;
+      var handedToLauncher = false;
+      try {
+        final args = _playerArgs(
           videoUrl: direct.directUrl!,
           title: direct.displayTitle,
           subtitle: direct.source.isNotEmpty ? direct.source : null,
@@ -360,10 +366,19 @@ class TorrentPlaybackService {
           resolveSourceToPlaylist:
               torrents.length > 1 ? _lazyProviderResolver() : null,
           meta: meta,
-        ),
-        onQuickPlayNextEpisode:
-            _nextEpisodeHandlerFor(context, meta, provider: provider),
-      );
+        );
+        final nextEpisodeHandler =
+            _nextEpisodeHandlerFor(context, meta, provider: provider);
+        handedToLauncher = loader != null;
+        await VideoPlayerLauncher.push(
+          context,
+          args,
+          onPlayerHandoff: loader?.dismiss,
+          onQuickPlayNextEpisode: nextEpisodeHandler,
+        );
+      } finally {
+        if (!handedToLauncher) loader?.dismiss();
+      }
     }
 
     // A direct-URL addon stream, if present, is the cheapest instant play — and
@@ -485,16 +500,19 @@ class TorrentPlaybackService {
     );
     if (cancelled()) return; // dismissed by the Cancel tap; nothing more to do
     loader.setStage(PlayLoadStage.starting);
-    closeLoading();
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      closeLoading();
+      return;
+    }
     if (res == null) {
       // Every probe failed — a ladder-demoted direct link still guarantees
-      // the play the pre-ladder flow would have delivered (dismiss above is
-      // idempotent, so playDirect's own closeLoading is harmless).
+      // the play the pre-ladder flow would have delivered (playDirect keeps
+      // the loader up and hands its dismissal to the launcher).
       if (fallbackDirect != null) {
         await playDirect(fallbackDirect);
         return;
       }
+      closeLoading();
       _snack(context,
           'No instantly-playable source found. Open Sources to pick or download one.');
       return;
@@ -508,6 +526,7 @@ class TorrentPlaybackService {
       meta: meta,
       sources: torrents,
       sourceIndex: idx < 0 ? 0 : idx,
+      overlay: loader,
     );
   }
 
@@ -856,13 +875,15 @@ class TorrentPlaybackService {
         }
         if (packResolved != null && packWinner != null) {
           overlay.setStage(PlayLoadStage.starting);
-          closeLoading();
+          // No closeLoading here: the loader stays up through the launch prep
+          // and _launch has it dismissed when the player takes the screen.
           final idx = packs.indexOf(packWinner);
           await _launch(context, packResolved, packWinner.displayTitle,
               provider: provider,
               meta: meta,
               sources: packs,
-              sourceIndex: idx < 0 ? 0 : idx);
+              sourceIndex: idx < 0 ? 0 : idx,
+              overlay: overlay);
           return;
         }
         // No pack was instantly playable — fall through to the episode search.
@@ -1495,10 +1516,16 @@ class TorrentPlaybackService {
         if (cancel.cancelled) return true;
         if (r != null) {
           overlay.setStage(PlayLoadStage.starting);
-          closeLoading();
-          if (!context.mounted) return false;
+          if (!context.mounted) {
+            closeLoading();
+            return false;
+          }
+          // Loader stays up through the launch prep; _launch has it dismissed
+          // when the player takes the screen.
           await _launch(context, r, r.title,
-              provider: SeriesSource.localService, meta: meta);
+              provider: SeriesSource.localService,
+              meta: meta,
+              overlay: overlay);
           return true;
         }
         if (!context.mounted) {
@@ -1574,10 +1601,18 @@ class TorrentPlaybackService {
       if (cancel.cancelled) return true;
       if (res != null) {
         overlay.setStage(PlayLoadStage.starting);
-        closeLoading();
-        if (!context.mounted) return false;
+        if (!context.mounted) {
+          closeLoading();
+          return false;
+        }
+        // Loader stays up through the launch prep; _launch has it dismissed
+        // when the player takes the screen.
         await _launch(context, res, t.displayTitle,
-            provider: prov, meta: meta, sources: [t], sourceIndex: 0);
+            provider: prov,
+            meta: meta,
+            sources: [t],
+            sourceIndex: 0,
+            overlay: overlay);
         return true;
       }
       if (!context.mounted) {
@@ -2307,51 +2342,64 @@ class TorrentPlaybackService {
     PlaybackMeta? meta,
     List<Torrent>? sources,
     int sourceIndex = 0,
+    // The play flow's still-showing loader, when the caller kept it up. It
+    // covers the whole launch prep (auto-bind writes, the TV payload build
+    // with its debrid link resolution, the native activity start) and the
+    // launcher dismisses it only when the player actually takes the screen —
+    // closing the detail-screen flash between "loading" and "playing".
+    PipelineLoadingOverlay? overlay,
   }) async {
-    // Secondary metadata line (file size / source / file count), matching Home.
-    final winner = (sources != null &&
-            sourceIndex >= 0 &&
-            sourceIndex < sources.length)
-        ? sources[sourceIndex]
-        : null;
-    String? subtitleLine;
-    if (r.hasPlaylist) {
-      subtitleLine = '${r.playlist!.length} files';
-    } else if (winner != null) {
-      subtitleLine = winner.sizeBytes > 0
-          ? Formatters.formatFileSize(winner.sizeBytes)
-          : (winner.source.isNotEmpty ? winner.source : null);
-    }
-    // Organize the playlist as a TV series when the file names look like one, so
-    // a keyword-launched season pack groups by season/episode and "next" walks
-    // episode order — parity with the old screen. Scoped to KEYWORD play
-    // (meta == null): catalog already drives series/movie view from its own
-    // contentType, so this shared launcher must not override that. We pass
-    // `series` only when detected and leave it null otherwise (null lets the
-    // launcher's contentType fallback win).
-    final PlaylistViewMode? viewMode =
-        (meta == null && r.hasPlaylist && _isSeriesPlaylist(r.playlist!))
-            ? PlaylistViewMode.series
-            : null;
-    // VR hand-off (parity with the old search screen): for a single video file
-    // played from KEYWORD search (meta == null), when the user's VR mode says
-    // so, play in DeoVR instead of the in-app player. Scoped to keyword so this
-    // shared launcher doesn't newly divert catalog board plays. Packs keep the
-    // normal player (DeoVR takes one video).
-    if (meta == null && !r.hasPlaylist && await _shouldUseDeoVR(title)) {
+    // Once push() takes the handoff callback the LAUNCHER owns the dismissal
+    // (player-visible time, or its own always-fires safety net); the finally
+    // here only covers exits before that point. dismiss() is idempotent.
+    var loaderHandedToLauncher = false;
+    try {
+      // Secondary metadata line (file size / source / file count), matching Home.
+      final winner = (sources != null &&
+              sourceIndex >= 0 &&
+              sourceIndex < sources.length)
+          ? sources[sourceIndex]
+          : null;
+      String? subtitleLine;
+      if (r.hasPlaylist) {
+        subtitleLine = '${r.playlist!.length} files';
+      } else if (winner != null) {
+        subtitleLine = winner.sizeBytes > 0
+            ? Formatters.formatFileSize(winner.sizeBytes)
+            : (winner.source.isNotEmpty ? winner.source : null);
+      }
+      // Organize the playlist as a TV series when the file names look like one, so
+      // a keyword-launched season pack groups by season/episode and "next" walks
+      // episode order — parity with the old screen. Scoped to KEYWORD play
+      // (meta == null): catalog already drives series/movie view from its own
+      // contentType, so this shared launcher must not override that. We pass
+      // `series` only when detected and leave it null otherwise (null lets the
+      // launcher's contentType fallback win).
+      final PlaylistViewMode? viewMode =
+          (meta == null && r.hasPlaylist && _isSeriesPlaylist(r.playlist!))
+              ? PlaylistViewMode.series
+              : null;
+      // VR hand-off (parity with the old search screen): for a single video file
+      // played from KEYWORD search (meta == null), when the user's VR mode says
+      // so, play in DeoVR instead of the in-app player. Scoped to keyword so this
+      // shared launcher doesn't newly divert catalog board plays. Packs keep the
+      // normal player (DeoVR takes one video).
+      if (meta == null && !r.hasPlaylist && await _shouldUseDeoVR(title)) {
+        // DeoVR runs its own dialog flow — drop the loader before it.
+        overlay?.dismiss();
+        if (!context.mounted) return;
+        await _launchWithDeoVR(context, videoUrl: r.playUrl!, filename: title);
+        return;
+      }
+      // Remember a catalog movie's source before handing off to the player, so the
+      // binding is saved even if the screen tears down during playback. The series
+      // counterpart is gated by the series auto-pin setting (on by default).
+      await _autoBindMovieOnPlay(meta, winner, provider);
+      await _autoBindSeriesOnPlay(meta, winner, provider);
       if (!context.mounted) return;
-      await _launchWithDeoVR(context, videoUrl: r.playUrl!, filename: title);
-      return;
-    }
-    // Remember a catalog movie's source before handing off to the player, so the
-    // binding is saved even if the screen tears down during playback. The series
-    // counterpart is gated by the series auto-pin setting (on by default).
-    await _autoBindMovieOnPlay(meta, winner, provider);
-    await _autoBindSeriesOnPlay(meta, winner, provider);
-    if (!context.mounted) return;
-    await VideoPlayerLauncher.push(
-      context,
-      _playerArgs(
+      // Args built BEFORE the flag flips: a throw while constructing them
+      // must still hit the finally's dismiss, since push() never ran.
+      final args = _playerArgs(
         videoUrl: r.playUrl!,
         title: title,
         subtitle: subtitleLine,
@@ -2366,13 +2414,21 @@ class TorrentPlaybackService {
         rdTorrentId: r.rdTorrentId,
         torboxTorrentId: r.torboxTorrentId,
         viewMode: viewMode,
-      ),
+      );
       // 'local' isn't a debrid provider the advance could search with — the
       // null makes the advance replay bound sources first, then addon streams.
-      onQuickPlayNextEpisode: _nextEpisodeHandlerFor(context, meta,
-          provider:
-              provider == SeriesSource.localService ? null : provider),
-    );
+      final nextEpisodeHandler = _nextEpisodeHandlerFor(context, meta,
+          provider: provider == SeriesSource.localService ? null : provider);
+      loaderHandedToLauncher = overlay != null;
+      await VideoPlayerLauncher.push(
+        context,
+        args,
+        onPlayerHandoff: overlay?.dismiss,
+        onQuickPlayNextEpisode: nextEpisodeHandler,
+      );
+    } finally {
+      if (!loaderHandedToLauncher) overlay?.dismiss();
+    }
   }
 
   /// Whether VR playback (DeoVR) should be used for [filename], per the user's

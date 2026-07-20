@@ -23,6 +23,7 @@ class PipelineLoadingOverlay {
   final NavigatorState _nav;
   final ValueNotifier<_PlState> _state;
   final List<PlayLoadStage> _steps;
+  RawDialogRoute<void>? _route;
   bool _dismissed = false;
 
   PipelineLoadingOverlay._(this._nav, this._state, this._steps);
@@ -53,8 +54,11 @@ class PipelineLoadingOverlay {
     final handle = PipelineLoadingOverlay._(nav, state, steps);
     final tv = PlatformUtil.isAndroidTvCached;
 
-    showGeneralDialog<void>(
-      context: context,
+    // Pushed as an explicit route (not showGeneralDialog) so [dismiss] can
+    // target THIS route: the play flow now keeps the loader up while the
+    // player route/activity launches on top of it, and a blind pop() at that
+    // point could pop the wrong screen.
+    final route = RawDialogRoute<void>(
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       transitionDuration: const Duration(milliseconds: 280),
@@ -92,6 +96,8 @@ class PipelineLoadingOverlay {
         child: child,
       ),
     );
+    handle._route = route;
+    nav.push(route);
     return handle;
   }
 
@@ -130,10 +136,19 @@ class PipelineLoadingOverlay {
     );
   }
 
+  /// Idempotent, and safe at any point in the stack's life: pops normally
+  /// when the loader is topmost, and removes its own route (never a blind
+  /// pop) when something — e.g. the player route — was pushed on top of it.
   void dismiss() {
     if (_dismissed) return;
     _dismissed = true;
-    if (_nav.mounted && _nav.canPop()) _nav.pop();
+    final route = _route;
+    if (route == null || !_nav.mounted) return;
+    if (route.isCurrent) {
+      _nav.pop();
+    } else if (route.isActive) {
+      _nav.removeRoute(route);
+    }
   }
 }
 

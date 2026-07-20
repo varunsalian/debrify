@@ -483,11 +483,62 @@ class VideoPlayerLauncher {
     }
   }
 
+  /// [onPlayerHandoff] (optional) fires exactly once, at the moment a player
+  /// surface actually takes over the screen: synchronously before the in-app
+  /// player route is pushed, or — for external activities (Android TV native
+  /// player, DeoVR, external apps) — once that activity covers the app
+  /// (bounded by a timeout). It also fires if the launch dies, so a play-flow
+  /// loading overlay handed here can stay up through the launch prep yet can
+  /// never be left covering the app.
   static Future<void> push(
     BuildContext context,
     VideoPlayerLaunchArgs originalArgs, {
     Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
     bool isTrailer = false,
+    VoidCallback? onPlayerHandoff,
+  }) async {
+    // Exactly-once relay for [onPlayerHandoff]. _push fires one of these at
+    // its launch points; the finally is the safety net so an exception mid
+    // launch-prep can never strand the caller's loader.
+    var handedOff = false;
+    void handoffNow() {
+      if (handedOff) return;
+      handedOff = true;
+      onPlayerHandoff?.call();
+    }
+
+    // External-activity launches return control immediately while the
+    // activity is still opening. Firing the handoff right away would drop the
+    // caller's loader and flash the underlying screen for the length of the
+    // launch transition — so wait until the activity actually covers the app.
+    void handoffWhenCovered() {
+      if (handedOff) return;
+      handedOff = true;
+      final callback = onPlayerHandoff;
+      if (callback != null) _runWhenCoveredByExternalActivity(callback);
+    }
+
+    try {
+      await _push(
+        context,
+        originalArgs,
+        onQuickPlayNextEpisode: onQuickPlayNextEpisode,
+        isTrailer: isTrailer,
+        handoffNow: handoffNow,
+        handoffWhenCovered: handoffWhenCovered,
+      );
+    } finally {
+      handoffNow();
+    }
+  }
+
+  static Future<void> _push(
+    BuildContext context,
+    VideoPlayerLaunchArgs originalArgs, {
+    Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
+    bool isTrailer = false,
+    required VoidCallback handoffNow,
+    required VoidCallback handoffWhenCovered,
   }) async {
     // If "Sync Catalog Items" is enabled and content has IMDB ID, enable scrobble
     var args = originalArgs;
@@ -625,6 +676,7 @@ class VideoPlayerLauncher {
     if (!args.disableExternalPlayer && defaultPlayerMode == 'external') {
       final launched = await _launchWithExternalPlayer(context, args);
       if (launched) {
+        handoffWhenCovered();
         MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
@@ -634,6 +686,7 @@ class VideoPlayerLauncher {
         Platform.isAndroid) {
       final launched = await _launchWithDeoVR(context, args);
       if (launched) {
+        handoffWhenCovered();
         MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
@@ -648,11 +701,16 @@ class VideoPlayerLauncher {
         isTrailer: isTrailer,
       );
       if (launched) {
+        handoffWhenCovered();
         MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
     }
 
+    // In-app player: pop the loader and push the player in the same frame, so
+    // there's no between-screens gap and the loader never sits under the
+    // player route.
+    handoffNow();
     final result = await Navigator.of(context).push<Map<String, dynamic>?>(
       MaterialPageRoute(builder: (_) => args.toWidget()),
     );
@@ -1158,6 +1216,33 @@ class VideoPlayerLauncher {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Runs [action] once another activity takes the foreground (first
+  /// lifecycle state away from resumed), or after a short timeout if that
+  /// never happens. Lets a play-flow loading overlay stay up through an
+  /// external-activity launch transition, dismissed only while it's hidden —
+  /// the timeout guarantees a launch that silently dies can't strand it.
+  static void _runWhenCoveredByExternalActivity(VoidCallback action) {
+    final binding = WidgetsBinding.instance;
+    if (binding.lifecycleState != AppLifecycleState.resumed) {
+      action();
+      return;
+    }
+    var done = false;
+    Timer? fallback;
+    late final _AppCoverObserver observer;
+    void finish() {
+      if (done) return;
+      done = true;
+      fallback?.cancel();
+      binding.removeObserver(observer);
+      action();
+    }
+
+    observer = _AppCoverObserver(onCovered: finish);
+    binding.addObserver(observer);
+    fallback = Timer(const Duration(seconds: 4), finish);
   }
 
   static String _analyticsProviderLabel(VideoPlayerLaunchArgs args) {
@@ -3390,4 +3475,17 @@ class _NavigationMaps {
   final Map<int, int> prevMap;
 
   const _NavigationMaps({required this.nextMap, required this.prevMap});
+}
+
+/// Fires [onCovered] on the first lifecycle change away from resumed — i.e.
+/// when the launched activity (native TV player / external app) takes the
+/// foreground. One-shot; the caller removes it via the callback.
+class _AppCoverObserver with WidgetsBindingObserver {
+  _AppCoverObserver({required this.onCovered});
+  final VoidCallback onCovered;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) onCovered();
+  }
 }
