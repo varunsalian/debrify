@@ -275,9 +275,6 @@
     <!-- Stremio TV Channel Guide Overlay -->
     <include layout="@layout/view_stremio_tv_guide" />
 
-    <!-- Stremio Sources Panel Overlay -->
-    <include layout="@layout/view_stremio_sources_panel" />
-
     <!-- Loading/Tuning Stream Overlay -->
     <FrameLayout
         android:id="@+id/android_tv_next_overlay"
