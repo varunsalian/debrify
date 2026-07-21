@@ -17,7 +17,11 @@ class DebrifyImageCache {
   static final CacheManager manager = CacheManager(
     Config(
       'debrifyImageCache',
-      maxNrOfCacheObjects: 2000,
+      // flutter_cache_manager caps object COUNT, not bytes. On TV this store
+      // was reaching ~600 MB at 2000 objects because full-size backdrops
+      // (~2.6 MB each) share the slots with posters. Halving the slot count
+      // roughly halves the on-disk footprint — a proxy, not a hard byte cap.
+      maxNrOfCacheObjects: 1000,
       stalePeriod: const Duration(days: 30),
     ),
   );
