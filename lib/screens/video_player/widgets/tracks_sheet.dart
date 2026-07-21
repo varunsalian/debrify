@@ -9,21 +9,36 @@ import '../services/subtitle_settings_service.dart';
 
 class TracksSheetSubtitleSearchResult {
   final List<StremioSubtitle> subtitles;
+  final List<AddonSubtitleSlot>? slots;
   final String? selectedSubtitleId;
   final String? identityLabel;
+  // The manually-fixed identity these results were fetched for. The sheet
+  // adopts it so a later per-addon Retry re-fetches the SAME content, not
+  // the identity the sheet was opened with.
+  final String? imdbId;
+  final String? contentType;
+  final int? season;
+  final int? episode;
 
   const TracksSheetSubtitleSearchResult({
     required this.subtitles,
+    this.slots,
     this.selectedSubtitleId,
     this.identityLabel,
+    this.imdbId,
+    this.contentType,
+    this.season,
+    this.episode,
   });
 }
 
 /// Modal bottom sheet for selecting audio and subtitle tracks
 ///
-/// Provides a Netflix-style UI for switching between available
-/// audio tracks and subtitle options, with separate sections for
-/// embedded and addon subtitles.
+/// Netflix-style UI for switching between available audio tracks and
+/// subtitle options. Addon subtitles are grouped per addon (mirroring the
+/// Android TV player): each addon gets its own group with a live status
+/// badge — count, spinner while loading, warning on failure — and a
+/// failed addon can be retried individually.
 class TracksSheet {
   /// Shows the tracks selection bottom sheet
   static Future<void> show(
@@ -37,8 +52,8 @@ class TracksSheet {
     String? contentType,
     int? contentSeason,
     int? contentEpisode,
-    List<StremioSubtitle>? cachedSubtitles,
-    void Function(List<StremioSubtitle> subtitles)? onSubtitlesFetched,
+    List<AddonSubtitleSlot>? cachedAddonSlots,
+    void Function(List<AddonSubtitleSlot> slots)? onAddonSlotsFetched,
     String? selectedStremioSubtitleId,
     void Function(String? id)? onStremioSubtitleSelected,
     Future<String?> Function(StremioSubtitle subtitle)?
@@ -68,12 +83,53 @@ class TracksSheet {
         .loadAll();
     if (!context.mounted) return;
 
-    List<StremioSubtitle>? stremioSubtitles = cachedSubtitles;
+    // Cached slots may contain LOADING entries if the sheet was closed
+    // mid-fetch last time (the reopened sheet can't receive that old fetch's
+    // updates) — surface them as retriable failures instead of stuck spinners.
+    List<AddonSubtitleSlot>? addonSlots = cachedAddonSlots == null
+        ? null
+        : [
+            for (final s in cachedAddonSlots)
+              s.status == AddonSubtitleStatus.loading
+                  ? s.copyWith(
+                      status: AddonSubtitleStatus.failed,
+                      error: 'Fetch was interrupted',
+                    )
+                  : s,
+          ];
+    bool slotsFetchStarted = addonSlots != null;
     String? activeSubtitleIdentityLabel = subtitleIdentityLabel;
-    bool isLoadingStremioSubtitles = false;
+    // Identity the slot fetches run against; replaced by a "Fix show" search.
+    String? activeImdbId = contentImdbId;
+    String? activeContentType = contentType;
+    int? activeSeason = contentSeason;
+    int? activeEpisode = contentEpisode;
     bool isIdentifyingTitle = false;
     int subtitleFetchGeneration = 0;
     int selectedTabIndex = 0;
+    // Addons the user retried: a late snapshot from the initial full fetch
+    // must not clobber their (newer) retry outcome.
+    final retriedAddonIds = <String>{};
+
+    // Cache slots with the owner — but only fully-settled snapshots. Caching
+    // an in-flight list would (a) let an empty flat projection suppress the
+    // screen's subtitle auto-select and (b) strand LOADING entries in the
+    // cache if the sheet closes mid-fetch.
+    void cacheSlots(List<AddonSubtitleSlot> slots) {
+      if (slots.any((s) => s.status == AddonSubtitleStatus.loading)) return;
+      onAddonSlotsFetched?.call(slots);
+    }
+
+    // Land on the group owning the active addon subtitle, if known.
+    String selectedProviderId = 'emb';
+    if (selectedStremioSubtitleId != null && addonSlots != null) {
+      for (final slot in addonSlots) {
+        if (slot.subtitles.any((s) => s.id == selectedStremioSubtitleId)) {
+          selectedProviderId = slot.addonId;
+          break;
+        }
+      }
+    }
 
     await showModalBottomSheet(
       context: context,
@@ -82,38 +138,90 @@ class TracksSheet {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            // Fetch Stremio subtitles on first build
-            if (stremioSubtitles == null &&
-                !isLoadingStremioSubtitles &&
-                contentImdbId != null &&
-                contentType != null) {
-              isLoadingStremioSubtitles = true;
+            // Kick off the per-addon fetch on first build (cache miss).
+            final fetchImdbId = activeImdbId;
+            final fetchType = activeContentType;
+            if (!slotsFetchStarted && fetchImdbId != null && fetchType != null) {
+              slotsFetchStarted = true;
               final generation = ++subtitleFetchGeneration;
-              Future(() async {
-                try {
-                  final result = await StremioSubtitleService.instance
-                      .fetchSubtitles(
-                        type: contentType,
-                        imdbId: contentImdbId,
-                        season: contentSeason,
-                        episode: contentEpisode,
-                      );
-                  if (!context.mounted ||
-                      generation != subtitleFetchGeneration) {
-                    return;
+              StremioSubtitleService.instance
+                  .fetchSubtitleSlots(
+                type: fetchType,
+                imdbId: fetchImdbId,
+                season: activeSeason,
+                episode: activeEpisode,
+                onUpdate: (slots) {
+                  if (generation != subtitleFetchGeneration) return;
+                  // The service snapshot doesn't know about retries — keep
+                  // the locally newer outcome for any retried addon.
+                  var next = slots;
+                  final local = addonSlots;
+                  if (local != null && retriedAddonIds.isNotEmpty) {
+                    next = [
+                      for (final s in slots)
+                        if (retriedAddonIds.contains(s.addonId))
+                          local.firstWhere(
+                            (l) => l.addonId == s.addonId,
+                            orElse: () => s,
+                          )
+                        else
+                          s,
+                    ];
                   }
-                  setModalState(() {
-                    stremioSubtitles = result.subtitles;
-                    isLoadingStremioSubtitles = false;
-                  });
-                  onSubtitlesFetched?.call(result.subtitles);
-                } catch (e) {
-                  debugPrint('TracksSheet: Fetch error: $e');
-                  if (context.mounted &&
-                      generation == subtitleFetchGeneration) {
-                    setModalState(() => isLoadingStremioSubtitles = false);
-                  }
+                  // Cache runs even if the sheet was closed mid-fetch.
+                  cacheSlots(next);
+                  if (!context.mounted) return;
+                  setModalState(() => addonSlots = next);
+                },
+              )
+                  .catchError((Object e) {
+                // Addon-level errors are caught per-slot inside the service;
+                // this only fires when listing the addons itself blew up.
+                debugPrint('TracksSheet: Slot fetch failed: $e');
+                if (generation == subtitleFetchGeneration &&
+                    context.mounted) {
+                  setModalState(() => addonSlots ??= const []);
                 }
+                return const <AddonSubtitleSlot>[];
+              });
+            }
+
+            void retryAddon(String addonId) {
+              final slots = addonSlots;
+              final imdbId = activeImdbId;
+              final type = activeContentType;
+              if (slots == null || imdbId == null || type == null) {
+                return;
+              }
+              final idx = slots.indexWhere((s) => s.addonId == addonId);
+              if (idx < 0 || slots[idx].status == AddonSubtitleStatus.loading) {
+                return;
+              }
+              final generation = subtitleFetchGeneration;
+              retriedAddonIds.add(addonId);
+              setModalState(() {
+                addonSlots = List.of(slots)
+                  ..[idx] = slots[idx]
+                      .copyWith(status: AddonSubtitleStatus.loading);
+              });
+              StremioSubtitleService.instance
+                  .fetchSingleAddonSlot(
+                addonId: addonId,
+                type: type,
+                imdbId: imdbId,
+                season: activeSeason,
+                episode: activeEpisode,
+              )
+                  .then((settled) {
+                if (generation != subtitleFetchGeneration) return;
+                final cur = addonSlots;
+                if (cur == null) return;
+                final i = cur.indexWhere((s) => s.addonId == addonId);
+                if (i < 0) return;
+                final updated = List.of(cur)..[i] = settled;
+                cacheSlots(updated);
+                if (!context.mounted) return;
+                setModalState(() => addonSlots = updated);
               });
             }
 
@@ -203,12 +311,8 @@ class TracksSheet {
                           _buildTab(
                             icon: Icons.subtitles_rounded,
                             label: 'Subtitles',
-                            badge: isLoadingStremioSubtitles
-                                ? '...'
-                                : _getSubtitleCount(
-                                    embeddedSubs,
-                                    stremioSubtitles,
-                                  ),
+                            badge: _subtitleBadge(embeddedSubs, addonSlots,
+                                slotsFetchStarted),
                             isSelected: selectedTabIndex == 1,
                             onTap: () =>
                                 setModalState(() => selectedTabIndex = 1),
@@ -243,8 +347,12 @@ class TracksSheet {
                         onAudioChanged: (v) =>
                             setModalState(() => selectedAudio = v),
                         embeddedSubs: embeddedSubs,
-                        stremioSubtitles: stremioSubtitles,
-                        isLoadingStremioSubtitles: isLoadingStremioSubtitles,
+                        addonSlots: addonSlots,
+                        slotsPending: slotsFetchStarted && addonSlots == null,
+                        selectedProviderId: selectedProviderId,
+                        onProviderSelected: (id) =>
+                            setModalState(() => selectedProviderId = id),
+                        onRetryAddon: retryAddon,
                         onSubChanged: (v) {
                           setModalState(() => selectedSub = v);
                           if (!v.startsWith('stremio:')) {
@@ -264,7 +372,6 @@ class TracksSheet {
                                 final generation = ++subtitleFetchGeneration;
                                 setModalState(() {
                                   isIdentifyingTitle = true;
-                                  isLoadingStremioSubtitles = true;
                                 });
                                 try {
                                   final result = await onIdentifyTitle();
@@ -274,7 +381,22 @@ class TracksSheet {
                                   }
                                   setModalState(() {
                                     if (result != null) {
-                                      stremioSubtitles = result.subtitles;
+                                      if (result.slots != null) {
+                                        addonSlots = result.slots;
+                                        // The fix delivered fresh slots — a
+                                        // sheet opened without an identity
+                                        // must NOT kick off its own fetch
+                                        // over them on the next rebuild.
+                                        slotsFetchStarted = true;
+                                        retriedAddonIds.clear();
+                                      }
+                                      if (result.imdbId != null) {
+                                        activeImdbId = result.imdbId;
+                                        activeContentType =
+                                            result.contentType;
+                                        activeSeason = result.season;
+                                        activeEpisode = result.episode;
+                                      }
                                       activeSubtitleIdentityLabel =
                                           result.identityLabel ??
                                           activeSubtitleIdentityLabel;
@@ -282,10 +404,20 @@ class TracksSheet {
                                           result.selectedSubtitleId;
                                       if (selectedId != null) {
                                         selectedSub = 'stremio:$selectedId';
+                                        final slots = result.slots;
+                                        if (slots != null) {
+                                          for (final slot in slots) {
+                                            if (slot.subtitles.any(
+                                                (s) => s.id == selectedId)) {
+                                              selectedProviderId =
+                                                  slot.addonId;
+                                              break;
+                                            }
+                                          }
+                                        }
                                       }
                                     }
                                     isIdentifyingTitle = false;
-                                    isLoadingStremioSubtitles = false;
                                   });
                                 } catch (e) {
                                   debugPrint(
@@ -295,7 +427,6 @@ class TracksSheet {
                                       generation == subtitleFetchGeneration) {
                                     setModalState(() {
                                       isIdentifyingTitle = false;
-                                      isLoadingStremioSubtitles = false;
                                     });
                                   }
                                 }
@@ -324,11 +455,16 @@ class TracksSheet {
     );
   }
 
-  static String? _getSubtitleCount(
+  static String? _subtitleBadge(
     List<mk.SubtitleTrack> embedded,
-    List<StremioSubtitle>? addon,
+    List<AddonSubtitleSlot>? slots,
+    bool fetchStarted,
   ) {
-    final count = embedded.length + (addon?.length ?? 0);
+    if (slots == null) {
+      return fetchStarted ? '…' : (embedded.isNotEmpty ? '${embedded.length}' : null);
+    }
+    if (slots.any((s) => s.status == AddonSubtitleStatus.loading)) return '…';
+    final count = embedded.length + AddonSubtitleSlot.flatten(slots).length;
     return count > 0 ? '$count' : null;
   }
 
@@ -409,8 +545,11 @@ class TracksSheet {
     required StateSetter setModalState,
     required void Function(String) onAudioChanged,
     required List<mk.SubtitleTrack> embeddedSubs,
-    required List<StremioSubtitle>? stremioSubtitles,
-    required bool isLoadingStremioSubtitles,
+    required List<AddonSubtitleSlot>? addonSlots,
+    required bool slotsPending,
+    required String selectedProviderId,
+    required void Function(String) onProviderSelected,
+    required void Function(String) onRetryAddon,
     required void Function(String) onSubChanged,
     required void Function(String? id)? onStremioSubtitleSelected,
     required Future<String?> Function(StremioSubtitle subtitle)?
@@ -439,8 +578,11 @@ class TracksSheet {
         return _SubtitlesTab(
           key: key,
           embeddedSubs: embeddedSubs,
-          stremioSubtitles: stremioSubtitles,
-          isLoading: isLoadingStremioSubtitles,
+          addonSlots: addonSlots,
+          slotsPending: slotsPending,
+          selectedProviderId: selectedProviderId,
+          onProviderSelected: onProviderSelected,
+          onRetryAddon: onRetryAddon,
           selectedSub: selectedSub,
           selectedAudio: selectedAudio,
           player: player,
@@ -452,6 +594,7 @@ class TracksSheet {
           isIdentifyingTitle: isIdentifyingTitle,
           subtitleIdentityLabel: subtitleIdentityLabel,
           onIdentifyTitle: onIdentifyTitle,
+          isWide: isWide,
         );
       case 2:
         return _StyleTab(
@@ -538,13 +681,23 @@ class _AudioTab extends StatelessWidget {
 }
 
 // ============================================================================
-// Subtitles Tab
+// Subtitles Tab — per-addon groups (Embedded | addon | addon …)
 // ============================================================================
+
+class _ProviderEntry {
+  final String id;
+  final String name;
+  final AddonSubtitleSlot? slot; // null for the Embedded pseudo-provider
+  const _ProviderEntry(this.id, this.name, this.slot);
+}
 
 class _SubtitlesTab extends StatelessWidget {
   final List<mk.SubtitleTrack> embeddedSubs;
-  final List<StremioSubtitle>? stremioSubtitles;
-  final bool isLoading;
+  final List<AddonSubtitleSlot>? addonSlots;
+  final bool slotsPending;
+  final String selectedProviderId;
+  final void Function(String) onProviderSelected;
+  final void Function(String) onRetryAddon;
   final String selectedSub;
   final String selectedAudio;
   final mk.Player player;
@@ -557,12 +710,16 @@ class _SubtitlesTab extends StatelessWidget {
   final bool isIdentifyingTitle;
   final String? subtitleIdentityLabel;
   final Future<void> Function()? onIdentifyTitle;
+  final bool isWide;
 
   const _SubtitlesTab({
     super.key,
     required this.embeddedSubs,
-    required this.stremioSubtitles,
-    required this.isLoading,
+    required this.addonSlots,
+    required this.slotsPending,
+    required this.selectedProviderId,
+    required this.onProviderSelected,
+    required this.onRetryAddon,
     required this.selectedSub,
     required this.selectedAudio,
     required this.player,
@@ -574,6 +731,7 @@ class _SubtitlesTab extends StatelessWidget {
     required this.isIdentifyingTitle,
     required this.subtitleIdentityLabel,
     required this.onIdentifyTitle,
+    required this.isWide,
   });
 
   /// A tap on subtitle [tappedId] is a genuine subtitle switch worth resetting
@@ -583,147 +741,309 @@ class _SubtitlesTab extends StatelessWidget {
   bool _isRealSubtitleChange(String tappedId) =>
       tappedId != selectedSub && selectedSub != 'auto';
 
+  List<_ProviderEntry> get _providers => [
+        const _ProviderEntry('emb', 'Embedded', null),
+        for (final slot in addonSlots ?? const <AddonSubtitleSlot>[])
+          _ProviderEntry(slot.addonId, slot.addonName, slot),
+      ];
+
+  /// Whether the currently applied subtitle lives in this provider's group.
+  bool _providerHasSelection(_ProviderEntry p) {
+    if (p.slot == null) {
+      return !selectedSub.startsWith('stremio:');
+    }
+    return p.slot!.subtitles.any((s) => 'stremio:${s.id}' == selectedSub);
+  }
+
+  String _effectiveProviderId(List<_ProviderEntry> providers) {
+    if (providers.any((p) => p.id == selectedProviderId)) {
+      return selectedProviderId;
+    }
+    return 'emb';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final canSearchOnline = onIdentifyTitle != null;
-    final hasAddonSubtitles = stremioSubtitles?.isNotEmpty ?? false;
-    final showEmptyOnlineState =
-        canSearchOnline &&
-        !isLoading &&
-        stremioSubtitles != null &&
-        !hasAddonSubtitles;
+    final providers = _providers;
+    final effectiveId = _effectiveProviderId(providers);
+    final selected = providers.firstWhere((p) => p.id == effectiveId);
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      children: [
-        if (canSearchOnline) ...[
-          _OnlineSubtitleSearchPanel(
+    final identity = onIdentifyTitle == null
+        ? null
+        : _IdentityStrip(
             identityLabel: subtitleIdentityLabel,
             isSearching: isIdentifyingTitle,
             onSearch: () => onIdentifyTitle!(),
-          ),
-          const SizedBox(height: 16),
-        ],
+          );
 
-        _TrackTile(
-          title: 'Off',
-          subtitle: 'Disable subtitles',
-          isSelected: selectedSub == 'no',
-          onTap: () async {
-            final realChange = _isRealSubtitleChange('no');
-            onSubChanged('no');
-            await player.setSubtitleTrack(mk.SubtitleTrack.no());
-            await onTrackChanged(selectedAudio, 'no');
-            if (realChange) onSubtitleTrackChanged?.call();
-          },
-        ),
-
-        // Embedded subtitles
-        if (embeddedSubs.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _SectionLabel(label: 'Embedded', count: embeddedSubs.length),
-          const SizedBox(height: 8),
-          ...embeddedSubs.asMap().entries.map((entry) {
-            final index = entry.key;
-            final sub = entry.value;
-            final label = LanguageMapper.labelForTrack(sub, index);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _TrackTile(
-                title: label,
-                isSelected: sub.id == selectedSub,
-                onTap: () async {
-                  final realChange = _isRealSubtitleChange(sub.id);
-                  onSubChanged(sub.id);
-                  await player.setSubtitleTrack(sub);
-                  await onTrackChanged(selectedAudio, sub.id);
-                  if (realChange) onSubtitleTrackChanged?.call();
-                },
-              ),
-            );
-          }),
-        ],
-
-        // Addon subtitles
-        if (isLoading || hasAddonSubtitles || showEmptyOnlineState) ...[
-          const SizedBox(height: 16),
-          _SectionLabel(
-            label: 'From Addons',
-            count: stremioSubtitles?.length,
-            isLoading: isLoading,
-          ),
-          const SizedBox(height: 8),
-          if (isLoading &&
-              (stremioSubtitles == null || stremioSubtitles!.isEmpty))
+    if (isWide) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (identity != null)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: VideoPlayerColors.netflixRed,
-                      ),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: identity,
+            ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 220,
+                    child: ListView(
+                      children: [
+                        for (final p in providers)
+                          _ProviderTile(
+                            entry: p,
+                            embeddedCount: embeddedSubs.length,
+                            isSelected: p.id == effectiveId,
+                            hasActiveSub: _providerHasSelection(p),
+                            onTap: () => onProviderSelected(p.id),
+                          ),
+                        if (slotsPending) const _ProviderPendingTile(),
+                      ],
                     ),
-                    const SizedBox(width: 12),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(width: 1, color: Colors.white.withValues(alpha: 0.06)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildProviderContent(selected)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (identity != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            child: identity,
+          ),
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            children: [
+              for (final p in providers)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _ProviderChip(
+                    entry: p,
+                    embeddedCount: embeddedSubs.length,
+                    isSelected: p.id == effectiveId,
+                    hasActiveSub: _providerHasSelection(p),
+                    onTap: () => onProviderSelected(p.id),
+                  ),
+                ),
+              if (slotsPending)
+                const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: _ProviderChip.pending(),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Expanded(child: _buildProviderContent(selected)),
+      ],
+    );
+  }
+
+  Widget _buildProviderContent(_ProviderEntry provider) {
+    final padding = isWide
+        ? EdgeInsets.zero
+        : const EdgeInsets.fromLTRB(20, 0, 20, 20);
+
+    if (provider.slot == null) {
+      return ListView(
+        padding: padding,
+        children: [
+          _TrackTile(
+            title: 'Off',
+            subtitle: 'Disable subtitles',
+            isSelected: selectedSub == 'no',
+            onTap: () async {
+              final realChange = _isRealSubtitleChange('no');
+              onSubChanged('no');
+              await player.setSubtitleTrack(mk.SubtitleTrack.no());
+              await onTrackChanged(selectedAudio, 'no');
+              if (realChange) onSubtitleTrackChanged?.call();
+            },
+          ),
+          const SizedBox(height: 8),
+          if (embeddedSubs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: Text(
+                  'No embedded subtitle tracks in this file',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            )
+          else
+            ...embeddedSubs.asMap().entries.map((entry) {
+              final index = entry.key;
+              final sub = entry.value;
+              final label = LanguageMapper.labelForTrack(sub, index);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _TrackTile(
+                  title: label,
+                  isSelected: sub.id == selectedSub,
+                  onTap: () async {
+                    final realChange = _isRealSubtitleChange(sub.id);
+                    onSubChanged(sub.id);
+                    await player.setSubtitleTrack(sub);
+                    await onTrackChanged(selectedAudio, sub.id);
+                    if (realChange) onSubtitleTrackChanged?.call();
+                  },
+                ),
+              );
+            }),
+        ],
+      );
+    }
+
+    final slot = provider.slot!;
+    switch (slot.status) {
+      case AddonSubtitleStatus.loading:
+        return ListView(
+          padding: padding,
+          children: [
+            for (var i = 0; i < 3; i++)
+              Container(
+                height: 46,
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            const SizedBox(height: 6),
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: VideoPlayerColors.netflixRed,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Fetching from ${slot.addonName}…',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      case AddonSubtitleStatus.failed:
+        return ListView(
+          padding: padding,
+          children: [
+            _RetryCard(
+              addonName: slot.addonName,
+              error: slot.error,
+              onRetry: () => onRetryAddon(slot.addonId),
+            ),
+          ],
+        );
+      case AddonSubtitleStatus.ok:
+        if (slot.subtitles.isEmpty) {
+          return ListView(
+            padding: padding,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.subtitles_off_rounded,
+                      size: 26,
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
+                    const SizedBox(height: 8),
                     Text(
-                      'Loading subtitles...',
+                      'No subtitles from this addon',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
+                        color: Colors.white.withValues(alpha: 0.55),
                         fontSize: 13,
                       ),
                     ),
                   ],
                 ),
               ),
-            )
-          else if (hasAddonSubtitles)
-            ...stremioSubtitles!.map((sub) {
-              final subId = 'stremio:${sub.id}';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _TrackTile(
-                  title: sub.displayName,
-                  subtitle: sub.source,
-                  isSelected: subId == selectedSub,
-                  onTap: () async {
-                    final realChange = _isRealSubtitleChange(subId);
-                    onSubChanged(subId);
-                    try {
-                      final filePath = await onDownloadStremioSubtitleToFile
-                          ?.call(sub);
-                      // Download failed: leave the current subtitle (and its
-                      // offset) untouched — do NOT fire onSubtitleTrackChanged.
-                      if (filePath == null) return;
+            ],
+          );
+        }
+        return ListView.builder(
+          padding: padding,
+          itemCount: slot.subtitles.length,
+          itemBuilder: (context, index) {
+            final sub = slot.subtitles[index];
+            final subId = 'stremio:${sub.id}';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _TrackTile(
+                title: sub.displayName,
+                trailing: sub.lang.toUpperCase(),
+                isSelected: subId == selectedSub,
+                onTap: () async {
+                  final realChange = _isRealSubtitleChange(subId);
+                  onSubChanged(subId);
+                  try {
+                    final filePath = await onDownloadStremioSubtitleToFile
+                        ?.call(sub);
+                    // Download failed: leave the current subtitle (and its
+                    // offset) untouched — do NOT fire onSubtitleTrackChanged.
+                    if (filePath == null) return;
 
-                      final track = mk.SubtitleTrack.uri(
-                        filePath,
-                        title: sub.displayName,
-                        language: sub.lang,
-                      );
-                      await player.setSubtitleTrack(mk.SubtitleTrack.no());
-                      await player.setSubtitleTrack(track);
-                      onStremioSubtitleSelected?.call(sub.id);
-                      await onTrackChanged(selectedAudio, subId);
-                      if (realChange) onSubtitleTrackChanged?.call();
-                    } catch (e) {
-                      debugPrint('TracksSheet: Subtitle error - $e');
-                    }
-                  },
-                ),
-              );
-            })
-          else
-            _OnlineSubtitleEmptyState(onSearch: () => onIdentifyTitle!()),
-        ],
-
-        const SizedBox(height: 20),
-      ],
-    );
+                    final track = mk.SubtitleTrack.uri(
+                      filePath,
+                      title: sub.displayName,
+                      language: sub.lang,
+                    );
+                    await player.setSubtitleTrack(mk.SubtitleTrack.no());
+                    await player.setSubtitleTrack(track);
+                    onStremioSubtitleSelected?.call(sub.id);
+                    await onTrackChanged(selectedAudio, subId);
+                    if (realChange) onSubtitleTrackChanged?.call();
+                  } catch (e) {
+                    debugPrint('TracksSheet: Subtitle error - $e');
+                  }
+                },
+              ),
+            );
+          },
+        );
+    }
   }
 }
 
@@ -1023,12 +1343,14 @@ class _StyleTab extends StatelessWidget {
 // Shared Widgets
 // ============================================================================
 
-class _OnlineSubtitleSearchPanel extends StatelessWidget {
+/// Compact "Detected: <title> · Fix" strip — the entry into the identify
+/// flow, replacing the old full-width online-search panel.
+class _IdentityStrip extends StatelessWidget {
   final String? identityLabel;
   final bool isSearching;
   final VoidCallback onSearch;
 
-  const _OnlineSubtitleSearchPanel({
+  const _IdentityStrip({
     required this.identityLabel,
     required this.isSearching,
     required this.onSearch,
@@ -1039,103 +1361,72 @@ class _OnlineSubtitleSearchPanel extends StatelessWidget {
     final label = identityLabel?.trim();
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: VideoPlayerColors.netflixRed.withValues(alpha: 0.18),
-                ),
-                child: const Icon(
-                  Icons.travel_explore_rounded,
-                  size: 18,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Online subtitles',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      label == null || label.isEmpty
-                          ? 'Detected title unavailable'
-                          : label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.62),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          const Icon(
+            Icons.travel_explore_rounded,
+            size: 16,
+            color: Colors.white54,
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Find subtitles by choosing the correct title.',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.48),
-              fontSize: 12,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label == null || label.isEmpty
+                  ? 'Title not detected — fix it to find subtitles'
+                  : label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 12,
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: isSearching ? null : onSearch,
-              icon: isSearching
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: isSearching ? null : onSearch,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFFFF4D57).withValues(alpha: 0.45),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isSearching)
+                    const SizedBox(
+                      width: 11,
+                      height: 11,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+                        strokeWidth: 1.5,
+                        color: Color(0xFFFF4D57),
                       ),
                     )
-                  : const Icon(Icons.search_rounded, size: 18),
-              label: Text(
-                isSearching
-                    ? 'Searching Catalogs...'
-                    : 'Search Movie/Show Subtitles',
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: VideoPlayerColors.netflixRed,
-                disabledBackgroundColor: VideoPlayerColors.netflixRed
-                    .withValues(alpha: 0.45),
-                foregroundColor: Colors.white,
-                disabledForegroundColor: Colors.white.withValues(alpha: 0.75),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
+                  else
+                    const Icon(
+                      Icons.search_rounded,
+                      size: 13,
+                      color: Color(0xFFFF4D57),
+                    ),
+                  const SizedBox(width: 5),
+                  const Text(
+                    'Fix',
+                    style: TextStyle(
+                      color: Color(0xFFFF4D57),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1145,46 +1436,332 @@ class _OnlineSubtitleSearchPanel extends StatelessWidget {
   }
 }
 
-class _OnlineSubtitleEmptyState extends StatelessWidget {
-  final VoidCallback onSearch;
+/// Horizontal provider chip (phone layout).
+class _ProviderChip extends StatelessWidget {
+  final _ProviderEntry? entry;
+  final int embeddedCount;
+  final bool isSelected;
+  final bool hasActiveSub;
+  final VoidCallback? onTap;
 
-  const _OnlineSubtitleEmptyState({required this.onSearch});
+  const _ProviderChip({
+    required _ProviderEntry this.entry,
+    required this.embeddedCount,
+    required this.isSelected,
+    required this.hasActiveSub,
+    required this.onTap,
+  });
+
+  const _ProviderChip.pending()
+      : entry = null,
+        embeddedCount = 0,
+        isSelected = false,
+        hasActiveSub = false,
+        onTap = null;
 
   @override
   Widget build(BuildContext context) {
+    if (entry == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: Colors.white38,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 13),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? VideoPlayerColors.netflixRed.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? VideoPlayerColors.netflixRed.withValues(alpha: 0.55)
+                : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasActiveSub) ...[
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFF4D57),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              entry!.name,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.white60,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 6),
+            _ProviderBadge(
+              entry: entry!,
+              embeddedCount: embeddedCount,
+              emphasized: isSelected,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Vertical provider row (wide/desktop two-pane layout).
+class _ProviderTile extends StatelessWidget {
+  final _ProviderEntry entry;
+  final int embeddedCount;
+  final bool isSelected;
+  final bool hasActiveSub;
+  final VoidCallback onTap;
+
+  const _ProviderTile({
+    required this.entry,
+    required this.embeddedCount,
+    required this.isSelected,
+    required this.hasActiveSub,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? VideoPlayerColors.netflixRed.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: isSelected
+                ? VideoPlayerColors.netflixRed.withValues(alpha: 0.45)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            if (hasActiveSub) ...[
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFF4D57),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                entry.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _ProviderBadge(
+              entry: entry,
+              embeddedCount: embeddedCount,
+              emphasized: isSelected,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProviderPendingTile extends StatelessWidget {
+  const _ProviderPendingTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: Colors.white38,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Count / spinner / warning badge shared by chip and tile.
+class _ProviderBadge extends StatelessWidget {
+  final _ProviderEntry entry;
+  final int embeddedCount;
+  final bool emphasized;
+
+  const _ProviderBadge({
+    required this.entry,
+    required this.embeddedCount,
+    required this.emphasized,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final slot = entry.slot;
+    if (slot != null && slot.status == AddonSubtitleStatus.loading) {
+      return const SizedBox(
+        width: 11,
+        height: 11,
+        child: CircularProgressIndicator(
+          strokeWidth: 1.5,
+          color: Colors.white54,
+        ),
+      );
+    }
+    if (slot != null && slot.status == AddonSubtitleStatus.failed) {
+      return const Icon(
+        Icons.warning_amber_rounded,
+        size: 14,
+        color: Color(0xFFFFB300),
+      );
+    }
+    final count = slot == null ? embeddedCount : slot.subtitles.length;
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        color: emphasized
+            ? VideoPlayerColors.netflixRed.withValues(alpha: 0.4)
+            : Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        '$count',
+        style: TextStyle(
+          color: emphasized ? Colors.white : Colors.white54,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// Failed addon: error card with a per-addon retry, mirroring the TV menu's
+/// "Failed — retry this addon" row.
+class _RetryCard extends StatelessWidget {
+  final String addonName;
+  final String? error;
+  final VoidCallback onRetry;
+
+  const _RetryCard({
+    required this.addonName,
+    required this.error,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final err = error?.trim();
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEF4444).withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+        ),
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.subtitles_off_rounded,
-            size: 28,
-            color: Colors.white.withValues(alpha: 0.35),
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 26,
+            color: Color(0xFFFFB300),
           ),
           const SizedBox(height: 8),
           Text(
-            'No online subtitles found for this title',
+            '$addonName failed to load',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.68),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 12),
-          TextButton.icon(
-            onPressed: onSearch,
-            icon: const Icon(Icons.search_rounded, size: 18),
-            label: const Text('Search Another Movie/Show'),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          if (err != null && err.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              err.length > 90 ? '${err.substring(0, 90)}…' : err,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.85),
+                fontSize: 11,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          GestureDetector(
+            onTap: onRetry,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 22, vertical: 9),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFE50914), Color(0xFFFF4D57)],
+                ),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.refresh_rounded, size: 16, color: Colors.white),
+                  SizedBox(width: 7),
+                  Text(
+                    'Retry this addon',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -1196,12 +1773,14 @@ class _OnlineSubtitleEmptyState extends StatelessWidget {
 class _TrackTile extends StatelessWidget {
   final String title;
   final String? subtitle;
+  final String? trailing;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _TrackTile({
     required this.title,
     this.subtitle,
+    this.trailing,
     required this.isSelected,
     required this.onTap,
   });
@@ -1282,74 +1861,31 @@ class _TrackTile extends StatelessWidget {
                 ],
               ),
             ),
+            if (trailing != null) ...[
+              const SizedBox(width: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? VideoPlayerColors.netflixRed.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.09),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  trailing!,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : Colors.white60,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  final int? count;
-  final bool isLoading;
-
-  const _SectionLabel({
-    required this.label,
-    this.count,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 3,
-          height: 14,
-          decoration: BoxDecoration(
-            color: VideoPlayerColors.netflixRed,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          ),
-        ),
-        if (count != null || isLoading) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: isLoading && count == null
-                ? const SizedBox(
-                    width: 10,
-                    height: 10,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      color: Colors.white54,
-                    ),
-                  )
-                : Text(
-                    '$count',
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-          ),
-        ],
-      ],
     );
   }
 }

@@ -274,3 +274,51 @@ class StremioSubtitleResult {
     return map;
   }
 }
+
+/// Fetch state of a single subtitle addon.
+enum AddonSubtitleStatus { loading, ok, failed }
+
+/// One subtitle addon's fetch outcome: the per-addon unit the subtitle
+/// pickers group by, mirroring the Android TV player's AddonSubtitleResult.
+class AddonSubtitleSlot {
+  final String addonId;
+  final String addonName;
+  final AddonSubtitleStatus status;
+  final List<StremioSubtitle> subtitles;
+  final String? error;
+
+  const AddonSubtitleSlot({
+    required this.addonId,
+    required this.addonName,
+    required this.status,
+    this.subtitles = const [],
+    this.error,
+  });
+
+  AddonSubtitleSlot copyWith({
+    AddonSubtitleStatus? status,
+    List<StremioSubtitle>? subtitles,
+    String? error,
+  }) {
+    return AddonSubtitleSlot(
+      addonId: addonId,
+      addonName: addonName,
+      status: status ?? this.status,
+      subtitles: subtitles ?? this.subtitles,
+      error: error,
+    );
+  }
+
+  /// Flatten slots into the deduped (by URL, addon order) list the player's
+  /// track bookkeeping uses — same rule as the TV player's flat rebuild.
+  static List<StremioSubtitle> flatten(List<AddonSubtitleSlot> slots) {
+    final seen = <String>{};
+    final out = <StremioSubtitle>[];
+    for (final slot in slots) {
+      for (final sub in slot.subtitles) {
+        if (sub.url.isNotEmpty && seen.add(sub.url)) out.add(sub);
+      }
+    }
+    return out;
+  }
+}

@@ -4,15 +4,35 @@ import 'package:flutter/services.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/torrent.dart';
+import '../../../services/series_source_fetcher.dart';
 
-/// Premium Stremio source sheet overlay for the video player.
-/// Right-sliding frosted glass panel with Direct/Torrent tabs and source list.
+/// In-player source switcher panel (right-sliding, Netflix-dark).
+///
+/// Flat plays show Direct/Torrent tabs. Series plays that carry a
+/// [SeriesSourceFetcher] split torrents into Packs/Episodes/Direct (same
+/// coverage_type classification as the Android TV player), and tabs whose
+/// dedicated search never ran offer a "Load more sources" action that runs
+/// the missing search and appends the results (append-only merge).
 class SourceSheet extends StatefulWidget {
   final List<Torrent> sources;
   final int currentSourceIndex;
   final Future<String?> Function(Torrent) resolveSource;
   final void Function(int index, String resolvedUrl) onSourceSelected;
   final VoidCallback onClose;
+
+  /// Load-more backend. Null for plays without one (IPTV, YouTube, manual
+  /// picks…) — the sheet then behaves like the classic flat picker.
+  final SeriesSourceFetcher? seriesFetcher;
+
+  /// Currently playing position, so "Load more → Episodes" targets the
+  /// episode on screen (pack playlists auto-advance without relaunching).
+  final int? currentSeason;
+  final int? currentEpisode;
+
+  /// Fired with the full merged list after a successful load-more. The owner
+  /// must adopt it as the new effective sources (append-only: existing
+  /// entries keep their positions).
+  final void Function(List<Torrent> merged)? onSourcesMerged;
 
   const SourceSheet({
     Key? key,
@@ -21,6 +41,10 @@ class SourceSheet extends StatefulWidget {
     required this.resolveSource,
     required this.onSourceSelected,
     required this.onClose,
+    this.seriesFetcher,
+    this.currentSeason,
+    this.currentEpisode,
+    this.onSourcesMerged,
   }) : super(key: key);
 
   @override
@@ -28,6 +52,14 @@ class SourceSheet extends StatefulWidget {
 }
 
 enum _FocusZone { tabs, search, sources }
+
+class _TabDef {
+  final String id;
+  final String label;
+  final List<Torrent> sources;
+  final bool hasCurrent;
+  const _TabDef(this.id, this.label, this.sources, this.hasCurrent);
+}
 
 class _SourceSheetState extends State<SourceSheet>
     with TickerProviderStateMixin {
@@ -43,10 +75,8 @@ class _SourceSheetState extends State<SourceSheet>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
 
-  // Tab state: 0 = Direct, 1 = Torrent
+  List<_TabDef> _tabs = [];
   int _activeTab = 0;
-  List<Torrent> _directSources = [];
-  List<Torrent> _torrentSources = [];
   List<Torrent> _filteredSources = [];
   int _focusedIndex = 0;
   _FocusZone _focusZone = _FocusZone.sources;
@@ -55,16 +85,22 @@ class _SourceSheetState extends State<SourceSheet>
   int? _resolvingIndex; // Original index in widget.sources being resolved
   String? _errorMessage; // Brief error message shown at bottom
 
-  // Design tokens
-  static const _accent = Color(0xFF536DFE); // Indigo accent
-  static const _accentAlt = Color(0xFF3D5AFE);
-  static const _surfaceDark = Color(0xFF101016);
+  // Load-more state: the mode currently in flight, or null.
+  String? _loadingMode;
+
+  // Design tokens (Netflix-dark, matching the TV unified menu)
+  static const _accent = Color(0xFFE50914);
+  static const _accentSoft = Color(0xFFFF4D57);
+  static const _surfaceDark = Color(0xFF141414);
+
+  bool get _seriesTabs =>
+      widget.seriesFetcher != null && !widget.seriesFetcher!.isMovie;
 
   @override
   void initState() {
     super.initState();
 
-    _categorizeSources();
+    _rebuildTabs();
     _autoSelectTab();
     _recomputeFilters();
 
@@ -105,6 +141,24 @@ class _SourceSheetState extends State<SourceSheet>
   }
 
   @override
+  void didUpdateWidget(SourceSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Load-more merged in a new sources list (owner adopted it): re-bucket.
+    // Append-only merge keeps tab identity stable, so the active tab stays.
+    if (!identical(oldWidget.sources, widget.sources) ||
+        oldWidget.currentSourceIndex != widget.currentSourceIndex) {
+      _rebuildTabs();
+      if (_activeTab >= _tabs.length) _activeTab = 0;
+      // Keep the user's focus where it was (append-only merges preserve
+      // indices) instead of letting the recompute snap it back to the
+      // PLAYING row above the freshly appended results.
+      final keepFocus = _focusedIndex;
+      _recomputeFilters();
+      _focusedIndex = keepFocus.clamp(0, _maxFocusIndex);
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -117,32 +171,73 @@ class _SourceSheetState extends State<SourceSheet>
 
   // ─── Categorization ────────────────────────────────────────────────
 
-  void _categorizeSources() {
-    _directSources = widget.sources
-        .where((t) => t.isDirectStream)
-        .toList();
-    _torrentSources = widget.sources
+  static bool _isPack(Torrent t) =>
+      t.coverageType == 'seasonPack' ||
+      t.coverageType == 'multiSeasonPack' ||
+      t.coverageType == 'completeSeries';
+
+  void _rebuildTabs() {
+    final direct =
+        widget.sources.where((t) => t.isDirectStream).toList();
+    final torrents = widget.sources
         .where((t) => t.streamType == StreamType.torrent)
         .toList();
-  }
 
-  void _autoSelectTab() {
-    // Auto-select tab that has the currently playing source
-    if (widget.currentSourceIndex >= 0 &&
-        widget.currentSourceIndex < widget.sources.length) {
-      final current = widget.sources[widget.currentSourceIndex];
-      if (current.isDirectStream) {
-        _activeTab = 0;
-      } else {
-        _activeTab = 1;
-      }
-    } else if (_directSources.isEmpty && _torrentSources.isNotEmpty) {
-      _activeTab = 1;
+    final cur = (widget.currentSourceIndex >= 0 &&
+            widget.currentSourceIndex < widget.sources.length)
+        ? widget.sources[widget.currentSourceIndex]
+        : null;
+    bool hasCur(List<Torrent> list) =>
+        cur != null && list.any((t) => _isSameTorrent(t, cur));
+
+    if (_seriesTabs) {
+      final packs = torrents.where(_isPack).toList();
+      final episodes = torrents.where((t) => !_isPack(t)).toList();
+      _tabs = [
+        _TabDef('packs', 'Packs', packs, hasCur(packs)),
+        _TabDef('episodes', 'Episodes', episodes, hasCur(episodes)),
+        _TabDef('direct', 'Direct', direct, hasCur(direct)),
+      ];
+    } else {
+      _tabs = [
+        _TabDef('direct', 'Direct', direct, hasCur(direct)),
+        _TabDef('torrent', 'Torrent', torrents, hasCur(torrents)),
+      ];
     }
   }
 
+  void _autoSelectTab() {
+    // Land on the tab holding the currently playing source; otherwise the
+    // first tab that has anything to show (or offers load-more).
+    final curIdx = _tabs.indexWhere((t) => t.hasCurrent);
+    if (curIdx >= 0) {
+      _activeTab = curIdx;
+      return;
+    }
+    final nonEmpty = _tabs.indexWhere((t) => t.sources.isNotEmpty);
+    if (nonEmpty >= 0) _activeTab = nonEmpty;
+  }
+
   List<Torrent> get _currentTabSources =>
-      _activeTab == 0 ? _directSources : _torrentSources;
+      _tabs.isEmpty ? const [] : _tabs[_activeTab].sources;
+
+  /// Fetch mode offered on the active tab, or null when that tab's search
+  /// already ran (or there is no fetcher).
+  String? get _activeLoadMoreMode {
+    final f = widget.seriesFetcher;
+    if (f == null || _tabs.isEmpty) return null;
+    final id = _tabs[_activeTab].id;
+    if (f.isMovie) {
+      return (id == 'torrent' && !f.movieFetched)
+          ? SeriesSourceFetcher.modeMovie
+          : null;
+    }
+    if (id == 'packs' && !f.packsFetched) return SeriesSourceFetcher.modePacks;
+    if (id == 'episodes' && !f.episodesFetched) {
+      return SeriesSourceFetcher.modeEpisodes;
+    }
+    return null;
+  }
 
   // ─── Filtering ─────────────────────────────────────────────────────
 
@@ -163,14 +258,23 @@ class _SourceSheetState extends State<SourceSheet>
       final idx = _filteredSources.indexWhere((t) => _isSameTorrent(t, current));
       if (idx >= 0) {
         _focusedIndex = idx;
-      } else {
-        _focusedIndex = _filteredSources.isNotEmpty
-            ? _focusedIndex.clamp(0, _filteredSources.length - 1)
-            : 0;
+        return;
       }
-    } else {
-      _focusedIndex = 0;
     }
+    _focusedIndex = _focusedIndex.clamp(0, _maxFocusIndex);
+  }
+
+  /// Whether the load-more row/CTA is actually on screen: a search query
+  /// that empties the tab shows the plain "no matches" state instead.
+  bool get _loadMoreVisible =>
+      _activeLoadMoreMode != null &&
+      (_filteredSources.isNotEmpty || _searchController.text.isEmpty);
+
+  /// Highest focusable index in the list zone: sources, plus the trailing
+  /// load-more row when visible (also focusable at 0 on an empty tab).
+  int get _maxFocusIndex {
+    final count = _filteredSources.length + (_loadMoreVisible ? 1 : 0);
+    return count > 0 ? count - 1 : 0;
   }
 
   /// Recompute filters and trigger a rebuild.
@@ -194,7 +298,7 @@ class _SourceSheetState extends State<SourceSheet>
   // ─── Scrolling ─────────────────────────────────────────────────────
 
   void _scrollToFocused() {
-    if (_filteredSources.isEmpty || !_scrollController.hasClients) return;
+    if (!_scrollController.hasClients) return;
     const h = 72.0;
     final target = _focusedIndex * h;
     final vp = _scrollController.position.viewportDimension;
@@ -258,6 +362,56 @@ class _SourceSheetState extends State<SourceSheet>
     }
   }
 
+  // ─── Load more ─────────────────────────────────────────────────────
+
+  Future<void> _loadMore() async {
+    final mode = _activeLoadMoreMode;
+    final fetcher = widget.seriesFetcher;
+    if (mode == null || fetcher == null || _loadingMode != null) return;
+
+    setState(() {
+      _loadingMode = mode;
+      _errorMessage = null;
+    });
+
+    List<Torrent>? fetched;
+    try {
+      fetched = await fetcher.fetch(
+        mode,
+        season: widget.currentSeason,
+        episode: widget.currentEpisode,
+      );
+    } catch (e) {
+      debugPrint('SourceSheet: Load more failed: $e');
+      fetched = null;
+    }
+
+    if (fetched != null) {
+      // Deliver the merge even if the sheet was closed mid-fetch: the
+      // fetcher's flag has already flipped, so dropping the results here
+      // would lose them with no way to re-run the search.
+      final merged = SeriesSourceFetcher.mergeSources(widget.sources, fetched);
+      widget.onSourcesMerged?.call(merged);
+      if (mounted) {
+        setState(() => _loadingMode = null);
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    // Failure: the fetcher keeps the flag down, so the row survives for a
+    // retry — mirror the resolution-error banner pattern.
+    setState(() {
+      _loadingMode = null;
+      _errorMessage = "Couldn't fetch more sources — try again";
+    });
+    await Future.delayed(const Duration(seconds: 3));
+    if (mounted && _loadingMode == null) {
+      setState(() => _errorMessage = null);
+    }
+  }
+
   // ─── Keyboard / DPAD ──────────────────────────────────────────────
 
   void _handleKeyEvent(KeyEvent event) {
@@ -286,14 +440,16 @@ class _SourceSheetState extends State<SourceSheet>
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       if (_activeTab > 0) {
         setState(() {
-          _activeTab = 0;
+          _activeTab--;
+          _focusedIndex = 0;
           _recomputeFilters();
         });
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_activeTab < 1) {
+      if (_activeTab < _tabs.length - 1) {
         setState(() {
-          _activeTab = 1;
+          _activeTab++;
+          _focusedIndex = 0;
           _recomputeFilters();
         });
       }
@@ -323,12 +479,15 @@ class _SourceSheetState extends State<SourceSheet>
         setState(() => _focusZone = _FocusZone.search);
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_focusedIndex < _filteredSources.length - 1) {
+      if (_focusedIndex < _maxFocusIndex) {
         setState(() => _focusedIndex++);
         _scrollToFocused();
       }
     } else if (isActivateKey(event.logicalKey)) {
-      if (_filteredSources.isNotEmpty && _resolvingIndex == null) {
+      if (_focusedIndex >= _filteredSources.length) {
+        // Trailing load-more row (or the empty-tab CTA at index 0).
+        if (_loadMoreVisible) _loadMore();
+      } else if (_filteredSources.isNotEmpty && _resolvingIndex == null) {
         _selectSource(_filteredSources[_focusedIndex]);
       }
     }
@@ -465,7 +624,7 @@ class _SourceSheetState extends State<SourceSheet>
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [_accent, _accentAlt],
+                colors: [_accent, _accentSoft],
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
@@ -473,10 +632,6 @@ class _SourceSheetState extends State<SourceSheet>
                     color: _accent.withOpacity(0.25),
                     blurRadius: 16,
                     spreadRadius: 2),
-                BoxShadow(
-                    color: _accentAlt.withOpacity(0.15),
-                    blurRadius: 24,
-                    spreadRadius: 4),
               ],
             ),
             child: const Icon(Icons.swap_horiz_rounded,
@@ -546,18 +701,12 @@ class _SourceSheetState extends State<SourceSheet>
         ),
         child: Row(
           children: [
-            _buildTab(
-              label: 'Direct',
-              count: _directSources.length,
-              index: 0,
-              isFocused: inTabZone && _activeTab == 0,
-            ),
-            _buildTab(
-              label: 'Torrent',
-              count: _torrentSources.length,
-              index: 1,
-              isFocused: inTabZone && _activeTab == 1,
-            ),
+            for (var i = 0; i < _tabs.length; i++)
+              _buildTab(
+                tab: _tabs[i],
+                index: i,
+                isFocused: inTabZone && _activeTab == i,
+              ),
           ],
         ),
       ),
@@ -565,17 +714,24 @@ class _SourceSheetState extends State<SourceSheet>
   }
 
   Widget _buildTab({
-    required String label,
-    required int count,
+    required _TabDef tab,
     required int index,
     required bool isFocused,
   }) {
     final isActive = _activeTab == index;
+    final count = tab.sources.length;
     final isEmpty = count == 0;
+    // An empty tab stays tappable when it can load more sources.
+    final canLoadMore = widget.seriesFetcher != null &&
+        (widget.seriesFetcher!.isMovie
+            ? (tab.id == 'torrent' && !widget.seriesFetcher!.movieFetched)
+            : (tab.id == 'packs' && !widget.seriesFetcher!.packsFetched) ||
+                (tab.id == 'episodes' &&
+                    !widget.seriesFetcher!.episodesFetched));
 
     return Expanded(
       child: GestureDetector(
-        onTap: isEmpty
+        onTap: (isEmpty && !canLoadMore)
             ? null
             : () {
                 setState(() {
@@ -589,30 +745,44 @@ class _SourceSheetState extends State<SourceSheet>
           margin: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             gradient: isActive
-                ? LinearGradient(
-                    colors: [_accent, _accentAlt],
+                ? const LinearGradient(
+                    colors: [_accent, _accentSoft],
                   )
                 : null,
             borderRadius: BorderRadius.circular(10),
             border: isFocused && !isActive
-                ? Border.all(color: _accent.withOpacity(0.5), width: 1.5)
+                ? Border.all(color: _accentSoft.withOpacity(0.6), width: 1.5)
                 : null,
           ),
           alignment: Alignment.center,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: isEmpty
-                      ? Colors.white.withOpacity(0.2)
-                      : isActive
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  letterSpacing: -0.2,
+              if (tab.hasCurrent && !isActive) ...[
+                Container(
+                  width: 5,
+                  height: 5,
+                  decoration: const BoxDecoration(
+                    color: _accentSoft,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: Text(
+                  tab.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: (isEmpty && !canLoadMore)
+                        ? Colors.white.withOpacity(0.2)
+                        : isActive
+                            ? Colors.white
+                            : Colors.white.withOpacity(0.5),
+                    fontSize: 12,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    letterSpacing: -0.2,
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
@@ -663,7 +833,7 @@ class _SourceSheetState extends State<SourceSheet>
               ? Colors.white.withOpacity(0.08)
               : Colors.white.withOpacity(0.04),
           border: Border.all(
-            color: hasFocus ? _accent.withOpacity(0.4) : Colors.transparent,
+            color: hasFocus ? _accentSoft.withOpacity(0.4) : Colors.transparent,
             width: 1.5,
           ),
           boxShadow: hasFocus
@@ -687,7 +857,7 @@ class _SourceSheetState extends State<SourceSheet>
                 hasQuery ? Icons.filter_list_rounded : Icons.search_rounded,
                 key: ValueKey(hasQuery),
                 color: hasFocus
-                    ? _accent.withOpacity(0.7)
+                    ? _accentSoft.withOpacity(0.7)
                     : Colors.white.withOpacity(0.3),
                 size: 20,
               ),
@@ -726,57 +896,31 @@ class _SourceSheetState extends State<SourceSheet>
   // ─── Source List ───────────────────────────────────────────────────
 
   Widget _buildSourceList() {
+    final loadMoreMode = _activeLoadMoreMode;
+    final inSourceZone = _focusZone == _FocusZone.sources;
+
     if (_filteredSources.isEmpty) {
-      final typeName = _activeTab == 0 ? 'direct' : 'torrent';
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _activeTab == 0
-                    ? Icons.link_off_rounded
-                    : Icons.cloud_off_rounded,
-                color: Colors.white.withOpacity(0.1),
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No $typeName sources available',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _searchController.text.isNotEmpty
-                  ? 'Try a different search term'
-                  : 'This content has no $typeName streams',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.2), fontSize: 12),
-            ),
-          ],
-        ),
-      );
+      if (loadMoreMode != null && _searchController.text.isEmpty) {
+        return _buildEmptyLoadMoreState(
+            focused: inSourceZone && _focusedIndex == 0);
+      }
+      return _buildEmptyState();
     }
 
-    final inSourceZone = _focusZone == _FocusZone.sources;
+    final extraRow = _loadMoreVisible ? 1 : 0;
 
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      itemCount: _filteredSources.length,
-      itemExtent: 72,
+      itemCount: _filteredSources.length + extraRow,
       itemBuilder: (context, index) {
+        if (index >= _filteredSources.length) {
+          return _LoadMoreRow(
+            isLoading: _loadingMode != null,
+            isFocused: inSourceZone && _focusedIndex == index,
+            onTap: _loadMore,
+          );
+        }
         final source = _filteredSources[index];
         final origIdx = _getOriginalIndex(source);
         final isCurrent = origIdx == widget.currentSourceIndex;
@@ -790,7 +934,7 @@ class _SourceSheetState extends State<SourceSheet>
           isCurrent: isCurrent,
           isResolving: isResolving,
           isError: isError,
-          isTorrentTab: _activeTab == 1,
+          showSeeders: source.streamType == StreamType.torrent,
           pulseAnim: _pulseAnim,
           onTap: () {
             if (_resolvingIndex == null) {
@@ -799,6 +943,218 @@ class _SourceSheetState extends State<SourceSheet>
           },
         );
       },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    final tabName =
+        _tabs.isEmpty ? 'matching' : _tabs[_activeTab].label.toLowerCase();
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.cloud_off_rounded,
+              color: Colors.white.withOpacity(0.1),
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No $tabName sources available',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _searchController.text.isNotEmpty
+                ? 'Try a different search term'
+                : 'This content has no $tabName streams',
+            style: TextStyle(
+                color: Colors.white.withOpacity(0.2), fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyLoadMoreState({required bool focused}) {
+    final tab = _tabs[_activeTab];
+    final isLoading = _loadingMode != null;
+    final String subtitle;
+    if (tab.id == 'packs') {
+      subtitle = "A dedicated season-pack search hasn't run for this play.";
+    } else if (tab.id == 'episodes') {
+      subtitle = "Individual episodes weren't searched for this play.";
+    } else {
+      subtitle = "A full source search hasn't run for this play.";
+    }
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.04),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.travel_explore_rounded,
+              color: Colors.white.withOpacity(0.25),
+              size: 26,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No ${tab.label.toLowerCase()} sources yet',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.6),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.3),
+                  fontSize: 11.5,
+                  height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: isLoading ? null : _loadMore,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: isLoading
+                    ? null
+                    : const LinearGradient(colors: [_accent, _accentSoft]),
+                color: isLoading ? Colors.white.withOpacity(0.06) : null,
+                borderRadius: BorderRadius.circular(10),
+                border: focused
+                    ? Border.all(color: Colors.white, width: 1.5)
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isLoading)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _accentSoft,
+                      ),
+                    )
+                  else
+                    const Icon(Icons.add_rounded,
+                        color: Colors.white, size: 17),
+                  const SizedBox(width: 8),
+                  Text(
+                    isLoading ? 'Searching for sources…' : 'Load more sources',
+                    style: TextStyle(
+                      color:
+                          isLoading ? Colors.white.withOpacity(0.6) : Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Load-more Row
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _LoadMoreRow extends StatelessWidget {
+  final bool isLoading;
+  final bool isFocused;
+  final VoidCallback onTap;
+
+  static const _accentSoft = Color(0xFFFF4D57);
+
+  const _LoadMoreRow({
+    required this.isLoading,
+    required this.isFocused,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: isLoading ? null : onTap,
+      child: Container(
+        height: 48,
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: isFocused
+              ? _accentSoft.withOpacity(0.08)
+              : Colors.transparent,
+          border: Border.all(
+            color: isFocused
+                ? _accentSoft.withOpacity(0.8)
+                : _accentSoft.withOpacity(isLoading ? 0.2 : 0.45),
+            width: 1.5,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isLoading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _accentSoft,
+                  ),
+                )
+              else
+                const Icon(Icons.add_rounded, color: _accentSoft, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                isLoading ? 'Searching for sources…' : 'Load more sources',
+                style: TextStyle(
+                  color: isLoading
+                      ? Colors.white.withOpacity(0.5)
+                      : _accentSoft,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -813,12 +1169,12 @@ class _SourceTile extends StatelessWidget {
   final bool isCurrent;
   final bool isResolving;
   final bool isError;
-  final bool isTorrentTab;
+  final bool showSeeders;
   final Animation<double> pulseAnim;
   final VoidCallback onTap;
 
-  static const _accent = Color(0xFF536DFE);
-  static const _accentAlt = Color(0xFF3D5AFE);
+  static const _accent = Color(0xFFE50914);
+  static const _accentSoft = Color(0xFFFF4D57);
 
   const _SourceTile({
     required this.source,
@@ -826,7 +1182,7 @@ class _SourceTile extends StatelessWidget {
     required this.isCurrent,
     required this.isResolving,
     required this.isError,
-    required this.isTorrentTab,
+    required this.showSeeders,
     required this.pulseAnim,
     required this.onTap,
   });
@@ -877,6 +1233,7 @@ class _SourceTile extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
+        height: 64,
         margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
@@ -894,7 +1251,7 @@ class _SourceTile extends StatelessWidget {
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                       colors: [
-                        _accent.withOpacity(0.08),
+                        _accent.withOpacity(0.10),
                         _accent.withOpacity(0.02),
                       ],
                     )
@@ -914,9 +1271,9 @@ class _SourceTile extends StatelessWidget {
             color: isError
                 ? Colors.red.withOpacity(0.5)
                 : isFocused
-                    ? _accent.withOpacity(0.5)
+                    ? _accentSoft.withOpacity(0.6)
                     : isCurrent
-                        ? _accent.withOpacity(0.12)
+                        ? _accent.withOpacity(0.25)
                         : Colors.transparent,
             width: isFocused ? 1.5 : 1,
           ),
@@ -964,7 +1321,7 @@ class _SourceTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: isCurrent
-                          ? _accent
+                          ? _accentSoft
                           : isFocused
                               ? Colors.white
                               : Colors.white.withOpacity(0.85),
@@ -979,12 +1336,12 @@ class _SourceTile extends StatelessWidget {
                     children: [
                       if (size.isNotEmpty)
                         _buildChip(size, const Color(0xFF42A5F5)),
-                      if (isTorrentTab && source.seeders > 0) ...[
+                      if (showSeeders && source.seeders > 0) ...[
                         if (size.isNotEmpty) const SizedBox(width: 6),
                         _buildChip('${source.seeders} S', const Color(0xFF66BB6A)),
                       ],
                       if (source.source.isNotEmpty) ...[
-                        if (size.isNotEmpty || (isTorrentTab && source.seeders > 0))
+                        if (size.isNotEmpty || (showSeeders && source.seeders > 0))
                           const SizedBox(width: 6),
                         _buildChip(source.source, const Color(0xFFAB47BC)),
                       ],
@@ -1001,7 +1358,7 @@ class _SourceTile extends StatelessWidget {
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(_accent.withOpacity(0.7)),
+                  valueColor: AlwaysStoppedAnimation(_accentSoft.withOpacity(0.8)),
                 ),
               )
             else if (isCurrent)
@@ -1045,7 +1402,7 @@ class _SourceTile extends StatelessWidget {
             gradient: LinearGradient(
               colors: [
                 _accent.withOpacity(0.8 + pulseAnim.value * 0.2),
-                _accentAlt.withOpacity(0.6 + pulseAnim.value * 0.2),
+                _accentSoft.withOpacity(0.6 + pulseAnim.value * 0.2),
               ],
             ),
             borderRadius: BorderRadius.circular(6),
@@ -1069,4 +1426,3 @@ class _SourceTile extends StatelessWidget {
     );
   }
 }
-

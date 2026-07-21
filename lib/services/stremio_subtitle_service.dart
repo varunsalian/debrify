@@ -115,6 +115,101 @@ class StremioSubtitleService {
     );
   }
 
+  /// Fetch subtitles keeping per-addon grouping, one [AddonSubtitleSlot] per
+  /// enabled subtitle addon (mirrors the Android TV player's per-addon model).
+  ///
+  /// [onUpdate] fires with a fresh snapshot of the full slot list first when
+  /// all slots enter LOADING, then again as each addon settles (ok/failed).
+  /// The returned future completes with the final list once every addon has
+  /// settled — callers that only want the end state can just await it.
+  Future<List<AddonSubtitleSlot>> fetchSubtitleSlots({
+    required String type,
+    required String imdbId,
+    int? season,
+    int? episode,
+    void Function(List<AddonSubtitleSlot> slots)? onUpdate,
+  }) async {
+    final addons = await getSubtitleAddons();
+    final slots = [
+      for (final a in addons)
+        AddonSubtitleSlot(
+          addonId: a.id,
+          addonName: a.name,
+          status: AddonSubtitleStatus.loading,
+        ),
+    ];
+    onUpdate?.call(List.unmodifiable(slots));
+    if (addons.isEmpty) return const [];
+
+    final subtitleId = _buildSubtitleId(imdbId, season, episode);
+    await Future.wait([
+      for (var i = 0; i < addons.length; i++)
+        () async {
+          AddonSubtitleSlot updated;
+          try {
+            final subs =
+                await _fetchSubtitlesFromAddon(addons[i], type, subtitleId);
+            updated = slots[i].copyWith(
+              status: AddonSubtitleStatus.ok,
+              subtitles: subs,
+            );
+          } catch (e) {
+            updated = slots[i].copyWith(
+              status: AddonSubtitleStatus.failed,
+              error: '$e',
+            );
+          }
+          slots[i] = updated;
+          onUpdate?.call(List.unmodifiable(slots));
+        }(),
+    ]);
+    return List.unmodifiable(slots);
+  }
+
+  /// Re-fetch a single addon by id (the per-addon "Retry" action). Returns
+  /// the settled slot — ok with subtitles, or failed with the error message.
+  Future<AddonSubtitleSlot> fetchSingleAddonSlot({
+    required String addonId,
+    required String type,
+    required String imdbId,
+    int? season,
+    int? episode,
+  }) async {
+    final addons = await getSubtitleAddons();
+    StremioAddon? addon;
+    for (final a in addons) {
+      if (a.id == addonId) {
+        addon = a;
+        break;
+      }
+    }
+    if (addon == null) {
+      return AddonSubtitleSlot(
+        addonId: addonId,
+        addonName: addonId,
+        status: AddonSubtitleStatus.failed,
+        error: 'Addon not found',
+      );
+    }
+    final subtitleId = _buildSubtitleId(imdbId, season, episode);
+    try {
+      final subs = await _fetchSubtitlesFromAddon(addon, type, subtitleId);
+      return AddonSubtitleSlot(
+        addonId: addon.id,
+        addonName: addon.name,
+        status: AddonSubtitleStatus.ok,
+        subtitles: subs,
+      );
+    } catch (e) {
+      return AddonSubtitleSlot(
+        addonId: addon.id,
+        addonName: addon.name,
+        status: AddonSubtitleStatus.failed,
+        error: '$e',
+      );
+    }
+  }
+
   /// Build the subtitle ID for API request
   String _buildSubtitleId(String imdbId, int? season, int? episode) {
     if (season != null && episode != null) {

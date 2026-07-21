@@ -68,6 +68,7 @@ import 'video_player/widgets/subtitle_line_picker_overlay.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
+import '../services/series_source_fetcher.dart';
 import '../services/stremio_service.dart';
 import '../services/stremio_subtitle_service.dart';
 import '../services/trakt/trakt_service.dart';
@@ -157,6 +158,9 @@ class VideoPlayerScreen extends StatefulWidget {
   final Future<String?> Function(Torrent)? resolveStremioSource;
   // Torrent search source switching: resolves a Torrent to a full playlist
   final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
+  // "Load more sources" backend for the source sheet (series pack/episode
+  // searches, or the movie search for bound movie plays)
+  final SeriesSourceFetcher? seriesSourceFetcher;
   // Stremio TV channel guide data
   final List<Map<String, dynamic>>? stremioTvChannels;
   final String? stremioTvCurrentChannelId;
@@ -209,6 +213,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
     this.resolveSourceToPlaylist,
+    this.seriesSourceFetcher,
     this.stremioTvChannels,
     this.stremioTvCurrentChannelId,
     this.stremioTvGuideDataProvider,
@@ -387,6 +392,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Overrides for sources after Stremio TV channel switch
   List<Torrent>? _stremioSourcesOverride;
   Future<String?> Function(Torrent)? _resolveStremioSourceOverride;
+  // Sources grown by the sheet's "Load more" (append-only merge over
+  // widget.stremioSources; the fetcher's flags track what was searched)
+  List<Torrent>? _augmentedSources;
 
   // Stremio TV guide state
   bool _showStremioTvGuide = false;
@@ -399,9 +407,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   int? _currentStremioTvContentEpisode;
   String? _currentStremioTvContentTitle;
 
-  /// Effective sources: override from channel switch, or initial widget sources.
+  /// Effective sources: override from channel switch, load-more-augmented
+  /// list, or initial widget sources (in that priority order).
   List<Torrent>? get _effectiveSources =>
-      _stremioSourcesOverride ?? widget.stremioSources;
+      _stremioSourcesOverride ?? _augmentedSources ?? widget.stremioSources;
 
   /// Effective source resolver: override from channel switch, or initial widget resolver.
   Future<String?> Function(Torrent)? get _effectiveResolver =>
@@ -426,6 +435,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Cached Stremio addon subtitles (per-item cache like Android TV)
   List<StremioSubtitle>? _cachedStremioSubtitles;
+  // Per-addon view of the same fetch (drives the sheet's addon groups);
+  // _cachedStremioSubtitles is its deduped flat projection.
+  List<AddonSubtitleSlot>? _cachedAddonSlots;
   String? _cachedSubtitleKey; // Format: "imdbId:season:episode" or "imdbId"
   String?
   _selectedStremioSubtitleId; // Track selected addon subtitle for UI state
@@ -6083,13 +6095,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   (_effectiveResolver != null ||
                       widget.resolveSourceToPlaylist != null))
                 Positioned.fill(
-                  child: SourceSheet(
-                    sources: _effectiveSources!,
-                    currentSourceIndex: _currentSourceIndex,
-                    resolveSource: _buildSourceSheetResolver(),
-                    onSourceSelected: _handleSourceSelected,
-                    onClose: _hideSourceSheet,
-                  ),
+                  child: Builder(builder: (context) {
+                    // A Stremio TV channel switch replaces the sources
+                    // wholesale — the launch fetcher no longer matches the
+                    // content, so load-more is only offered pre-switch.
+                    final fetcher = _stremioSourcesOverride == null
+                        ? widget.seriesSourceFetcher
+                        : null;
+                    final se = _traktSeasonEpisode();
+                    return SourceSheet(
+                      sources: _effectiveSources!,
+                      currentSourceIndex: _currentSourceIndex,
+                      resolveSource: _buildSourceSheetResolver(),
+                      onSourceSelected: _handleSourceSelected,
+                      onClose: _hideSourceSheet,
+                      seriesFetcher: fetcher,
+                      currentSeason: se.season,
+                      currentEpisode: se.episode,
+                      onSourcesMerged: (merged) {
+                        if (!mounted) return;
+                        setState(() => _augmentedSources = merged);
+                      },
+                    );
+                  }),
                 ),
               // Stremio TV guide sheet overlay
               if (_showStremioTvGuide && _hasStremioTvGuide)
@@ -6749,16 +6777,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _embeddedSubtitleApplied = false;
       _userManuallySelectedSubtitle = false;
       _cachedStremioSubtitles = null;
+      _cachedAddonSlots = null;
       _cachedSubtitleKey = null;
     });
 
     try {
-      final result = await StremioSubtitleService.instance.fetchSubtitles(
+      final slots = await StremioSubtitleService.instance.fetchSubtitleSlots(
         type: contentType,
         imdbId: imdbId,
         season: contentType == 'series' ? season : null,
         episode: contentType == 'series' ? episode : null,
       );
+      final subtitles = AddonSubtitleSlot.flatten(slots);
 
       if (!mounted || fetchToken != _addonSubtitleFetchToken) return null;
 
@@ -6767,12 +6797,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           ? '$imdbId:$season:$episode'
           : imdbId;
 
-      _cachedStremioSubtitles = result.subtitles;
+      _cachedStremioSubtitles = subtitles;
+      _cachedAddonSlots = slots;
       _cachedSubtitleKey = cacheKey;
 
       await _fetchAndMaybeAutoSelectAddonSubtitle();
 
-      if (result.subtitles.isEmpty && mounted) {
+      if (subtitles.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('No online subtitles found for this title'),
@@ -6781,9 +6812,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
 
       return TracksSheetSubtitleSearchResult(
-        subtitles: result.subtitles,
+        subtitles: subtitles,
+        slots: slots,
         selectedSubtitleId: _selectedStremioSubtitleId,
         identityLabel: 'Subtitles for $subtitleDisplayLabel',
+        imdbId: imdbId,
+        contentType: contentType,
+        season: contentType == 'series' ? season : null,
+        episode: contentType == 'series' ? episode : null,
       );
     } catch (e) {
       debugPrint('VideoPlayer: Search subtitle fetch failed: $e');
@@ -6878,15 +6914,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               : effectiveImdbId)
         : null;
 
-    // Check if we have cached subtitles for this content
-    final List<StremioSubtitle>? cachedSubs =
+    // Check if we have cached per-addon subtitle slots for this content
+    final List<AddonSubtitleSlot>? cachedSlots =
         (cacheKey != null && _cachedSubtitleKey == cacheKey)
-        ? _cachedStremioSubtitles
+        ? _cachedAddonSlots
         : null;
 
-    if (cachedSubs != null) {
+    if (cachedSlots != null) {
       debugPrint(
-        'VideoPlayer: Using ${cachedSubs.length} cached subtitles for key: $cacheKey',
+        'VideoPlayer: Using ${cachedSlots.length} cached addon slots for key: $cacheKey',
       );
     }
 
@@ -6910,16 +6946,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       contentType: effectiveContentType,
       contentSeason: subtitleSeason,
       contentEpisode: subtitleEpisode,
-      cachedSubtitles: cachedSubs,
-      onSubtitlesFetched: (subtitles) {
-        // Cache the fetched subtitles for this content
-        if (cacheKey != null) {
-          debugPrint(
-            'VideoPlayer: Caching ${subtitles.length} subtitles for key: $cacheKey',
-          );
-          _cachedStremioSubtitles = subtitles;
-          _cachedSubtitleKey = cacheKey;
+      cachedAddonSlots: cachedSlots,
+      onAddonSlotsFetched: (slots) {
+        // Cache the per-addon slots (and their flat projection, which the
+        // auto-select path consumes) for this content. If the identity was
+        // fixed while the sheet was open, the identify flow already re-keyed
+        // the cache — updates keyed to the stale open-time identity must not
+        // clobber it.
+        if (cacheKey == null) return;
+        if (_cachedSubtitleKey != null && _cachedSubtitleKey != cacheKey) {
+          return;
         }
+        _cachedAddonSlots = slots;
+        _cachedStremioSubtitles = AddonSubtitleSlot.flatten(slots);
+        _cachedSubtitleKey = cacheKey;
       },
       selectedStremioSubtitleId: _selectedStremioSubtitleId,
       onStremioSubtitleSelected: (id) {
@@ -6935,6 +6975,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Reset subtitle-related state when switching content.
   void _resetSubtitleState() {
     _cachedStremioSubtitles = null;
+    _cachedAddonSlots = null;
     _cachedSubtitleKey = null;
     _selectedStremioSubtitleId = null;
     _manualContentImdbId = null;
@@ -7269,15 +7310,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           'VideoPlayer: Using ${subtitles.length} cached addon subtitles',
         );
       } else {
-        // Fetch Stremio subtitles proactively
+        // Fetch Stremio subtitles proactively (per-addon slots, so the
+        // sheet's addon groups are warm when opened)
         debugPrint('VideoPlayer: Fetching addon subtitles (IMDB: $imdbId)');
-        final result = await StremioSubtitleService.instance.fetchSubtitles(
+        final slots = await StremioSubtitleService.instance.fetchSubtitleSlots(
           type: contentType,
           imdbId: imdbId,
           season: season,
           episode: episode,
         );
-        subtitles = result.subtitles;
+        subtitles = AddonSubtitleSlot.flatten(slots);
 
         // Check if content changed during fetch
         if (fetchToken != _addonSubtitleFetchToken) {
@@ -7289,6 +7331,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Cache the results
         _cachedStremioSubtitles = subtitles;
+        _cachedAddonSlots = slots;
         _cachedSubtitleKey = cacheKey;
         debugPrint(
           'VideoPlayer: Fetched and cached ${subtitles.length} addon subtitles',
