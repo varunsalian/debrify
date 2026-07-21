@@ -131,13 +131,19 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   /// Guards async resolves against focus moving on before they land.
   int _previewResolveTicket = 0;
-  // Keyed by channel URL (stable identity) rather than list position, so
-  // focus survives category/search filtering of the grid.
-  final Map<String, FocusNode> _cardFocusNodes = {};
+  // Keyed by channel INSTANCE rather than list position (focus survives
+  // category/search filtering, which reuses the same objects) — and rather
+  // than URL: playlists routinely list one stream URL under several names,
+  // and a URL key would hand those rows a single shared FocusNode, lighting
+  // them all up together and scrambling DPAD traversal around the pair.
+  // Instances are stable for a playlist's whole life (progressive Stremio
+  // batches append to one list; filters select from it), and the map is
+  // rebuilt with the instances on every _loadPlaylist.
+  final Map<IptvChannel, FocusNode> _cardFocusNodes = Map.identity();
 
   FocusNode _focusNodeFor(IptvChannel channel) => _cardFocusNodes.putIfAbsent(
-    channel.url,
-    () => FocusNode(debugLabel: 'iptv-card-${channel.url}'),
+    channel,
+    () => FocusNode(debugLabel: 'iptv-card-${channel.name}-${channel.url}'),
   );
 
   String _lastSearchQuery = '';
@@ -1165,7 +1171,10 @@ class IptvResultsViewState extends State<IptvResultsView>
           itemBuilder: (context, index) {
             final channel = _filteredChannels[index];
             return IptvChannelRow(
-              key: ValueKey(channel.url),
+              // ObjectKey, not ValueKey(url): duplicate URLs are legal in a
+              // playlist, and sibling rows must never share a key (or the
+              // focus node cached behind it — see _cardFocusNodes).
+              key: ObjectKey(channel),
               channel: channel,
               isTelevision: widget.isTelevision,
               onTap: () => _playChannel(channel),
