@@ -41,7 +41,6 @@ import '../utils/concurrency.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/dominant_color.dart';
 import '../utils/format_tag_detector.dart';
-import '../utils/torrent_curation.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
 import '../services/app_route_observer.dart';
@@ -12265,20 +12264,20 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (!mounted || token != _searchToken) return;
     final sel = _effectiveSelection;
     // Series pack/bind post-processing — ported from the old Home
-    // (torrent_search_screen) so this list matches. For a specific episode,
-    // scope results to that episode exactly like the Play path
-    // (curateEpisodeCandidates): keep single episodes matching the S/E token
-    // and packs covering the season, exact matches first. Otherwise (whole
-    // series/season, no episode) drop direct-link singles, season-filter, and
-    // float season/complete packs to the top by coverage priority.
+    // (torrent_search_screen) so this list matches. For a specific episode
+    // (episode drill-down), show EVERYTHING the episode-scoped query returned
+    // — engines + addon streams, torrents and direct links alike, in standard
+    // merge order. No curateEpisodeCandidates here: that filter serves the
+    // auto-play probe path; on this page it dropped direct links lacking an
+    // S/E token in the name and floated season packs, hiding exactly the
+    // per-episode sources the user drilled down for. Pack-NAMED rows the
+    // episode query genuinely returned stay visible by design. Otherwise
+    // (whole series/season, no episode) drop direct-link singles,
+    // season-filter, and float season/complete packs to the top by coverage
+    // priority.
     final List<Torrent> torrents;
     if (sel.isSeries && sel.season != null && sel.episode != null) {
-      torrents = curateEpisodeCandidates(
-        raw,
-        isSeries: true,
-        season: sel.season,
-        episode: sel.episode,
-      );
+      torrents = raw;
     } else {
       torrents = _sortSeriesPacks(_filterSeriesPacks(raw, sel), sel);
     }
