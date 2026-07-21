@@ -1,0 +1,43 @@
+name: DebrifyTV2
+options:
+  bundleIdPrefix: com.debrify
+  deploymentTarget:
+    tvOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+    CODE_SIGN_STYLE: Automatic
+targets:
+  DebrifyTV:
+    type: application
+    platform: tvOS
+    sources:
+      - path: DebrifyTV
+    settings:
+      base:
+        PRODUCT_NAME: DebrifyTV
+        PRODUCT_MODULE_NAME: DebrifyTV
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.debrify.tv2
+        INFOPLIST_KEY_CFBundleDisplayName: Debrify 2
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        CODE_SIGN_ENTITLEMENTS: DebrifyTV/DebrifyTV.entitlements
+    scheme:
+      testTargets:
+        - DebrifyTVTests
+  DebrifyTVTests:
+    type: bundle.unit-test
+    platform: tvOS
+    sources:
+      - path: DebrifyTVTests
+    dependencies:
+      - target: DebrifyTV
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.debrify.tv2.tests
+        GENERATE_INFOPLIST_FILE: YES
