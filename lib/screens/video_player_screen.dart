@@ -7000,11 +7000,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final restoreToken = _addonSubtitleFetchToken;
 
     try {
+      debugPrint('SubAuto: _restoreTrackPreferences entered (token=$restoreToken)');
       // Wait for subtitle tracks to be parsed from the media file
       // media_kit initially only has 'auto' and 'no' placeholder tracks
       await _waitForSubtitleTracks(token: restoreToken);
 
-      if (restoreToken != _addonSubtitleFetchToken) return;
+      if (restoreToken != _addonSubtitleFetchToken) {
+        debugPrint('SubAuto: restore aborted after track wait (content changed)');
+        return;
+      }
 
       final seriesPlaylist = _seriesPlaylist;
       Map<String, dynamic>? trackPreferences;
@@ -7025,7 +7029,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
 
       // Bail out if content changed during preferences fetch
-      if (restoreToken != _addonSubtitleFetchToken) return;
+      if (restoreToken != _addonSubtitleFetchToken) {
+        debugPrint('SubAuto: restore aborted (content changed during prefs fetch)');
+        return;
+      }
+
+      final subTracksNow = _player.state.tracks.subtitle
+          .map((t) => '${t.id}/${t.language}/${t.title}')
+          .toList();
+      debugPrint(
+        'SubAuto: restore start — prefs=${trackPreferences == null ? 'NONE' : trackPreferences.toString()} '
+        'subtitleTracks=$subTracksNow currentSub=${_player.state.track.subtitle.id}',
+      );
 
       bool subtitleApplied = false;
 
@@ -7051,8 +7066,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Bail out if content changed during audio track application
         if (restoreToken != _addonSubtitleFetchToken) return;
 
-        // Apply subtitle track preference
-        if (subtitleTrackId != null && subtitleTrackId.isNotEmpty) {
+        // Apply subtitle track preference. A stored 'auto' is mpv's default
+        // placeholder — persisted whenever the user changed AUDIO without
+        // ever picking a subtitle — not an explicit subtitle choice. Honoring
+        // it would mark an embedded subtitle as applied (mpv 'auto' shows the
+        // file's default track, often English) and block addon auto-select of
+        // the preferred language. Mirror the audio branch's 'auto' guard and
+        // fall through to the default-language path instead.
+        if (subtitleTrackId != null &&
+            subtitleTrackId.isNotEmpty &&
+            subtitleTrackId != 'auto') {
           final tracks = _player.state.tracks;
           // Check if the stored track actually exists in this video
           final trackExists = tracks.subtitle.any(
@@ -7062,33 +7085,80 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             final subtitleTrack = tracks.subtitle.firstWhere(
               (track) => track.id == subtitleTrackId,
             );
-            await _player.setSubtitleTrack(subtitleTrack);
-            subtitleApplied = true;
+            // A stored pick that CONFLICTS with the current global default
+            // language is stale — it predates the user changing the setting
+            // (the ids are bare mpv ordinals, so it can't be trusted across
+            // setting changes). Let the default-language path win instead:
+            // embedded match first, else addon auto-select. Stored 'no'
+            // (explicit off for this series) is always honored.
+            final defaultLang =
+                await StorageService.getDefaultSubtitleLanguage();
+            final conflictsWithDefault = subtitleTrackId != 'no' &&
+                defaultLang != null &&
+                (defaultLang == 'off' ||
+                    !(LanguageMapper.matchesLanguage(
+                          defaultLang,
+                          subtitleTrack.language,
+                        ) ||
+                        LanguageMapper.matchesLanguage(
+                          defaultLang,
+                          subtitleTrack.title,
+                        )));
+            if (conflictsWithDefault) {
+              debugPrint(
+                'SubAuto: stored track id=$subtitleTrackId '
+                '(lang=${subtitleTrack.language}/${subtitleTrack.title}) '
+                'conflicts with default=$defaultLang → default-language path',
+              );
+              subtitleApplied = await _applyDefaultSubtitleLanguage();
+            } else {
+              debugPrint(
+                'SubAuto: applying STORED subtitle track id=$subtitleTrackId '
+                '(lang=${subtitleTrack.language}/${subtitleTrack.title}) — blocks addon auto-select',
+              );
+              await _player.setSubtitleTrack(subtitleTrack);
+              subtitleApplied = true;
+            }
           } else {
             // Stored track doesn't exist in this video - fall through to default
+            debugPrint(
+              'SubAuto: stored subtitle id=$subtitleTrackId not in this file → default-language path',
+            );
             subtitleApplied = await _applyDefaultSubtitleLanguage();
           }
         } else {
           // No stored subtitle preference - apply default subtitle language setting
+          debugPrint(
+            'SubAuto: stored subtitle id=$subtitleTrackId treated as no-choice → default-language path',
+          );
           subtitleApplied = await _applyDefaultSubtitleLanguage();
         }
       } else {
         // No track preferences at all - apply default language settings
+        debugPrint('SubAuto: no stored prefs → default-language path');
         await _applyDefaultAudioLanguage();
         subtitleApplied = await _applyDefaultSubtitleLanguage();
       }
 
       // Final check before applying state
-      if (restoreToken != _addonSubtitleFetchToken) return;
+      if (restoreToken != _addonSubtitleFetchToken) {
+        debugPrint('SubAuto: restore aborted post-apply (content changed)');
+        return;
+      }
 
       // Track if embedded subtitle was applied for addon fallback
       _embeddedSubtitleApplied = subtitleApplied;
       _trackPreferencesReadyForAddonSubtitles = true;
+      debugPrint(
+        'SubAuto: restore done — embeddedSubtitleApplied=$subtitleApplied → running addon auto-select',
+      );
 
       // Always fetch Stremio addon subtitles proactively (like Android TV)
       // Auto-selection will only happen if no embedded subtitle was applied
       _fetchAndMaybeAutoSelectAddonSubtitle();
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('SubAuto: restore FAILED with exception: $e');
+    }
   }
 
   /// Apply default audio language from settings (when no stored preference exists)
@@ -7130,6 +7200,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<bool> _applyDefaultSubtitleLanguage() async {
     try {
       final defaultLang = await StorageService.getDefaultSubtitleLanguage();
+      debugPrint('SubAuto: defaultSubtitleLanguage setting = $defaultLang');
       if (defaultLang == null) {
         // No preference set - do nothing, let player use its default
         return false;
@@ -7159,12 +7230,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
 
       if (matchingTrack != null) {
+        debugPrint(
+          'SubAuto: matched EMBEDDED track id=${matchingTrack.id} lang=${matchingTrack.language} title=${matchingTrack.title} — applying',
+        );
         await _player.setSubtitleTrack(matchingTrack);
         return true;
       }
+      debugPrint(
+        'SubAuto: no $defaultLang embedded track → returning false (addon auto-select may run)',
+      );
       return false;
     } catch (e) {
       // Silently fail - subtitle preference is non-critical
+      debugPrint('SubAuto: _applyDefaultSubtitleLanguage FAILED: $e');
       return false;
     }
   }
@@ -7293,9 +7371,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       // Need IMDB ID to fetch Stremio subtitles
       if (imdbId == null || imdbId.isEmpty) {
-        debugPrint('VideoPlayer: No IMDB ID for addon subtitle fetch');
+        debugPrint('SubAuto: ABORT — no IMDB ID for addon subtitle fetch');
         return;
       }
+      debugPrint(
+        'SubAuto: addon auto-select start — imdb=$imdbId type=$contentType s=$season e=$episode',
+      );
 
       // Build cache key
       final cacheKey = season != null && episode != null
@@ -7341,20 +7422,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Only auto-select if no embedded subtitle was applied and user hasn't manually selected
       if (_embeddedSubtitleApplied) {
         debugPrint(
-          'VideoPlayer: Embedded subtitle already applied, skipping addon auto-select',
+          'SubAuto: SKIP — embedded subtitle already applied (_embeddedSubtitleApplied=true)',
         );
         return;
       }
 
       if (_userManuallySelectedSubtitle) {
         debugPrint(
-          'VideoPlayer: User manually selected subtitle, skipping addon auto-select',
+          'SubAuto: SKIP — user manually selected a subtitle this session',
         );
         return;
       }
 
       if (subtitles.isEmpty) {
-        debugPrint('VideoPlayer: No addon subtitles available for auto-select');
+        debugPrint('SubAuto: SKIP — zero addon subtitles fetched');
         return;
       }
 
@@ -7363,11 +7444,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       // If subtitles are explicitly disabled, don't auto-select
       if (defaultLang == 'off') {
+        debugPrint('SubAuto: SKIP — subtitles set to off');
         return;
       }
 
       // If no preference set, default to English
       final targetLang = defaultLang ?? 'en';
+      final availableLangs = subtitles.map((s) => s.lang).toSet();
+      debugPrint(
+        'SubAuto: matching targetLang=$targetLang (setting=$defaultLang) '
+        'against ${subtitles.length} addon subs, langs=$availableLangs',
+      );
 
       // Find matching subtitle by language
       StremioSubtitle? matchingSub;
@@ -7379,7 +7466,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
 
       if (matchingSub == null) {
-        debugPrint('VideoPlayer: No $targetLang addon subtitle found');
+        debugPrint(
+          'SubAuto: NO MATCH — no $targetLang among $availableLangs',
+        );
         return;
       }
 
@@ -7404,7 +7493,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return;
       }
       if (filePath == null) {
-        debugPrint('VideoPlayer: Failed to download addon subtitle');
+        debugPrint('SubAuto: FAILED to download addon subtitle ${matchingSub.url}');
         return;
       }
 
@@ -7419,10 +7508,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _activeExternalSubtitlePath = filePath;
 
       debugPrint(
-        'VideoPlayer: Auto-enabled ${matchingSub.lang} addon subtitle',
+        'SubAuto: APPLIED addon subtitle "${matchingSub.displayName}" lang=${matchingSub.lang} source=${matchingSub.source}',
       );
     } catch (e) {
-      debugPrint('VideoPlayer: Addon subtitle fetch/auto-selection failed: $e');
+      debugPrint('SubAuto: auto-select FAILED with exception: $e');
     }
   }
 

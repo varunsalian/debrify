@@ -1986,10 +1986,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) return
                 val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
                 if (defaultSubtitleLang == "off") return
-                val hasTextSelected = tracks.groups.any { group ->
-                    group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
-                }
-                if (hasTextSelected) {
+                // Language-aware: an auto-selected embedded track (e.g. a forced
+                // English one in a MULTi rip) only blocks addon auto-select when
+                // it actually matches the user's preferred language.
+                if (selectedEmbeddedTrackSatisfiesPreference(tracks)) {
                     embeddedSubtitleSelected = true
                 }
             }
@@ -3497,6 +3497,30 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     /**
+     * Whether the embedded text track ExoPlayer selected satisfies the user's
+     * default-subtitle-language preference. With no preference set, any
+     * selection satisfies (respect the file's own choice). With a preference,
+     * only a matching-language track does — a forced/default English track
+     * must NOT block addon auto-select of e.g. Spanish.
+     */
+    private fun selectedEmbeddedTrackSatisfiesPreference(tracks: Tracks): Boolean {
+        val pref = SubtitleSettings.getDefaultSubtitleLanguage(this)
+        for (group in tracks.groups) {
+            if (group.type != C.TRACK_TYPE_TEXT) continue
+            for (i in 0 until group.length) {
+                if (!group.isTrackSelected(i)) continue
+                if (pref == null) return true
+                val f = group.getTrackFormat(i)
+                if (LanguageMapper.matchesLanguage(pref, f.language) ||
+                    LanguageMapper.matchesLanguage(pref, f.label) ||
+                    LanguageMapper.matchesLanguage(pref, f.id)
+                ) return true
+            }
+        }
+        return false
+    }
+
+    /**
      * Try to auto-select a Stremio addon subtitle matching user's preferred language.
      * Called after Stremio subtitles are fetched, if no embedded subtitle was selected.
      */
@@ -3511,12 +3535,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // Check if ExoPlayer auto-selected an embedded subtitle via TrackSelector preferences
-        // (covers non-PikPak content where ensureDefaultSubtitleSelected() isn't called)
-        val hasEmbeddedSubSelected = player?.currentTracks?.groups?.any { group ->
-            group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
-        } ?: false
-        if (hasEmbeddedSubSelected && currentStremioSubtitleIndex == -1) {
+        // Check if ExoPlayer auto-selected an embedded subtitle via TrackSelector
+        // preferences (covers non-PikPak content where ensureDefaultSubtitleSelected()
+        // isn't called). Language-aware: a selected track only blocks addon
+        // auto-select when it actually matches the user's preference.
+        val tracksNow = player?.currentTracks
+        if (tracksNow != null &&
+            currentStremioSubtitleIndex == -1 &&
+            selectedEmbeddedTrackSatisfiesPreference(tracksNow)
+        ) {
             embeddedSubtitleSelected = true
             return
         }
