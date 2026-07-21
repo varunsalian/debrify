@@ -237,6 +237,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioSourceBadgeText: TextView? = null
     private var stremioResolutionToken = 0 // Guards against stale async resolution callbacks
     private var hasPlaylistResolver = false // True when source switching rebuilds entire playlist
+    // Series source tabs (payload-gated): torrent sources split into
+    // "Season packs" / "Episodes" columns, each offering "Load more sources"
+    // until its dedicated fetch has run (a series play arrives with only one
+    // category searched — bound source: neither, pack-first: packs only,
+    // episode fallback: episodes only).
+    private var seriesSourceTabs = false
+    private var seriesPacksFetched = true
+    private var seriesEpisodesFetched = true
+    private var moreSourcesLoadingMode: String? = null // in-flight "Load more" tab
 
     // Stremio TV Guide state
     private var isStremioTvMode = false
@@ -5714,18 +5723,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     // ── Sources ─────────────────────────────────────────────────────────────
-    private fun umSourcesModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
-        val direct = stremioSources.filter { it.isDirectStream }
-        val torrent = stremioSources.filter { !it.isDirectStream }
-        val curDirect = stremioSources.getOrNull(currentStremioSourceIndex)?.isDirectStream
-        val col2 = listOf(
-            mrow("Direct", value = "${direct.size}", tag = "direct", selected = curDirect == true),
-            mrow("Torrent", value = "${torrent.size}", tag = "torrent", selected = curDirect == false)
-        )
-        val tab = col2.getOrNull(col2Index)?.tag ?: "direct"
-        val list = if (tab == "torrent") torrent else direct
-        val col3 = if (list.isEmpty()) listOf(mrow("No ${tab} sources", enabled = false))
-        else list.map { src ->
+    private fun umSourceRows(list: List<StremioSource>, emptyLabel: String): MutableList<UnifiedMenuController.Row> {
+        if (list.isEmpty()) return mutableListOf(mrow(emptyLabel, enabled = false))
+        return list.map { src ->
             val meta = buildString {
                 append(src.quality)
                 src.formattedSize?.let { append(" · $it") }
@@ -5736,7 +5736,62 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 src.displayTitle, value = meta, selected = src.index == currentStremioSourceIndex,
                 onOk = { onStremioSourceSelected(src); unifiedMenu?.hide() }
             )
+        }.toMutableList()
+    }
+
+    /** Appends the tab's "Load more sources" action (or its in-flight Loading
+     *  row) when that tab's dedicated fetch hasn't run yet. */
+    private fun umAddLoadMoreRow(
+        rows: MutableList<UnifiedMenuController.Row>,
+        mode: String,
+        fetched: Boolean
+    ) {
+        when {
+            moreSourcesLoadingMode == mode ->
+                rows.add(mrow("Loading more sources…", enabled = false))
+            !fetched ->
+                rows.add(mrow("Load more sources", accent = true,
+                    onOk = { requestMoreTorrentSources(mode) }))
         }
+    }
+
+    private fun umSourcesModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
+        val direct = stremioSources.filter { it.isDirectStream }
+        val torrent = stremioSources.filter { !it.isDirectStream }
+        val current = stremioSources.getOrNull(currentStremioSourceIndex)
+
+        if (seriesSourceTabs) {
+            // Series play: torrent sources split into pack/episode tabs, each
+            // with on-demand "Load more" until its dedicated fetch has run.
+            val packs = torrent.filter { it.isSeasonPack }
+            val episodes = torrent.filter { !it.isSeasonPack }
+            val curTorrent = current != null && !current.isDirectStream
+            val col2 = listOf(
+                mrow("Season packs", value = "${packs.size}", tag = "packs",
+                    selected = curTorrent && current!!.isSeasonPack),
+                mrow("Episodes", value = "${episodes.size}", tag = "episodes",
+                    selected = curTorrent && !current!!.isSeasonPack),
+                mrow("Direct", value = "${direct.size}", tag = "direct",
+                    selected = current?.isDirectStream == true)
+            )
+            val tab = col2.getOrNull(col2Index)?.tag ?: "packs"
+            val col3 = when (tab) {
+                "packs" -> umSourceRows(packs, "No season pack sources")
+                    .also { umAddLoadMoreRow(it, "packs", seriesPacksFetched) }
+                "episodes" -> umSourceRows(episodes, "No episode sources")
+                    .also { umAddLoadMoreRow(it, "episodes", seriesEpisodesFetched) }
+                else -> umSourceRows(direct, "No direct sources")
+            }
+            return UnifiedMenuController.Model(col1, "SOURCES", col2, "Switch source", col3)
+        }
+
+        val col2 = listOf(
+            mrow("Direct", value = "${direct.size}", tag = "direct", selected = current?.isDirectStream == true),
+            mrow("Torrent", value = "${torrent.size}", tag = "torrent", selected = current?.isDirectStream == false)
+        )
+        val tab = col2.getOrNull(col2Index)?.tag ?: "direct"
+        val list = if (tab == "torrent") torrent else direct
+        val col3 = umSourceRows(list, "No ${tab} sources")
         return UnifiedMenuController.Model(col1, "SOURCES", col2, "Switch source", col3)
     }
 
@@ -6574,10 +6629,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Setup quality badge
         updateStremioQualityBadge()
 
-        // Badge opens the unified menu's Sources section — the single picker.
+        // Badge opens the unified menu's Sources section — the single picker,
+        // landing on the tab that holds the currently playing source.
         stremioSourceBadge?.setOnClickListener {
             hideControlsMenu()
-            unifiedMenu?.show("sources")
+            unifiedMenu?.show("sources", currentSourcesTab())
+        }
+    }
+
+    /** col2 tag of the tab containing the current source (null → default). */
+    private fun currentSourcesTab(): String? {
+        val current = stremioSources.getOrNull(currentStremioSourceIndex) ?: return null
+        if (!seriesSourceTabs) return if (current.isDirectStream) "direct" else "torrent"
+        return when {
+            current.isDirectStream -> "direct"
+            current.isSeasonPack -> "packs"
+            else -> "episodes"
         }
     }
 
@@ -6819,6 +6886,91 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - exception: ${e.message}", e)
             showStatusPillTransient("Couldn't switch source")
         }
+    }
+
+    /**
+     * "Load more sources" for a series source tab: asks Flutter to run the
+     * not-yet-fetched category's search ('packs' | 'episodes'). The response
+     * carries the FULL updated source list (append-only, so every existing
+     * index — including [currentStremioSourceIndex] — stays valid) plus the
+     * updated per-tab fetch flags. While in flight the tab shows a disabled
+     * Loading row; a failure keeps the button up for a retry.
+     */
+    private fun requestMoreTorrentSources(mode: String) {
+        if (moreSourcesLoadingMode != null) return
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            showStatusPillTransient("Couldn't load more sources")
+            return
+        }
+        moreSourcesLoadingMode = mode
+        unifiedMenu?.render()
+        // Current playlist position: a season-pack playlist auto-advances
+        // episodes without relaunching, so the fetch must target what's
+        // playing NOW, not the launch episode.
+        val curItem = payload?.items?.getOrNull(currentIndex)
+        android.util.Log.d(
+            "AndroidTvPlayer",
+            "requestMoreTorrentSources - mode=$mode, s=${curItem?.season}, e=${curItem?.episode}"
+        )
+        channel.invokeMethod(
+            "requestMoreTorrentSources",
+            hashMapOf<String, Any?>(
+                "mode" to mode,
+                "season" to curItem?.season,
+                "episode" to curItem?.episode,
+            ),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread { applyMoreTorrentSources(mode, result as? Map<*, *>) }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    android.util.Log.e("AndroidTvPlayer", "requestMoreTorrentSources - error: $errorCode - $errorMessage")
+                    runOnUiThread { failMoreTorrentSources() }
+                }
+
+                override fun notImplemented() {
+                    android.util.Log.e("AndroidTvPlayer", "requestMoreTorrentSources - not implemented")
+                    runOnUiThread { failMoreTorrentSources() }
+                }
+            }
+        )
+    }
+
+    private fun applyMoreTorrentSources(mode: String, map: Map<*, *>?) {
+        moreSourcesLoadingMode = null
+        if (map == null) {
+            failMoreTorrentSources(alreadyCleared = true)
+            return
+        }
+        val newSources = map["stremioSources"] as? List<*>
+        if (newSources != null && newSources.isNotEmpty()) {
+            val before = stremioSources.size
+            stremioSources.clear()
+            for ((idx, src) in newSources.withIndex()) {
+                val srcMap = src as? Map<*, *> ?: continue
+                stremioSources.add(StremioSource.fromMap(srcMap, idx))
+            }
+            // Append-only contract: the current source keeps its index; clamp
+            // is belt-and-braces only.
+            currentStremioSourceIndex = currentStremioSourceIndex
+                .coerceIn(0, stremioSources.lastIndex.coerceAtLeast(0))
+            android.util.Log.d(
+                "AndroidTvPlayer",
+                "applyMoreTorrentSources - mode=$mode, sources $before → ${stremioSources.size}"
+            )
+        }
+        (map["packsFetched"] as? Boolean)?.let { seriesPacksFetched = it }
+        (map["episodesFetched"] as? Boolean)?.let { seriesEpisodesFetched = it }
+        updateStremioQualityBadge()
+        unifiedMenu?.render()
+    }
+
+    private fun failMoreTorrentSources(alreadyCleared: Boolean = false) {
+        if (!alreadyCleared) moreSourcesLoadingMode = null
+        showStatusPillTransient("Couldn't load more sources")
+        unifiedMenu?.render()
     }
 
     private fun switchToSourcePlaylist(sourceIndex: Int, rawItems: List<*>) {
@@ -7217,6 +7369,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Parse playlist resolver flag
             hasPlaylistResolver = obj.optBoolean("hasPlaylistResolver", false)
+
+            // Series source tabs: pack/episode split + per-tab "Load more"
+            // availability. Parsed unconditionally (defaults off) so a
+            // relaunch/next-episode payload can never inherit stale state.
+            seriesSourceTabs = obj.optBoolean("seriesSourceTabs", false)
+            seriesPacksFetched = obj.optBoolean("seriesPacksFetched", true)
+            seriesEpisodesFetched = obj.optBoolean("seriesEpisodesFetched", true)
+            moreSourcesLoadingMode = null
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 
@@ -8165,8 +8325,15 @@ private data class StremioSource(
     val seeders: Int,
     val source: String?,
     val quality: String,     // parsed: "4K", "1080p", "720p", "480p", "HD"
+    // Coverage stamped by the Dart search engines: 'completeSeries',
+    // 'multiSeasonPack', 'seasonPack', 'singleEpisode', or null (unknown).
+    val coverageType: String? = null,
 ) {
     val isDirectStream: Boolean get() = streamType == "directUrl"
+
+    /** Season/series-pack coverage — drives the series source-tab split. */
+    val isSeasonPack: Boolean get() = coverageType == "seasonPack" ||
+        coverageType == "multiSeasonPack" || coverageType == "completeSeries"
 
     val displayTitle: String get() {
         val newlineIdx = name.indexOf('\n')
@@ -8199,6 +8366,7 @@ private data class StremioSource(
                 seeders = obj.optInt("seeders", 0),
                 source = obj.optString("source").takeIf { it.isNotEmpty() },
                 quality = parseQuality(name),
+                coverageType = obj.optString("coverage_type").takeIf { it.isNotEmpty() },
             )
         }
 
@@ -8214,6 +8382,7 @@ private data class StremioSource(
                 seeders = (map["seeders"] as? Number)?.toInt() ?: 0,
                 source = (map["source"] as? String)?.takeIf { it.isNotEmpty() },
                 quality = parseQuality(name),
+                coverageType = (map["coverage_type"] as? String)?.takeIf { it.isNotEmpty() },
             )
         }
 

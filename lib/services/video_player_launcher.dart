@@ -22,6 +22,7 @@ import '../services/debrid_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/next_episode_service.dart';
 import '../services/analytics_service.dart';
+import '../services/series_source_fetcher.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
@@ -219,6 +220,9 @@ class VideoPlayerLaunchArgs {
   final Future<String?> Function(Torrent)? resolveStremioSource;
   // Torrent search source switching: resolves a Torrent to a full playlist
   final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
+  // Series source tabs: on-demand "Load more sources" fetcher for the
+  // pack/episode split. Non-null only for series plays with a searchable id.
+  final SeriesSourceFetcher? seriesSourceFetcher;
   // Stremio TV in-player channel guide
   final List<Map<String, dynamic>>? stremioTvChannels;
   final String? stremioTvCurrentChannelId;
@@ -283,6 +287,7 @@ class VideoPlayerLaunchArgs {
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
     this.resolveSourceToPlaylist,
+    this.seriesSourceFetcher,
     this.stremioTvChannels,
     this.stremioTvCurrentChannelId,
     this.stremioTvRotationMinutes,
@@ -1528,6 +1533,40 @@ class VideoPlayerLauncher {
         };
       }
 
+      // "Load more sources" for the series source tabs: run the missing
+      // category's search (packs/episodes), APPEND the deduped results onto
+      // the mutable sources holder — never re-order; the native side and the
+      // resolvers above couple a source to its list index — and hand the full
+      // list back. Returning null (search failed) keeps the native button up
+      // for a retry.
+      final seriesFetcher = args.seriesSourceFetcher;
+      Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
+          moreSourcesProviderForTv;
+      if (seriesFetcher != null && currentStremioSources.isNotEmpty) {
+        moreSourcesProviderForTv = (String mode, {int? season, int? episode}) async {
+          // season/episode = what the native player is CURRENTLY on (a pack
+          // playlist auto-advances without relaunching); the fetcher falls
+          // back to the launch episode when absent.
+          final fetched =
+              await seriesFetcher.fetch(mode, season: season, episode: episode);
+          if (fetched == null) return null;
+          currentStremioSources = SeriesSourceFetcher.mergeSources(
+            currentStremioSources,
+            fetched,
+          );
+          debugPrint(
+            'VideoPlayerLauncher: load-more "$mode" → ${fetched.length} fetched, '
+            '${currentStremioSources.length} total sources',
+          );
+          return {
+            'stremioSources':
+                currentStremioSources.map((t) => t.toJson()).toList(),
+            'packsFetched': seriesFetcher.packsFetched,
+            'episodesFetched': seriesFetcher.episodesFetched,
+          };
+        };
+      }
+
       // Build Stremio TV channel switch wrapper that updates mutable sources holder
       Map<String, dynamic>? prepareStremioTvPlaybackResult(
         Map<String, dynamic>? playbackResult,
@@ -1583,6 +1622,13 @@ class VideoPlayerLauncher {
           'seriesRotationMinutes': args.stremioTvSeriesRotationMinutes,
           'mixSalt': args.stremioTvMixSalt,
         };
+      }
+      // Series source tabs: tell the native player to split torrent sources
+      // into pack/episode tabs, and which tabs still offer "Load more".
+      if (moreSourcesProviderForTv != null) {
+        payloadMap['seriesSourceTabs'] = true;
+        payloadMap['seriesPacksFetched'] = seriesFetcher!.packsFetched;
+        payloadMap['seriesEpisodesFetched'] = seriesFetcher.episodesFetched;
       }
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
@@ -1652,6 +1698,7 @@ class VideoPlayerLauncher {
             : null,
         onResolveStremioSource: stremioSourceResolverForTv,
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
+        onRequestMoreSources: moreSourcesProviderForTv,
         onRequestStremioTvGuideData: args.stremioTvGuideDataProvider,
         onRequestStremioTvChannelSwitch: channelSwitchForTv,
         onRequestStremioTvNext: stremioTvNextForTv,

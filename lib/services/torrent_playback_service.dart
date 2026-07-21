@@ -38,6 +38,7 @@ import 'local_bound_source_service.dart';
 import 'main_page_bridge.dart';
 import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
+import 'series_source_fetcher.dart';
 import 'series_source_service.dart';
 import 'storage_service.dart';
 import 'torbox_service.dart';
@@ -322,6 +323,9 @@ class TorrentPlaybackService {
     // Quick-play filter ladder (QUICK_PLAY_FILTERS_PLAN.md): ranks candidates
     // by filter strictness. Null/inactive ⇒ byte-identical legacy behavior.
     FilterLadder? ladder,
+    // "Load more sources" backend for the player's series source tabs; rides
+    // through to the launch untouched. Null ⇒ flat source list (unchanged).
+    SeriesSourceFetcher? seriesFetcher,
   }) async {
     // Idempotent for callers that already ordered (stable sort).
     if (ladder != null && ladder.isActive) {
@@ -364,7 +368,10 @@ class TorrentPlaybackService {
           stremioSources: torrents,
           stremioCurrentSourceIndex: torrents.indexOf(direct),
           resolveSourceToPlaylist:
-              torrents.length > 1 ? _lazyProviderResolver() : null,
+              (torrents.length > 1 || seriesFetcher != null)
+                  ? _lazyProviderResolver()
+                  : null,
+          seriesSourceFetcher: seriesFetcher,
           meta: meta,
         );
         final nextEpisodeHandler =
@@ -526,6 +533,7 @@ class TorrentPlaybackService {
       meta: meta,
       sources: torrents,
       sourceIndex: idx < 0 ? 0 : idx,
+      seriesFetcher: seriesFetcher,
       overlay: loader,
     );
   }
@@ -816,42 +824,24 @@ class TorrentPlaybackService {
         provider != 'pikpak' &&
         !_recentlyNoPack(imdbId, season) &&
         await StorageService.getAutoBindSeriesPacksOnPlay()) {
-      List<Torrent> packs = const [];
-      var searchOk = false;
-      try {
-        final packRes = await TorrentService.searchByImdbWithStremio(
-          imdbId,
-          isMovie: false,
-          contentType: 'series',
-          // No season/episode → the whole-series smart-fallback path. Seed the
-          // probe with the requested season so its season-pack tier is found
-          // for ANY season (the default probe is only S1–S5).
-          availableSeasons: [season],
-        );
-        packs = (packRes['torrents'] as List).cast<Torrent>();
-        searchOk = true;
-      } catch (_) {
-        // Pack search failed (e.g. transient network) — the episode search
-        // below still runs, and we DON'T poison the negative cache so the next
-        // episode retries rather than deferring for the whole TTL.
-      }
+      // null = the SEARCH failed (transient network) — the episode search
+      // below still runs, and we DON'T poison the negative cache so the next
+      // episode retries rather than deferring for the whole TTL.
+      final packResult = await searchSeriesPackSources(
+        imdbId: imdbId,
+        label: label,
+        season: season,
+        provider: provider,
+        ladder: ladder,
+        isCancelled: () => cancel.cancelled,
+        onCacheCheck: () => overlay.setStage(PlayLoadStage.cacheCheck),
+      );
+      final searchOk = packResult != null;
+      final packs = packResult ?? const <Torrent>[];
       if (cancel.cancelled) return;
       if (!context.mounted) {
         closeLoading();
         return;
-      }
-      packs = await _curatePackCandidates(packs,
-          label: label, season: season, provider: provider);
-      // Ladder tier is the PRIMARY pack sort key (stable over the coverage/
-      // seeders order): the winning pack gets PINNED by auto-bind, so it must
-      // be one the user's filters approve of when any such pack exists.
-      packs = ladder.order(packs);
-      if (packs.isNotEmpty &&
-          (provider == 'torbox' || provider == 'premiumize')) {
-        overlay.setStage(PlayLoadStage.cacheCheck);
-        packs = await _cacheFirst(provider, packs);
-        // Stable re-sort: tier dominates cachedness, cached-first within tier.
-        packs = ladder.order(packs);
       }
       _applyLadderNote(overlay, ladder, packs);
       if (cancel.cancelled) return;
@@ -883,6 +873,8 @@ class TorrentPlaybackService {
               meta: meta,
               sources: packs,
               sourceIndex: idx < 0 ? 0 : idx,
+              seriesFetcher: seriesFetcherFor(
+                  meta: meta, provider: provider, packsFetched: true),
               overlay: overlay);
           return;
         }
@@ -895,10 +887,19 @@ class TorrentPlaybackService {
       if (searchOk) _markNoPack(imdbId, season);
     }
 
-    Map<String, dynamic> res;
+    List<Torrent> torrents;
     try {
-      res = await TorrentService.searchByImdb(imdbId,
-          isMovie: isMovie, season: season, episode: episode);
+      torrents = await searchCuratedSources(
+        imdbId: imdbId,
+        label: label,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+        provider: provider,
+        isCancelled: () => cancel.cancelled,
+        onResults: (n) =>
+            overlay.setStage(PlayLoadStage.searching, sourceCount: n),
+      );
     } catch (e) {
       if (cancel.cancelled) return; // overlay already dismissed by Cancel
       closeLoading();
@@ -909,52 +910,6 @@ class TorrentPlaybackService {
     if (!context.mounted) {
       closeLoading();
       return;
-    }
-    var torrents = (res['torrents'] as List).cast<Torrent>();
-    if (torrents.isNotEmpty) {
-      overlay.setStage(PlayLoadStage.searching, sourceCount: torrents.length);
-      // Curate candidates so the RIGHT torrent is probed first (mirrors old
-      // home): drop unrelated titles, keep/relevance-sort by the requested
-      // episode/season, then drop RD-blocked keywords when RD is the provider.
-      // Without this the raw seeder-ranked list can lead with wrong-episode/
-      // other-season packs that resolve fine but get rejected by
-      // _resolvedHasEpisode, burning the probes.
-      torrents = await _curateCandidates(
-        torrents,
-        label: label,
-        isMovie: isMovie,
-        season: season,
-        episode: episode,
-        provider: provider,
-      );
-    }
-    if (torrents.isEmpty) {
-      // Torrent engines came up dry — fall back to the Stremio addons' own
-      // streams. A direct-URL stream plays instantly via playBest's
-      // direct-first preference; addon torrents keep the normal probe path.
-      // Torrents stay preferred overall because this runs only when the
-      // engine search found nothing. (No curation here: addon streams are
-      // already id/episode-scoped by the /stream endpoint, and their names
-      // — quality labels, not titles — would fail the title match.)
-      try {
-        final addonRes = await TorrentService.searchStremioAddonsOnly(
-          imdbId: imdbId,
-          isMovie: isMovie,
-          season: season,
-          episode: episode,
-        );
-        torrents = (addonRes['torrents'] as List).cast<Torrent>();
-      } catch (_) {
-        torrents = const [];
-      }
-      if (cancel.cancelled) return;
-      if (!context.mounted) {
-        closeLoading();
-        return;
-      }
-      if (torrents.isNotEmpty) {
-        overlay.setStage(PlayLoadStage.searching, sourceCount: torrents.length);
-      }
     }
     if (torrents.isEmpty) {
       closeLoading();
@@ -973,7 +928,13 @@ class TorrentPlaybackService {
         meta: meta,
         overlay: overlay,
         isCancelled: () => cancel.cancelled,
-        ladder: ladder);
+        ladder: ladder,
+        // The dedicated episode fetch just ran; the pack tab stays fetchable
+        // even when the pack-first search ran earlier — its results were
+        // discarded (nothing instantly playable), so "Load more" re-lists
+        // them for a manual pick.
+        seriesFetcher: seriesFetcherFor(
+            meta: meta, provider: provider, episodesFetched: true));
   }
 
   /// Loads the quick-play ladder: inactive (a no-op) when the user disabled
@@ -1022,6 +983,196 @@ class TorrentPlaybackService {
   ) {
     final note = ladderNote(ladder, ordered);
     if (note != null) overlay.setNote(note);
+  }
+
+  /// Season/series-pack search chain: whole-series search (seeded with
+  /// [season] so any season's pack tier is probed) → strict pack curation →
+  /// ladder order (→ provider cache-first pass + stable re-sort). Shared by
+  /// the auto-pin pack-first play and the in-player "Load more sources" fetch
+  /// so both produce identically ranked lists. Returns null when the SEARCH
+  /// itself failed (transient network) — distinct from "no packs exist" — so
+  /// callers don't negative-cache a transient failure. [isCancelled] short-
+  /// circuits the chain early; callers re-check it on return. [onCacheCheck]
+  /// fires just before the cache-status pass actually runs (loader stage).
+  static Future<List<Torrent>?> searchSeriesPackSources({
+    required String imdbId,
+    required String label,
+    required int season,
+    required String provider,
+    required FilterLadder ladder,
+    bool Function()? isCancelled,
+    void Function()? onCacheCheck,
+  }) async {
+    List<Torrent> packs;
+    try {
+      final packRes = await TorrentService.searchByImdbWithStremio(
+        imdbId,
+        isMovie: false,
+        contentType: 'series',
+        // No season/episode → the whole-series smart-fallback path. Seed the
+        // probe with the requested season so its season-pack tier is found
+        // for ANY season (the default probe is only S1–S5).
+        availableSeasons: [season],
+      );
+      packs = (packRes['torrents'] as List).cast<Torrent>();
+    } catch (_) {
+      return null;
+    }
+    if (isCancelled?.call() ?? false) return packs;
+    packs = await _curatePackCandidates(packs,
+        label: label, season: season, provider: provider);
+    // Ladder tier is the PRIMARY pack sort key (stable over the coverage/
+    // seeders order): the winning pack gets PINNED by auto-bind, so it must
+    // be one the user's filters approve of when any such pack exists.
+    packs = ladder.order(packs);
+    if (isCancelled?.call() ?? false) return packs;
+    if (packs.isNotEmpty && (provider == 'torbox' || provider == 'premiumize')) {
+      onCacheCheck?.call();
+      packs = await _cacheFirst(provider, packs);
+      // Stable re-sort: tier dominates cachedness, cached-first within tier.
+      packs = ladder.order(packs);
+    }
+    return packs;
+  }
+
+  /// Exact-title search chain: engine search → curation → the Stremio
+  /// addon-only fallback when the engines come up dry. Shared by
+  /// [playFromSelection]'s episode/movie fallback and the in-player "Load
+  /// more sources" episode fetch. Engine-search failures PROPAGATE (callers
+  /// own the error surface); the addon fallback fails silently to an empty
+  /// list, matching the play flow. [onResults] fires with the count each time
+  /// a search produced candidates (loader stage narration).
+  static Future<List<Torrent>> searchCuratedSources({
+    required String imdbId,
+    required String label,
+    required bool isMovie,
+    int? season,
+    int? episode,
+    required String provider,
+    bool Function()? isCancelled,
+    void Function(int count)? onResults,
+  }) async {
+    final res = await TorrentService.searchByImdb(imdbId,
+        isMovie: isMovie, season: season, episode: episode);
+    var torrents = (res['torrents'] as List).cast<Torrent>();
+    if (isCancelled?.call() ?? false) return torrents;
+    if (torrents.isNotEmpty) {
+      onResults?.call(torrents.length);
+      // Curate candidates so the RIGHT torrent is probed first (mirrors old
+      // home): drop unrelated titles, keep/relevance-sort by the requested
+      // episode/season, then drop RD-blocked keywords when RD is the provider.
+      // Without this the raw seeder-ranked list can lead with wrong-episode/
+      // other-season packs that resolve fine but get rejected by
+      // _resolvedHasEpisode, burning the probes.
+      torrents = await _curateCandidates(
+        torrents,
+        label: label,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+        provider: provider,
+      );
+    }
+    if (torrents.isEmpty) {
+      // Torrent engines came up dry — fall back to the Stremio addons' own
+      // streams. A direct-URL stream plays instantly via playBest's
+      // direct-first preference; addon torrents keep the normal probe path.
+      // Torrents stay preferred overall because this runs only when the
+      // engine search found nothing. (No curation here: addon streams are
+      // already id/episode-scoped by the /stream endpoint, and their names
+      // — quality labels, not titles — would fail the title match.)
+      try {
+        final addonRes = await TorrentService.searchStremioAddonsOnly(
+          imdbId: imdbId,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+        );
+        torrents = (addonRes['torrents'] as List).cast<Torrent>();
+      } catch (_) {
+        torrents = const [];
+      }
+      if (isCancelled?.call() ?? false) return torrents;
+      if (torrents.isNotEmpty) onResults?.call(torrents.length);
+    }
+    return torrents;
+  }
+
+  /// Builds the [SeriesSourceFetcher] a series play hands to the player: the
+  /// "Load more sources" backend for the pack/episode source tabs. Returns
+  /// null when the play isn't fetchable-series-shaped (movies, no concrete
+  /// season+episode, non-`tt` ids the torrent engines can't search).
+  /// [provider] is the launch's debrid provider; a non-debrid launch (bound
+  /// 'local' source, addon 'stream') resolves the default configured provider
+  /// at fetch time instead, and the fetch fails soft (null) when none exists.
+  static SeriesSourceFetcher? seriesFetcherFor({
+    required PlaybackMeta? meta,
+    String? provider,
+    bool packsFetched = false,
+    bool episodesFetched = false,
+  }) {
+    final imdbId = meta?.imdbId;
+    final season = meta?.season;
+    final episode = meta?.episode;
+    if (meta == null ||
+        imdbId == null ||
+        !imdbId.startsWith('tt') ||
+        meta.contentType == 'movie' ||
+        season == null ||
+        episode == null) {
+      return null;
+    }
+    final label = meta.title ?? '';
+
+    Future<String?> effectiveProvider() async {
+      if (provider != null &&
+          provider != SeriesSource.localService &&
+          provider != 'stream') {
+        return provider;
+      }
+      return _defaultConfiguredProvider();
+    }
+
+    return SeriesSourceFetcher(
+      season: season,
+      episode: episode,
+      packsFetched: packsFetched,
+      episodesFetched: episodesFetched,
+      // The (s, e) the fetch passes in is the episode CURRENTLY playing — a
+      // season-pack playlist auto-advances inside one player session, so the
+      // launch episode captured above is only the fallback.
+      searchPacks: (s, e) async {
+        final prov = await effectiveProvider();
+        if (prov == null) return null;
+        final ladder = await loadLadder(includeSize: false);
+        return searchSeriesPackSources(
+          imdbId: imdbId,
+          label: label,
+          season: s,
+          provider: prov,
+          ladder: ladder,
+        );
+      },
+      searchEpisodes: (s, e) async {
+        final prov = await effectiveProvider();
+        if (prov == null) return null;
+        final ladder = await loadLadder(includeSize: false);
+        try {
+          final list = await searchCuratedSources(
+            imdbId: imdbId,
+            label: label,
+            isMovie: false,
+            season: s,
+            episode: e,
+            provider: prov,
+          );
+          return ladder.order(list);
+        } catch (_) {
+          // Engine search failed — null keeps the tab's "Load more" for retry.
+          return null;
+        }
+      },
+    );
   }
 
   /// Curate torrent candidates before probing, mirroring the old Home engine:
@@ -1439,20 +1590,37 @@ class TorrentPlaybackService {
 
   /// Reconstruct a [Torrent] from a stored binding so it can flow through the
   /// normal add→resolve→launch pipeline (debrid dedup makes the re-add instant).
-  static Torrent _torrentFromSource(SeriesSource s) => Torrent(
-        rowid: 0,
+  static Torrent _torrentFromSource(SeriesSource s) {
+    // Stamp coverage like the engine field-mapper does for search results —
+    // a reconstructed binding otherwise has coverageType null, and the
+    // player's series source tabs would file a season pack under "Episodes".
+    CoverageInfo? coverage;
+    try {
+      coverage = TorrentCoverageDetector.detectCoverage(
+        title: s.torrentName,
         infohash: s.torrentHash,
-        name: s.torrentName,
-        sizeBytes: 0,
-        createdUnix: 0,
-        seeders: 0,
-        leechers: 0,
-        completed: 0,
-        scrapedDate: 0,
-        magnetUrl:
-            'magnet:?xt=urn:btih:${s.torrentHash}&dn=${Uri.encodeComponent(s.torrentName)}',
-        hasRealInfoHash: true,
       );
+    } catch (_) {}
+    return Torrent(
+      rowid: 0,
+      infohash: s.torrentHash,
+      name: s.torrentName,
+      sizeBytes: 0,
+      createdUnix: 0,
+      seeders: 0,
+      leechers: 0,
+      completed: 0,
+      scrapedDate: 0,
+      magnetUrl:
+          'magnet:?xt=urn:btih:${s.torrentHash}&dn=${Uri.encodeComponent(s.torrentName)}',
+      hasRealInfoHash: true,
+      coverageType: coverage?.coverageType.name,
+      startSeason: coverage?.startSeason,
+      endSeason: coverage?.endSeason,
+      seasonNumber: coverage?.seasonNumber,
+      transformedTitle: coverage?.transformedTitle,
+    );
+  }
 
   /// Play a pinned source directly (no search). Tries each bound source in
   /// priority order; returns true once one plays. Self-heals a source that is
@@ -1612,6 +1780,8 @@ class TorrentPlaybackService {
             meta: meta,
             sources: [t],
             sourceIndex: 0,
+            // Bound play searched NOTHING — both tabs offer "Load more".
+            seriesFetcher: seriesFetcherFor(meta: meta, provider: prov),
             overlay: overlay);
         return true;
       }
@@ -2145,6 +2315,7 @@ class TorrentPlaybackService {
     List<Torrent>? stremioSources,
     int? stremioCurrentSourceIndex,
     Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist,
+    SeriesSourceFetcher? seriesSourceFetcher,
     PlaybackMeta? meta,
     String? rdTorrentId,
     int? torboxTorrentId,
@@ -2160,6 +2331,7 @@ class TorrentPlaybackService {
         stremioSources: stremioSources,
         stremioCurrentSourceIndex: stremioCurrentSourceIndex,
         resolveSourceToPlaylist: resolveSourceToPlaylist,
+        seriesSourceFetcher: seriesSourceFetcher,
         contentImdbId: meta?.imdbId,
         contentType: meta?.contentType,
         contentSeason: meta?.season,
@@ -2342,6 +2514,9 @@ class TorrentPlaybackService {
     PlaybackMeta? meta,
     List<Torrent>? sources,
     int sourceIndex = 0,
+    // "Load more sources" backend for the player's series source tabs (packs
+    // vs episodes) — null for movies/keyword plays, which keep the flat list.
+    SeriesSourceFetcher? seriesFetcher,
     // The play flow's still-showing loader, when the caller kept it up. It
     // covers the whole launch prep (auto-bind writes, the TV payload build
     // with its debrid link resolution, the native activity start) and the
@@ -2407,9 +2582,18 @@ class TorrentPlaybackService {
         startIndex: r.hasPlaylist ? r.startIndex : null,
         stremioSources: sources,
         stremioCurrentSourceIndex: sources != null ? sourceIndex : null,
-        resolveSourceToPlaylist: (sources != null && sources.length > 1)
-            ? _switchAwareResolver(provider, meta)
+        // A single-source launch still needs the resolver when the fetcher is
+        // along: "Load more" grows the list mid-session and the new entries
+        // must be switchable. A bound 'local' launch has no debrid provider —
+        // the lazy variant resolves one silently at switch time.
+        resolveSourceToPlaylist: (sources != null &&
+                sources.isNotEmpty &&
+                (sources.length > 1 || seriesFetcher != null))
+            ? (provider == SeriesSource.localService
+                ? _lazySwitchAwareResolver(meta)
+                : _switchAwareResolver(provider, meta))
             : null,
+        seriesSourceFetcher: seriesFetcher,
         meta: meta,
         rdTorrentId: r.rdTorrentId,
         torboxTorrentId: r.torboxTorrentId,
@@ -2671,6 +2855,24 @@ class TorrentPlaybackService {
         await _rebindOnSourceSwitch(meta, t, provider);
       }
       return playlist;
+    };
+  }
+
+  /// [_switchAwareResolver] for launches whose provider can't resolve torrents
+  /// (a bound 'local' source): the provider is resolved silently at switch
+  /// time — default/first-configured, matching [_lazyProviderResolver] — and
+  /// the switch still syncs the pinned source. Fails gracefully (null) when
+  /// no provider is configured.
+  static Future<List<PlaylistEntry>?> Function(Torrent)
+      _lazySwitchAwareResolver(PlaybackMeta? meta) {
+    return (Torrent t) async {
+      if (t.streamType == StreamType.directUrl &&
+          (t.directUrl?.isNotEmpty ?? false)) {
+        return [PlaylistEntry(url: t.directUrl!, title: t.displayTitle)];
+      }
+      final provider = await _defaultConfiguredProvider();
+      if (provider == null) return null;
+      return _switchAwareResolver(provider, meta)(t);
     };
   }
 

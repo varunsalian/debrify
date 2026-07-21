@@ -50,6 +50,14 @@ class AndroidTvPlayerBridge {
   static Future<String?> Function(int)? _stremioSourceResolver;
   static Future<List<Map<String, dynamic>>?> Function(int)?
   _sourcePlaylistResolver;
+  // Series source tabs: fetches the not-yet-loaded category ('packs' |
+  // 'episodes') for the currently playing season/episode and returns the full
+  // updated source list + fetch flags.
+  static Future<Map<String, dynamic>?> Function(
+    String, {
+    int? season,
+    int? episode,
+  })? _moreSourcesProvider;
   static Future<Map<String, dynamic>?> Function(List<String>)?
   _stremioTvGuideDataProvider;
   static Future<Map<String, dynamic>?> Function(String)?
@@ -385,6 +393,53 @@ class AndroidTvPlayerBridge {
             }
           }
           return null;
+        case 'requestMoreTorrentSources':
+          // Series source tabs: the native player asked for the not-yet-
+          // fetched category. A null/failed fetch throws so the native side
+          // keeps its "Load more" button up for a retry.
+          debugPrint(
+            'AndroidTvPlayerBridge: requestMoreTorrentSources received - args: ${call.arguments}',
+          );
+          final moreProvider = _moreSourcesProvider;
+          if (moreProvider == null) {
+            debugPrint(
+              'AndroidTvPlayerBridge: no more-sources provider registered',
+            );
+            return null;
+          }
+          final moreArgs = call.arguments;
+          final mode = (moreArgs is Map) ? moreArgs['mode'] as String? : null;
+          if (mode == null || mode.isEmpty) return null;
+          final curSeason = (moreArgs as Map)['season'] as int?;
+          final curEpisode = moreArgs['episode'] as int?;
+          try {
+            final result = await moreProvider(
+              mode,
+              season: curSeason,
+              episode: curEpisode,
+            );
+            debugPrint(
+              'AndroidTvPlayerBridge: more-sources fetch returned: '
+              '${result != null ? "${(result['stremioSources'] as List?)?.length} sources" : "null"}',
+            );
+            if (result == null) {
+              throw PlatformException(
+                code: 'more_sources_failed',
+                message: 'Source search failed',
+              );
+            }
+            return result;
+          } on PlatformException {
+            rethrow;
+          } catch (e, stack) {
+            debugPrint(
+              'AndroidTvPlayerBridge: more-sources provider error $e\n$stack',
+            );
+            throw PlatformException(
+              code: 'more_sources_failed',
+              message: e.toString(),
+            );
+          }
         case 'torrentPlaybackFinished':
           _lastPlaybackHeartbeat = null; // reset so the next watch isn't throttled
           final finishedTorrent = _torrentFinishedCallback;
@@ -394,6 +449,7 @@ class AndroidTvPlayerBridge {
           _movieMetadataProvider = null;
           _stremioSourceResolver = null;
           _sourcePlaylistResolver = null;
+          _moreSourcesProvider = null;
           _stremioTvGuideDataProvider = null;
           _stremioTvChannelSwitchProvider = null;
           _stremioTvNextProvider = null;
@@ -895,6 +951,8 @@ class AndroidTvPlayerBridge {
     MovieMetadataProvider? onRequestMovieMetadata,
     Future<String?> Function(int)? onResolveStremioSource,
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
+    Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
+    onRequestMoreSources,
     Future<Map<String, dynamic>?> Function(List<String>)?
     onRequestStremioTvGuideData,
     Future<Map<String, dynamic>?> Function(String)?
@@ -915,6 +973,7 @@ class AndroidTvPlayerBridge {
     _movieMetadataProvider = onRequestMovieMetadata;
     _stremioSourceResolver = onResolveStremioSource;
     _sourcePlaylistResolver = onResolveSourcePlaylist;
+    _moreSourcesProvider = onRequestMoreSources;
     _stremioTvGuideDataProvider = onRequestStremioTvGuideData;
     _stremioTvChannelSwitchProvider = onRequestStremioTvChannelSwitch;
     _stremioTvNextProvider = onRequestStremioTvNext;
@@ -955,6 +1014,7 @@ class AndroidTvPlayerBridge {
     _movieMetadataProvider = null;
     _stremioSourceResolver = null;
     _sourcePlaylistResolver = null;
+    _moreSourcesProvider = null;
     _stremioTvGuideDataProvider = null;
     _stremioTvChannelSwitchProvider = null;
     _stremioTvNextProvider = null;
