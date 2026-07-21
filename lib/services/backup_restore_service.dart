@@ -278,6 +278,9 @@ class BackupRestoreService {
             if (username != null && username.isNotEmpty) {
               await StorageService.setTraktUsername(username);
             }
+            // Match interactive connect: a freshly imported Trakt session
+            // starts with catalog scrobbling on.
+            await StorageService.setTraktSyncCatalogItems(true);
             report.trakt = true;
           } catch (e) {
             report.errors.add('Trakt: $e');

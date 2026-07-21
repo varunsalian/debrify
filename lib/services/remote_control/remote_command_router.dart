@@ -432,6 +432,9 @@ class RemoteCommandRouter {
       if (username != null && username.isNotEmpty) {
         await StorageService.setTraktUsername(username);
       }
+      // Match interactive connect: a freshly imported Trakt session starts
+      // with catalog scrobbling on.
+      await StorageService.setTraktSyncCatalogItems(true);
 
       debugPrint('RemoteCommandRouter: Trakt session configured successfully');
       _showSnackBar('Trakt connected successfully');
