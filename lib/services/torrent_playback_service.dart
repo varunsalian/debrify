@@ -1123,15 +1123,7 @@ class TorrentPlaybackService {
       return null;
     }
     final label = meta.title ?? '';
-
-    Future<String?> effectiveProvider() async {
-      if (provider != null &&
-          provider != SeriesSource.localService &&
-          provider != 'stream') {
-        return provider;
-      }
-      return _defaultConfiguredProvider();
-    }
+    Future<String?> effectiveProvider() => _effectiveFetchProvider(provider);
 
     return SeriesSourceFetcher(
       season: season,
@@ -1169,6 +1161,58 @@ class TorrentPlaybackService {
           return ladder.order(list);
         } catch (_) {
           // Engine search failed — null keeps the tab's "Load more" for retry.
+          return null;
+        }
+      },
+    );
+  }
+
+  /// The provider a "Load more sources" fetch should search with: the
+  /// launch's own debrid provider, except non-debrid launches (bound 'local'
+  /// source, addon 'stream') resolve the default configured one instead.
+  /// Null (nothing configured) fails the fetch soft.
+  static Future<String?> _effectiveFetchProvider(String? provider) async {
+    if (provider != null &&
+        provider != SeriesSource.localService &&
+        provider != 'stream') {
+      return provider;
+    }
+    return _defaultConfiguredProvider();
+  }
+
+  /// Movie counterpart of [seriesFetcherFor]: a bound movie play launches
+  /// with just the pinned torrent, so its flat Torrent tab offers one "Load
+  /// more sources" that runs the normal movie search chain. Null when the
+  /// play isn't a searchable movie. Non-bound movie plays already carry the
+  /// full search results, so their launch sites simply don't build one.
+  static SeriesSourceFetcher? movieFetcherFor({
+    required PlaybackMeta? meta,
+    String? provider,
+  }) {
+    final imdbId = meta?.imdbId;
+    if (meta == null ||
+        imdbId == null ||
+        !imdbId.startsWith('tt') ||
+        meta.contentType != 'movie') {
+      return null;
+    }
+    final label = meta.title ?? '';
+    return SeriesSourceFetcher.movie(
+      searchMovie: () async {
+        final prov = await _effectiveFetchProvider(provider);
+        if (prov == null) return null;
+        // Size buckets are movie-meaningful — keep them (unlike series).
+        final ladder = await loadLadder();
+        try {
+          final list = await searchCuratedSources(
+            imdbId: imdbId,
+            label: label,
+            isMovie: true,
+            provider: prov,
+          );
+          return ladder.order(list);
+        } catch (_) {
+          // Engine search failed — null keeps "Load more" for retry.
           return null;
         }
       },
@@ -1780,8 +1824,11 @@ class TorrentPlaybackService {
             meta: meta,
             sources: [t],
             sourceIndex: 0,
-            // Bound play searched NOTHING — both tabs offer "Load more".
-            seriesFetcher: seriesFetcherFor(meta: meta, provider: prov),
+            // Bound play searched NOTHING — every applicable "Load more"
+            // shows. Each factory self-gates on content type, so exactly one
+            // (or neither, for non-tt ids) is non-null.
+            seriesFetcher: seriesFetcherFor(meta: meta, provider: prov) ??
+                movieFetcherFor(meta: meta, provider: prov),
             overlay: overlay);
         return true;
       }

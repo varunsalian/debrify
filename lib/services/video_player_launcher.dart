@@ -1563,6 +1563,7 @@ class VideoPlayerLauncher {
                 currentStremioSources.map((t) => t.toJson()).toList(),
             'packsFetched': seriesFetcher.packsFetched,
             'episodesFetched': seriesFetcher.episodesFetched,
+            'movieFetched': seriesFetcher.movieFetched,
           };
         };
       }
@@ -1623,12 +1624,18 @@ class VideoPlayerLauncher {
           'mixSalt': args.stremioTvMixSalt,
         };
       }
-      // Series source tabs: tell the native player to split torrent sources
-      // into pack/episode tabs, and which tabs still offer "Load more".
+      // "Load more sources" flags: series plays get the pack/episode tab
+      // split; movie plays keep the flat picker with one Load more row on
+      // the Torrent tab.
       if (moreSourcesProviderForTv != null) {
-        payloadMap['seriesSourceTabs'] = true;
-        payloadMap['seriesPacksFetched'] = seriesFetcher!.packsFetched;
-        payloadMap['seriesEpisodesFetched'] = seriesFetcher.episodesFetched;
+        if (seriesFetcher!.isMovie) {
+          payloadMap['movieMoreSources'] = true;
+          payloadMap['movieSourcesFetched'] = seriesFetcher.movieFetched;
+        } else {
+          payloadMap['seriesSourceTabs'] = true;
+          payloadMap['seriesPacksFetched'] = seriesFetcher.packsFetched;
+          payloadMap['seriesEpisodesFetched'] = seriesFetcher.episodesFetched;
+        }
       }
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(

@@ -129,5 +129,39 @@ void main() {
       expect(fetcher.packsFetched, isFalse);
       expect(fetcher.episodesFetched, isFalse);
     });
+
+    test('flavors reject each other\'s modes', () async {
+      final series = SeriesSourceFetcher(
+        season: 1,
+        episode: 1,
+        searchPacks: (s, e) async => <Torrent>[],
+        searchEpisodes: (s, e) async => <Torrent>[],
+      );
+      expect(series.isMovie, isFalse);
+      expect(await series.fetch(SeriesSourceFetcher.modeMovie), isNull);
+      expect(series.movieFetched, isTrue); // pre-marked: no movie button
+
+      final movie = SeriesSourceFetcher.movie(
+        searchMovie: () async => [t('m', infohash: 'M1')],
+      );
+      expect(movie.isMovie, isTrue);
+      expect(movie.packsFetched, isTrue); // pre-marked: no series buttons
+      expect(movie.episodesFetched, isTrue);
+      expect(await movie.fetch(SeriesSourceFetcher.modePacks), isNull);
+      expect(await movie.fetch(SeriesSourceFetcher.modeEpisodes), isNull);
+    });
+
+    test('movie flavor: success flips movieFetched, failure retries', () async {
+      var fail = true;
+      final movie = SeriesSourceFetcher.movie(
+        searchMovie: () async => fail ? null : [t('m', infohash: 'M1')],
+      );
+      expect(await movie.fetch(SeriesSourceFetcher.modeMovie), isNull);
+      expect(movie.movieFetched, isFalse); // failed → button stays
+      fail = false;
+      expect(
+          await movie.fetch(SeriesSourceFetcher.modeMovie), hasLength(1));
+      expect(movie.movieFetched, isTrue);
+    });
   });
 }

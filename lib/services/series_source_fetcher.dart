@@ -9,19 +9,23 @@ typedef SeriesSourceSearch = Future<List<Torrent>?> Function(
   int episode,
 );
 
-/// On-demand fetcher for the in-player series source tabs.
+/// One search for a movie's full source list (no episode targeting).
+typedef MovieSourceSearch = Future<List<Torrent>?> Function();
+
+/// On-demand fetcher for the in-player "Load more sources" action.
 ///
-/// A series play reaches the player with only ONE category of torrent sources
-/// loaded: a bound/pinned source (nothing searched), the pack-first search
-/// (packs only) or the episode fallback search (episode results only). This
-/// object carries what was already fetched and how to fetch the missing
-/// category later — the player's "Load more sources" action.
+/// A bound/pinned play reaches the player with only what was already resolved:
+/// a series play carries one category of torrent sources (bound source:
+/// nothing searched, pack-first: packs only, episode fallback: episodes only)
+/// and a bound movie play carries just the single pinned torrent. This object
+/// carries what was already fetched and how to fetch the rest later.
 ///
 /// Deliberately player-agnostic: it holds no channel/UI code, so the Flutter
 /// player's sources sheet can reuse it as-is. The search closures are built by
-/// [TorrentPlaybackService.seriesFetcherFor], which reuses the exact search +
-/// curation + filter-ladder chains the Quick Play flow runs.
+/// `TorrentPlaybackService.seriesFetcherFor` / `movieFetcherFor`, which reuse
+/// the exact search + curation + filter-ladder chains the Quick Play flow runs.
 class SeriesSourceFetcher {
+  /// Series flavor: pack/episode tabs, each independently fetchable.
   SeriesSourceFetcher({
     required SeriesSourceSearch searchPacks,
     required SeriesSourceSearch searchEpisodes,
@@ -30,44 +34,78 @@ class SeriesSourceFetcher {
     this.packsFetched = false,
     this.episodesFetched = false,
   })  : _searchPacks = searchPacks,
-        _searchEpisodes = searchEpisodes;
+        _searchEpisodes = searchEpisodes,
+        _searchMovie = null,
+        movieFetched = true;
+
+  /// Movie flavor: one flat list, one "Load more" (the normal movie search).
+  SeriesSourceFetcher.movie({
+    required MovieSourceSearch searchMovie,
+    this.movieFetched = false,
+  })  : _searchMovie = searchMovie,
+        _searchPacks = null,
+        _searchEpisodes = null,
+        season = 0,
+        episode = 0,
+        packsFetched = true,
+        episodesFetched = true;
 
   static const String modePacks = 'packs';
   static const String modeEpisodes = 'episodes';
+  static const String modeMovie = 'movie';
 
-  final SeriesSourceSearch _searchPacks;
-  final SeriesSourceSearch _searchEpisodes;
+  final SeriesSourceSearch? _searchPacks;
+  final SeriesSourceSearch? _searchEpisodes;
+  final MovieSourceSearch? _searchMovie;
+
+  /// Whether this is the movie flavor (flat list, [modeMovie] only).
+  bool get isMovie => _searchMovie != null;
 
   /// The LAUNCH episode — the fallback search target when the caller doesn't
   /// say what is currently playing. A season-pack playlist can auto-advance
   /// episodes inside one player session, so callers should pass the current
-  /// position to [fetch] whenever they know it.
+  /// position to [fetch] whenever they know it. Unused (0) for movies.
   final int season;
   final int episode;
 
-  /// Whether the dedicated search for each tab has already run (either before
-  /// launch or via a successful [fetch]). While false, the player offers
-  /// "Load more sources" on that tab.
+  /// Whether the dedicated search for each mode has already run (either
+  /// before launch or via a successful [fetch]). While false, the player
+  /// offers "Load more sources" for it. The flavors pre-mark each other's
+  /// modes fetched so only their own buttons ever show.
   bool packsFetched;
   bool episodesFetched;
+  bool movieFetched;
 
-  /// Runs the search for [mode], targeting [season]/[episode] when given
-  /// (the player's CURRENT position) and the launch episode otherwise.
-  /// Returns the fetched (curated, ordered) list — possibly empty — or null
-  /// when the search failed. The fetched flag flips only on success, so a
-  /// failed fetch keeps "Load more" available to retry.
+  /// Runs the search for [mode] — for series modes targeting
+  /// [season]/[episode] when given (the player's CURRENT position) and the
+  /// launch episode otherwise. Returns the fetched (curated, ordered) list —
+  /// possibly empty — or null when the search failed or [mode] doesn't apply
+  /// to this flavor. The fetched flag flips only on success, so a failed
+  /// fetch keeps "Load more" available to retry.
   Future<List<Torrent>?> fetch(String mode, {int? season, int? episode}) async {
-    if (mode != modePacks && mode != modeEpisodes) return null;
     final s = season ?? this.season;
     final e = episode ?? this.episode;
-    final result = await (mode == modePacks
-        ? _searchPacks(s, e)
-        : _searchEpisodes(s, e));
+    final List<Torrent>? result;
+    switch (mode) {
+      case modePacks:
+        result = await _searchPacks?.call(s, e);
+        break;
+      case modeEpisodes:
+        result = await _searchEpisodes?.call(s, e);
+        break;
+      case modeMovie:
+        result = await _searchMovie?.call();
+        break;
+      default:
+        return null;
+    }
     if (result == null) return null;
     if (mode == modePacks) {
       packsFetched = true;
-    } else {
+    } else if (mode == modeEpisodes) {
       episodesFetched = true;
+    } else {
+      movieFetched = true;
     }
     return result;
   }

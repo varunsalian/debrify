@@ -245,6 +245,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var seriesSourceTabs = false
     private var seriesPacksFetched = true
     private var seriesEpisodesFetched = true
+    // Movie flavor: flat picker, one "Load more sources" on the Torrent tab
+    // (a bound movie play launches with just the pinned torrent).
+    private var movieMoreSources = false
+    private var movieSourcesFetched = true
     private var moreSourcesLoadingMode: String? = null // in-flight "Load more" tab
 
     // Stremio TV Guide state
@@ -5791,7 +5795,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
         val tab = col2.getOrNull(col2Index)?.tag ?: "direct"
         val list = if (tab == "torrent") torrent else direct
-        val col3 = umSourceRows(list, "No ${tab} sources")
+        val col3 = umSourceRows(list, "No ${tab} sources").also {
+            // Movie flavor: one "Load more sources" on the Torrent tab.
+            if (movieMoreSources && tab == "torrent") {
+                umAddLoadMoreRow(it, "movie", movieSourcesFetched)
+            }
+        }
         return UnifiedMenuController.Model(col1, "SOURCES", col2, "Switch source", col3)
     }
 
@@ -6963,6 +6972,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         (map["packsFetched"] as? Boolean)?.let { seriesPacksFetched = it }
         (map["episodesFetched"] as? Boolean)?.let { seriesEpisodesFetched = it }
+        (map["movieFetched"] as? Boolean)?.let { movieSourcesFetched = it }
         updateStremioQualityBadge()
         unifiedMenu?.render()
     }
@@ -7376,6 +7386,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             seriesSourceTabs = obj.optBoolean("seriesSourceTabs", false)
             seriesPacksFetched = obj.optBoolean("seriesPacksFetched", true)
             seriesEpisodesFetched = obj.optBoolean("seriesEpisodesFetched", true)
+            movieMoreSources = obj.optBoolean("movieMoreSources", false)
+            movieSourcesFetched = obj.optBoolean("movieSourcesFetched", true)
             moreSourcesLoadingMode = null
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
