@@ -1,0 +1,167 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+import 'package:debrify/services/stream_url_validator.dart';
+
+const _big = 100 * 1024 * 1024; // 100 MB
+const _small = 5 * 1024 * 1024; // 5 MB
+
+/// Installs a MockClient whose responses come from [routes]:
+/// url → (status, headers). Records every requested url in the returned list.
+List<String> mock(Map<String, (int, Map<String, String>)> routes) {
+  final requested = <String>[];
+  StreamUrlValidator.clientFactory = () => MockClient((request) async {
+        requested.add(request.url.toString());
+        expect(request.method, 'HEAD');
+        final route = routes[request.url.toString()];
+        if (route == null) return http.Response('', 404);
+        return http.Response('', route.$1, headers: route.$2);
+      });
+  return requested;
+}
+
+void main() {
+  tearDown(() {
+    StreamUrlValidator.clientFactory = http.Client.new;
+  });
+
+  test('2xx with a big content-length is alive', () async {
+    mock({
+      'https://x/movie.mp4': (200, {'content-length': '$_big'}),
+    });
+    expect(
+        await StreamUrlValidator.isPlayableVideoUrl('https://x/movie.mp4'),
+        isTrue);
+  });
+
+  test('placeholder-sized body (< 50 MB) is dead', () async {
+    mock({
+      'https://x/movie.mp4': (200, {'content-length': '$_small'}),
+    });
+    expect(
+        await StreamUrlValidator.isPlayableVideoUrl('https://x/movie.mp4'),
+        isFalse);
+  });
+
+  test('non-2xx is dead', () async {
+    mock({
+      'https://x/movie.mp4': (404, {'content-length': '$_big'}),
+    });
+    expect(
+        await StreamUrlValidator.isPlayableVideoUrl('https://x/movie.mp4'),
+        isFalse);
+  });
+
+  test('missing content-length is dead', () async {
+    mock({'https://x/movie.mp4': (200, {})});
+    expect(
+        await StreamUrlValidator.isPlayableVideoUrl('https://x/movie.mp4'),
+        isFalse);
+  });
+
+  test('redirect chain is followed and the FINAL url judged', () async {
+    final requested = mock({
+      'https://x/a': (302, {'location': 'https://x/b'}),
+      'https://x/b': (307, {'location': '/c.mp4'}), // relative
+      'https://x/c.mp4': (200, {'content-length': '$_big'}),
+    });
+    expect(await StreamUrlValidator.isPlayableVideoUrl('https://x/a'), isTrue);
+    expect(requested, ['https://x/a', 'https://x/b', 'https://x/c.mp4']);
+  });
+
+  test('redirect without a location is dead', () async {
+    mock({'https://x/a': (302, {})});
+    expect(await StreamUrlValidator.isPlayableVideoUrl('https://x/a'), isFalse);
+  });
+
+  test('more than 5 redirect hops is dead', () async {
+    mock({
+      for (var i = 0; i < 9; i++)
+        'https://x/$i': (302, {'location': 'https://x/${i + 1}'}),
+      'https://x/9': (200, {'content-length': '$_big'}),
+    });
+    expect(await StreamUrlValidator.isPlayableVideoUrl('https://x/0'), isFalse);
+  });
+
+  test('HLS playlist by content-type is alive without a length', () async {
+    mock({
+      'https://x/live': (200, {'content-type': 'application/vnd.apple.mpegurl'}),
+    });
+    expect(await StreamUrlValidator.isPlayableVideoUrl('https://x/live'), isTrue);
+  });
+
+  test('HLS playlist by .m3u8 path is alive without a length', () async {
+    mock({'https://x/master.m3u8': (200, {})});
+    expect(
+        await StreamUrlValidator.isPlayableVideoUrl('https://x/master.m3u8'),
+        isTrue);
+  });
+
+  test('thrown transport errors read as dead, never throw', () async {
+    StreamUrlValidator.clientFactory =
+        () => MockClient((_) async => throw Exception('socket down'));
+    expect(await StreamUrlValidator.isPlayableVideoUrl('https://x/a'), isFalse);
+  });
+
+  test('exactly 4 redirects (5 requests total) still succeeds', () async {
+    mock({
+      for (var i = 0; i < 4; i++)
+        'https://x/$i': (302, {'location': 'https://x/${i + 1}'}),
+      'https://x/4': (200, {'content-length': '$_big'}),
+    });
+    expect(await StreamUrlValidator.isPlayableVideoUrl('https://x/0'), isTrue);
+  });
+
+  test('custom minBytes floor is honored', () async {
+    mock({
+      'https://x/ep.mp4': (200, {'content-length': '${30 * 1024 * 1024}'}),
+    });
+    expect(
+        await StreamUrlValidator.isPlayableVideoUrl('https://x/ep.mp4'),
+        isFalse); // default 50MB floor
+    expect(
+        await StreamUrlValidator.isPlayableVideoUrl('https://x/ep.mp4',
+            minBytes: 10 * 1024 * 1024),
+        isTrue);
+  });
+
+  group('lenient mode', () {
+    test('405/501 (host refuses HEAD) is alive', () async {
+      mock({'https://x/a.mp4': (405, {})});
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/a.mp4',
+              lenient: true),
+          isTrue);
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/a.mp4'),
+          isFalse); // strict keeps rejecting
+    });
+
+    test('2xx without content-length is alive', () async {
+      mock({'https://x/a.mp4': (200, {})});
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/a.mp4',
+              lenient: true),
+          isTrue);
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/a.mp4'),
+          isFalse); // strict keeps rejecting
+    });
+
+    test('positive evidence of death still rejects', () async {
+      mock({
+        'https://x/gone.mp4': (404, {}),
+        'https://x/tiny.mp4': (200, {'content-length': '$_small'}),
+      });
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/gone.mp4',
+              lenient: true),
+          isFalse);
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/tiny.mp4',
+              lenient: true),
+          isFalse);
+    });
+  });
+}

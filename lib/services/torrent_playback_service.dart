@@ -41,6 +41,7 @@ import 'premiumize_service.dart';
 import 'series_source_fetcher.dart';
 import 'series_source_service.dart';
 import 'storage_service.dart';
+import 'stream_url_validator.dart';
 import 'torbox_service.dart';
 import 'torrent_file_service.dart';
 import 'torrent_service.dart';
@@ -388,19 +389,107 @@ class TorrentPlaybackService {
       }
     }
 
+    // Direct links carry no implicit validation (a torrent's debrid resolve
+    // IS its probe), and dead hosts love serving tiny placeholder videos with
+    // a 200 — so every direct play below runs through a HEAD check first
+    // (same validator Stremio TV always used) and steps to the next candidate
+    // on failure. VOD ONLY: live channels (non-movie/series catalog plays)
+    // routinely stream without a content-length and would all read as dead —
+    // they keep the unvalidated instant play. The budget bounds worst-case
+    // added latency; once spent, remaining candidates play unvalidated (the
+    // pre-validation behavior), so validation can only ever improve a play,
+    // never lose one.
+    final validatableVod =
+        meta?.contentType == 'movie' || meta?.contentType == 'series';
+    // Real sub-50MB episodes exist (480p / anime shorts) — the movie floor
+    // would false-negative them; genuine error-placeholders are under ~5MB.
+    final minStreamBytes = meta?.contentType == 'series'
+        ? 10 * 1024 * 1024
+        : StreamUrlValidator.minContentBytes;
+    final deadDirectUrls = <String>{};
+    var validationBudget = 5;
+    Future<bool> directLooksAlive(Torrent t) async {
+      if (!validatableVod) return true;
+      final url = t.directUrl!;
+      if (deadDirectUrls.contains(url)) return false;
+      if (validationBudget <= 0) return true; // budget spent — trust it
+      validationBudget--;
+      // Lenient: only positive evidence of death rejects — HEAD-refusing
+      // hosts and length-less 2xx responses give no signal and whole CDNs
+      // fail them identically, which would kill every candidate at once.
+      final alive = await StreamUrlValidator.isPlayableVideoUrl(
+        url,
+        minBytes: minStreamBytes,
+        lenient: true,
+      );
+      if (!alive) {
+        deadDirectUrls.add(url);
+        ov?.setNote('Skipped a dead stream link — trying the next source…');
+      }
+      return alive;
+    }
+
+    // Walks every direct stream in (tier-ordered) list order and plays the
+    // first one that validates. Returns true when it handled the play (or the
+    // user cancelled mid-walk); false when no direct stream survived.
+    Future<bool> playFirstAliveDirect() async {
+      for (final t in torrents) {
+        final isDirect = t.streamType == StreamType.directUrl &&
+            (t.directUrl?.isNotEmpty ?? false);
+        if (!isDirect) continue;
+        if (cancelled()) return true; // overlay dismissed by the Cancel tap
+        if (await directLooksAlive(t)) {
+          if (cancelled()) return true;
+          await playDirect(t);
+          return true;
+        }
+      }
+      return false;
+    }
+
     // A direct-URL addon stream, if present, is the cheapest instant play — and
     // needs no debrid provider, so play it before prompting for one. This is the
     // IPTV / non-IMDb catalog path (streams come straight from the addon).
     // With an active ladder, it plays NOW only from the best PLAYABLE tier
     // (a full-match torrent beats a relaxed-tier direct link, plan §3.4) —
-    // but a relaxed-tier direct link is KEPT as [fallbackDirect] and rescues
-    // every torrent-path dead end below, so the ladder can only ever reorder,
-    // never lose the instant play the pre-ladder flow guaranteed.
+    // while relaxed-tier direct links rescue every torrent-path dead end
+    // below (playFirstAliveDirect), so the ladder can only ever reorder,
+    // never lose the instant play the pre-ladder flow guaranteed. A direct
+    // that fails validation is dropped and the selection re-runs: the next
+    // pick may be another direct (instant play again) or a torrent now
+    // holding the best playable tier (falls through to the probe path).
     final bool tiered = ladder != null && ladder.isActive;
-    final (direct, fallbackDirect) = selectDirect(torrents, ladder);
-    if (direct != null) {
+    var selectable = torrents;
+    var direct = selectDirect(selectable, ladder).$1;
+    while (direct != null) {
       if (cancelled()) return; // e.g. Cancel during a caller's await
-      await playDirect(direct);
+      if (await directLooksAlive(direct)) {
+        if (cancelled()) return;
+        await playDirect(direct);
+        return;
+      }
+      final dead = direct;
+      selectable = selectable.where((t) => !identical(t, dead)).toList();
+      direct = selectDirect(selectable, ladder).$1;
+    }
+
+    // Every direct link VALIDATED dead and nothing probeable exists: a
+    // provider prompt (or "no provider" snack) would be nonsense — the play
+    // failed because the stream links are down, say so. Budget-exhausted
+    // directs are NOT in the dead set, so when unvalidated candidates remain
+    // this can't fire and the trust-play rescue below still runs.
+    if (deadDirectUrls.isNotEmpty &&
+        !torrents.any((t) =>
+            t.streamType != StreamType.externalUrl && _hasAcquisition(t)) &&
+        !torrents.any((t) =>
+            t.streamType == StreamType.directUrl &&
+            (t.directUrl?.isNotEmpty ?? false) &&
+            !deadDirectUrls.contains(t.directUrl))) {
+      if (ov != null) closeLoading();
+      if (context.mounted) {
+        _snack(context,
+            "This title's stream links appear to be offline. Open Sources to try one manually.");
+      }
       return;
     }
 
@@ -420,10 +509,7 @@ class TorrentPlaybackService {
     if (prov == null) {
       // Without a provider no torrent can play — a relaxed-tier direct link
       // is still the guaranteed instant play (pre-ladder behavior).
-      if (fallbackDirect != null) {
-        await playDirect(fallbackDirect);
-        return;
-      }
+      if (await playFirstAliveDirect()) return;
       if (ov != null) closeLoading();
       _snack(context, 'No debrid provider configured. Add one in Settings.');
       return;
@@ -434,10 +520,7 @@ class TorrentPlaybackService {
             t.streamType != StreamType.externalUrl && _hasAcquisition(t))
         .toList();
     if (candidates.isEmpty) {
-      if (fallbackDirect != null) {
-        await playDirect(fallbackDirect);
-        return;
-      }
+      if (await playFirstAliveDirect()) return;
       if (ov != null) closeLoading();
       _snack(context, 'No playable sources found for this title.');
       return;
@@ -515,10 +598,7 @@ class TorrentPlaybackService {
       // Every probe failed — a ladder-demoted direct link still guarantees
       // the play the pre-ladder flow would have delivered (playDirect keeps
       // the loader up and hands its dismissal to the launcher).
-      if (fallbackDirect != null) {
-        await playDirect(fallbackDirect);
-        return;
-      }
+      if (await playFirstAliveDirect()) return;
       closeLoading();
       _snack(context,
           'No instantly-playable source found. Open Sources to pick or download one.');

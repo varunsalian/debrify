@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 
 import '../../widgets/home/home_theme.dart';
 import '../../widgets/pipeline_loading_overlay.dart';
@@ -13,6 +12,7 @@ import '../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../models/torrent.dart';
 import '../../services/analytics_service.dart';
 import '../../services/debrid_service.dart';
+import '../../services/stream_url_validator.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
@@ -668,78 +668,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     return sorted;
   }
 
-  /// Minimum content size (50 MB) to consider a direct stream valid.
-  /// Anything smaller is likely a placeholder/error video.
-  static const int _minContentBytes = 50 * 1024 * 1024;
-
-  /// Check if a direct stream URL has sufficient content size.
-  /// Returns false for non-2xx responses, missing content-length,
-  /// or placeholder videos (< 50 MB).
-  /// Follows up to 5 redirects to reach the final URL.
-  Future<bool> _isValidStreamUrl(String url) async {
-    try {
-      final client = http.Client();
-      try {
-        var currentUrl = url;
-        for (int i = 0; i < 5; i++) {
-          final request = http.Request('HEAD', Uri.parse(currentUrl));
-          request.followRedirects = false;
-          final streamed = await client
-              .send(request)
-              .timeout(const Duration(seconds: 5));
-          // Drain response stream to release resources
-          await streamed.stream.drain();
-
-          if (streamed.statusCode >= 300 && streamed.statusCode < 400) {
-            final location = streamed.headers['location'];
-            if (location == null || location.isEmpty) {
-              debugPrint(
-                'StremioTV: HEAD $currentUrl → ${streamed.statusCode} (redirect, no location)',
-              );
-              return false;
-            }
-            // Resolve relative redirects
-            currentUrl = Uri.parse(currentUrl).resolve(location).toString();
-            debugPrint(
-              'StremioTV: HEAD → ${streamed.statusCode}, following redirect',
-            );
-            continue;
-          }
-
-          // Reject non-2xx responses
-          if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-            debugPrint(
-              'StremioTV: HEAD $currentUrl → ${streamed.statusCode}, rejecting non-2xx',
-            );
-            return false;
-          }
-
-          final contentLength = int.tryParse(
-            streamed.headers['content-length'] ?? '',
-          );
-          if (contentLength == null) {
-            debugPrint(
-              'StremioTV: HEAD $currentUrl → ${streamed.statusCode}, no content-length',
-            );
-            return false;
-          }
-          final sizeMb = (contentLength / (1024 * 1024)).toStringAsFixed(1);
-          debugPrint(
-            'StremioTV: HEAD $currentUrl → ${streamed.statusCode}, size: ${sizeMb}MB',
-          );
-          return contentLength >= _minContentBytes;
-        }
-        // Too many redirects
-        debugPrint('StremioTV: HEAD $url → too many redirects, rejecting');
-        return false;
-      } finally {
-        client.close();
-      }
-    } catch (e) {
-      debugPrint('StremioTV: HEAD check failed for $url: $e');
-      return false;
-    }
-  }
+  /// Direct-stream validity: delegated to the shared [StreamUrlValidator]
+  /// (extracted from this screen so quick-play uses the identical check).
+  Future<bool> _isValidStreamUrl(String url) =>
+      StreamUrlValidator.isPlayableVideoUrl(url);
 
   /// Maps the active debrid provider to the Pipeline loader's chip label,
   /// two-letter code, accent colour, and whether it runs a cache-check stage.
