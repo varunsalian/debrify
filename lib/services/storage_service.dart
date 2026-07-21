@@ -380,16 +380,17 @@ class StorageService {
   }
 
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
-  /// metadata addon provides one. Default: ON everywhere EXCEPT Android TV —
-  /// there the Home hero spotlight is the ambient-trailer surface
-  /// ([getHomeHeroTrailerEnabled]), and one living surface per platform is
-  /// enough. Once the user toggles it (Settings → Home Page) their explicit
-  /// choice is stored and the default no longer applies.
+  /// metadata addon provides one. Exactly ONE ambient-trailer surface exists
+  /// per platform, and this is the non-TV one: OFF on Android TV always (the
+  /// Home hero spotlight owns ambient there — [getHomeHeroTrailerEnabled]),
+  /// default ON everywhere else. The TV case is hard-off rather than a
+  /// default, so a value stored before this split — or by a phone install
+  /// whose prefs were restored onto a TV box — can't switch the detail
+  /// backdrop back on. Settings only offers the toggle off-TV to match.
   static Future<bool> getDetailTrailerAutoplayEnabled() async {
+    if (await PlatformUtil.isAndroidTV()) return false;
     final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getBool('detail_trailer_autoplay_enabled');
-    if (stored != null) return stored;
-    return !(await PlatformUtil.isAndroidTV());
+    return prefs.getBool('detail_trailer_autoplay_enabled') ?? true;
   }
 
   static Future<void> setDetailTrailerAutoplayEnabled(bool enabled) async {
@@ -397,16 +398,16 @@ class StorageService {
     await prefs.setBool('detail_trailer_autoplay_enabled', enabled);
   }
 
-  /// Ambient trailer in the Home board's hero spotlight (Android TV only —
-  /// the hero isn't rendered elsewhere). Default: ON on Android TV, OFF
-  /// elsewhere (the platform's ambient surface is the detail page instead —
-  /// [getDetailTrailerAutoplayEnabled] is its inverse). Independent toggles,
-  /// so users can still enable both or neither.
+  /// Ambient trailer in the TV hero surfaces — the Home board's spotlight and
+  /// the Discover rail. Android TV only in both senses: those surfaces aren't
+  /// rendered elsewhere, so this is hard-off off-TV rather than merely
+  /// defaulted off (the platform's ambient surface is the detail page instead
+  /// — [getDetailTrailerAutoplayEnabled] is its counterpart). Exactly one of
+  /// the pair is live on any given device, and Settings shows only that one.
   static Future<bool> getHomeHeroTrailerEnabled() async {
+    if (!await PlatformUtil.isAndroidTV()) return false;
     final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getBool('home_hero_trailer_enabled');
-    if (stored != null) return stored;
-    return PlatformUtil.isAndroidTV();
+    return prefs.getBool('home_hero_trailer_enabled') ?? true;
   }
 
   static Future<void> setHomeHeroTrailerEnabled(bool enabled) async {
@@ -414,28 +415,57 @@ class StorageService {
     await prefs.setBool('home_hero_trailer_enabled', enabled);
   }
 
-  /// Whether the Home hero trailer plays sound (false = video only).
-  static Future<bool> getHomeHeroTrailerAudioEnabled() async {
+  /// Pref key for the ambient-trailer sound pair, resolved per platform.
+  /// Resolves to exactly four keys, spelled out here because the returns
+  /// below are interpolated and a grep for a literal name would otherwise
+  /// find nothing: `home_hero_trailer_audio_enabled`,
+  /// `home_hero_trailer_volume`, `detail_trailer_audio_enabled`,
+  /// `detail_trailer_volume`. Any future backup allowlist, reset sweep or
+  /// migration has to name all four — enumerating one surface silently drops
+  /// the other platform's settings.
+  /// Each ambient surface owns its own key even though only one of them can
+  /// be live on a device: the TV hero/Discover stage keeps the legacy
+  /// `home_hero_` pair (renaming would reset every TV install), the non-TV
+  /// detail backdrop gets its own. That separation matters because the old
+  /// Settings page offered the hero sound rows on EVERY platform — a phone
+  /// user could store "sound off" for a hero that never rendered there, and
+  /// with one shared key that dead value would now silently mute their detail
+  /// backdrop. Per-surface keys make such writes unreadable instead, so
+  /// non-TV starts at the defaults its backdrop has always used.
+  static Future<String> _ambientTrailerKey(String suffix) async =>
+      await PlatformUtil.isAndroidTV()
+      ? 'home_hero_trailer_$suffix'
+      : 'detail_trailer_$suffix';
+
+  /// Whether this platform's ambient trailer plays sound (false = video only).
+  /// See [_ambientTrailerKey] for which surface that is. Note the IPTV live
+  /// preview is a channel feed, not a trailer, and stays at full volume.
+  static Future<bool> getAmbientTrailerAudioEnabled() async {
+    final key = await _ambientTrailerKey('audio_enabled');
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('home_hero_trailer_audio_enabled') ?? true;
+    return prefs.getBool(key) ?? true;
   }
 
-  static Future<void> setHomeHeroTrailerAudioEnabled(bool enabled) async {
+  static Future<void> setAmbientTrailerAudioEnabled(bool enabled) async {
+    final key = await _ambientTrailerKey('audio_enabled');
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('home_hero_trailer_audio_enabled', enabled);
+    await prefs.setBool(key, enabled);
   }
 
-  /// Home hero trailer volume, percent 10–100. Default 70 — under the UI, a
-  /// notch quieter than the detail page's ambient loop.
-  static Future<int> getHomeHeroTrailerVolume() async {
+  /// Ambient trailer volume, percent 10–100. Default 70 — audible but under
+  /// the UI, and the level the detail backdrop has always run at. Same
+  /// one-surface-per-platform scope as [getAmbientTrailerAudioEnabled].
+  static Future<int> getAmbientTrailerVolume() async {
+    final key = await _ambientTrailerKey('volume');
     final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getInt('home_hero_trailer_volume') ?? 70;
+    final v = prefs.getInt(key) ?? 70;
     return v.clamp(10, 100);
   }
 
-  static Future<void> setHomeHeroTrailerVolume(int percent) async {
+  static Future<void> setAmbientTrailerVolume(int percent) async {
+    final key = await _ambientTrailerKey('volume');
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('home_hero_trailer_volume', percent.clamp(10, 100));
+    await prefs.setInt(key, percent.clamp(10, 100));
   }
 
   /// Android TV: render ambient trailers on a native SurfaceView *under* a

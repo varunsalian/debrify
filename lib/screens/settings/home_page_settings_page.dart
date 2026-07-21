@@ -30,10 +30,20 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   bool _continueWatchingEnabled = true;
   bool _trailerAutoplayEnabled = false;
   bool _heroTrailerEnabled = true;
-  bool _heroTrailerAudioEnabled = true;
-  int _heroTrailerVolume = 70;
+  bool _ambientTrailerAudioEnabled = true;
+  int _ambientTrailerVolume = 70;
   bool _tvTrailerUnderlayEnabled = true;
   List<StremioAddon> _addons = [];
+
+  /// Is this platform's one ambient-trailer surface on? Decides whether the
+  /// shared sound + volume rows have anything to govern. Only ever one of the
+  /// two is live (StorageService hard-offs the other), so this is a pick, not
+  /// an OR — a stale stored `true` for the wrong platform can't leak through.
+  /// The cached TV read is safe here: build() is gated on [_loading], and
+  /// clearing it awaits getters that themselves await the TV probe.
+  bool get _ambientTrailerEnabled => PlatformUtil.isAndroidTvCached
+      ? _heroTrailerEnabled
+      : _trailerAutoplayEnabled;
 
   @override
   void initState() {
@@ -63,9 +73,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           await StorageService.getDetailTrailerAutoplayEnabled();
       final heroTrailerEnabled =
           await StorageService.getHomeHeroTrailerEnabled();
-      final heroTrailerAudioEnabled =
-          await StorageService.getHomeHeroTrailerAudioEnabled();
-      final heroTrailerVolume = await StorageService.getHomeHeroTrailerVolume();
+      final ambientTrailerAudioEnabled =
+          await StorageService.getAmbientTrailerAudioEnabled();
+      final ambientTrailerVolume =
+          await StorageService.getAmbientTrailerVolume();
       final tvTrailerUnderlayEnabled =
           await StorageService.getTvTrailerUnderlayEnabled();
       final traktListType = await StorageService.getHomeDefaultTraktListType();
@@ -99,10 +110,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _continueWatchingEnabled = continueWatchingEnabled;
         _trailerAutoplayEnabled = trailerAutoplayEnabled;
         _heroTrailerEnabled = heroTrailerEnabled;
-        _heroTrailerAudioEnabled = heroTrailerAudioEnabled;
+        _ambientTrailerAudioEnabled = ambientTrailerAudioEnabled;
         // Off-grid stored values are injected as an extra dropdown option
         // (see _volumeOptions), so nothing silently changes on load.
-        _heroTrailerVolume = heroTrailerVolume;
+        _ambientTrailerVolume = ambientTrailerVolume;
         _tvTrailerUnderlayEnabled = tvTrailerUnderlayEnabled;
         _loading = false;
       });
@@ -552,75 +563,58 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Ambient trailers: the two surfaces are independent toggles —
-                // detail-page backdrop and (TV-only) the Home hero spotlight,
-                // which also owns the sound switch + volume below it.
+                // Ambient trailers: exactly ONE living surface per platform —
+                // the Home hero spotlight on TV, the detail-page backdrop
+                // everywhere else — so only that platform's toggle is offered
+                // (the other is hard-off in StorageService, not merely hidden).
+                // The sound switch + volume below govern whichever one it is.
                 SettingsSection(
                   title: '',
                   children: [
-                    SettingsToggleTile(
-                      icon: Icons.movie_filter_rounded,
-                      title: 'Trailer on Detail Page',
-                      subtitle:
-                          'Play a trailer behind the movie/series detail page. '
-                          'Falls back to the poster when off or unavailable.',
-                      subtitleMaxLines: 2,
-                      value: _trailerAutoplayEnabled,
-                      onChanged: (value) async {
-                        try {
-                          await StorageService.setDetailTrailerAutoplayEnabled(
-                            value,
-                          );
-                          if (!mounted) return;
-                          setState(() => _trailerAutoplayEnabled = value);
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to save setting: $e'),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                    SettingsToggleTile(
-                      icon: Icons.smart_display_rounded,
-                      title: 'Trailer on Home Spotlight',
-                      subtitle:
-                          'Android TV: when you rest on a title, its trailer '
-                          'plays in the hero at the top of Home.',
-                      subtitleMaxLines: 2,
-                      value: _heroTrailerEnabled,
-                      onChanged: (value) async {
-                        try {
-                          await StorageService.setHomeHeroTrailerEnabled(value);
-                          if (!mounted) return;
-                          setState(() => _heroTrailerEnabled = value);
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to save setting: $e'),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                    if (_heroTrailerEnabled) ...[
+                    if (PlatformUtil.isAndroidTvCached)
                       SettingsToggleTile(
-                        icon: Icons.volume_up_rounded,
-                        title: 'Spotlight Trailer Sound',
-                        subtitle: 'Off plays the hero trailer silently.',
-                        value: _heroTrailerAudioEnabled,
+                        icon: Icons.smart_display_rounded,
+                        title: 'Trailer on Home Spotlight',
+                        subtitle:
+                            'When you rest on a title, its trailer plays in '
+                            'the hero at the top of Home and in Discover.',
+                        subtitleMaxLines: 2,
+                        value: _heroTrailerEnabled,
                         onChanged: (value) async {
                           try {
-                            await StorageService.setHomeHeroTrailerAudioEnabled(
+                            await StorageService.setHomeHeroTrailerEnabled(
                               value,
                             );
                             if (!mounted) return;
-                            setState(() => _heroTrailerAudioEnabled = value);
+                            setState(() => _heroTrailerEnabled = value);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to save setting: $e'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      )
+                    else
+                      SettingsToggleTile(
+                        icon: Icons.movie_filter_rounded,
+                        title: 'Trailer on Detail Page',
+                        subtitle:
+                            'Play a trailer behind the movie/series detail '
+                            'page. Falls back to the poster when off or '
+                            'unavailable.',
+                        subtitleMaxLines: 2,
+                        value: _trailerAutoplayEnabled,
+                        onChanged: (value) async {
+                          try {
+                            await StorageService.setDetailTrailerAutoplayEnabled(
+                              value,
+                            );
+                            if (!mounted) return;
+                            setState(() => _trailerAutoplayEnabled = value);
                           } catch (e) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -632,30 +626,59 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           }
                         },
                       ),
-                      if (_heroTrailerAudioEnabled)
+                    if (_ambientTrailerEnabled) ...[
+                      SettingsToggleTile(
+                        icon: Icons.volume_up_rounded,
+                        title: 'Trailer Sound',
+                        // Name the surface rather than say "the trailer" — the
+                        // IPTV guide's live channel preview is a feed, not a
+                        // trailer, and deliberately ignores this.
+                        subtitle: PlatformUtil.isAndroidTvCached
+                            ? 'Off plays the spotlight trailer silently.'
+                            : 'Off plays the detail-page trailer silently.',
+                        value: _ambientTrailerAudioEnabled,
+                        onChanged: (value) async {
+                          try {
+                            await StorageService.setAmbientTrailerAudioEnabled(
+                              value,
+                            );
+                            if (!mounted) return;
+                            setState(() => _ambientTrailerAudioEnabled = value);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to save setting: $e'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      if (_ambientTrailerAudioEnabled)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                           child: DropdownButtonFormField<int>(
                             isExpanded: true,
-                            value: _heroTrailerVolume,
+                            value: _ambientTrailerVolume,
                             decoration: const InputDecoration(
-                              labelText: 'Spotlight trailer volume',
+                              labelText: 'Trailer volume',
                               prefixIcon: Icon(Icons.tune_rounded),
                             ),
                             items: [
                               for (final v in _volumeOptions(
-                                _heroTrailerVolume,
+                                _ambientTrailerVolume,
                               ))
                                 DropdownMenuItem(value: v, child: Text('$v%')),
                             ],
                             onChanged: (value) async {
                               if (value == null) return;
                               try {
-                                await StorageService.setHomeHeroTrailerVolume(
+                                await StorageService.setAmbientTrailerVolume(
                                   value,
                                 );
                                 if (!mounted) return;
-                                setState(() => _heroTrailerVolume = value);
+                                setState(() => _ambientTrailerVolume = value);
                               } catch (e) {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(

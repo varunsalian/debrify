@@ -154,7 +154,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   bool _trailerLoading = false;
 
   /// Whether OTT-style trailer autoplay behind the backdrop is on (settings).
+  /// Always false on Android TV — the Home hero owns ambient trailers there.
   bool _trailerAutoplayEnabled = false;
+
+  /// Ambient loop volume (0–100) from settings; 0 when the sound toggle is off.
+  /// Read alongside [_trailerAutoplayEnabled] and applied when the backdrop
+  /// opens its engine (which can't happen before the streams resolve), so it's
+  /// always in place by then. Promoting to fullscreen still plays at full
+  /// volume — the backdrop handles that, muted ambient or not.
+  double _trailerAmbientVolume = 70;
 
   /// Resolved trailer streams, pre-fetched for the ambient backdrop.
   YoutubeResolvedStreams? _trailerStreams;
@@ -400,6 +408,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // OTT autoplay: honour the setting, then pre-resolve the stream (also reused
     // by the Trailer button). Silent on failure — the poster simply stays.
     final autoplay = await StorageService.getDetailTrailerAutoplayEnabled();
+    // The ambient sound pair is shared with the TV hero (one live surface per
+    // platform), so off-TV it governs this backdrop. Read unconditionally so
+    // all three land in the one setState below — [autoplay] is false on TV
+    // anyway, and these are two prefs reads.
+    final soundOn = await StorageService.getAmbientTrailerAudioEnabled();
+    final volume = await StorageService.getAmbientTrailerVolume();
     if (!mounted) return;
     // The backdrop refuses to autoplay under OS reduced-motion — skip the whole
     // pipeline (no resolve, no spinner) rather than spin forever waiting for a
@@ -409,6 +423,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final willAutoplay = autoplay && !reduceMotion;
     setState(() {
       _trailerAutoplayEnabled = autoplay;
+      _trailerAmbientVolume = soundOn ? volume.toDouble() : 0;
       // Spinner from here until the backdrop reports first frames (or fails).
       _trailerResolving = willAutoplay;
     });
@@ -606,6 +621,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                     ? _trailerStreams?.audioUrl
                     : null,
                 enabled: _trailerAutoplayEnabled,
+                ambientVolume: _trailerAmbientVolume,
                 foreground: _trailerForeground,
                 onRequestClose: _exitTrailerForeground,
                 onPlayingChanged: (playing) {
