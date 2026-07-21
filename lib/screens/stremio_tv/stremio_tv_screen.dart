@@ -26,6 +26,8 @@ import '../../utils/file_utils.dart';
 import '../../utils/rd_blocked_filter.dart';
 import '../../utils/formatters.dart';
 import '../../utils/stremio_episode_selector.dart';
+import '../../utils/series_parser.dart';
+import '../../utils/torrent_coverage_detector.dart';
 import '../../services/torrent_service.dart';
 import '../catalog_item_detail_screen.dart';
 import '../settings/stremio_tv_settings_page.dart';
@@ -655,6 +657,76 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     return null;
   }
 
+  /// Filters torrent candidates down to those that can actually provide the
+  /// requested [season]/[episode]:
+  ///  - non-torrent streams (direct/addon) pass through — they were queried
+  ///    per-episode already;
+  ///  - season/multi-season/complete packs are kept when they cover the target
+  ///    season (or their range is unknown, in which case in-pack file
+  ///    selection picks the episode);
+  ///  - single-episode torrents are dropped only when we CONFIDENTLY parse a
+  ///    different S/E from the name; ambiguous/unparseable names are kept.
+  ///
+  /// If every candidate is confidently a different episode this can return no
+  /// torrents — that is intentional (see note at the return).
+  List<Torrent> _filterTorrentsForEpisode(
+    List<Torrent> sources, {
+    required int season,
+    required int episode,
+  }) {
+    final kept = <Torrent>[];
+    for (final t in sources) {
+      if (t.streamType != StreamType.torrent) {
+        kept.add(t);
+        continue;
+      }
+      final coverage = TorrentCoverageDetector.detectCoverage(
+        title: t.name,
+        infohash: t.infohash,
+      );
+      switch (coverage.coverageType) {
+        case CoverageType.completeSeries:
+          kept.add(t);
+          break;
+        case CoverageType.multiSeasonPack:
+          if (coverage.startSeason == null ||
+              coverage.endSeason == null ||
+              (season >= coverage.startSeason! &&
+                  season <= coverage.endSeason!)) {
+            kept.add(t);
+          }
+          break;
+        case CoverageType.seasonPack:
+          if (coverage.seasonNumber == null ||
+              coverage.seasonNumber == season) {
+            kept.add(t);
+          }
+          break;
+        case CoverageType.singleEpisode:
+          final info = SeriesParser.parseFilename(t.name);
+          // Only drop when we're CONFIDENT it's a different episode — i.e. both
+          // season and episode parsed and at least one differs. Ambiguous /
+          // unparseable names are kept (could be the right episode with odd
+          // naming, or a pack we failed to classify).
+          final confidentMismatch = info.season != null &&
+              info.episode != null &&
+              (info.season != season || info.episode != episode);
+          if (!confidentMismatch) {
+            kept.add(t);
+          }
+          break;
+      }
+    }
+
+    // NOTE: we intentionally do NOT fall back to the unfiltered set when this
+    // leaves zero torrents. Zero here means every candidate confidently parsed
+    // to a *different* episode, so falling back would replay the exact bug this
+    // filter exists to fix. Returning the filtered set lets resolution use any
+    // per-episode direct streams, or fail so the next-provider advances to a
+    // slot/episode we can actually play correctly.
+    return kept;
+  }
+
   List<Torrent> _sortStreamsByQuality(List<Torrent> streams) {
     if (_preferredQuality == 'auto') return streams;
     final sorted = List<Torrent>.from(streams);
@@ -903,6 +975,17 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 _extractQuality(t.name) != '480p',
           )
           .toList();
+
+      // Drop torrents that belong to a different episode (see
+      // _filterTorrentsForEpisode) — keyword engines return the whole series,
+      // and the top-seeded wrong episode would otherwise win auto-play.
+      if (!isMovie && season != null && episode != null) {
+        playableSources = _filterTorrentsForEpisode(
+          playableSources,
+          season: season,
+          episode: episode,
+        );
+      }
 
       // For TorBox, filter torrent sources to only cached ones
       if (_debridProvider == 'torbox') {
@@ -1261,6 +1344,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
               _extractQuality(t.name) != '480p',
         )
         .toList();
+
+    // Episode-match filter — many engines (e.g. apibay keyword search) return
+    // single-episode torrents for the WRONG episode of the same series. Without
+    // this, the highest-seeded unrelated episode wins auto-play and every slot
+    // plays the same file. Keep exact-episode matches + season-covering packs,
+    // drop single-episode torrents that belong to a different episode.
+    if (!isMovie && season != null && episode != null) {
+      playableSources = _filterTorrentsForEpisode(
+        playableSources,
+        season: season,
+        episode: episode,
+      );
+    }
 
     // TorBox cache filter
     if (_debridProvider == 'torbox') {
