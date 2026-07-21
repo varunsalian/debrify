@@ -15,6 +15,9 @@ import '../services/engine/engine_registry.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/premiumize_account_service.dart';
 import '../services/alldebrid_account_service.dart';
+import '../services/remote_control/remote_command_router.dart';
+import '../services/remote_control/remote_constants.dart';
+import '../services/remote_control/remote_control_state.dart';
 import '../utils/platform_util.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
@@ -54,6 +57,10 @@ class InitialSetupFlow extends StatefulWidget {
 }
 
 enum _IntegrationType { realDebrid, torbox, pikpak, premiumize, allDebrid }
+
+/// How the user wants to complete first-run setup: configure directly on this
+/// device, or receive everything from the Debrify app on their phone.
+enum _SetupMode { thisDevice, fromPhone }
 
 class _IntegrationMeta {
   const _IntegrationMeta({
@@ -157,7 +164,8 @@ const Map<_IntegrationType, _IntegrationMeta> _integrationMeta = {
   ),
 };
 
-class _InitialSetupFlowState extends State<InitialSetupFlow> {
+class _InitialSetupFlowState extends State<InitialSetupFlow>
+    with SingleTickerProviderStateMixin {
   final Set<_IntegrationType> _selection = <_IntegrationType>{};
   final TextEditingController _realDebridController = TextEditingController();
   final TextEditingController _torboxController = TextEditingController();
@@ -183,6 +191,21 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
   bool _isAndroidTv = false; // Store TV detection result
 
+  // Setup-mode chooser (very first screen): null until the user picks a path.
+  _SetupMode? _setupMode;
+
+  // "Import from your phone" guide state.
+  static const int _importStepCount = 5;
+  int _importStep = 0;
+  Timer? _importAutoTimer;
+  late final AnimationController _importPulseController;
+  bool _switchedRoleForImport = false;
+  bool _importListenersAttached = false;
+  bool _transferComplete = false;
+  int _receivedItemCount = 0;
+  String? _lastReceivedLabel;
+  String _advertisedName = 'This device';
+
   // Scroll controller for auto-scrolling on DPAD navigation
   final ScrollController _scrollController = ScrollController();
 
@@ -203,6 +226,18 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     debugLabel: 'continue-button',
   );
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'back-button');
+  final FocusNode _welcomeBackButtonFocusNode = FocusNode(
+    debugLabel: 'welcome-back-button',
+  );
+  final FocusNode _modeThisDeviceFocusNode = FocusNode(
+    debugLabel: 'mode-this-device',
+  );
+  final FocusNode _modePhoneFocusNode = FocusNode(
+    debugLabel: 'mode-from-phone',
+  );
+  final FocusNode _importBackButtonFocusNode = FocusNode(
+    debugLabel: 'import-back-button',
+  );
   final FocusNode _openLinkButtonFocusNode = FocusNode(
     debugLabel: 'open-link-button',
   );
@@ -291,6 +326,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   void initState() {
     super.initState();
 
+    // Drives the pulsing "look here" highlight in the phone-import guide;
+    // only runs while that screen is showing.
+    _importPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+      lowerBound: 0.35,
+    );
+
     // Add focus listeners for auto-scrolling on TV
     _addFocusListeners();
 
@@ -321,8 +364,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         final navigator = Navigator.maybeOf(context);
         if (navigator == null || !navigator.canPop()) return;
 
-        FocusManager.instance.primaryFocus?.unfocus();
-        _realDebridChipFocusNode.requestFocus();
+        _requestInitialFocus();
       } catch (e) {
         // Failed to detect TV, default to non-TV mode
         if (!mounted) return;
@@ -336,8 +378,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         final navigator = Navigator.maybeOf(context);
         if (navigator == null || !navigator.canPop()) return;
 
-        FocusManager.instance.primaryFocus?.unfocus();
-        _realDebridChipFocusNode.requestFocus();
+        _requestInitialFocus();
       }
     });
   }
@@ -353,6 +394,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _skipButtonFocusNode,
       _continueButtonFocusNode,
       _backButtonFocusNode,
+      _welcomeBackButtonFocusNode,
+      _modeThisDeviceFocusNode,
+      _modePhoneFocusNode,
+      _importBackButtonFocusNode,
       _openLinkButtonFocusNode,
       _textFieldFocusNode,
       _pikpakEmailFieldFocusNode,
@@ -436,6 +481,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   void dispose() {
     _traktPollTimer?.cancel();
     _traktCountdownTimer?.cancel();
+    _importAutoTimer?.cancel();
+    _detachImportListeners();
+    _importPulseController.dispose();
 
     // Remove focus listeners FIRST to prevent memory leaks
     _removeFocusListeners();
@@ -457,6 +505,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _skipButtonFocusNode.dispose();
     _continueButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
+    _welcomeBackButtonFocusNode.dispose();
+    _modeThisDeviceFocusNode.dispose();
+    _modePhoneFocusNode.dispose();
+    _importBackButtonFocusNode.dispose();
     _openLinkButtonFocusNode.dispose();
     _textFieldFocusNode.dispose();
     _pikpakEmailFieldFocusNode.dispose();
@@ -590,7 +642,22 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                                                       Curves.easeOutCubic,
                                                   switchOutCurve:
                                                       Curves.easeInCubic,
-                                                  child: _stepIndex == 0
+                                                  child: _setupMode == null
+                                                      ? _buildModeStep(
+                                                          theme,
+                                                          innerConstraints
+                                                              .maxWidth,
+                                                          screenHeight,
+                                                        )
+                                                      : _setupMode ==
+                                                            _SetupMode.fromPhone
+                                                      ? _buildPhoneImportStep(
+                                                          theme,
+                                                          innerConstraints
+                                                              .maxWidth,
+                                                          screenHeight,
+                                                        )
+                                                      : _stepIndex == 0
                                                       ? _buildWelcomeStep(
                                                           theme,
                                                           innerConstraints
@@ -653,6 +720,17 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        Row(
+          children: <Widget>[
+            IconButton(
+              focusNode: _welcomeBackButtonFocusNode,
+              onPressed: _isProcessing ? null : _goBackToModeChooser,
+              icon: const Icon(Icons.arrow_back_rounded),
+              tooltip: 'Back',
+            ),
+          ],
+        ),
+        SizedBox(height: spacing1),
         Text(
           'Set up your services',
           style: theme.textTheme.headlineSmall?.copyWith(
@@ -776,6 +854,1073 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               ],
             );
           },
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Setup-mode chooser + "Import from your phone" guide
+  // ---------------------------------------------------------------------------
+
+  void _requestInitialFocus() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_setupMode == null) {
+      _modeThisDeviceFocusNode.requestFocus();
+    } else {
+      _realDebridChipFocusNode.requestFocus();
+    }
+  }
+
+  void _chooseThisDevice() {
+    setState(() => _setupMode = _SetupMode.thisDevice);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _setupMode != _SetupMode.thisDevice) return;
+      _realDebridChipFocusNode.requestFocus();
+    });
+  }
+
+  void _goBackToModeChooser() {
+    setState(() => _setupMode = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _setupMode != null) return;
+      _modeThisDeviceFocusNode.requestFocus();
+    });
+  }
+
+  void _choosePhoneImport() {
+    setState(() {
+      _setupMode = _SetupMode.fromPhone;
+      _importStep = 0;
+      _transferComplete = false;
+      _receivedItemCount = 0;
+      _lastReceivedLabel = null;
+    });
+    _importPulseController.repeat(reverse: true);
+    _restartImportAutoAdvance();
+    _attachImportListeners();
+    unawaited(_startReceiveMode());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _setupMode != _SetupMode.fromPhone) return;
+      _importBackButtonFocusNode.requestFocus();
+    });
+  }
+
+  void _leavePhoneImport() {
+    _importAutoTimer?.cancel();
+    _importAutoTimer = null;
+    _importPulseController.stop();
+    _detachImportListeners();
+    unawaited(_restoreRoleAfterImport());
+    setState(() => _setupMode = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _setupMode != null) return;
+      _modeThisDeviceFocusNode.requestFocus();
+    });
+  }
+
+  /// Make this device discoverable so the phone's Remote > Send screen can
+  /// find it. On Android TV the boot-default listener is usually already
+  /// running; we only switch roles when it isn't.
+  Future<void> _startReceiveMode() async {
+    try {
+      var name = await StorageService.getRemoteTvDeviceName();
+      name ??= await PlatformUtil.getDeviceName();
+      name ??= PlatformUtil.isAndroidTvCached ? 'Debrify TV' : 'This device';
+      if (!mounted || _setupMode != _SetupMode.fromPhone) return;
+      setState(() => _advertisedName = name!);
+      final state = RemoteControlState();
+      if (!state.isTv) {
+        _switchedRoleForImport = true;
+        await state.switchToReceiverMode(name);
+      }
+    } catch (e) {
+      debugPrint('InitialSetupFlow: failed to start receive mode: $e');
+    }
+  }
+
+  /// Undo `_startReceiveMode` when the user backs out without transferring.
+  /// TVs keep listening (that's their default role); other devices go back to
+  /// sender mode, mirroring the Remote role picker's restore logic.
+  Future<void> _restoreRoleAfterImport() async {
+    if (!_switchedRoleForImport) return;
+    _switchedRoleForImport = false;
+    try {
+      final state = RemoteControlState();
+      final enabled = await StorageService.getRemoteControlEnabled();
+      if (!enabled) {
+        await state.stop();
+      } else if (!PlatformUtil.isAndroidTvCached) {
+        await state.switchToSenderMode();
+      }
+    } catch (_) {
+      // Best effort; the Remote picker can always fix the role later.
+    }
+  }
+
+  void _attachImportListeners() {
+    if (_importListenersAttached) return;
+    _importListenersAttached = true;
+    RemoteControlState().addListener(_onRemoteStateChanged);
+    RemoteCommandRouter().addHandler(_onRemoteCommand);
+  }
+
+  void _detachImportListeners() {
+    if (!_importListenersAttached) return;
+    _importListenersAttached = false;
+    RemoteControlState().removeListener(_onRemoteStateChanged);
+    RemoteCommandRouter().removeHandler(_onRemoteCommand);
+  }
+
+  void _onRemoteStateChanged() {
+    if (!mounted || _setupMode != _SetupMode.fromPhone) return;
+    final bool connected = RemoteControlState().isConnected;
+    setState(() {
+      // The phone just connected — skip ahead to the "Transfer Everything"
+      // step so the guide matches what the user sees on their phone.
+      if (connected && _importStep < 3 && !_transferComplete) {
+        _importStep = 3;
+        _restartImportAutoAdvance();
+      }
+    });
+  }
+
+  void _onRemoteCommand(String action, String command, String? data) {
+    if (!mounted || _setupMode != _SetupMode.fromPhone) return;
+    String? label;
+    if (action == RemoteAction.addon && command == AddonCommand.install) {
+      label = 'Stremio addon';
+    } else if (action == RemoteAction.config) {
+      if (command == ConfigCommand.complete) {
+        // The router marks onboarding complete and restarts the app shortly;
+        // we just flip into the success state while that happens.
+        _importAutoTimer?.cancel();
+        setState(() => _transferComplete = true);
+        return;
+      }
+      label = _labelForConfigCommand(command);
+    }
+    if (label == null) return;
+    setState(() {
+      _receivedItemCount++;
+      _lastReceivedLabel = label;
+    });
+  }
+
+  String? _labelForConfigCommand(String command) {
+    switch (command) {
+      case ConfigCommand.realDebrid:
+        return 'Real-Debrid';
+      case ConfigCommand.torbox:
+        return 'Torbox';
+      case ConfigCommand.premiumize:
+        return 'Premiumize';
+      case ConfigCommand.allDebrid:
+        return 'AllDebrid';
+      case ConfigCommand.pikpak:
+        return 'PikPak';
+      case ConfigCommand.trakt:
+        return 'Trakt';
+      case ConfigCommand.searchEngines:
+        return 'Search engines';
+      case ConfigCommand.webDav:
+        return 'WebDAV servers';
+      case ConfigCommand.indexerManagers:
+        return 'Indexer managers';
+      // A chunked channel announces itself once via `start`; a small channel
+      // arrives as a single `debrifyChannel`. Chunks themselves stay silent.
+      case ConfigCommand.debrifyChannel:
+      case ConfigCommand.debrifyChannelStart:
+        return 'TV channel';
+      default:
+        return null;
+    }
+  }
+
+  void _restartImportAutoAdvance() {
+    _importAutoTimer?.cancel();
+    _importAutoTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || _setupMode != _SetupMode.fromPhone || _transferComplete) {
+        return;
+      }
+      setState(() {
+        if (RemoteControlState().isConnected) {
+          // Once connected, settle on the final steps instead of looping.
+          if (_importStep < _importStepCount - 1) _importStep++;
+        } else {
+          _importStep = (_importStep + 1) % _importStepCount;
+        }
+      });
+    });
+  }
+
+  void _setImportStep(int step) {
+    if (_transferComplete || step < 0 || step >= _importStepCount) return;
+    setState(() => _importStep = step);
+    _restartImportAutoAdvance();
+  }
+
+  void _importStepPrev() =>
+      _setImportStep((_importStep - 1 + _importStepCount) % _importStepCount);
+
+  void _importStepNext() =>
+      _setImportStep((_importStep + 1) % _importStepCount);
+
+  Widget _buildModeStep(
+    ThemeData theme,
+    double availableWidth,
+    double screenHeight,
+  ) {
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing2 = screenHeight < 800 ? 16.0 : 24.0;
+    final bool isTv = _isAndroidTv || PlatformUtil.isAndroidTvCached;
+
+    return Column(
+      key: const ValueKey<String>('setup-mode'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          'Welcome to Debrify',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        SizedBox(height: spacing1),
+        Text(
+          'How would you like to set things up?',
+          style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+        ),
+        SizedBox(height: spacing2),
+        _ModeCard(
+          focusNode: _modeThisDeviceFocusNode,
+          icon: isTv ? Icons.tv_rounded : Icons.tune_rounded,
+          gradient: const <Color>[Color(0xFF1E3A8A), Color(0xFF6366F1)],
+          title: isTv ? 'Set up on this TV' : 'Set up on this device',
+          subtitle:
+              'Connect your services, import search engines, and link Trakt right here.',
+          onSelected: _chooseThisDevice,
+        ),
+        SizedBox(height: spacing1 + 4),
+        _ModeCard(
+          focusNode: _modePhoneFocusNode,
+          icon: Icons.phonelink_rounded,
+          gradient: const <Color>[Color(0xFFB91C1C), Color(0xFFEF4444)],
+          title: 'Import from your phone',
+          subtitle:
+              'Beam your entire setup — services, addons, and channels — from the Debrify app on your phone.',
+          footnote:
+              'Needs Debrify on your phone, with both devices on the same Wi-Fi.',
+          onSelected: _choosePhoneImport,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhoneImportStep(
+    ThemeData theme,
+    double availableWidth,
+    double screenHeight,
+  ) {
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing2 = screenHeight < 800 ? 12.0 : 16.0;
+    final steps = _importGuideSteps();
+    final step = steps[_importStep.clamp(0, steps.length - 1)];
+
+    Widget guide;
+    if (_transferComplete) {
+      const Color green = Color(0xFF34D399);
+      guide = SizedBox(
+        width: double.infinity,
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: spacing2 + 8),
+          child: Column(
+            children: <Widget>[
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: green.withValues(alpha: 0.14),
+                  border: Border.all(color: green, width: 2),
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: green,
+                  size: 38,
+                ),
+              ),
+              SizedBox(height: spacing2),
+              Text(
+                'Setup received!',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Hang tight — Debrify will restart in a moment.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.white70,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      guide = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragEnd: (DragEndDetails details) {
+          final double v = details.primaryVelocity ?? 0;
+          if (v < -150) {
+            _importStepNext();
+          } else if (v > 150) {
+            _importStepPrev();
+          }
+        },
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final bool wide = constraints.maxWidth >= 430;
+            final Widget mock = AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (Widget child, Animation<double> anim) =>
+                  FadeTransition(
+                    opacity: anim,
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.96, end: 1).animate(anim),
+                      child: child,
+                    ),
+                  ),
+              child: KeyedSubtree(
+                key: ValueKey<int>(_importStep),
+                child: _PhoneMockFrame(child: step.mock),
+              ),
+            );
+            final Widget caption = AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              layoutBuilder:
+                  (Widget? currentChild, List<Widget> previousChildren) =>
+                      Stack(
+                        alignment: Alignment.centerLeft,
+                        children: <Widget>[
+                          ...previousChildren,
+                          if (currentChild != null) currentChild,
+                        ],
+                      ),
+              child: Column(
+                key: ValueKey<int>(_importStep),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    'Step ${_importStep + 1} of $_importStepCount',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: Colors.white54,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    step.title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    step.body,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white70,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            );
+            if (wide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  mock,
+                  const SizedBox(width: 20),
+                  Expanded(child: caption),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Center(child: mock),
+                SizedBox(height: spacing2),
+                caption,
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (FocusNode node, KeyEvent event) {
+        if (_transferComplete) return KeyEventResult.ignored;
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _importStepPrev();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _importStepNext();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Column(
+        key: const ValueKey<String>('phone-import'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              IconButton(
+                focusNode: _importBackButtonFocusNode,
+                onPressed: _transferComplete ? null : _leavePhoneImport,
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back',
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Import from your phone',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: spacing1),
+          guide,
+          if (!_transferComplete) ...<Widget>[
+            SizedBox(height: spacing1),
+            _buildImportStepDots(),
+          ],
+          SizedBox(height: spacing2),
+          _buildImportStatusCard(theme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImportStepDots() {
+    return ExcludeFocus(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          IconButton(
+            onPressed: _importStepPrev,
+            icon: const Icon(Icons.chevron_left_rounded),
+            iconSize: 20,
+            color: Colors.white54,
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Previous step',
+          ),
+          for (int i = 0; i < _importStepCount; i++)
+            GestureDetector(
+              onTap: () => _setImportStep(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: i == _importStep ? 22 : 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  color: i == _importStep
+                      ? const Color(0xFF818CF8)
+                      : Colors.white24,
+                ),
+              ),
+            ),
+          IconButton(
+            onPressed: _importStepNext,
+            icon: const Icon(Icons.chevron_right_rounded),
+            iconSize: 20,
+            color: Colors.white54,
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Next step',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImportStatusCard(ThemeData theme) {
+    final bool connected = RemoteControlState().isConnected;
+    const Color green = Color(0xFF34D399);
+    final String title;
+    final String sub;
+    final Color color;
+    bool pulse = true;
+    if (_transferComplete) {
+      color = green;
+      pulse = false;
+      title = 'Setup received!';
+      sub = 'Finishing up — Debrify will restart in a moment.';
+    } else if (connected && _receivedItemCount > 0) {
+      color = green;
+      title = 'Receiving your setup…';
+      sub = 'Latest: $_lastReceivedLabel · $_receivedItemCount received';
+    } else if (connected) {
+      color = green;
+      title = 'Phone connected';
+      sub = 'Send the transfer from your phone to finish.';
+    } else {
+      color = const Color(0xFFF87171);
+      title = 'Waiting for your phone…';
+      sub = 'This device shows up as “$_advertisedName”.';
+    }
+
+    Widget orb;
+    if (pulse) {
+      orb = AnimatedBuilder(
+        animation: _importPulseController,
+        builder: (BuildContext context, Widget? _) {
+          final double t = _importPulseController.value;
+          return Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withValues(alpha: 0.45 + 0.55 * t),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: color.withValues(alpha: 0.5 * t),
+                  blurRadius: 8,
+                  spreadRadius: 1.5,
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } else {
+      orb = Container(
+        width: 12,
+        height: 12,
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: green),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        children: <Widget>[
+          orb,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  sub,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white60, fontSize: 11.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_ImportGuideStep> _importGuideSteps() {
+    return <_ImportGuideStep>[
+      _ImportGuideStep(
+        title: 'Open Remote on your phone',
+        body:
+            'In the Debrify app on your phone, open the navigation menu and pick Remote at the bottom.',
+        mock: _mockMenuScreen(),
+      ),
+      _ImportGuideStep(
+        title: 'Choose Send',
+        body:
+            'Your phone becomes the sender — it can control this device and push its whole setup over.',
+        mock: _mockRoleScreen(),
+      ),
+      _ImportGuideStep(
+        title: 'Connect to “$_advertisedName”',
+        body:
+            'Your phone scans the network. Pick this device from the list and tap Connect.',
+        mock: _mockScanScreen(),
+      ),
+      _ImportGuideStep(
+        title: 'Tap Transfer Everything',
+        body: 'One click sends your services, addons, and channels across.',
+        mock: _mockOptionsScreen(),
+      ),
+      _ImportGuideStep(
+        title: 'Start the transfer',
+        body:
+            'Keep everything selected and press Transfer Everything. This screen finishes on its own once it arrives.',
+        mock: _mockChecklistScreen(),
+      ),
+    ];
+  }
+
+  // --- Miniature phone-screen mockups for the guide -------------------------
+
+  static const Color _mockHighlightColor = Color(0xFFFBBF24);
+
+  Widget _mockBar(double width, {double height = 5}) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+  }
+
+  /// Pulsing amber "look here" ring used to call out the control the user
+  /// should tap on their phone.
+  Widget _highlightBox({
+    required Widget child,
+    double radius = 9,
+    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: 7),
+  }) {
+    return AnimatedBuilder(
+      animation: _importPulseController,
+      builder: (BuildContext context, Widget? inner) {
+        final double t = _importPulseController.value;
+        return Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            color: _mockHighlightColor.withValues(alpha: 0.08 + 0.08 * t),
+            border: Border.all(
+              color: _mockHighlightColor.withValues(alpha: 0.45 + 0.55 * t),
+              width: 1.4,
+            ),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: _mockHighlightColor.withValues(alpha: 0.3 * t),
+                blurRadius: 9,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: inner,
+        );
+      },
+      child: child,
+    );
+  }
+
+  Widget _mockDimRow({
+    IconData? icon,
+    Color? iconColor,
+    double barWidth = 52,
+    Widget? trailing,
+    double height = 24,
+  }) {
+    return Container(
+      height: height,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        children: <Widget>[
+          if (icon != null) ...<Widget>[
+            Icon(
+              icon,
+              size: 11,
+              color: (iconColor ?? Colors.white).withValues(alpha: 0.75),
+            ),
+            const SizedBox(width: 6),
+          ],
+          _mockBar(barWidth),
+          if (trailing != null) ...<Widget>[const Spacer(), trailing],
+        ],
+      ),
+    );
+  }
+
+  Widget _mockHighlightRow({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    Widget? trailing,
+    double height = 26,
+  }) {
+    return SizedBox(
+      height: height,
+      child: _highlightBox(
+        child: Row(
+          children: <Widget>[
+            Icon(icon, size: 11, color: iconColor),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (trailing != null) trailing,
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Step 1 — the app menu with "Remote" called out at the bottom.
+  Widget _mockMenuScreen() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _mockDimRow(
+          icon: Icons.cloud_rounded,
+          iconColor: const Color(0xFF38BDF8),
+          barWidth: 34,
+        ),
+        _mockDimRow(
+          icon: Icons.tv_rounded,
+          iconColor: const Color(0xFF818CF8),
+          barWidth: 52,
+        ),
+        _mockDimRow(
+          icon: Icons.smart_display_rounded,
+          iconColor: const Color(0xFF818CF8),
+          barWidth: 46,
+        ),
+        _mockDimRow(
+          icon: Icons.extension_rounded,
+          iconColor: const Color(0xFF6366F1),
+          barWidth: 40,
+        ),
+        _mockDimRow(
+          icon: Icons.settings_rounded,
+          iconColor: const Color(0xFF6366F1),
+          barWidth: 44,
+        ),
+        const SizedBox(height: 4),
+        _mockHighlightRow(
+          icon: Icons.settings_remote_rounded,
+          iconColor: const Color(0xFFEF4444),
+          label: 'Remote',
+          trailing: const Icon(
+            Icons.chevron_right_rounded,
+            size: 11,
+            color: Colors.white70,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Step 2 — the Send / Receive role picker with "Send" called out.
+  Widget _mockRoleScreen() {
+    Widget card({
+      required bool highlight,
+      required IconData icon,
+      required Color color,
+      required String label,
+    }) {
+      final Widget inner = Row(
+        children: <Widget>[
+          Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, size: 12, color: Colors.white),
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: highlight ? Colors.white : Colors.white60,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                _mockBar(56, height: 4),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 12,
+            color: Colors.white38,
+          ),
+        ],
+      );
+      if (highlight) {
+        return SizedBox(
+          height: 56,
+          child: _highlightBox(radius: 11, child: inner),
+        );
+      }
+      return Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 7),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: inner,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _mockBar(64, height: 6),
+        const SizedBox(height: 4),
+        _mockBar(90, height: 4),
+        const SizedBox(height: 10),
+        card(
+          highlight: true,
+          icon: Icons.send_rounded,
+          color: const Color(0xFFD32F2F),
+          label: 'Send',
+        ),
+        const SizedBox(height: 8),
+        card(
+          highlight: false,
+          icon: Icons.download_rounded,
+          color: const Color(0xFF37474F),
+          label: 'Receive',
+        ),
+      ],
+    );
+  }
+
+  /// Step 3 — the scan list with this device called out.
+  Widget _mockScanScreen() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            const SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: Color(0xFF818CF8),
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Text(
+              'Scanning…',
+              style: TextStyle(color: Colors.white54, fontSize: 9),
+            ),
+            const Spacer(),
+            const Icon(Icons.refresh_rounded, size: 11, color: Colors.white38),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 44,
+          child: _highlightBox(
+            radius: 11,
+            child: Row(
+              children: <Widget>[
+                const Icon(Icons.tv_rounded, size: 13, color: Colors.white),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        _advertisedName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      _mockBar(48, height: 4),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: const Text(
+                    'Connect',
+                    style: TextStyle(color: Colors.white, fontSize: 8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: _mockBar(70, height: 4),
+        ),
+      ],
+    );
+  }
+
+  /// Step 4 — connected options with "Transfer Everything" called out.
+  Widget _mockOptionsScreen() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _mockHighlightRow(
+          height: 30,
+          icon: Icons.bolt_rounded,
+          iconColor: const Color(0xFF818CF8),
+          label: 'Transfer Everything',
+          trailing: const Icon(
+            Icons.chevron_right_rounded,
+            size: 11,
+            color: Colors.white70,
+          ),
+        ),
+        const SizedBox(height: 6),
+        _mockDimRow(
+          icon: Icons.gamepad_rounded,
+          iconColor: const Color(0xFF6366F1),
+          barWidth: 44,
+          height: 26,
+        ),
+        _mockDimRow(
+          icon: Icons.extension_rounded,
+          iconColor: const Color(0xFF6366F1),
+          barWidth: 52,
+          height: 26,
+        ),
+        _mockDimRow(
+          icon: Icons.live_tv_rounded,
+          iconColor: const Color(0xFF6366F1),
+          barWidth: 58,
+          height: 26,
+        ),
+        _mockDimRow(
+          icon: Icons.settings_remote_rounded,
+          iconColor: const Color(0xFF6366F1),
+          barWidth: 48,
+          height: 26,
+        ),
+      ],
+    );
+  }
+
+  /// Step 5 — the item checklist with the final button called out.
+  Widget _mockChecklistScreen() {
+    Widget addonRow(double barWidth) {
+      return _mockDimRow(
+        icon: Icons.extension_rounded,
+        iconColor: const Color(0xFF6366F1),
+        barWidth: barWidth,
+        height: 24,
+        trailing: Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white24),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        addonRow(46),
+        addonRow(58),
+        addonRow(40),
+        addonRow(52),
+        const Spacer(),
+        SizedBox(
+          height: 30,
+          child: _highlightBox(
+            radius: 15,
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(Icons.send_rounded, size: 10, color: Colors.white),
+                SizedBox(width: 5),
+                Text(
+                  'Transfer Everything',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -2906,6 +4051,251 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         ),
         style: const TextStyle(color: Colors.white),
         onSubmitted: widget.onSubmitted,
+      ),
+    );
+  }
+}
+
+/// One step of the "Import from your phone" guide: a caption plus a miniature
+/// phone-screen mockup with the relevant control highlighted.
+class _ImportGuideStep {
+  const _ImportGuideStep({
+    required this.title,
+    required this.body,
+    required this.mock,
+  });
+
+  final String title;
+  final String body;
+  final Widget mock;
+}
+
+/// Large focusable card used on the setup-mode chooser screen.
+class _ModeCard extends StatefulWidget {
+  const _ModeCard({
+    required this.focusNode,
+    required this.icon,
+    required this.gradient,
+    required this.title,
+    required this.subtitle,
+    this.footnote,
+    required this.onSelected,
+  });
+
+  final FocusNode focusNode;
+  final IconData icon;
+  final List<Color> gradient;
+  final String title;
+  final String subtitle;
+  final String? footnote;
+  final VoidCallback onSelected;
+
+  @override
+  State<_ModeCard> createState() => _ModeCardState();
+}
+
+class _ModeCardState extends State<_ModeCard> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void dispose() {
+    try {
+      widget.focusNode.removeListener(_handleFocusChange);
+    } catch (e) {
+      debugPrint('_ModeCard: Error removing listener: $e');
+    }
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (mounted) {
+      setState(() {
+        _isFocused = widget.focusNode.hasFocus;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              HapticFeedback.lightImpact();
+              widget.onSelected();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          focusNode: widget.focusNode,
+          child: GestureDetector(
+            onTap: widget.onSelected,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: Colors.white.withValues(alpha: _isFocused ? 0.12 : 0.06),
+                border: Border.all(
+                  color: _isFocused
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.15),
+                  width: _isFocused ? 2 : 1,
+                ),
+                boxShadow: _isFocused
+                    ? <BoxShadow>[
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: widget.gradient),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: widget.gradient.last.withValues(alpha: 0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Icon(widget.icon, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          widget.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.subtitle,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12.5,
+                            height: 1.35,
+                          ),
+                        ),
+                        if (widget.footnote != null) ...<Widget>[
+                          const SizedBox(height: 6),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              const Icon(
+                                Icons.info_outline_rounded,
+                                size: 12,
+                                color: Colors.white38,
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  widget.footnote!,
+                                  style: const TextStyle(
+                                    color: Colors.white38,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Decorative miniature phone shell that frames the guide-step mockups.
+class _PhoneMockFrame extends StatelessWidget {
+  const _PhoneMockFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 158,
+      height: 250,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D0B16),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.22),
+          width: 2.5,
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      // The mockups are decorative and use fixed-height rows; opt out of text
+      // scaling so large TV/system scale factors can't overflow them.
+      child: MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.noScaling),
+        child: Column(
+          children: <Widget>[
+            const SizedBox(height: 7),
+            Container(
+              width: 34,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(9, 8, 9, 10),
+                child: child,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
