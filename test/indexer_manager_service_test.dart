@@ -204,6 +204,234 @@ void main() {
       expect(results, hasLength(1));
       expect(results.single.name, 'Torrent release');
     });
+
+    test(
+      'searches Prowlarr by imdbId via per-indexer Torznab, filtered by capability',
+      () async {
+        final server = await _TestServer.start((request) async {
+          if (request.uri.path == '/api/v1/indexer') {
+            expect(request.headers.value('X-Api-Key'), 'prowlarr-key');
+            request.response
+              ..headers.contentType = ContentType.json
+              ..write(
+                jsonEncode([
+                  {
+                    'id': 1,
+                    'enable': true,
+                    'protocol': 'torrent',
+                    'capabilities': {
+                      'movieSearchParams': ['q', 'imdbId'],
+                    },
+                  },
+                  {
+                    // Declares movie search but not imdbId -- known
+                    // unsupported, must be excluded.
+                    'id': 2,
+                    'enable': true,
+                    'protocol': 'torrent',
+                    'capabilities': {
+                      'movieSearchParams': ['q'],
+                    },
+                  },
+                ]),
+              );
+            await request.response.close();
+            return;
+          }
+
+          expect(request.uri.path, '/1/api');
+          expect(request.uri.queryParameters['t'], 'movie');
+          expect(request.uri.queryParameters['imdbid'], '0468569');
+
+          request.response
+            ..headers.contentType = ContentType('text', 'xml')
+            ..write('''
+<rss xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <item>
+      <title>The Dark Knight 1080p</title>
+      <link>magnet:?xt=urn:btih:1111111111111111111111111111111111111a&amp;dn=Dark+Knight</link>
+      <pubDate>Thu, 30 Apr 2026 12:00:00 GMT</pubDate>
+      <size>123456</size>
+      <torznab:attr name="seeders" value="10" />
+    </item>
+  </channel>
+</rss>
+''');
+          await request.response.close();
+        });
+
+        addTearDown(server.close);
+
+        final results = await IndexerManagerService.searchByImdb(
+          IndexerManagerConfig(
+            id: 'test',
+            name: 'Local Prowlarr',
+            type: IndexerManagerType.prowlarr,
+            baseUrl: server.baseUrl,
+            apiKey: 'prowlarr-key',
+          ),
+          'tt0468569',
+          isMovie: true,
+        );
+
+        expect(results, hasLength(1));
+        expect(results.single.name, 'The Dark Knight 1080p');
+      },
+    );
+
+    test(
+      'excludes Usenet indexers from Prowlarr imdb search even when imdbId is declared',
+      () async {
+        var torznabCalled = false;
+        final server = await _TestServer.start((request) async {
+          if (request.uri.path == '/api/v1/indexer') {
+            request.response
+              ..headers.contentType = ContentType.json
+              ..write(
+                jsonEncode([
+                  {
+                    'id': 5,
+                    'enable': true,
+                    'protocol': 'usenet',
+                    'capabilities': {
+                      'movieSearchParams': ['q', 'imdbId'],
+                    },
+                  },
+                ]),
+              );
+            await request.response.close();
+            return;
+          }
+
+          torznabCalled = true;
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+        });
+
+        addTearDown(server.close);
+
+        final results = await IndexerManagerService.searchByImdb(
+          IndexerManagerConfig(
+            id: 'test',
+            name: 'Local Prowlarr',
+            type: IndexerManagerType.prowlarr,
+            baseUrl: server.baseUrl,
+            apiKey: 'prowlarr-key',
+          ),
+          'tt0468569',
+          isMovie: true,
+        );
+
+        expect(torznabCalled, isFalse);
+        expect(results, isEmpty);
+      },
+    );
+
+    test(
+      'includes Prowlarr indexers with untested capabilities opportunistically',
+      () async {
+        final server = await _TestServer.start((request) async {
+          if (request.uri.path == '/api/v1/indexer') {
+            request.response
+              ..headers.contentType = ContentType.json
+              ..write(
+                jsonEncode([
+                  {
+                    // No 'capabilities' key at all -- simulates an indexer
+                    // Prowlarr hasn't probed yet.
+                    'id': 9,
+                    'enable': true,
+                    'protocol': 'torrent',
+                  },
+                ]),
+              );
+            await request.response.close();
+            return;
+          }
+
+          expect(request.uri.path, '/9/api');
+          request.response
+            ..headers.contentType = ContentType('text', 'xml')
+            ..write('''
+<rss xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <item>
+      <title>Untested Indexer Release</title>
+      <link>magnet:?xt=urn:btih:2222222222222222222222222222222222222b&amp;dn=Release</link>
+      <pubDate>Thu, 30 Apr 2026 12:00:00 GMT</pubDate>
+      <size>1000</size>
+    </item>
+  </channel>
+</rss>
+''');
+          await request.response.close();
+        });
+
+        addTearDown(server.close);
+
+        final results = await IndexerManagerService.searchByImdb(
+          IndexerManagerConfig(
+            id: 'test',
+            name: 'Local Prowlarr',
+            type: IndexerManagerType.prowlarr,
+            baseUrl: server.baseUrl,
+            apiKey: 'prowlarr-key',
+          ),
+          'tt0468569',
+          isMovie: true,
+        );
+
+        expect(results, hasLength(1));
+        expect(results.single.name, 'Untested Indexer Release');
+      },
+    );
+
+    test(
+      'surfaces an error when every Prowlarr Torznab indexer fails',
+      () async {
+        final server = await _TestServer.start((request) async {
+          if (request.uri.path == '/api/v1/indexer') {
+            request.response
+              ..headers.contentType = ContentType.json
+              ..write(
+                jsonEncode([
+                  {
+                    'id': 1,
+                    'enable': true,
+                    'protocol': 'torrent',
+                    'capabilities': {
+                      'movieSearchParams': ['q', 'imdbId'],
+                    },
+                  },
+                ]),
+              );
+            await request.response.close();
+            return;
+          }
+
+          request.response.statusCode = HttpStatus.internalServerError;
+          await request.response.close();
+        });
+
+        addTearDown(server.close);
+
+        await expectLater(
+          IndexerManagerService.searchByImdb(
+            IndexerManagerConfig(
+              id: 'test',
+              name: 'Local Prowlarr',
+              type: IndexerManagerType.prowlarr,
+              baseUrl: server.baseUrl,
+              apiKey: 'prowlarr-key',
+            ),
+            'tt0468569',
+            isMovie: true,
+          ),
+          throwsA(isA<Exception>()),
+        );
+      },
+    );
   });
 }
 

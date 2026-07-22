@@ -21,7 +21,21 @@ class IndexerManagerTestResult {
   });
 }
 
+class _ProwlarrIndexerCacheEntry {
+  final DateTime fetchedAt;
+  final List<dynamic> indexers;
+
+  const _ProwlarrIndexerCacheEntry({
+    required this.fetchedAt,
+    required this.indexers,
+  });
+}
+
 class IndexerManagerService {
+  static const Duration _prowlarrIndexerCacheTtl = Duration(minutes: 5);
+  static final Map<String, _ProwlarrIndexerCacheEntry> _prowlarrIndexerCache =
+      {};
+
   static Future<List<IndexerManagerConfig>> getConfigs() {
     return StorageService.getIndexerManagerConfigs();
   }
@@ -123,23 +137,15 @@ class IndexerManagerService {
             message: 'Jackett returned HTTP ${response.statusCode}.',
           );
         case IndexerManagerType.prowlarr:
-          final uri = _appendPath(config.normalizedBaseUrl, '/api/v1/indexer');
-          final response = await http
-              .get(uri, headers: _prowlarrHeaders(config))
-              .timeout(Duration(seconds: config.timeoutSeconds));
-          if (response.statusCode >= 200 && response.statusCode < 300) {
-            final decoded = jsonDecode(response.body);
-            final count = decoded is List ? decoded.length : 0;
-            return IndexerManagerTestResult(
-              success: true,
-              message: count > 0
-                  ? 'Prowlarr connected with $count indexer(s).'
-                  : 'Prowlarr connected.',
-            );
-          }
+          final indexers = await _fetchProwlarrIndexers(
+            config,
+            allowCache: false,
+          );
           return IndexerManagerTestResult(
-            success: false,
-            message: 'Prowlarr returned HTTP ${response.statusCode}.',
+            success: true,
+            message: indexers.isNotEmpty
+                ? 'Prowlarr connected with ${indexers.length} indexer(s).'
+                : 'Prowlarr connected.',
           );
       }
     } catch (e) {
@@ -187,14 +193,24 @@ class IndexerManagerService {
     int? episode,
     int? maxResults,
   }) async {
+    // Prowlarr's aggregate UI search endpoint (/api/v1/search) silently drops
+    // the imdbId param and falls back to each indexer's "recently added"
+    // feed instead of erroring, so imdb-based lookups go through the
+    // per-indexer Torznab endpoint instead, which honors it correctly.
+    if (imdbId != null && imdbId.isNotEmpty) {
+      return _searchProwlarrByImdb(
+        config,
+        imdbId: imdbId,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+        maxResults: maxResults,
+      );
+    }
+
     final params = <String, String>{
       if (query != null && query.isNotEmpty) 'query': query,
       if (query != null && query.isNotEmpty) 'type': 'search',
-      if (imdbId != null && imdbId.isNotEmpty) 'imdbId': imdbId,
-      if (imdbId != null && imdbId.isNotEmpty)
-        'type': isMovie ? 'movie' : 'tvsearch',
-      if (!isMovie && season != null) 'season': '$season',
-      if (!isMovie && episode != null) 'episode': '$episode',
       if (config.categories.isNotEmpty)
         'categories': config.categories.join(','),
     };
@@ -229,6 +245,176 @@ class IndexerManagerService {
         )
         .whereType<Torrent>()
         .take(limit)
+        .toList();
+  }
+
+  static Future<List<Torrent>> _searchProwlarrByImdb(
+    IndexerManagerConfig config, {
+    required String imdbId,
+    required bool isMovie,
+    int? season,
+    int? episode,
+    int? maxResults,
+  }) async {
+    final indexerIds = await _prowlarrImdbCapableIndexerIds(
+      config,
+      isMovie: isMovie,
+    );
+    if (indexerIds.isEmpty) return [];
+
+    final queryParams = <String, String>{
+      't': isMovie ? 'movie' : 'tvsearch',
+      'imdbid': imdbId.replaceFirst('tt', ''),
+      if (!isMovie && season != null) 'season': '$season',
+      if (!isMovie && episode != null) 'ep': '$episode',
+    };
+
+    // Each indexer is queried independently: one indexer failing (bad
+    // upstream, timeout) shouldn't sink results from the others. But if
+    // every one of them fails, that's a real error (e.g. Prowlarr
+    // unreachable or a bad API key) and should surface as one instead of
+    // silently looking like "no results".
+    var anySucceeded = false;
+    Object? lastError;
+    final results = await Future.wait(
+      indexerIds.map((id) async {
+        try {
+          final torrents = await _searchProwlarrTorznab(
+            config,
+            id,
+            queryParams,
+          );
+          anySucceeded = true;
+          return torrents;
+        } catch (e) {
+          lastError = e;
+          debugPrint(
+            'IndexerManagerService: Prowlarr indexer $id Torznab search failed: $e',
+          );
+          return const <Torrent>[];
+        }
+      }),
+    );
+
+    if (!anySucceeded && lastError != null) {
+      throw Exception('Prowlarr Torznab search failed: $lastError');
+    }
+
+    final limit = maxResults ?? config.maxResults;
+    return results.expand((list) => list).take(limit).toList();
+  }
+
+  /// Returns the ids of enabled, torrent-protocol Prowlarr indexers eligible
+  /// for an imdbId-based search in the given movie/tv mode. An indexer whose
+  /// capabilities Prowlarr hasn't probed yet (missing/empty searchParams) is
+  /// included opportunistically: Prowlarr's own Torznab endpoint safely
+  /// returns zero results for a mode an indexer doesn't actually support, so
+  /// this can't leak wrong results, only costs an extra parallel request. An
+  /// indexer that explicitly declares support without imdbId is excluded.
+  static Future<List<int>> _prowlarrImdbCapableIndexerIds(
+    IndexerManagerConfig config, {
+    required bool isMovie,
+  }) async {
+    final indexers = await _fetchProwlarrIndexers(config);
+
+    final paramsKey = isMovie ? 'movieSearchParams' : 'tvSearchParams';
+    final ids = <int>[];
+    for (final entry in indexers) {
+      if (entry is! Map) continue;
+      final map = Map<String, dynamic>.from(entry);
+      if (map['enable'] != true) continue;
+      // Torznab items carry no protocol marker, so a Usenet indexer here
+      // would be parsed as a bogus "torrent" release. Only indexers that
+      // explicitly declare the torrent protocol are eligible.
+      if (map['protocol']?.toString().toLowerCase() != 'torrent') continue;
+      final id = map['id'];
+      if (id is! int) continue;
+
+      final capabilities = map['capabilities'];
+      final searchParams = capabilities is Map
+          ? capabilities[paramsKey]
+          : null;
+      final knownUnsupported =
+          searchParams is List &&
+          !searchParams.any(
+            (param) => param.toString().toLowerCase() == 'imdbid',
+          );
+      if (!knownUnsupported) ids.add(id);
+    }
+    return ids;
+  }
+
+  /// Fetches Prowlarr's indexer list (id, enable, protocol, and declared
+  /// search capabilities per indexer), cached briefly since callers may
+  /// retry the same search and this rarely changes between calls.
+  static Future<List<dynamic>> _fetchProwlarrIndexers(
+    IndexerManagerConfig config, {
+    bool allowCache = true,
+  }) async {
+    final cacheKey = '${config.normalizedBaseUrl}|${config.apiKey}';
+    if (allowCache) {
+      final cached = _prowlarrIndexerCache[cacheKey];
+      if (cached != null &&
+          DateTime.now().difference(cached.fetchedAt) <
+              _prowlarrIndexerCacheTtl) {
+        return cached.indexers;
+      }
+    }
+
+    final uri = _appendPath(config.normalizedBaseUrl, '/api/v1/indexer');
+    final response = await http
+        .get(uri, headers: _prowlarrHeaders(config))
+        .timeout(Duration(seconds: config.timeoutSeconds));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Prowlarr returned HTTP ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body);
+    final indexers = decoded is List ? decoded : const <dynamic>[];
+    _prowlarrIndexerCache[cacheKey] = _ProwlarrIndexerCacheEntry(
+      fetchedAt: DateTime.now(),
+      indexers: indexers,
+    );
+    return indexers;
+  }
+
+  static Future<List<Torrent>> _searchProwlarrTorznab(
+    IndexerManagerConfig config,
+    int indexerId,
+    Map<String, String> queryParams,
+  ) async {
+    final params = <String, String>{
+      'apikey': config.apiKey.trim(),
+      ...queryParams,
+      if (config.categories.isNotEmpty) 'cat': config.categories.join(','),
+    };
+    final uri = _appendPath(
+      config.normalizedBaseUrl,
+      '/$indexerId/api',
+    ).replace(queryParameters: params);
+    debugPrint(
+      'IndexerManagerService: Prowlarr Torznab search ${uri.replace(queryParameters: {...uri.queryParameters, 'apikey': '***'})}',
+    );
+
+    final response = await http
+        .get(uri)
+        .timeout(Duration(seconds: config.timeoutSeconds));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Prowlarr indexer $indexerId returned HTTP ${response.statusCode}',
+      );
+    }
+
+    final document = XmlDocument.parse(response.body);
+    final items = document.descendants
+        .whereType<XmlElement>()
+        .where((element) => element.name.local == 'item')
+        .toList();
+
+    return items
+        .map((item) => _torrentFromTorznabItem(item, config))
+        .whereType<Torrent>()
         .toList();
   }
 
