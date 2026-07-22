@@ -851,30 +851,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Loaded once per series from the dedicated store (kept apart from the
   /// ms-based resume state) and looked up by the current episode's season/episode.
   Future<double?> _currentEpisodeTraktPercent() async {
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist == null || !seriesPlaylist.isSeries) return null;
     final imdbId = widget.contentImdbId;
     if (imdbId == null || imdbId.isEmpty) return null;
+
+    // Await BEFORE reading _currentIndex/season/episode below, so that if the
+    // user advances to a different episode while this is in flight, we key
+    // off the episode that's actually current when the fetch resolves.
     _traktEpisodeProgress ??=
         await StorageService.getEpisodeTraktProgress(imdbId: imdbId);
-    final playlist = _activePlaylist;
-    if (playlist == null || _currentIndex < 0 || _currentIndex >= playlist.length) {
-      return null;
-    }
-    // Must be the CURRENT episode — no orElse-to-first fallback, or we'd seek to
-    // an unrelated episode's Trakt position on filtered/reordered playlists.
-    SeriesEpisode? ep;
-    for (final e in seriesPlaylist.allEpisodes) {
-      if (e.originalIndex == _currentIndex) {
-        ep = e;
-        break;
+
+    int? season;
+    int? episode;
+    final seriesPlaylist = _seriesPlaylist;
+    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+      final playlist = _activePlaylist;
+      if (playlist == null || _currentIndex < 0 || _currentIndex >= playlist.length) {
+        return null;
       }
+      // Must be the CURRENT episode — no orElse-to-first fallback, or we'd seek to
+      // an unrelated episode's Trakt position on filtered/reordered playlists.
+      SeriesEpisode? ep;
+      for (final e in seriesPlaylist.allEpisodes) {
+        if (e.originalIndex == _currentIndex) {
+          ep = e;
+          break;
+        }
+      }
+      if (ep == null) return null;
+      season = ep.seriesInfo.season;
+      episode = ep.seriesInfo.episode;
+    } else if (_effectiveContentType == 'series') {
+      // Single-file episode (e.g. a direct-link stream) — no playlist to derive
+      // season/episode from; fall back to the same launch args the local
+      // resume-state lookup uses.
+      season = _effectiveContentSeason;
+      episode = _effectiveContentEpisode;
     }
-    if (ep == null) return null;
-    final s = ep.seriesInfo.season;
-    final e = ep.seriesInfo.episode;
-    if (s == null || e == null) return null;
-    return _traktEpisodeProgress!['${s}_$e'];
+    if (season == null || episode == null) return null;
+
+    return _traktEpisodeProgress!['${season}_$episode'];
   }
 
   /// Load an external audio track to play alongside a video-only stream
@@ -4880,6 +4895,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               );
               return videoState;
             }
+          }
+        }
+
+        // Single video file (no playlist): if it's a series episode (e.g. a
+        // direct-link/addon stream, or Quick Play next episode), the position
+        // was saved under the season/episode-keyed series store, not here.
+        if (_effectiveContentType == 'series' &&
+            _effectiveContentSeason != null &&
+            _effectiveContentEpisode != null) {
+          final seriesState = await StorageService.getSeriesPlaybackState(
+            seriesTitle: _effectiveContentTitle ?? widget.title,
+            season: _effectiveContentSeason!,
+            episode: _effectiveContentEpisode!,
+          );
+          if (seriesState != null) {
+            return seriesState;
+          }
+        }
+
+        // A direct-link/addon movie stream's title varies per search (quality
+        // tag, mirror, reordered results), so the title-keyed lookup below can
+        // miss even though it's the same movie. Prefer the stable
+        // imdbId-keyed record when one exists.
+        final movieImdbId = _effectiveContentImdbId;
+        if (_effectiveContentType != 'series' &&
+            movieImdbId != null &&
+            movieImdbId.isNotEmpty) {
+          final byImdbId = await StorageService.getVideoPlaybackStateByImdbId(
+            movieImdbId,
+          );
+          if (byImdbId != null) {
+            return byImdbId;
           }
         }
 
