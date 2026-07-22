@@ -390,8 +390,9 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
 
   Widget _buildMetadataRow() {
     final t = widget.torrent;
-    // Addon direct / external streams carry no torrent metadata (size, seeders),
-    // so show a stream badge + source instead of a misleading "0 B · 0 seeders".
+    // Addon direct / external streams carry no seeder/leecher metadata, so
+    // show a stream badge + source instead of a misleading "0 seeders". Size
+    // is shown when the addon supplied one (e.g. behaviorHints.videoSize).
     // (Home renders these as its own cards and never feeds them here; only the
     // Search tab's Sources list does, so this branch is additive.)
     if (t.isDirectStream || t.isExternalStream) {
@@ -410,6 +411,12 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
                 ? const Color(0xFF6366F1) // indigo
                 : const Color(0xFF10B981), // green
           ),
+          if (t.sizeBytes > 0)
+            _buildMetaChip(
+              icon: Icons.storage_rounded,
+              label: _formatSize(t.sizeBytes),
+              color: const Color(0xFF60A5FA), // Blue 400
+            ),
           _buildMetaChip(
             icon: Icons.source_rounded,
             label: t.source.toUpperCase(),

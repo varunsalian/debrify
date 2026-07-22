@@ -6538,6 +6538,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               isTelevision: widget.isTelevision,
                               showPlayPill: widget.isTelevision,
                               formatTags: tags,
+                              qualityTag: tags.isEmpty
+                                  ? _SourcesScreenState._qualityLabel(t)
+                                  : null,
                               cacheLabel: labels.isEmpty
                                   ? null
                                   : labels.join(' | '),
@@ -6731,6 +6734,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   static String _kwRowSubtitle(Torrent t) {
     final parts = <String>[];
     if (t.isDirectStream || t.isExternalStream) {
+      if (t.sizeBytes > 0) {
+        parts.add(_SourcesScreenState._fmtSize(t.sizeBytes));
+      }
       if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
       return parts.join(' · ');
     }
@@ -13448,7 +13454,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       isTelevision: widget.isTelevision,
       showPlayPill: !widget.bindMode && widget.isTelevision,
       formatTags: tags,
-      qualityTag: (tags.isEmpty && !isStream) ? _qualityLabel(t) : null,
+      qualityTag: tags.isEmpty ? _qualityLabel(t) : null,
       cacheLabel: _cacheLabel(t),
       coverageBadge: _keywordMode ? null : _coverageLabel(t),
       streamBadge: t.isExternalStream
@@ -13488,6 +13494,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   String _rowSubtitle(Torrent t) {
     final parts = <String>[];
     if (t.isDirectStream || t.isExternalStream) {
+      if (t.sizeBytes > 0) parts.add(_fmtSize(t.sizeBytes));
       if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
       return parts.join(' · ');
     }
@@ -13514,7 +13521,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     return 'Today';
   }
 
-  String? _qualityLabel(Torrent t) {
+  static String? _qualityLabel(Torrent t) {
     // Use the same resolution logic as the F badges (pixel tokens win over the
     // loose UHD/4K keyword) so the compact/keyword quality pill stays consistent
     // with them — the `qualityTier` extension mislabels "UHD BluRay 1080p".
