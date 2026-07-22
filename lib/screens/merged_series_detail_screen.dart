@@ -1256,8 +1256,65 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     ),
   );
 
+  /// Action-row key policy (TV). Without this, LEFT/RIGHT on a row button fall
+  /// through to the pane's `focusInDirection`, whose geometric search happily
+  /// picks a Cast / More-Like-This card sitting below-right of the row (every
+  /// rail card is a real widget even when scrolled far out of view) — so RIGHT
+  /// on the last button flung the cursor into "More Like This" instead of
+  /// crossing into the episodes pane. Here the row owns its horizontal axis:
+  /// RIGHT/LEFT walk the row's buttons in reading order; RIGHT past the last
+  /// button crosses into the episodes pane (series two-pane only — dead stop
+  /// otherwise); LEFT past the first is a dead stop.
+  KeyEventResult _handleActionRowKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.arrowRight &&
+        key != LogicalKeyboardKey.arrowLeft) {
+      return KeyEventResult.ignored;
+    }
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null) return KeyEventResult.ignored;
+    // The row's buttons in reading order (the Wrap can break onto a second
+    // line, so order by line first, then x).
+    // Bucket y into coarse lines rather than comparing raw centers: the
+    // center-aligned Wrap can leave same-line buttons of different heights a
+    // sub-pixel apart, which an exact compare would read as separate lines.
+    // Wrap lines are ≥40px apart, so a 24px bucket can never split one.
+    int line(FocusNode n) => (n.rect.center.dy / 24).round();
+    final buttons = node.traversalDescendants.toList()
+      ..sort((a, b) {
+        final dy = line(a).compareTo(line(b));
+        return dy != 0 ? dy : a.rect.center.dx.compareTo(b.rect.center.dx);
+      });
+    final i = buttons.indexOf(primary);
+    if (i < 0) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (i < buttons.length - 1) {
+        buttons[i + 1].requestFocus();
+      } else if (!_isMovie && _wide) {
+        _focusEpisodesPane();
+      }
+      return KeyEventResult.handled;
+    }
+    // LEFT: previous button; dead stop at the first (UP is the way to the
+    // back button, and a geometric fallback would dive into the rails).
+    if (i > 0) buttons[i - 1].requestFocus();
+    return KeyEventResult.handled;
+  }
+
   Widget _buildActionRow() {
     final count = widget.boundSourceCount?.call(_item) ?? 0;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _handleActionRowKey,
+      child: _buildActionRowButtons(count),
+    );
+  }
+
+  Widget _buildActionRowButtons(int count) {
     return Wrap(
       spacing: 10,
       runSpacing: 10,
