@@ -3390,6 +3390,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // instant teardown, same as any other hero change.
     _clearHeroTrailer();
     _heroLiveUrl.value = null;
+    // The shell's glass-stage backdrop and sidebar tint are ALSO the stale
+    // catalog title's art (published by [_publishAmbientArt]/
+    // [_publishHeroTintToShell], neither of which this focus path runs) —
+    // blank them too rather than leaving that art behind everything,
+    // including the sidebar, while an unrelated channel plays.
+    MainPageBridge.tvAmbientArt.value = null;
+    MainPageBridge.tvHeroTint.value = null;
     if (!StremioIptvService.isStremioChannelUrl(channel.url)) {
       _heroLiveUrl.value = channel.url;
       return;
@@ -3406,10 +3413,22 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// whatever catalog trailer [_heroItem] owns.
   void _clearHeroLiveIptv() {
     _heroLiveReq++;
-    if (_heroLiveChannel.value != null) _heroLiveChannel.value = null;
+    final wasLive = _heroLiveChannel.value != null;
+    if (wasLive) _heroLiveChannel.value = null;
     if (_heroLiveTakeover.value) _heroLiveTakeover.value = false;
     _heroLiveCandidates = null;
     if (_heroLiveUrl.value != null) _heroLiveUrl.value = null;
+    // Restore the shell's glass-stage backdrop/tint for whatever catalog
+    // title the hero already holds. Needed even when DPAD focus returns to
+    // the SAME card it was on before IPTV took over: _setHero's "back on the
+    // current hero" branch doesn't re-run _publishAmbientArt/
+    // _publishHeroTintToShell (no item change to react to), so without this
+    // the shell would stay on the blank/neutral state _setHeroLiveIptv left
+    // it in.
+    if (wasLive && _heroTrailerActive) {
+      _publishAmbientArt(_heroItem.value, _heroEnriched.value);
+      MainPageBridge.tvHeroTint.value = _heroTint.value;
+    }
   }
 
   /// The boxed hero region's live IPTV feed genuinely failed (refused to
