@@ -1107,11 +1107,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
           focusNode: _modePhoneFocusNode,
           icon: Icons.phonelink_rounded,
           gradient: const <Color>[Color(0xFFB91C1C), Color(0xFFEF4444)],
-          title: 'Import from your phone',
+          title: 'Import from another device',
           subtitle:
-              'Beam your entire setup — services, addons, and channels — from the Debrify app on your phone.',
+              'Beam your entire setup — services, addons, and channels — from another device where Debrify is installed.',
           footnote:
-              'Needs Debrify on your phone, with both devices on the same Wi-Fi.',
+              'Needs Debrify on the other device, with both devices on the same Wi-Fi.',
           onSelected: _choosePhoneImport,
         ),
       ],
