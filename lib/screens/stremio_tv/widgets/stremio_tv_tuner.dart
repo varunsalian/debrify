@@ -13,6 +13,33 @@ import '../../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../stremio_tv_service.dart';
 
+/// Imperative handle the screen uses to move D-pad focus onto a dial card
+/// *reliably*, even when that card has been recycled off-screen by the dial's
+/// [ListView.builder].
+///
+/// A bare `FocusNode.requestFocus()` on a node whose card isn't currently
+/// mounted is a silent no-op — that is the root of two long-tail TV bugs:
+/// focus escaping the dial to the header search box on a long channel hold, and
+/// then down-arrow never bringing it back. This routes those "jump" focus moves
+/// through the tuner so the target card is scrolled into view (and thus built)
+/// before it is focused.
+class StremioTvTunerController {
+  _StremioTvTunerState? _state;
+
+  void _bind(_StremioTvTunerState state) => _state = state;
+  void _unbind(_StremioTvTunerState state) {
+    if (identical(_state, state)) _state = null;
+  }
+
+  /// Move focus to the channel at [realIndex] (an index into the screen's full
+  /// `allChannels`/`rowFocusNodes` list), scrolling the dial so its card is
+  /// mounted first. Returns false when the tuner is absent, in its narrow
+  /// (phone) layout, or the channel isn't in the displayed dial — the caller
+  /// should then fall back to a best-effort direct focus.
+  bool focusRealIndex(int realIndex) =>
+      _state?._focusRealIndex(realIndex) ?? false;
+}
+
 /// "The Tuner" — a cinematic channel-surfing experience for Stremio TV.
 ///
 /// On wide screens (TV / laptop, width >= 900) it renders a full-bleed
@@ -86,6 +113,10 @@ class StremioTvTuner extends StatefulWidget {
   /// Reports the focused channel's index within [allChannels].
   final void Function(int realIndex) onFocusedIndexChanged;
 
+  /// Optional imperative handle so the screen can reliably move focus onto a
+  /// dial card (scrolling it into view first). See [StremioTvTunerController].
+  final StremioTvTunerController? controller;
+
   const StremioTvTuner({
     super.key,
     required this.channels,
@@ -109,6 +140,7 @@ class StremioTvTuner extends StatefulWidget {
     required this.onFocusedIndexChanged,
     this.onEditLocal,
     this.onExportLocal,
+    this.controller,
   });
 
   @override
@@ -148,6 +180,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._bind(this);
     _rebuildIndex();
     _activeId.value =
         widget.channels.isNotEmpty ? widget.channels.first.id : null;
@@ -177,6 +210,10 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   @override
   void didUpdateWidget(StremioTvTuner old) {
     super.didUpdateWidget(old);
+    if (!identical(old.controller, widget.controller)) {
+      old.controller?._unbind(this);
+      widget.controller?._bind(this);
+    }
     // NB: always rebuild — the host mutates its channel list IN PLACE (empty-
     // channel removal), so old.channels is the same object as widget.channels
     // and an identical()/length guard can never detect the change. The O(n)
@@ -205,6 +242,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
   @override
   void dispose() {
+    widget.controller?._unbind(this);
     _tick?.cancel();
     _settle?.cancel();
     _activeId.dispose();
@@ -352,6 +390,84 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     }
     if (target >= live.length) return;
     _nodeFor(live[target])?.requestFocus();
+  }
+
+  // --- Reliable focus jumps (header handoff / focus rescue) --------------
+
+  /// Total horizontal extent of one dial card: [_DialCard]'s 138px Container
+  /// plus its 8px symmetric margin. Used to estimate a scroll offset that will
+  /// build an off-screen card so it can actually receive focus.
+  static const double _dialItemExtent = 138.0 + 16.0;
+
+  /// Leading horizontal padding of the dial [ListView].
+  static const double _dialLeadingPad = 32.0;
+
+  /// Move D-pad focus to the channel at [realIndex] in [StremioTvTuner.allChannels],
+  /// scrolling the dial so its card is mounted first. Returns false when the
+  /// channel isn't in the displayed dial or we're in the narrow (phone) layout
+  /// with no dial to scroll — the caller falls back to a direct focus request.
+  ///
+  /// This is the reliable counterpart to a bare `requestFocus`: on a long
+  /// channel hold the previously focused card can be recycled off-screen, and
+  /// focusing a recycled ListView child silently does nothing. Both the "focus
+  /// jumped to search" escape and the "down-arrow won't return to channels"
+  /// trap trace back to that no-op.
+  bool _focusRealIndex(int realIndex) {
+    if (!mounted) return false;
+    if (realIndex < 0 ||
+        realIndex >= widget.allChannels.length ||
+        realIndex >= widget.rowFocusNodes.length) {
+      return false;
+    }
+    final channel = widget.allChannels[realIndex];
+    final dialIndex = widget.channels.indexWhere((c) => c.id == channel.id);
+    if (dialIndex < 0) return false; // not currently displayed
+    final node = widget.rowFocusNodes[realIndex];
+    // Narrow layout has no horizontal dial to scroll; leave it to the caller.
+    if (!_dialScroll.hasClients) {
+      node.requestFocus();
+      return true;
+    }
+    // Card already mounted (on-screen): focus immediately, no scroll jolt.
+    if (node.context != null) {
+      node.requestFocus();
+      return true;
+    }
+    // Off-screen: bring the card into view so it builds, then focus once its
+    // Focus widget has attached (the card's own onFocusChange re-centres it).
+    _scrollDialToIndex(dialIndex);
+    _focusWhenAttached(node, 0);
+    return true;
+  }
+
+  void _scrollDialToIndex(int dialIndex) {
+    if (!_dialScroll.hasClients) return;
+    final pos = _dialScroll.position;
+    final viewport = pos.viewportDimension;
+    final target = (_dialLeadingPad +
+            dialIndex * _dialItemExtent +
+            _dialItemExtent / 2 -
+            viewport / 2)
+        .clamp(0.0, pos.maxScrollExtent);
+    _dialScroll.jumpTo(target);
+  }
+
+  /// Focus [node] on the next frame(s), once the scrolled-in card has built and
+  /// its FocusNode is attached. Bounded retries cover the rare case where one
+  /// frame isn't enough for the ListView to lay the card out.
+  void _focusWhenAttached(FocusNode node, int attempt) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // The host can cull an empty channel and dispose its node within these
+      // few frames; requesting focus on a disposed node throws, so bail if it's
+      // no longer one of the live row nodes.
+      if (!widget.rowFocusNodes.contains(node)) return;
+      if (node.context != null) {
+        node.requestFocus();
+      } else if (attempt < 3) {
+        _focusWhenAttached(node, attempt + 1);
+      }
+    });
   }
 
   // --- Long-press quick actions ------------------------------------------

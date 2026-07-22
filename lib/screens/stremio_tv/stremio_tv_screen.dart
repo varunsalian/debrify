@@ -87,6 +87,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   final List<FocusNode> _rowFocusNodes = [];
   int _focusedIndex = 0;
 
+  /// Imperative handle to the tuner so header→dial focus jumps scroll the
+  /// target card into view before focusing it — a recycled off-screen card
+  /// can't otherwise receive focus (silent no-op), which stranded focus on the
+  /// header search box after a long channel hold.
+  final StremioTvTunerController _tunerController = StremioTvTunerController();
+
   /// Bumped whenever a channel's items finish lazy-loading. The tuner is
   /// wrapped in a ValueListenableBuilder on this, so a load completing
   /// mid-surf rebuilds only the tuner subtree — not the whole screen with its
@@ -2486,17 +2492,25 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (_rowFocusNodes.isEmpty) return;
     final filtered = _filteredChannels;
     if (filtered.isEmpty) return;
+    // Preferred target: the last-focused channel if it's still displayed;
+    // otherwise the first visible channel.
+    int targetIdx = -1;
     if (_focusedIndex >= 0 &&
         _focusedIndex < _rowFocusNodes.length &&
         _focusedIndex < _channels.length &&
         filtered.contains(_channels[_focusedIndex])) {
-      _rowFocusNodes[_focusedIndex].requestFocus();
-      return;
+      targetIdx = _focusedIndex;
+    } else {
+      targetIdx = _channels.indexOf(filtered.first);
     }
-    final firstIdx = _channels.indexOf(filtered.first);
-    if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
-      _rowFocusNodes[firstIdx].requestFocus();
-    }
+    if (targetIdx < 0 || targetIdx >= _rowFocusNodes.length) return;
+    // Route through the tuner so an off-screen (recycled) dial card is scrolled
+    // into view *before* focusing — a bare requestFocus on an unmounted
+    // ListView child silently no-ops, which is why down-arrow from the header
+    // could fail to return focus to the channels after a long surf.
+    if (_tunerController.focusRealIndex(targetIdx)) return;
+    // Fallback (narrow layout / tuner not mounted): best-effort direct focus.
+    _rowFocusNodes[targetIdx].requestFocus();
   }
 
   void _reorderRowFocusNodes(
@@ -3058,6 +3072,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                             );
                           }
                           return StremioTvTuner(
+                            controller: _tunerController,
                             channels: filtered,
                             allChannels: _channels,
                             rowFocusNodes: _rowFocusNodes,
