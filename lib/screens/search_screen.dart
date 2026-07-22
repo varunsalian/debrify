@@ -728,6 +728,35 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// fades in — the film takes the room.
   final ValueNotifier<double> _heroTrailerTakeover = ValueNotifier<double>(0);
 
+  // Live IPTV favourite hero preview: when DPAD focus rests on an "IPTV" row
+  // card, its stream plays in the SAME boxed video region as the catalog
+  // trailer above — reusing HeroTrailerBackdrop's `live: true` mode, exactly
+  // like the IPTV page's own inline channel preview
+  // (IptvResultsView._buildPreviewStage). Painted as a layer above
+  // [_HeroTrailerLayer] so the two never need to swap types; whichever one
+  // actually has a URL to show wins (see [_setHeroLiveIptv]).
+  final ValueNotifier<String?> _heroLiveUrl = ValueNotifier<String?>(null);
+
+  /// Set the INSTANT an IPTV favourite gains focus — well before its stream
+  /// (if a Stremio-addon channel) finishes resolving. [_HeroLiveLayer] uses
+  /// this to occlude the region with the channel's OWN art immediately, so
+  /// the previously-focused catalog title's Cinemeta poster never shows
+  /// through the resolve/buffer gap underneath.
+  final ValueNotifier<IptvChannel?> _heroLiveChannel =
+      ValueNotifier<IptvChannel?>(null);
+
+  /// Boolean mirror of [_heroLiveChannel] for [_HeroSpotlight.liveTakeover] —
+  /// the spotlight fades its (now-stale) colour field and identity text on
+  /// this, and has no other reason to know the IPTV-specific channel type.
+  final ValueNotifier<bool> _heroLiveTakeover = ValueNotifier<bool>(false);
+  int _heroLiveReq = 0;
+
+  /// Candidate ladder for the live IPTV favourite when it's a Stremio-addon
+  /// channel (several upstream links to try in order) — mirrors the IPTV
+  /// page's own ladder (IptvResultsView._onPreviewPlaybackFailed). Null for a
+  /// plain M3U/Xtream favourite, which has just the one URL.
+  List<String>? _heroLiveCandidates;
+
   /// Set when real content playback launches (any path — in-app route,
   /// native TV activity, external app): the ambient trailer must not resume
   /// behind or after the feature (the behavior ef5f555 shipped; the
@@ -1135,6 +1164,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _heroTrailerLoading.dispose();
     _heroTrailerShowing.dispose();
     _heroTrailerTakeover.dispose();
+    _heroLiveUrl.dispose();
+    _heroLiveChannel.dispose();
+    _heroLiveTakeover.dispose();
     _heroTint.dispose();
     _searchController.dispose();
     _catalogSourcesHideTimer?.cancel();
@@ -3167,6 +3199,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Off-TV / blank search prompt the hero isn't rendered, so don't track focus
     // or fire the per-item backdrop-enrichment /meta fetch behind it.
     if (!_heroActive) return;
+    // A catalog/CW card just took focus (possibly straight from the IPTV
+    // favourites row, which has no row in between) — drop any live IPTV feed
+    // so the boxed video region falls back to this item's own trailer.
+    _clearHeroLiveIptv();
     if (_heroItem.value?.id == item.id) {
       // Back on the current hero (a vertical move within the column, or an
       // A→B→A jiggle inside the swap debounce): drop any pending swap to a
@@ -3335,6 +3371,67 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
+  }
+
+  /// DPAD focus rested on an IPTV favourite card — retune the boxed hero video
+  /// region to that channel's live stream. A plain M3U/Xtream favourite's URL
+  /// is already playable; a Stremio-addon favourite resolves candidates first
+  /// (same async ladder [IptvResultsView] uses for its own inline preview),
+  /// guarded by [_heroLiveReq] so a fast DPAD move past it can't land a stale
+  /// resolve on top of whatever channel focus has since moved to.
+  void _setHeroLiveIptv(IptvChannel channel) {
+    if (!_heroTrailerActive) return;
+    if (_heroLiveChannel.value?.url == channel.url) return;
+    _heroLiveChannel.value = channel;
+    if (!_heroLiveTakeover.value) _heroLiveTakeover.value = true;
+    _heroLiveCandidates = null;
+    final req = ++_heroLiveReq;
+    // A live feed pre-empts whatever catalog trailer is mid-flight/playing —
+    // instant teardown, same as any other hero change.
+    _clearHeroTrailer();
+    _heroLiveUrl.value = null;
+    if (!StremioIptvService.isStremioChannelUrl(channel.url)) {
+      _heroLiveUrl.value = channel.url;
+      return;
+    }
+    StremioIptvService.instance.resolveCandidates(channel.url).then((found) {
+      if (!mounted || req != _heroLiveReq || found.isEmpty) return;
+      _heroLiveCandidates = [for (final c in found) c.url];
+      _heroLiveUrl.value = _heroLiveCandidates!.first;
+    });
+  }
+
+  /// DPAD focus left the IPTV favourites row (another favourites row, or a
+  /// catalog/CW card) — drop the live feed so the boxed region falls back to
+  /// whatever catalog trailer [_heroItem] owns.
+  void _clearHeroLiveIptv() {
+    _heroLiveReq++;
+    if (_heroLiveChannel.value != null) _heroLiveChannel.value = null;
+    if (_heroLiveTakeover.value) _heroLiveTakeover.value = false;
+    _heroLiveCandidates = null;
+    if (_heroLiveUrl.value != null) _heroLiveUrl.value = null;
+  }
+
+  /// The boxed hero region's live IPTV feed genuinely failed (refused to
+  /// open, errored, or stalled past the first-frame timeout) — step down its
+  /// candidate ladder, mirroring the IPTV page's own inline preview
+  /// (IptvResultsView._onPreviewPlaybackFailed). No-op for a plain M3U/Xtream
+  /// favourite (single URL, no ladder) or once every candidate is exhausted.
+  void _onHeroLivePlaybackFailed() {
+    final candidates = _heroLiveCandidates;
+    final current = _heroLiveUrl.value;
+    if (candidates == null || current == null) return;
+    final next = candidates.indexOf(current) + 1;
+    if (next <= 0 || next >= candidates.length) {
+      // Every candidate is dead: forget the cached list so a later attempt
+      // re-resolves fresh links instead of replaying the same dead ones for
+      // the rest of the 5-minute cache window.
+      final channel = _heroLiveChannel.value;
+      if (channel != null) StremioIptvService.instance.invalidate(channel.url);
+      _heroLiveUrl.value = null;
+      return;
+    }
+    _heroLiveUrl.value = candidates[next];
   }
 
   /// Mirror the takeover arc onto the app-shell notifier (sidebar rail hide).
@@ -7962,6 +8059,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               trailerShowing: _heroTrailerActive
                                   ? _heroTrailerShowing
                                   : null,
+                              // An IPTV favourite took the boxed region — this
+                              // item's colour field/identity text describe
+                              // something that isn't playing anymore, so hide
+                              // them (see [_HeroSpotlight.liveTakeover]).
+                              liveTakeover: _heroTrailerActive
+                                  ? _heroLiveTakeover
+                                  : null,
                             );
                           },
                         );
@@ -8076,6 +8180,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   loading: _heroTrailerLoading,
                   onPlayingChanged: _onHeroTrailerPlaying,
                   takeover: _heroTrailerTakeover,
+                ),
+              ),
+            // A focused IPTV favourite's live feed, painted into the SAME
+            // region — above the catalog trailer layer so it simply wins
+            // whenever a channel has focus (shrinks to nothing otherwise,
+            // letting the catalog trailer show through).
+            if (_heroTrailerActive)
+              Positioned.fill(
+                child: _HeroLiveLayer(
+                  channel: _heroLiveChannel,
+                  streamUrl: _heroLiveUrl,
+                  heroHeight: heroH,
+                  volume: _heroTrailerVolume,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  onPlaybackFailed: _onHeroLivePlaybackFailed,
                 ),
               ),
             // While the film owns the board, only the showcased title's
@@ -9006,6 +9125,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             isTelevision: tv,
             focusNode: _tvFavNodes[col],
             onOpen: () => _playChannel(channel),
+            onFocused: _clearHeroLiveIptv,
           ),
         );
       },
@@ -9044,6 +9164,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             isTelevision: tv,
             focusNode: _stvFavNodes[col],
             onOpen: () => _playStremioTvChannel(channel),
+            onFocused: _clearHeroLiveIptv,
           ),
         );
       },
@@ -9078,6 +9199,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             isTelevision: tv,
             focusNode: _iptvFavNodes[col],
             onOpen: () => _playIptvChannel(channel),
+            // DPAD focus retunes the Home hero's boxed video region to this
+            // channel's live stream — same HeroTrailerBackdrop(live: true)
+            // mechanism the IPTV page's own inline preview uses.
+            onFocused: () => _setHeroLiveIptv(channel),
           ),
         );
       },
@@ -9110,6 +9235,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             isTelevision: tv,
             focusNode: _playlistFavNodes[col],
             onOpen: () => _onPlaylistItemTap(item),
+            onFocused: _clearHeroLiveIptv,
           ),
         );
       },
@@ -9197,6 +9323,15 @@ class _HeroSpotlight extends StatefulWidget {
   /// while hidden (no point re-rasterising an invisible layer every frame).
   final ValueListenable<bool>? trailerShowing;
 
+  /// Host-driven "an IPTV favourite has taken the boxed video region" signal
+  /// (see [_HeroLiveLayer]). [item]/[background]/[tint] all belong to the
+  /// previously-focused CATALOG title — once an unrelated live channel is
+  /// playing in the region, this spotlight's colour field and identity block
+  /// (title/meta/plot, all about that stale catalog title) fade out rather
+  /// than sit there describing something that isn't playing. Null outside
+  /// Home (no IPTV favourites row to trigger it).
+  final ValueListenable<bool>? liveTakeover;
+
   const _HeroSpotlight({
     required this.item,
     required this.background,
@@ -9211,6 +9346,7 @@ class _HeroSpotlight extends StatefulWidget {
     this.tint,
     this.trailerLoading,
     this.trailerShowing,
+    this.liveTakeover,
   });
 
   @override
@@ -9357,6 +9493,27 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     );
   }
 
+  /// An IPTV favourite has taken the boxed video region ([liveTakeover]) —
+  /// unlike the catalog trailer, that video has NOTHING to do with [item], so
+  /// its colour field / identity text must actually disappear rather than
+  /// stay put (the invariant [_maybeFadeForTrailer]/[_fadeMetaForTrailer] rely
+  /// on — "the text is still about what's playing" — doesn't hold here).
+  /// No-op when the surface never runs IPTV favourites.
+  Widget _fadeForLiveTakeover(Widget child) {
+    final live = widget.liveTakeover;
+    if (live == null) return child;
+    return ValueListenableBuilder<bool>(
+      valueListenable: live,
+      builder: (context, on, kid) => AnimatedOpacity(
+        opacity: on ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 340),
+        curve: Curves.easeOut,
+        child: kid,
+      ),
+      child: child,
+    );
+  }
+
   /// The hero's colour STAGE (boxed mode): a diagonal wash in the focused
   /// title's extracted tint plus a soft glow leaning toward the art region —
   /// the left half of the Concept-5 hero. Always on (this IS the rest-state
@@ -9495,7 +9652,8 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           // Behind everything: the hero's always-on colour stage (boxed mode)
           // — the canvas the title text sits on, and the surface the region's
           // feathers melt into.
-          if (widget.boxedTrailer) _heroMoodField(scheme),
+          if (widget.boxedTrailer)
+            _fadeForLiveTakeover(_heroMoodField(scheme)),
           if (bg.isNotEmpty && artRegion != null)
             // Region-anchored key art: cover-crop + the same eased feathers
             // the trailer uses, so still art and live video dissolve into the
@@ -9698,10 +9856,12 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               ),
             ),
           // The whole identity block — badge, title, meta, plot — fades out once
-          // the trailer covers the hero, so a full-bleed trailer plays clean.
+          // the trailer covers the hero, so a full-bleed trailer plays clean
+          // (and, separately, once an IPTV favourite takes the region — see
+          // [_fadeForLiveTakeover]).
           // RepaintBoundary: text + logo raster stays cached when siblings
           // (pill, veils, fields) repaint, and vice versa.
-          _maybeFadeForTrailer(
+          _fadeForLiveTakeover(_maybeFadeForTrailer(
             RepaintBoundary(
             child: Align(
               alignment: Alignment.bottomLeft,
@@ -9798,6 +9958,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               ),
             ),
             ),
+          ),
           // "Trailer loading" pill — top-right, above the scrims so it reads
           // against any backdrop. Purely informational (never focusable), and
           // rendered only while the host is actually fetching/starting a
@@ -10257,6 +10418,326 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
     );
   }
 
+}
+
+/// The boxed hero video region's IPTV-favourite variant: plays a focused
+/// favourite channel's live stream in the SAME right-anchored region
+/// [_HeroTrailerLayer] uses for catalog trailers, via
+/// [HeroTrailerBackdrop]'s `live: true` mode — the exact mechanism the IPTV
+/// page's own inline channel preview uses
+/// (IptvResultsView._buildPreviewStage). Painted as a sibling ABOVE
+/// [_HeroTrailerLayer] in the host's Stack and shrinks to nothing when no
+/// IPTV favourite has focus, so the catalog trailer shows through unchanged;
+/// the two are mutually exclusive in practice because
+/// [_SearchScreenState._setHeroLiveIptv] tears the catalog trailer down the
+/// moment a live feed starts.
+///
+/// While the stream resolves/buffers, [_HeroSpotlight]'s idle key art (the
+/// previously-focused catalog title's Cinemeta poster) still sits BENEATH
+/// this layer — so as soon as [channel] is non-null this paints an opaque
+/// floor of the channel's OWN art ([_HeroLiveFloor]) rather than leaving that
+/// gap for the stale poster to show through.
+class _HeroLiveLayer extends StatefulWidget {
+  final ValueListenable<IptvChannel?> channel;
+  final ValueListenable<String?> streamUrl;
+  final double heroHeight;
+  final double volume;
+  final ValueChanged<bool>? onPlayingChanged;
+  final VoidCallback? onPlaybackFailed;
+
+  const _HeroLiveLayer({
+    required this.channel,
+    required this.streamUrl,
+    required this.heroHeight,
+    required this.volume,
+    this.onPlayingChanged,
+    this.onPlaybackFailed,
+  });
+
+  @override
+  State<_HeroLiveLayer> createState() => _HeroLiveLayerState();
+}
+
+class _HeroLiveLayerState extends State<_HeroLiveLayer> {
+  /// Pins the live backdrop's element so its engine/texture survive rebuilds;
+  /// replaced per URL (channel switch, or a candidate-ladder step-down) so
+  /// each stream still gets a fresh engine.
+  GlobalKey _backdropKey = GlobalKey();
+  String? _backdropUrl;
+  IptvChannel? _channel;
+  String? _url;
+  bool _playing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _channel = widget.channel.value;
+    _url = widget.streamUrl.value;
+    widget.channel.addListener(_onChannelChanged);
+    widget.streamUrl.addListener(_onUrlChanged);
+  }
+
+  @override
+  void didUpdateWidget(_HeroLiveLayer old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.channel, widget.channel)) {
+      old.channel.removeListener(_onChannelChanged);
+      widget.channel.addListener(_onChannelChanged);
+      _channel = widget.channel.value;
+    }
+    if (!identical(old.streamUrl, widget.streamUrl)) {
+      old.streamUrl.removeListener(_onUrlChanged);
+      widget.streamUrl.addListener(_onUrlChanged);
+      _url = widget.streamUrl.value;
+      _playing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.channel.removeListener(_onChannelChanged);
+    widget.streamUrl.removeListener(_onUrlChanged);
+    super.dispose();
+  }
+
+  void _onChannelChanged() {
+    if (!mounted) return;
+    setState(() => _channel = widget.channel.value);
+  }
+
+  void _onUrlChanged() {
+    if (!mounted) return;
+    setState(() {
+      _url = widget.streamUrl.value;
+      _playing = false;
+    });
+  }
+
+  void _onPlaying(bool playing) {
+    widget.onPlayingChanged?.call(playing);
+    if (_playing != playing && mounted) setState(() => _playing = playing);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final channel = _channel;
+    if (channel == null) return const SizedBox.shrink();
+    final url = _url;
+    if (url != null && url != _backdropUrl) {
+      _backdropUrl = url;
+      _backdropKey = GlobalKey();
+    }
+    return IgnorePointer(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final boardH = constraints.maxHeight;
+          final boardW = constraints.maxWidth;
+          if (!boardH.isFinite ||
+              boardH <= 0 ||
+              !boardW.isFinite ||
+              boardW <= 0) {
+            return const SizedBox.shrink();
+          }
+          final heroH = widget.heroHeight.clamp(0.0, boardH);
+          final region = _heroTrailerRegionRect(boardW, heroH);
+          if (region == null) return const SizedBox.shrink();
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fromRect(
+                rect: region,
+                child: _buildRegion(channel, url),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Same clip/feather/brightness-lift treatment as
+  /// [_HeroTrailerLayerState._buildRegion], plus the channel-art floor and a
+  /// LIVE/TUNING status chip in place of the trailer's TRAILER/AMBIENT pills.
+  /// Unlike the catalog trailer (whose feathers only appear once playing —
+  /// its OWN idle art beneath already carries them), the melt here is
+  /// unconditional: the floor is opaque from the first frame this builds, so
+  /// there's always something to feather.
+  Widget _buildRegion(IptvChannel channel, String? url) {
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Opaque floor: the channel's own art, so the previously-focused
+          // catalog title's poster never shows through the resolve/buffer
+          // gap. Crossfades out once real frames land.
+          AnimatedOpacity(
+            opacity: _playing ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 340),
+            curve: Curves.easeOut,
+            child: _HeroLiveFloor(channel: channel),
+          ),
+          if (url != null)
+            RepaintBoundary(
+              child: HeroTrailerBackdrop(
+                key: _backdropKey,
+                imageUrl: null,
+                videoUrl: url,
+                enabled: true,
+                live: true,
+                imageBlurSigma: 0,
+                videoBlurSigma: 0,
+                startDelay: const Duration(milliseconds: 300),
+                ambientVolume: widget.volume,
+                onPlayingChanged: _onPlaying,
+                onPlaybackFailed: widget.onPlaybackFailed,
+                // Only a Stremio-addon favourite has a ladder to fall back
+                // on — bound its wait so a dead candidate doesn't stall
+                // forever. A plain M3U/Xtream favourite has just the one
+                // URL, so give it an unbounded wait instead of abandoning an
+                // otherwise-valid but slow-to-buffer stream (matches
+                // IptvResultsView._buildPreviewStage's own timeout choice).
+                firstFrameTimeout:
+                    StremioIptvService.isStremioChannelUrl(channel.url)
+                    ? const Duration(seconds: 12)
+                    : null,
+              ),
+            ),
+          IgnorePointer(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const ColoredBox(color: _heroTrailerBrightnessLift),
+                _heroEdgeFeather(
+                  Alignment.centerLeft,
+                  Alignment.centerRight,
+                  const Color(0xFF0D0B1A),
+                  _heroTrailerVideoFeatherFrac,
+                ),
+                _heroEdgeFeather(
+                  Alignment.topCenter,
+                  Alignment.bottomCenter,
+                  const Color(0xFF0D0B1A),
+                  0.10,
+                ),
+                _heroEdgeFeather(
+                  Alignment.bottomCenter,
+                  Alignment.topCenter,
+                  const Color(0xFF0D0B1A),
+                  0.20,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 16,
+            right: 22,
+            child: _HeroLiveChip(playing: _playing),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The IPTV favourite's own art, filling the boxed region while its stream
+/// resolves/buffers (and behind it, briefly, while frames settle) — the
+/// channel's logo over the same purple gradient + live-tv glyph fallback
+/// [_ArtPoster] uses for its card, so the region reads as "this channel is
+/// tuning in" rather than an unrelated leftover poster.
+class _HeroLiveFloor extends StatelessWidget {
+  final IptvChannel channel;
+
+  const _HeroLiveFloor({required this.channel});
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = channel.logoUrl;
+    final hasLogo = logo != null && logo.isNotEmpty;
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF2A1D5C),
+            Color(0xFF1A1440),
+            Color(0xFF0D0B1A),
+          ],
+          stops: [0.0, 0.55, 1.0],
+        ),
+      ),
+      child: Center(
+        child: hasLogo
+            ? Padding(
+                padding: const EdgeInsets.all(56),
+                child: CachedNetworkImage(
+                  imageUrl: logo,
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => const _HeroLiveGlyph(),
+                ),
+              )
+            : const _HeroLiveGlyph(),
+      ),
+    );
+  }
+}
+
+class _HeroLiveGlyph extends StatelessWidget {
+  const _HeroLiveGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      Icons.live_tv_rounded,
+      size: 64,
+      color: kStremioAccent.withValues(alpha: 0.85),
+    );
+  }
+}
+
+/// Small "LIVE"/"TUNING" status pill for the boxed hero region while an IPTV
+/// favourite plays there — same glass-capsule language as
+/// [_HeroTrailerLoadingPill]/[_HeroAmbientChip], with a red dot (matching
+/// [_ArtPoster]'s own LIVE badge) instead of the trailer pills' amber one.
+class _HeroLiveChip extends StatelessWidget {
+  final bool playing;
+
+  const _HeroLiveChip({required this.playing});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xCC0D0B1A),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: _kCwProgressRed,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            playing ? 'LIVE' : 'TUNING',
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The hero's title, IMAGE-FIRST: the studio title-treatment art when a
@@ -11393,6 +11874,14 @@ class _ArtPoster extends StatefulWidget {
   final FocusNode focusNode;
   final VoidCallback onOpen;
 
+  /// Fired when this card gains DPAD focus (TV only — see [_ArtPosterState]'s
+  /// `onFocusChange`). Only the IPTV favourites row uses this today, to retune
+  /// the Home hero's boxed video region to the focused channel's live stream;
+  /// the other favourites rows pass a clearing callback so that live feed
+  /// doesn't linger when focus moves off IPTV without passing through a
+  /// catalog/CW card first.
+  final VoidCallback? onFocused;
+
   const _ArtPoster({
     required this.imageUrl,
     required this.title,
@@ -11403,6 +11892,7 @@ class _ArtPoster extends StatefulWidget {
     this.badge,
     this.live = false,
     this.progress,
+    this.onFocused,
   });
 
   @override
@@ -11608,6 +12098,7 @@ class _ArtPosterState extends State<_ArtPoster> {
         setState(() => _focused = f);
         if (!f) _keyDown = false;
         if (f) {
+          widget.onFocused?.call();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             Scrollable.ensureVisible(
