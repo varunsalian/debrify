@@ -7,14 +7,19 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
 import android.app.UiModeManager
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.util.DisplayMetrics
+import android.util.Rational
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.SurfaceView
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.annotation.RequiresApi
 import androidx.core.view.WindowCompat
 import io.flutter.FlutterInjector
 import io.flutter.embedding.android.FlutterActivity
@@ -32,6 +37,36 @@ class MainActivity : FlutterActivity() {
 	private val EVENTS = "com.debrify.app/downloader_events"
     private val ANDROID_TV_CHANNEL = "com.debrify.app/android_tv_player"
     private val REMOTE_CONTROL_CHANNEL = "com.debrify.app/remote_control"
+    private val PIP_CHANNEL = "com.debrify.app/pip"
+
+    // ── Picture-in-Picture (phone media_kit player) ─────────────────────────
+    // PiP shrinks THIS activity into a floating window; the media_kit Flutter
+    // texture keeps rendering as long as the activity/engine survives. Armed by
+    // the Dart player screen while it's on top (see onUserLeaveHint). Phone
+    // only — TV has its own native player and never uses phone-style PiP.
+    private val PIP_ACTION = "com.debrify.app.PIP_ACTION"
+    private var pipChannel: MethodChannel? = null
+    private var pipAutoEnterArmed = false
+    private var pipAspectW = 0
+    private var pipAspectH = 0
+    private var pipIsPlaying = false
+    private var pipHasNext = false
+    private var pipReceiverRegistered = false
+
+    /** Receives taps on the PiP window's action buttons and forwards them to
+     *  the Dart player over [pipChannel]. Registered lazily on first PiP entry
+     *  (see registerPipReceiver), unregistered in onDestroy. */
+    private val pipActionReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != PIP_ACTION) return
+            val action = intent.getStringExtra("pipAction") ?: return
+            try {
+                pipChannel?.invokeMethod("onPipAction", action)
+            } catch (e: Exception) {
+                android.util.Log.e("DebrifyPiP", "action dispatch failed: ${e.message}")
+            }
+        }
+    }
 
     // Inline ExoPlayer for the ambient trailer backdrop on TV.
     private var tvTrailerPlayer: com.debrify.app.tv.TvTrailerTexturePlayer? = null
@@ -300,6 +335,14 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         tvTrailerPlayer?.releaseAll()
         tvTrailerPlayer = null
+        if (pipReceiverRegistered) {
+            try {
+                unregisterReceiver(pipActionReceiver)
+            } catch (e: Exception) {
+                // Already unregistered / never fully registered — ignore.
+            }
+            pipReceiverRegistered = false
+        }
         super.onDestroy()
     }
 
@@ -308,6 +351,137 @@ class MainActivity : FlutterActivity() {
         if (ActivityTracker.currentActivity == this) {
             ActivityTracker.currentActivity = null
         }
+    }
+
+    /** Auto-enter PiP when the user leaves the app (Home / Recents) while the
+     *  Dart player screen has armed it. */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (!pipAutoEnterArmed) return
+        // Don't re-enter if the window is already in PiP.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            isInPictureInPictureMode
+        ) {
+            return
+        }
+        enterPipInternal(pipAspectW, pipAspectH)
+    }
+
+    /** Tell the Dart side so it can collapse chrome in the tiny window. */
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        try {
+            pipChannel?.invokeMethod("onPipModeChanged", isInPictureInPictureMode)
+        } catch (e: Exception) {
+            android.util.Log.e("DebrifyPiP", "notify failed: ${e.message}")
+        }
+    }
+
+    private fun pipSupported(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        if (isTelevision()) return false
+        return packageManager.hasSystemFeature(
+            PackageManager.FEATURE_PICTURE_IN_PICTURE,
+        )
+    }
+
+    private fun enterPipInternal(aspectW: Int, aspectH: Int): Boolean {
+        // Inline SDK guard (not just pipSupported()) so the NewApi lint's flow
+        // analysis can see it before the API-26 calls below.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        if (!pipSupported()) return false
+        return try {
+            registerPipReceiver()
+            enterPictureInPictureMode(buildPipParams(aspectW, aspectH))
+        } catch (e: Exception) {
+            android.util.Log.e("DebrifyPiP", "enterPip failed: ${e.message}")
+            false
+        }
+    }
+
+    private fun registerPipReceiver() {
+        if (pipReceiverRegistered) return
+        val filter = android.content.IntentFilter(PIP_ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(pipActionReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(pipActionReceiver, filter)
+        }
+        pipReceiverRegistered = true
+    }
+
+    /** Push updated action buttons (play/pause icon, Next) to a PiP window
+     *  that's already open — no-op otherwise. */
+    private fun updatePipParamsIfActive() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        if (!isInPictureInPictureMode) return
+        try {
+            setPictureInPictureParams(buildPipParams(pipAspectW, pipAspectH))
+        } catch (e: Exception) {
+            android.util.Log.e("DebrifyPiP", "updateParams failed: ${e.message}")
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun buildPipParams(aspectW: Int, aspectH: Int): PictureInPictureParams {
+        // Android rejects aspect ratios outside [1/2.39, 2.39] with
+        // IllegalArgumentException — clamp ultrawide/portrait sources to just
+        // INSIDE those bounds (0.42 / 2.39; note 1/2.39 ≈ 0.41841, so a 0.4184
+        // clamp target would itself still be rejected).
+        var w = if (aspectW > 0) aspectW else 16
+        var h = if (aspectH > 0) aspectH else 9
+        val ratio = w.toDouble() / h.toDouble()
+        if (ratio > 2.39) {
+            w = 239; h = 100
+        } else if (ratio < 0.42) {
+            w = 42; h = 100
+        }
+        return PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(w, h))
+            .setActions(buildPipActions())
+            .build()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun buildPipActions(): ArrayList<android.app.RemoteAction> {
+        val actions = ArrayList<android.app.RemoteAction>()
+        val icon = if (pipIsPlaying) {
+            android.R.drawable.ic_media_pause
+        } else {
+            android.R.drawable.ic_media_play
+        }
+        val title = if (pipIsPlaying) "Pause" else "Play"
+        actions.add(makePipAction(icon, title, "playpause", 1))
+        if (pipHasNext) {
+            actions.add(
+                makePipAction(android.R.drawable.ic_media_next, "Next", "next", 2),
+            )
+        }
+        return actions
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun makePipAction(
+        iconRes: Int,
+        title: String,
+        action: String,
+        requestCode: Int,
+    ): android.app.RemoteAction {
+        val intent = Intent(PIP_ACTION).apply {
+            setPackage(packageName)
+            putExtra("pipAction", action)
+        }
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags = flags or PendingIntent.FLAG_IMMUTABLE
+        }
+        val pi = PendingIntent.getBroadcast(this, requestCode, intent, flags)
+        val icon = android.graphics.drawable.Icon.createWithResource(this, iconRes)
+        return android.app.RemoteAction(icon, title, title, pi)
     }
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -636,6 +810,47 @@ class MainActivity : FlutterActivity() {
                         android.util.Log.e("RemoteControl", "Failed to inject text: ${e.message}")
                         result.error("inject_failed", e.message, null)
                     }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Picture-in-Picture channel — driven by the phone media_kit player.
+        val pipCh = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PIP_CHANNEL)
+        pipChannel = pipCh
+        pipCh.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isSupported" -> result.success(pipSupported())
+                "enterPip" -> {
+                    val aw = call.argument<Int>("aspectWidth") ?: 0
+                    val ah = call.argument<Int>("aspectHeight") ?: 0
+                    if (aw > 0 && ah > 0) {
+                        pipAspectW = aw
+                        pipAspectH = ah
+                    }
+                    result.success(enterPipInternal(aw, ah))
+                }
+                "setAutoEnter" -> {
+                    pipAutoEnterArmed = call.argument<Boolean>("enabled") ?: false
+                    val aw = call.argument<Int>("aspectWidth") ?: 0
+                    val ah = call.argument<Int>("aspectHeight") ?: 0
+                    if (aw > 0 && ah > 0) {
+                        pipAspectW = aw
+                        pipAspectH = ah
+                    }
+                    result.success(true)
+                }
+                "updatePlaybackState" -> {
+                    pipIsPlaying = call.argument<Boolean>("isPlaying") ?: pipIsPlaying
+                    pipHasNext = call.argument<Boolean>("hasNext") ?: pipHasNext
+                    val aw = call.argument<Int>("aspectWidth") ?: 0
+                    val ah = call.argument<Int>("aspectHeight") ?: 0
+                    if (aw > 0 && ah > 0) {
+                        pipAspectW = aw
+                        pipAspectH = ah
+                    }
+                    updatePipParamsIfActive()
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }

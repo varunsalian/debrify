@@ -40,6 +40,8 @@ class Controls extends StatelessWidget {
   final VoidCallback? onShowIptvChannels;
   final bool hasStremioSources;
   final VoidCallback? onShowStremioSources;
+  final bool showPipButton;
+  final VoidCallback? onPip;
 
   const Controls({
     Key? key,
@@ -80,6 +82,8 @@ class Controls extends StatelessWidget {
     this.onShowIptvChannels,
     this.hasStremioSources = false,
     this.onShowStremioSources,
+    this.showPipButton = false,
+    this.onPip,
   }) : super(key: key);
 
   String _getAspectRatioName() {
@@ -240,8 +244,19 @@ class Controls extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // Empty space to balance the back button (when visible)
-                  if (!hideBackButton) const SizedBox(width: 48),
+                  // Picture-in-picture (Android phone); otherwise empty space
+                  // to balance the back button when it's visible.
+                  if (showPipButton && onPip != null)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.picture_in_picture_alt_rounded,
+                        color: Colors.white,
+                      ),
+                      tooltip: 'Picture in picture',
+                      onPressed: onPip,
+                    )
+                  else if (!hideBackButton)
+                    const SizedBox(width: 48),
                 ],
               ),
 

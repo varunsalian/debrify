@@ -12,6 +12,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/analytics_service.dart';
+import '../services/pip_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
@@ -457,6 +458,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // media_kit state
   bool _isReady = false;
   bool _isPlaying = false;
+  // True while the activity is shrunk into a Picture-in-Picture window; the
+  // build collapses all interactive/decorative chrome so only the video shows.
+  bool _isPipActive = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isTransitioning = false; // Show black screen during transitions
@@ -580,6 +584,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     AnalyticsService.screenView('video_player');
     _startAnalyticsHeartbeat();
     _activePlaylist = widget.playlist;
+
+    // Picture-in-Picture (Android phone): once native confirms capability,
+    // become the active PiP owner and listen so we can collapse chrome inside
+    // the tiny window. Auto-enter is armed later, when the video is actually
+    // ready (see the player `ready` callback), so pressing Home never shrinks
+    // a black/loading frame. Skipped when options are hidden — that context
+    // deliberately suppresses the PiP button and tap controls.
+    if (Platform.isAndroid && !widget.hideOptions) {
+      PipService.resolveSupport().then((ok) {
+        if (!mounted || !ok) return;
+        PipService.attach(
+          this,
+          onMode: _onPipModeChanged,
+          onAction: _onPipAction,
+        );
+        // Reveal the PiP button now that support is known.
+        setState(() {});
+        // If the player became ready before native support resolved, arm now.
+        if (_isReady) _armPipAutoEnter();
+      });
+    }
 
     // Log playlist entries to trace relativePath
     if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
@@ -1014,6 +1039,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         logLevel: mk.MPVLogLevel.error, // Suppress verbose subtitle logging
         ready: () {
           _isReady = true;
+          // Now that there's a real video frame, arm PiP auto-enter (no-op
+          // unless this screen is the active, supported PiP owner).
+          _armPipAutoEnter();
           if (mounted) {
             setState(() {});
             // Show channel badge when player is ready (if enabled)
@@ -1137,6 +1165,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playSub = _player.stream.playing.listen((p) {
       final wasPlaying = _isPlaying;
       _isPlaying = p;
+      _pushPipState();
       // Trakt scrobble on play/pause
       if (p && _duration > Duration.zero) {
         _traktScrobble('start');
@@ -4470,8 +4499,74 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// Enter PiP now, sized to the current video's pixel aspect when known.
+  void _enterPip() {
+    if (!PipService.isOwner(this)) return;
+    _pushPipState();
+    final w = _player.state.width ?? 0;
+    final h = _player.state.height ?? 0;
+    unawaited(PipService.enterPip(aspectWidth: w, aspectHeight: h));
+  }
+
+  /// Arm auto-enter (Home button) for this screen, seeding the current video
+  /// aspect so the auto-entered window matches the video shape. No-op unless
+  /// this screen is the active, supported PiP owner.
+  void _armPipAutoEnter() {
+    if (!PipService.isOwner(this)) return;
+    final w = _player.state.width ?? 0;
+    final h = _player.state.height ?? 0;
+    unawaited(
+      PipService.setAutoEnter(true, aspectWidth: w, aspectHeight: h),
+    );
+  }
+
+  /// Keep the native side's play/pause icon, Next button and window aspect in
+  /// sync with the live player — both for an open PiP window and for the next
+  /// Home-button auto-enter. No-op unless this screen is the active PiP owner.
+  void _pushPipState() {
+    if (!PipService.isOwner(this)) return;
+    final w = _player.state.width ?? 0;
+    final h = _player.state.height ?? 0;
+    unawaited(
+      PipService.updatePlaybackState(
+        isPlaying: _isPlaying,
+        hasNext: _hasAnyNext,
+        aspectWidth: w,
+        aspectHeight: h,
+      ),
+    );
+  }
+
+  /// Collapse the control chrome while inside the small PiP window, and restore
+  /// it when the window expands back to fullscreen.
+  void _onPipModeChanged(bool inPip) {
+    if (!mounted) return;
+    if (inPip) {
+      _hideTimer?.cancel();
+      _controlsVisible.value = false;
+      _pushPipState();
+    }
+    setState(() => _isPipActive = inPip);
+  }
+
+  /// Handle taps on the PiP window's action buttons.
+  void _onPipAction(String action) {
+    if (!mounted) return;
+    switch (action) {
+      case 'playpause':
+        _togglePlay();
+        break;
+      case 'next':
+        if (_hasAnyNext) _goToNextEpisode();
+        break;
+    }
+  }
+
   @override
   void dispose() {
+    // Detach from PiP (disarms auto-enter); ignored if a newer player already
+    // took ownership, so route replacement can't disarm the incoming screen.
+    PipService.detach(this);
     // Scrobble stop to Trakt when user exits player
     _stopTraktHeartbeat();
     _analyticsHeartbeatTimer?.cancel();
@@ -5447,6 +5542,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final duration = _duration;
     final pos = _position;
     final String? channelBadgeText = _channelBadgeText;
+    // In the PiP window, hide every interactive/decorative layer so only the
+    // video texture (and the buffering spinner) shows. Restores on exit.
+    final inPip = _isPipActive;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -5898,7 +5996,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 },
               ),
               // Full-screen gesture layer (placed below controls)
-              GestureDetector(
+              if (!inPip)
+                GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onTapDown: (d) => _lastTapLocal = d.localPosition,
                 onTap: () {
@@ -5926,7 +6025,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 onPanEnd: _onPanEnd,
               ),
               // Controls overlay (shown only when ready)
-              if (isReady)
+              if (isReady && !inPip)
                 ValueListenableBuilder<bool>(
                   valueListenable: _controlsVisible,
                   builder: (context, visible, _) {
@@ -6023,6 +6122,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       widget.resolveSourceToPlaylist != null)
                               ? _showSourceSheetOverlay
                               : null,
+                          showPipButton: PipService.isOwner(this),
+                          onPip: PipService.isOwner(this) ? _enterPip : null,
                         ),
                       ),
                     );
@@ -6030,7 +6131,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
               // Placed after controls to appear on top
-              if (widget.showVideoTitle && widget.showChannelName)
+              if (widget.showVideoTitle && widget.showChannelName && !inPip)
                 Positioned(
                   top: 20,
                   left: 20,
@@ -6048,7 +6149,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // Placed after controls to appear on top
               if (widget.showChannelName &&
                   channelBadgeText != null &&
-                  channelBadgeText.isNotEmpty)
+                  channelBadgeText.isNotEmpty &&
+                  !inPip)
                 Positioned(
                   top: 20,
                   right: 20,
@@ -6063,10 +6165,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 ),
               // PikPak retry overlay - non-blocking, positioned at bottom right
-              if (_isPikPakRetrying && _pikPakRetryMessage != null)
+              if (_isPikPakRetrying && _pikPakRetryMessage != null && !inPip)
                 PikPakRetryOverlay(message: _pikPakRetryMessage!),
               // Channel guide overlay
-              if (_showChannelGuide && _channelEntries.isNotEmpty)
+              if (_showChannelGuide && _channelEntries.isNotEmpty && !inPip)
                 Positioned.fill(
                   child: ChannelGuide(
                     channels: _channelEntries,
@@ -6079,7 +6181,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // IPTV channel sheet overlay
               if (_showIptvChannelSheet &&
                   widget.iptvChannels != null &&
-                  widget.iptvChannels!.isNotEmpty)
+                  widget.iptvChannels!.isNotEmpty &&
+                  !inPip)
                 Positioned.fill(
                   child: IptvChannelSheet(
                     channels: widget.iptvChannels!,
@@ -6093,7 +6196,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   _effectiveSources != null &&
                   _effectiveSources!.isNotEmpty &&
                   (_effectiveResolver != null ||
-                      widget.resolveSourceToPlaylist != null))
+                      widget.resolveSourceToPlaylist != null) &&
+                  !inPip)
                 Positioned.fill(
                   child: Builder(builder: (context) {
                     // A Stremio TV channel switch replaces the sources
@@ -6120,7 +6224,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   }),
                 ),
               // Stremio TV guide sheet overlay
-              if (_showStremioTvGuide && _hasStremioTvGuide)
+              if (_showStremioTvGuide && _hasStremioTvGuide && !inPip)
                 Positioned.fill(
                   child: StremioTvGuideSheet(
                     channels: _effectiveStremioTvChannels!,
@@ -6133,7 +6237,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 ),
               // Subtitle sync overlay
-              if (_showSyncOverlay) _buildSyncOverlay(),
+              if (_showSyncOverlay && !inPip) _buildSyncOverlay(),
             ],
             ),
             builder: (context, controlsVisible, child) {
