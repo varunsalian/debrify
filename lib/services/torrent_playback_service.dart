@@ -859,7 +859,16 @@ class TorrentPlaybackService {
     if (!context.mounted) return;
     if (provider == _cancelled) return;
     if (provider == null) {
-      _snack(context, 'No debrid provider configured. Add one in Settings.');
+      // No debrid provider — but some titles still have a direct addon stream
+      // that plays without one. Run an addon-only search and let playBest open
+      // a direct link; if there's none it shows the "add a provider" snack.
+      await _playAddonStream(context, imdbId,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+          meta: meta,
+          label: label,
+          noProvider: true);
       return;
     }
     // The Pipeline loader spans search → cache-check → prepare → start; its
@@ -1420,6 +1429,11 @@ class TorrentPlaybackService {
     int? episode,
     required PlaybackMeta meta,
     required String label,
+    // No-provider fast path: a `tt` title with no debrid configured. Search
+    // addons ONLY (skip the torrent engines whose results couldn't play
+    // anyway), and when nothing turns up point the user at Settings instead of
+    // the generic "no stream" message — adding a provider is the real fix.
+    bool noProvider = false,
   }) async {
     final cancel = _PlaybackCancelToken();
     // Direct addon/IPTV stream — the loader dismisses as soon as playBest opens
@@ -1433,13 +1447,21 @@ class TorrentPlaybackService {
     );
     void closeLoading() => overlay.dismiss();
 
-    Future<Map<String, dynamic>> search() => TorrentService.searchByImdbWithStremio(
-          id,
-          isMovie: isMovie,
-          season: season,
-          episode: episode,
-          contentType: meta.contentType,
-        );
+    Future<Map<String, dynamic>> search() => noProvider
+        ? TorrentService.searchStremioAddonsOnly(
+            imdbId: id,
+            isMovie: isMovie,
+            season: season,
+            episode: episode,
+            contentType: meta.contentType,
+          )
+        : TorrentService.searchByImdbWithStremio(
+            id,
+            isMovie: isMovie,
+            season: season,
+            episode: episode,
+            contentType: meta.contentType,
+          );
     Map<String, dynamic> res;
     try {
       res = await search();
@@ -1455,12 +1477,17 @@ class TorrentPlaybackService {
       return;
     }
     // Addon errors ride along keyed 'stremio:<addon name>' (timeouts and
-    // upstream 5xx land here, not as a thrown exception). Engine errors share
-    // the map on non-tt movie/series ids — only ADDON failures count here,
-    // else a flaky engine would misblame "didn't respond" on a title that
-    // simply has no stream.
+    // upstream 5xx land here, not as a thrown exception). The two searches
+    // surface them under different keys: searchByImdbWithStremio folds addon +
+    // engine errors together under 'engineErrors', while the noProvider path's
+    // searchStremioAddonsOnly returns them raw under 'addonErrors'. Read both,
+    // then keep only 'stremio:' keys — a flaky engine must not misblame
+    // "didn't respond" on a title that simply has no stream.
     Map<String, String> addonErrorsOf(Map<String, dynamic> r) {
-      final all = r['engineErrors'] as Map<String, String>? ?? const {};
+      final all = <String, String>{
+        ...?(r['engineErrors'] as Map<String, String>?),
+        ...?(r['addonErrors'] as Map<String, String>?),
+      };
       return {
         for (final e in all.entries)
           if (e.key.startsWith('stremio:')) e.key: e.value,
@@ -1495,7 +1522,15 @@ class TorrentPlaybackService {
             .join(', ');
         _snack(context, '$failed didn\'t respond for "$label" — try again.');
       } else {
-        _snack(context, 'No stream found for "$label".');
+        // noProvider: addons searched fine and returned nothing directly
+        // playable. Torrent engines were skipped (they need a provider), so the
+        // actionable next step is to add one — but don't claim the title has no
+        // stream at all, only that none plays without a provider.
+        _snack(
+            context,
+            noProvider
+                ? 'No direct stream for "$label". Add a debrid provider in Settings for more sources.'
+                : 'No stream found for "$label".');
       }
       return;
     }
