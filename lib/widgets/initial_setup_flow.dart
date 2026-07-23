@@ -1021,6 +1021,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
         return 'PikPak';
       case ConfigCommand.trakt:
         return 'Trakt';
+      case ConfigCommand.simkl:
+        return 'Simkl';
       case ConfigCommand.searchEngines:
         return 'Search engines';
       case ConfigCommand.webDav:

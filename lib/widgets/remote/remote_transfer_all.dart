@@ -55,6 +55,8 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   String? _traktRefreshToken;
   int? _traktTokenExpiry;
   String? _traktUsername;
+  String? _simklAccessToken;
+  String? _simklUsername;
   List<String> _engineIds = [];
   List<StremioAddon> _addons = [];
   List<WebDavConfig> _webDavServers = [];
@@ -107,6 +109,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       _traktUsername = await StorageService.getTraktUsername();
       final hasTrakt = (_traktAccessToken?.isNotEmpty ?? false) &&
           (_traktRefreshToken?.isNotEmpty ?? false);
+
+      _simklAccessToken = await StorageService.getSimklAccessToken();
+      _simklUsername = await StorageService.getSimklUsername();
+      final hasSimkl = _simklAccessToken?.isNotEmpty ?? false;
 
       await LocalEngineStorage.instance.initialize();
       _engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
@@ -186,6 +192,16 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               : 'Trakt',
           icon: Icons.history_rounded,
           color: const Color(0xFFED1C24),
+        ));
+      }
+      if (hasSimkl) {
+        items.add(_TransferItem(
+          key: ConfigCommand.simkl,
+          label: _simklUsername != null
+              ? 'Simkl (${_simklUsername!})'
+              : 'Simkl',
+          icon: Icons.movie_filter_rounded,
+          color: const Color(0xFF22D3EE),
         ));
       }
       if (hasEngines) {
@@ -364,6 +380,15 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             'refresh_token': _traktRefreshToken,
             if (_traktTokenExpiry != null) 'expiry_ms': _traktTokenExpiry,
             if (_traktUsername != null) 'username': _traktUsername,
+          }),
+        );
+      case ConfigCommand.simkl:
+        return state.sendConfigCommandToDevice(
+          ConfigCommand.simkl,
+          targetIp,
+          configData: jsonEncode({
+            'access_token': _simklAccessToken,
+            if (_simklUsername != null) 'username': _simklUsername,
           }),
         );
       case ConfigCommand.searchEngines:

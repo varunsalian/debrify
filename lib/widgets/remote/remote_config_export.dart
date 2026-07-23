@@ -45,6 +45,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _allDebrid;
   _ConfigItem? _pikpak;
   _ConfigItem? _trakt;
+  _ConfigItem? _simkl;
   _ConfigItem? _searchEngines;
 
   // API keys (loaded from storage)
@@ -59,6 +60,11 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   String? _traktRefreshToken;
   int? _traktTokenExpiry;
   String? _traktUsername;
+
+  // Simkl session bundle (loaded from storage) — no refresh token/expiry,
+  // Simkl's PIN-issued tokens don't have either.
+  String? _simklAccessToken;
+  String? _simklUsername;
 
   // PikPak password (entered by user)
   final _pikpakPasswordController = TextEditingController();
@@ -126,6 +132,12 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           _traktRefreshToken != null &&
           _traktRefreshToken!.isNotEmpty;
 
+      // Load Simkl session
+      _simklAccessToken = await StorageService.getSimklAccessToken();
+      _simklUsername = await StorageService.getSimklUsername();
+      final hasSimkl =
+          _simklAccessToken != null && _simklAccessToken!.isNotEmpty;
+
       // Load Search Engines
       await LocalEngineStorage.instance.initialize();
       _engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
@@ -181,6 +193,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           selected: hasTrakt,
         );
 
+        _simkl = _ConfigItem(
+          id: ConfigCommand.simkl,
+          name: 'Simkl',
+          icon: 'sk',
+          isConfigured: hasSimkl,
+          selected: hasSimkl,
+        );
+
         _searchEngines = _ConfigItem(
           id: ConfigCommand.searchEngines,
           name: 'Search Engines',
@@ -204,6 +224,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         (_allDebrid?.isConfigured ?? false) ||
         (_pikpak?.isConfigured ?? false) ||
         (_trakt?.isConfigured ?? false) ||
+        (_simkl?.isConfigured ?? false) ||
         (_searchEngines?.isConfigured ?? false);
   }
 
@@ -214,6 +235,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         (_allDebrid?.selected ?? false) ||
         (_pikpak?.selected ?? false) ||
         (_trakt?.selected ?? false) ||
+        (_simkl?.selected ?? false) ||
         (_searchEngines?.selected ?? false);
   }
 
@@ -344,6 +366,25 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         if (success) {
           successCount++;
           results.add('Trakt');
+        } else {
+          failCount++;
+        }
+      }
+
+      // Send Simkl session
+      if (_simkl?.selected == true && _simklAccessToken != null) {
+        final simklData = jsonEncode({
+          'access_token': _simklAccessToken,
+          if (_simklUsername != null) 'username': _simklUsername,
+        });
+        final success = await state.sendConfigCommandToDevice(
+          ConfigCommand.simkl,
+          targetIp,
+          configData: simklData,
+        );
+        if (success) {
+          successCount++;
+          results.add('Simkl');
         } else {
           failCount++;
         }
@@ -495,11 +536,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             const SizedBox(height: 16),
           ],
 
-          // Trakt section
-          if (_trakt?.isConfigured == true) ...[
+          // Trakt / Simkl section
+          if (_trakt?.isConfigured == true || _simkl?.isConfigured == true) ...[
             _buildSectionHeader('TRACKING'),
             const SizedBox(height: 8),
-            _buildConfigTile(_trakt!, subtitle: _traktUsername ?? 'Signed in'),
+            if (_trakt?.isConfigured == true)
+              _buildConfigTile(_trakt!, subtitle: _traktUsername ?? 'Signed in'),
+            if (_simkl?.isConfigured == true)
+              _buildConfigTile(_simkl!, subtitle: _simklUsername ?? 'Signed in'),
             const SizedBox(height: 16),
           ],
 
@@ -877,6 +921,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return Icons.cloud;
       case ConfigCommand.trakt:
         return Icons.history_rounded;
+      case ConfigCommand.simkl:
+        return Icons.movie_filter_rounded;
       case ConfigCommand.searchEngines:
         return Icons.search;
       default:
@@ -898,6 +944,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return const Color(0xFF3B82F6); // Blue
       case ConfigCommand.trakt:
         return const Color(0xFFED1C24); // Trakt red
+      case ConfigCommand.simkl:
+        return const Color(0xFF22D3EE); // Simkl cyan
       case ConfigCommand.searchEngines:
         return const Color(0xFF8B5CF6); // Purple
       default:
