@@ -457,7 +457,7 @@ class _IndexerManagerEditorDialogState
         enabled: _enabled,
         maxResults: _maxResults,
         timeoutSeconds:
-            int.tryParse(_timeoutController.text.trim())?.clamp(5, 60) ?? 20,
+            int.tryParse(_timeoutController.text.trim())?.clamp(5, 600) ?? 20,
         jackettIndexerId: _jackettIndexerController.text.trim().isEmpty
             ? 'all'
             : _jackettIndexerController.text.trim(),
@@ -611,7 +611,7 @@ class _IndexerManagerEditorDialogState
                         focusNode: _timeoutFocusNode,
                         decoration: const InputDecoration(
                           labelText: 'Timeout seconds',
-                          hintText: '20',
+                          hintText: '20 (5–600)',
                         ),
                         keyboardType: TextInputType.number,
                         textInputAction: TextInputAction.done,
