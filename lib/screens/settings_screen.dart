@@ -21,6 +21,7 @@ import '../services/account_service.dart';
 import '../services/backup_restore_service.dart';
 import '../services/download_service.dart';
 import '../services/mdblist/mdblist_service.dart';
+import '../services/simkl/simkl_service.dart';
 import '../services/storage_service.dart';
 import '../services/support_remote_config_service.dart';
 import '../services/torbox_account_service.dart';
@@ -291,6 +292,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _simklCaption = simklUsername != null
           ? 'Logged in as $simklUsername'
           : 'Logged in';
+    } else {
+      _simklConnected = false;
+      _simklStatus = 'Not connected';
+      _simklCaption = 'Tap to connect';
     }
 
     // MDBList uses a plain API key (no expiry) — a stored key means connected.
@@ -1331,6 +1336,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearPikPakAuth();
     await StorageService.clearWebDav();
     await StorageService.clearTraktAuth();
+    // Clears the token + username AND the in-memory library cache.
+    await SimklService.instance.logout();
     // Clears the key + username AND the in-memory list/items cache.
     await MdblistService.instance.logout();
     await DownloadService.instance.clearDownloadDatabase();

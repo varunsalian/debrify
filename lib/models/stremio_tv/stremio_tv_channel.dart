@@ -80,6 +80,11 @@ class StremioTvChannel {
   }
 
   /// Create a local channel from a user-imported JSON catalog.
+  ///
+  /// [groupId] becomes the channel-id prefix ('local' or 'mdblist') and must
+  /// match the filter-group id [StremioTvService.discoverChannels] derives for
+  /// this catalog — favorites are persisted under [id], so a mismatched prefix
+  /// silently drops them on the next discovery pass.
   factory StremioTvChannel.local({
     required String catalogId,
     required String catalogName,
@@ -87,6 +92,7 @@ class StremioTvChannel {
     required int channelNumber,
     required List<StremioMeta> items,
     bool isFavorite = false,
+    String groupId = 'local',
   }) {
     final addon = StremioAddon(
       id: 'local',
@@ -100,7 +106,7 @@ class StremioTvChannel {
       name: catalogName,
     );
     return StremioTvChannel(
-      id: 'local:$catalogId:$catalogType',
+      id: '$groupId:$catalogId:$catalogType',
       displayName: 'Local: $catalogName',
       addon: addon,
       catalog: catalog,

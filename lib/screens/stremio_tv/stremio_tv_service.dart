@@ -118,6 +118,10 @@ class StremioTvService {
             channelNumber: channelNumber++,
             items: items,
             isFavorite: favoriteIds.contains(channelId),
+            // Keeps the model's id equal to [channelId] above, so the favorite
+            // toggle (persisted under channel.id) round-trips with this
+            // hydration check.
+            groupId: groupId,
           ),
         );
       }

@@ -5965,14 +5965,28 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       double? traktPct;
       double? simklPct;
       if (preferTraktResume || isTraktSource) {
-        if (_isTraktAuthenticated || isTraktSource) {
-          traktPct = await _traktMoviePercent(item);
-          if (!mounted) return;
-        }
-        if (_isSimklAuthenticated) {
-          simklPct = await _simklMoviePercent(item);
-          if (!mounted) return;
-        }
+        // Concurrent and individually time-boxed: the Play press must never
+        // stall behind a degraded tracker API (sequential awaits here could
+        // previously block playback for the full HTTP timeouts). On timeout we
+        // launch with local-only resume — the reconciliation in the player
+        // degrades gracefully to the local position.
+        final lookups = await Future.wait<double?>([
+          (_isTraktAuthenticated || isTraktSource)
+              ? _traktMoviePercent(item).timeout(
+                  const Duration(seconds: 4),
+                  onTimeout: () => null,
+                )
+              : Future<double?>.value(null),
+          _isSimklAuthenticated
+              ? _simklMoviePercent(item).timeout(
+                  const Duration(seconds: 4),
+                  onTimeout: () => null,
+                )
+              : Future<double?>.value(null),
+        ]);
+        if (!mounted) return;
+        traktPct = lookups[0];
+        simklPct = lookups[1];
       }
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
@@ -6257,14 +6271,29 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// `/sync/playback/movies` and returns a selection carrying the percent) —
   /// no new Trakt service code. Trakt is IMDb-keyed, so a non-`tt` id can't
   /// match.
+  /// Short-TTL memo for [_traktMoviePercent]: the Resume label
+  /// (_resolveResumeInfo) and the Play press (_onCatalogPlay) both need the
+  /// percent seconds apart, and resolveSelection has no cache of its own — so
+  /// without this every detail open cost two identical /sync/playback/movies
+  /// fetches and Play blocked on the second. TTL matches SimklService's own
+  /// 30s playback cache (which already gives the Simkl helper this behavior).
+  final Map<String, (double?, DateTime)> _traktMoviePctMemo = {};
+
   Future<double?> _traktMoviePercent(StremioMeta item) async {
     final id = item.effectiveImdbId ?? item.id;
     if (id.isEmpty || !id.startsWith('tt')) return null;
+    final memo = _traktMoviePctMemo[id];
+    if (memo != null &&
+        DateTime.now().difference(memo.$2) < const Duration(seconds: 30)) {
+      return memo.$1;
+    }
     final sel = await TraktContinueWatchingService.instance.resolveSelection(
       traktContentType: TraktContinueWatchingService.moviesContentType,
       itemId: id,
     );
-    return _resumableMoviePercent(sel?.traktProgressPercent);
+    final pct = _resumableMoviePercent(sel?.traktProgressPercent);
+    _traktMoviePctMemo[id] = (pct, DateTime.now());
+    return pct;
   }
 
   /// Simkl's paused position (0-100) for a movie, or null when it has none.
