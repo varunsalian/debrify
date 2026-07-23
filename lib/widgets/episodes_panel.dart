@@ -15,6 +15,8 @@ import '../utils/tv_keys.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import 'episode_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
+import '../services/simkl/simkl_service.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
 import 'home/home_theme.dart';
 
 /// The episode drill-down engine + UI, extracted out of `EpisodesScreen` so it
@@ -128,6 +130,7 @@ class EpisodesPanel extends StatefulWidget {
 class EpisodesPanelState extends State<EpisodesPanel> {
   final StremioService _stremioService = StremioService.instance;
   final TraktService _traktService = TraktService.instance;
+  final SimklService _simklService = SimklService.instance;
 
   // Episode drill-down state
   int _episodeModeGeneration = 0;
@@ -153,6 +156,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
   /// watched/unwatched, rate) is only offered when this is true.
   bool _isTraktAuthenticated = false;
+
+  /// Whether a Simkl account is connected — mirrors [_isTraktAuthenticated],
+  /// gating the separate Simkl episode menu rows.
+  bool _isSimklAuthenticated = false;
 
   final List<FocusNode> _episodeFocusNodes = [];
   final ScrollController _episodeScrollController = ScrollController();
@@ -181,6 +188,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           _handleEpisodeSeasonDropdownKeyEvent;
     }
     _resolveTraktAuth();
+    _resolveSimklAuth();
     _enterEpisodeMode(
       widget.show,
       initialSeason: widget.initialSeason,
@@ -263,6 +271,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
   }
 
+  /// Resolve whether a Simkl account is connected — mirrors [_resolveTraktAuth].
+  Future<void> _resolveSimklAuth() async {
+    final authed = await _simklService.isAuthenticated();
+    if (mounted && authed != _isSimklAuthenticated) {
+      setState(() => _isSimklAuthenticated = authed);
+    }
+  }
+
   /// Handle the episode long-press menu (mark watched/unwatched, rate) against
   /// Trakt, mirroring the inline Trakt view. Watched-state changes are
   /// reflected locally in [_episodeWatchProgress] so the tile updates at once.
@@ -304,6 +320,61 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (rating == null) return;
         actionLabel = 'Rated $rating/10';
         success = await _traktService.rateEpisode(
+          showImdbId,
+          episode.season,
+          episode.number,
+          rating,
+        );
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Handle the episode long-press menu against Simkl — mirrors
+  /// [_onEpisodeMenuAction]. No local watched-state update: Simkl's
+  /// episode-level watched state isn't tracked client-side for this pass (the
+  /// menu always offers both Mark Watched and Mark Unwatched rather than a
+  /// state-aware toggle — see the Simkl integration plan).
+  Future<void> _onEpisodeSimklMenuAction(
+    TraktEpisode episode,
+    SimklEpisodeMenuAction action,
+  ) async {
+    final show = _selectedShow;
+    if (show == null) return;
+    final showImdbId = show.effectiveImdbId ?? show.id;
+    bool success = false;
+    String actionLabel = '';
+
+    switch (action) {
+      case SimklEpisodeMenuAction.markWatched:
+        actionLabel = 'Marked as Watched on Simkl';
+        success = await _simklService.markEpisodeWatched(
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
+      case SimklEpisodeMenuAction.markUnwatched:
+        actionLabel = 'Marked as Unwatched on Simkl';
+        success = await _simklService.markEpisodeUnwatched(
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
+      case SimklEpisodeMenuAction.rate:
+        if (!mounted) return;
+        final rating = await showSimklRatingDialog(context);
+        if (rating == null) return;
+        actionLabel = 'Rated $rating/10 on Simkl';
+        success = await _simklService.rateEpisode(
           showImdbId,
           episode.season,
           episode.number,
@@ -1473,6 +1544,20 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                 tile(Icons.star_rounded, 'Rate on Trakt',
                     () => _onEpisodeMenuAction(
                         episode, TraktEpisodeMenuAction.rate)),
+              ],
+              // Simkl's own rows — separate from Trakt's above, not merged.
+              // No live per-episode Simkl watched state is tracked, so both
+              // Mark Watched and Mark Unwatched are always offered.
+              if (_isSimklAuthenticated) ...[
+                tile(Icons.check_circle_rounded, 'Mark as Watched (Simkl)',
+                    () => _onEpisodeSimklMenuAction(
+                        episode, SimklEpisodeMenuAction.markWatched)),
+                tile(Icons.visibility_off_rounded, 'Mark as Unwatched (Simkl)',
+                    () => _onEpisodeSimklMenuAction(
+                        episode, SimklEpisodeMenuAction.markUnwatched)),
+                tile(Icons.star_rounded, 'Rate on Simkl',
+                    () => _onEpisodeSimklMenuAction(
+                        episode, SimklEpisodeMenuAction.rate)),
               ],
             ],
           ),

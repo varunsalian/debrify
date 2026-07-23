@@ -36,6 +36,7 @@ import '../services/torrent_playback_service.dart';
 import '../services/torrent_service.dart';
 import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/simkl/simkl_service.dart';
 import '../services/video_player_launcher.dart';
 import '../utils/concurrency.dart';
 import '../utils/dialog_tap_guard.dart';
@@ -59,10 +60,12 @@ import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
 import 'see_all/trakt_see_all_screen.dart';
 import 'see_all/simkl_see_all_screen.dart';
+import 'see_all/mdblist_see_all_screen.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
 import '../widgets/see_all/discover_trailer_stage.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'merged_series_detail_screen.dart';
 import 'debrid_downloads_screen.dart';
@@ -186,6 +189,7 @@ class _KwPreservedState {
 const String _discCw = 'cw';
 const String _discTrakt = 'trakt';
 const String _discSimkl = 'simkl';
+const String _discMdblist = 'mdblist';
 const String _discAddonPrefix = 'a:';
 
 // Metrics for the inline caption under an [_ArtPoster] (the favourites rails).
@@ -580,6 +584,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// (watchlist / collection / watched / rate / list). App actions (Select
   /// Source, Add to Stremio TV, Search Packs) show regardless.
   bool _isTraktAuthenticated = false;
+
+  /// Whether Simkl is connected — gates the Simkl detail quick actions,
+  /// rendered as their own strip alongside Trakt's (see [_isTraktAuthenticated]).
+  bool _isSimklAuthenticated = false;
   // Addons that produced homepage rows, indexed by id, so a Continue Watching
   // tap can route back through the right addon (for Episodes / next-episode).
   final Map<String, StremioAddon> _addonsById = {};
@@ -935,6 +943,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (_kwScroll.hasClients) _kwLastScroll = _kwScroll.offset;
     });
     _refreshTraktAuthState();
+    _refreshSimklAuthState();
     _loadMergedSeriesFlag();
     // Restore a keyword search preserved from a prior tab visit (results +
     // scroll). If one restored, it carries its own filters, so don't overwrite
@@ -1027,6 +1036,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// detail quick actions, the PikPak-only Play hiding, and the Trakt rows.
   void _onIntegrationsChanged() {
     _refreshTraktAuthState();
+    _refreshSimklAuthState();
     _refreshPikpakOnly();
     // Trakt Continue Watching rows are never rendered on the dedicated Search
     // tab, so don't refetch them there.
@@ -1037,6 +1047,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final auth = await TraktService.instance.isAuthenticated();
     if (!mounted || auth == _isTraktAuthenticated) return;
     setState(() => _isTraktAuthenticated = auth);
+  }
+
+  Future<void> _refreshSimklAuthState() async {
+    final auth = await SimklService.instance.isAuthenticated();
+    if (!mounted || auth == _isSimklAuthenticated) return;
+    setState(() => _isSimklAuthenticated = auth);
   }
 
   /// Restore a preserved keyword search into this instance if one exists for
@@ -4883,6 +4899,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // status loads, and the only strip the legacy CatalogItemDetailScreen uses.
     final options = buildMenuOptions(null);
 
+    // Simkl's own strip — built and rendered entirely separately from Trakt's
+    // above (see the Simkl integration plan: parallel, not merged). Gated on
+    // connection state the same way the Trakt strip is (isTraktAuthenticated
+    // above) — buildSimklMenuOptions itself returns empty when disconnected.
+    List<SimklMenuOption> buildSimklOptions(SimklTitleStatus? status) =>
+        buildSimklMenuOptions(
+          isSeries: item.type == 'series',
+          isSimklAuthenticated: _isSimklAuthenticated && imdb != null,
+          status: status,
+        );
+    final simklOptions = buildSimklOptions(null);
+
     // Experimental: series route to the merged detail+episodes page. Movies and
     // the flag-off path fall through to the existing CatalogItemDetailScreen.
     if ((item.type == 'series' || item.type == 'movie') && _mergedSeriesPage) {
@@ -4942,6 +4970,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   inCw: inCw,
                   imdb: imdb,
                 ),
+                simklMenuOptions: simklOptions,
+                simklMenuBuilder: buildSimklOptions,
+                // Live Simkl status (current watchlist status + rating) —
+                // only when connected and the title has an IMDb id.
+                simklStatusLoader: (_isSimklAuthenticated && imdb != null)
+                    ? () => SimklService.instance.fetchTitleStatus(imdb)
+                    : null,
+                onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
                 recommendationsLoader: imdb != null
                     ? () => _stremio.getRecommendations(
                         imdbId: imdb,
@@ -4960,6 +4996,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             _refreshBoundSources();
             _loadContinueWatching();
             _refreshTraktAuthState();
+            _refreshSimklAuthState();
             if (returnToTabOnClose != null) {
               MainPageBridge.switchTab?.call(returnToTabOnClose);
             }
@@ -5000,6 +5037,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 inCw: inCw,
                 imdb: imdb,
               ),
+              simklMenuOptions: simklOptions,
+              onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
               // "More Like This" rail + sparse-item meta backfill, matching the
               // catalog detail flow.
               recommendationsLoader: imdb != null
@@ -5022,6 +5061,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _refreshBoundSources();
           _loadContinueWatching();
           _refreshTraktAuthState();
+          _refreshSimklAuthState();
           if (returnToTabOnClose != null) {
             MainPageBridge.switchTab?.call(returnToTabOnClose);
           }
@@ -5070,6 +5110,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             action == TraktItemMenuAction.markUnwatched)) {
       _loadTraktContinueWatching(refreshBound: false);
     }
+  }
+
+  /// Dispatch a detail-screen Simkl quick action — mirrors
+  /// [_handleDetailQuickAction], simpler since Simkl's menu has no app
+  /// actions (Select Source etc.) or Continue-Watching removal to special-case.
+  Future<void> _handleDetailSimklQuickAction(
+    StremioMeta item,
+    SimklItemMenuAction action,
+  ) async {
+    await handleSimklMenuAction(context, item, action);
   }
 
   /// "Select/Edit Source" entry: edit dialog when a source is already bound,
@@ -7852,6 +7902,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         const StremioDropdownOption(_discCw, 'Continue Watching'),
         const StremioDropdownOption(_discTrakt, 'Trakt'),
         const StremioDropdownOption(_discSimkl, 'Simkl'),
+        const StremioDropdownOption(_discMdblist, 'MDBList'),
         for (final a in _discAddons)
           StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
       ],
@@ -7896,6 +7947,27 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         key: const ValueKey('disc_simkl'),
         onOpen: _openSimklItem,
         onQuickPlay: _pikpakOnly ? null : _playSimklItem,
+        onItemFocused: _onDiscFocused,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+        embedded: true,
+        leading: source,
+        leadingNode: _discSourceNode,
+      );
+    }
+
+    if (_discSource == _discMdblist) {
+      // MDBList items are plain catalog titles (StremioMeta w/ imdb id), so they
+      // open and quick-play through the same generic catalog paths as an addon
+      // catalog item — no MDBList-specific handlers needed.
+      return MdblistSeeAllScreen(
+        key: const ValueKey('disc_mdblist'),
+        onOpen: (item) =>
+            _openItem(item, _addonForContinue(item.sourceAddon?.id)),
+        onQuickPlay: _pikpakOnly
+            ? null
+            : (item) =>
+                  _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id)),
         onItemFocused: _onDiscFocused,
         isBound: _isBound,
         isTelevision: widget.isTelevision,

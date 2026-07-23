@@ -8,6 +8,7 @@ import '../models/advanced_search_selection.dart';
 import '../services/main_page_bridge.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/simkl/simkl_service.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
@@ -17,6 +18,7 @@ import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'add_source_picker_dialog.dart';
 import 'catalog_item_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
 import '../screens/catalog_item_detail_screen.dart';
 import '../screens/episodes_screen.dart';
 
@@ -151,6 +153,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   // Trakt integration
   bool _isTraktAuthenticated = false;
 
+  // Simkl integration — mirrors Trakt's, rendered as its own independent
+  // strip (see the Simkl integration plan).
+  bool _isSimklAuthenticated = false;
+
   // Bound sources for movies
   Map<String, List<SeriesSource>> _boundSources = {};
 
@@ -233,6 +239,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _loadAddons();
     _scrollController.addListener(_onScroll);
     _refreshTraktAuthState();
+    _refreshSimklAuthState();
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     // Set up focus listeners for visual indicators
     _providerDropdownFocusNode.addListener(() {
@@ -256,8 +263,15 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     setState(() => _isTraktAuthenticated = auth);
   }
 
+  Future<void> _refreshSimklAuthState() async {
+    final auth = await SimklService.instance.isAuthenticated();
+    if (!mounted) return;
+    setState(() => _isSimklAuthenticated = auth);
+  }
+
   void _handleIntegrationChanged() {
     _refreshTraktAuthState();
+    _refreshSimklAuthState();
   }
 
   /// Navigate down from top dropdowns: if in episode mode, go to season dropdown; otherwise content items.
@@ -1953,6 +1967,17 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           )
         : const <TraktMenuOption>[];
 
+    // Simkl's own strip — a strict IMDb-id gate, NOT the looser `hasTrakt`
+    // (which also accepts a valid non-IMDb id): every SimklService write
+    // sends `ids: {imdb: ...}`, so a non-IMDb item's actions would always
+    // fail server-side. Built and rendered entirely separately from Trakt's
+    // (see the Simkl integration plan). buildSimklMenuOptions itself returns
+    // empty when not authenticated.
+    final simklItems = buildSimklMenuOptions(
+      isSeries: item.type == 'series',
+      isSimklAuthenticated: item.hasValidImdbId && _isSimklAuthenticated,
+    );
+
     final screen = CatalogItemDetailScreen(
       item: item,
       isTelevision: widget.isTelevision,
@@ -1990,6 +2015,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           onAddToStremioTv: _handleAddToStremioTv,
         );
       },
+      simklMenuOptions: simklItems,
+      onSimklAction: (action) => handleSimklMenuAction(context, item, action),
       onPlay: () => _onQuickPlay(item),
       onBrowse: () => _onItemTap(item),
       // "Watch Next" rail: only for IMDb-backed movie/series. Tapping a
