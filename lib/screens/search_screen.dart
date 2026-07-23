@@ -61,6 +61,8 @@ import 'see_all/continue_watching_see_all_screen.dart';
 import 'see_all/trakt_see_all_screen.dart';
 import 'see_all/simkl_see_all_screen.dart';
 import 'see_all/mdblist_see_all_screen.dart';
+import 'see_all/mdblist_lists_see_all_screen.dart';
+import '../widgets/see_all/mdblist_list_card.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
@@ -143,7 +145,7 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-enum _Mode { catalog, keyword, lists }
+enum _Mode { catalog, keyword }
 
 /// Snapshot of an in-progress keyword search, preserved across a tab switch so
 /// returning restores results + scroll instead of a blank prompt — the nav
@@ -251,14 +253,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // toggle is reachable with a remote (arrow-up from the search field).
   final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
   final FocusNode _modeKeywordNode = FocusNode(debugLabel: 'mode_keyword');
-  final FocusNode _modeListsNode = FocusNode(debugLabel: 'mode_lists');
 
-  // MDBList list-search state (Lists mode; submit-based like Keyword). Results
-  // hand off to the Discover tab via MainPageBridge.pendingMdblistListOpen.
+  // MDBList list-search state. Runs in parallel with a Catalog search and
+  // surfaces as a "MDBList Lists" card rail at the top of the results board;
+  // each card hands off to the Discover tab via
+  // MainPageBridge.pendingMdblistListOpen. One focus node per card.
   String _listsQuery = '';
   List<MdblistListChoice> _listsResults = const [];
-  bool _listsSearching = false;
-  String? _listsError;
   int _listsToken = 0;
   final List<FocusNode> _listsNodes = [];
 
@@ -1229,7 +1230,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _searchFocusNode.dispose();
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
-    _modeListsNode.dispose();
     _disposeListsNodes();
     _discSourceNode.dispose();
     _discFocused.dispose();
@@ -2971,7 +2971,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_searchFocusNode.hasFocus ||
         _modeCatalogNode.hasFocus ||
         _modeKeywordNode.hasFocus ||
-        _modeListsNode.hasFocus ||
         _discSourceNode.hasFocus) {
       return true;
     }
@@ -3100,16 +3099,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         }
         return;
       }
-      // Lists mode: land on the first result row when results are mounted,
-      // else back on the field (prompt/empty/error states have nothing below).
-      if (_mode == _Mode.lists) {
-        if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
-          _listsNodes.first.requestFocus();
-        } else {
-          _searchFocusNode.requestFocus();
-        }
-        return;
-      }
       // Only when result rows are actually mounted. Mid-search is fine now:
       // the board clears at search start and rows stream in, so a non-empty
       // _rowNodes always belongs to the CURRENT query (never a stale set).
@@ -3117,6 +3106,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _rowNodes.isNotEmpty &&
           _rowNodes.first.isNotEmpty) {
         _rowNodes.first.first.requestFocus();
+      } else if (_listsRailVisible && _listsNodes.isNotEmpty) {
+        // Catalog found nothing but MDBList lists did — land on the rail so the
+        // remote never bounces back to the field with results on screen.
+        _listsNodes.first.requestFocus();
       } else {
         _searchFocusNode.requestFocus();
       }
@@ -3161,7 +3154,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     (switch (_mode) {
       _Mode.catalog => _modeCatalogNode,
       _Mode.keyword => _modeKeywordNode,
-      _Mode.lists => _modeListsNode,
     }).requestFocus();
   }
 
@@ -3741,12 +3733,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final q = value.trim();
     if (_mode == _Mode.keyword) {
       _runKeyword(q);
-    } else if (_mode == _Mode.lists) {
-      _runListsSearch(q);
     } else if (q.isEmpty) {
       _restoreHome();
     } else {
       _runCatalogSearch(q);
+      // In parallel with the catalog search: MDBList lists matching the query
+      // surface as a card rail at the top of the results board (best-effort —
+      // silently absent when MDBList isn't connected or nothing matches).
+      _runListsSearch(q);
     }
   }
 
@@ -3764,8 +3758,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _listsToken++; // cancel an in-flight lists search
       _listsQuery = '';
       _listsResults = const [];
-      _listsSearching = false;
-      _listsError = null;
     });
     _restoreHome();
   }
@@ -3787,52 +3779,34 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
   }
 
-  /// Search MDBList's public lists (Lists mode). Submit-based like Keyword;
-  /// [_listsToken] discards a stale response after a newer submit or a clear.
+  /// Search MDBList's public lists in parallel with a Catalog search; the
+  /// results render as a card rail atop the board (see [_buildListsRailRow]).
+  /// Best-effort: [_listsToken] discards a stale response after a newer submit
+  /// or a clear, and any not-connected / failed / empty case just clears the
+  /// rail (it renders only when [_listsResults] is non-empty). Does NOT steal
+  /// focus — the catalog search drives where the remote lands.
   Future<void> _runListsSearch(String query) async {
     final q = query.trim();
     final token = ++_listsToken;
+    _listsQuery = q;
     if (q.isEmpty) {
       _disposeListsNodes();
-      setState(() {
-        _listsQuery = '';
-        _listsResults = const [];
-        _listsSearching = false;
-        _listsError = null;
-      });
+      setState(() => _listsResults = const []);
       return;
     }
-    setState(() {
-      _listsQuery = q;
-      _listsSearching = true;
-      _listsError = null;
-      _listsResults = const [];
-    });
     final connected = await MdblistService.instance.isAuthenticated();
     if (!mounted || token != _listsToken) return;
     if (!connected) {
-      setState(() {
-        _listsSearching = false;
-        _listsError = 'Connect MDBList in Settings to search lists.';
-      });
+      _disposeListsNodes();
+      setState(() => _listsResults = const []);
       return;
     }
     final results = await MdblistListSource.instance.searchLists(q);
     if (!mounted || token != _listsToken) return;
     setState(() {
       _listsResults = results;
-      _listsSearching = false;
       _ensureListsNodes();
     });
-    // TV: drop DPAD onto the first result so Select is one press away (matches
-    // the TVMaze search dialog's post-search focus).
-    if (widget.isTelevision && results.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && token == _listsToken && _listsNodes.isNotEmpty) {
-          _listsNodes.first.requestFocus();
-        }
-      });
-    }
   }
 
   /// Hand the picked list to the Discover tab, which opens it focused (with
@@ -4963,10 +4937,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (query.isEmpty) return;
     if (mode == _Mode.keyword) {
       if (query != _kwQuery) _runKeyword(query);
-    } else if (mode == _Mode.lists) {
-      if (query != _listsQuery) _runListsSearch(query);
     } else {
       if (query != _catalogQuery) _runCatalogSearch(query);
+      if (query != _listsQuery) _runListsSearch(query);
     }
   }
 
@@ -6611,7 +6584,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // select switches mode.
       catalogNode: _modeCatalogNode,
       keywordNode: _modeKeywordNode,
-      listsNode: _modeListsNode,
       onLeaveToField: _focusSearchFieldAtEnd,
       onLeaveToContent: _focusContent,
     );
@@ -6718,7 +6690,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               hintText: switch (_mode) {
                 _Mode.catalog => 'Search or paste link',
                 _Mode.keyword => 'Search torrents by keyword',
-                _Mode.lists => 'Search MDBList lists',
               },
               hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.32)),
               suffixIcon: hasText
@@ -6784,11 +6755,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   Widget _buildBody() {
     if (_mode == _Mode.keyword) return _buildKeyword();
-    if (_mode == _Mode.lists) return _buildListsResults();
     // Full-screen spinner only until the FIRST result row streams in — after
     // that the board renders and late rows append beneath it (a slim progress
-    // strip in _buildBoard signals the search is still running).
-    if (_catalogSearching && _sections.isEmpty) {
+    // strip in _buildBoard signals the search is still running). If the MDBList
+    // lists rail already resolved (it's usually faster than the catalog fan-out),
+    // skip the spinner and render the board so the rail shows immediately.
+    if (_catalogSearching && _sections.isEmpty && !_listsRailVisible) {
       return const Center(child: CircularProgressIndicator());
     }
     // Dedicated Search tab: blank prompt until there's a query (no hero/board).
@@ -6798,91 +6770,117 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return _buildBoard();
   }
 
-  /// Lists mode body: prompt → spinner → error → empty → result rows. Each row
-  /// hands off to Discover on select. DPAD: up from the first row returns to
-  /// the search field, left escapes to the TV sidebar, select opens.
-  Widget _buildListsResults() {
-    if (_listsSearching) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_listsError != null) {
-      return _listsMessage(
-        Icons.cloud_off_rounded,
-        _listsError!,
-        'Check the connection and try again.',
-      );
-    }
-    if (_listsQuery.isEmpty) {
-      return _listsMessage(
-        Icons.playlist_play_rounded,
-        'Search MDBList lists',
-        'Type a name — "A24", "Criterion", "Best of 2024" — and pick a '
-            'list to browse it in Discover.',
-      );
-    }
-    if (_listsResults.isEmpty) {
-      return _listsMessage(
-        Icons.inbox_rounded,
-        'No lists found for "$_listsQuery"',
-        'Try a different name or a broader term.',
-      );
-    }
-    // Nodes are kept in lock-step with results by _runListsSearch; _buildListsRow
-    // null-guards the index, so we never touch them from build().
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680),
-        child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          itemCount: _listsResults.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
-          itemBuilder: (context, index) =>
-              _buildListsRow(_listsResults[index], index),
+  /// Whether the MDBList "Lists" card rail should show: a catalog search is
+  /// active AND lists matched. The rail is a leading board row and, because the
+  /// Continue Watching / favourites leading rows are all hidden during a search
+  /// (same `_catalogQuery.isEmpty` gate), it's the ONLY leading row on screen.
+  bool get _listsRailVisible =>
+      _catalogQuery.isNotEmpty && _listsResults.isNotEmpty;
+
+  /// Focus a card in the lists rail, clamping the column (same contract as
+  /// [_focusCwRow]/[_focusFavRowAt]). False when the rail has no cards.
+  bool _focusListsRailAt(int column) {
+    if (_listsNodes.isEmpty) return false;
+    _requestRowFocus(_listsNodes, column.clamp(0, _listsNodes.length - 1));
+    return true;
+  }
+
+  /// Open the full grid of every list that matched the current search. The rail
+  /// already holds the complete `/lists/search` result set, so this hands that
+  /// list straight to the See-All screen (no refetch, no paging).
+  ///
+  /// Unlike the rail tap (which jumps to the Discover tab), opening a list from
+  /// this grid PUSHES the list's items on top of the grid, so Back retraces
+  /// list items → grid → search results — letting the user browse several
+  /// lists in a row.
+  void _openListsSeeAll() {
+    final query = _listsQuery;
+    final results = List<MdblistListChoice>.of(_listsResults);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (gridCtx) => MdblistListsSeeAllScreen(
+          query: query,
+          lists: results,
+          isTelevision: widget.isTelevision,
+          // Push onto the grid's navigator so Back returns here.
+          onOpen: (list) => _openMdblistListItems(gridCtx, list),
         ),
       ),
     );
   }
 
-  Widget _listsMessage(IconData icon, String title, String subtitle) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 54, color: Colors.white.withValues(alpha: 0.22)),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.8),
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
+  /// Push an MDBList list's items as a standalone screen (non-embedded
+  /// [MdblistSeeAllScreen]) above [pushCtx]'s route. Reuses the exact item-open
+  /// and quick-play handlers the Discover tab wires for MDBList items, so a
+  /// title opens / quick-plays identically — just with a Back that returns to
+  /// the lists grid instead of a tab switch.
+  void _openMdblistListItems(BuildContext pushCtx, MdblistListChoice list) {
+    Navigator.of(pushCtx)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => MdblistSeeAllScreen(
+              initialList: list,
+              isTelevision: widget.isTelevision,
+              isBound: _isBound,
+              onOpen: (item) =>
+                  _openItem(item, _addonForContinue(item.sourceAddon?.id)),
+              onQuickPlay: _pikpakOnly
+                  ? null
+                  : (item) => _onCatalogPlay(
+                      item,
+                      _addonForContinue(item.sourceAddon?.id),
+                    ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 13.5,
-              ),
-            ),
-          ],
+          ),
+        )
+        .then((_) => _afterSeeAllReturn());
+  }
+
+  /// The "MDBList Lists" card rail shown atop the results board. Same 2:3 card
+  /// footprint as the poster rows; each card is a gradient tile (list glyph +
+  /// centred name + items/likes footer, no artwork) that opens the list in
+  /// Discover on select. DPAD: up → search field, down → first catalog row,
+  /// left off card 0 → sidebar (TV).
+  Widget _buildListsRailRow() {
+    final posterW = _railPosterW(context);
+    final posterH = posterW * 3 / 2;
+    final rowH = posterH + 14;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _railHeader(
+          title: 'MDBList Lists',
+          tag: 'LISTS',
+          // Mobile/laptop get a "See All" link (auto-hidden on TV, where the
+          // rail is DPAD-scrollable) → full grid of every matched list.
+          onSeeAll: _openListsSeeAll,
         ),
-      ),
+        SizedBox(
+          height: rowH,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.hardEdge,
+            cacheExtent: 400,
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            itemCount: _listsResults.length,
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 11),
+              child: SizedBox(
+                width: posterW,
+                height: posterH,
+                child: _buildListRailCard(_listsResults[index], index),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildListsRow(MdblistListChoice list, int index) {
+  /// One gradient list-card in the lists rail (see [_buildListsRailRow]).
+  Widget _buildListRailCard(MdblistListChoice list, int index) {
+    final tv = widget.isTelevision;
     final node = index < _listsNodes.length ? _listsNodes[index] : null;
-    final subtitle = [
-      if (list.ownerName != null) 'by ${list.ownerName}',
-      '${list.itemCount} items',
-      if (list.likes > 0) '♥ ${list.likes}',
-    ].join(' · ');
     return Focus(
       focusNode: node,
       onKeyEvent: (n, event) {
@@ -6894,22 +6892,28 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _openListsResult(list);
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.arrowUp) {
+        if (key == LogicalKeyboardKey.arrowLeft) {
           if (index > 0) {
             _listsNodes[index - 1].requestFocus();
-          } else {
-            _focusSearchFieldAtEnd();
+          } else if (tv) {
+            MainPageBridge.focusTvSidebar?.call();
           }
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.arrowDown) {
+        if (key == LogicalKeyboardKey.arrowRight) {
           if (index < _listsNodes.length - 1) {
             _listsNodes[index + 1].requestFocus();
           }
-          return KeyEventResult.handled; // swallow at the last row
+          return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.arrowLeft) {
-          if (widget.isTelevision) MainPageBridge.focusTvSidebar?.call();
+        if (key == LogicalKeyboardKey.arrowUp) {
+          _leaveBoardTop();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowDown) {
+          // Into the first catalog row, deferred until one loads if the catalog
+          // search is still in flight.
+          if (!_focusRow(0, 0)) _deferDownMove(column: 0);
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -6917,88 +6921,22 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       child: Builder(
         builder: (context) {
           final focused = Focus.of(context).hasFocus;
-          // Keep the focused row on-screen as DPAD walks the list.
           if (focused) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (node != null && node.hasFocus && context.mounted) {
                 Scrollable.ensureVisible(
                   context,
                   alignment: 0.5,
+                  alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
                   duration: const Duration(milliseconds: 150),
                 );
               }
             });
           }
-          return InkWell(
+          return MdblistListCard(
+            list: list,
+            focused: focused,
             onTap: () => _openListsResult(list),
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: focused
-                    ? kStremioAccent.withValues(alpha: 0.12)
-                    : Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: focused
-                      ? kStremioAccent
-                      : Colors.white.withValues(alpha: 0.08),
-                  width: focused ? 2 : 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.playlist_play_rounded,
-                    color: kStremioAccent,
-                    size: 26,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          list.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.55),
-                            fontSize: 12.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  if (list.liked)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: Icon(
-                        Icons.favorite_rounded,
-                        color: Color(0xFFE0245E),
-                        size: 18,
-                      ),
-                    ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: Colors.white.withValues(alpha: 0.4),
-                    size: 22,
-                  ),
-                ],
-              ),
-            ),
           );
         },
       ),
@@ -8579,7 +8517,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // reserved — the skeletons below are the board's content until the fetch
     // settles, and showing "No catalogs yet" first would flip to rows with the
     // exact reflow the reservation exists to prevent.
-    if (_sections.isEmpty && !showCw && !_anyFavVisible && !_traktReserving) {
+    if (_sections.isEmpty &&
+        !showCw &&
+        !_anyFavVisible &&
+        !_traktReserving &&
+        !_listsRailVisible) {
       if (_catalogQuery.isNotEmpty) {
         return _message(
           Icons.search_off_rounded,
@@ -8753,7 +8695,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         final skelCount = _traktSkeletonRowCount;
                         final favKinds = _favRowKinds;
                         final favCount = favKinds.length;
-                        final leadingCount = cwCount + skelCount + favCount;
+                        // The MDBList "Lists" rail, when a search matched lists.
+                        // It renders ONLY during a search, where CW/skeleton/fav
+                        // rows are all hidden — so it's the sole leading row and
+                        // its `- listsCount` offsets below are no-ops whenever
+                        // those other leading rows are present.
+                        final listsCount = _listsRailVisible ? 1 : 0;
+                        final leadingCount =
+                            listsCount + cwCount + skelCount + favCount;
                         // Footer spinner tracks the actual fetch, not just "more remain":
                         // `_boardCursor` advances synchronously so the final in-flight batch
                         // still shows it, and an idle board with more rows doesn't spin.
@@ -8773,17 +8722,22 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               (showFooter ? 1 : 0),
                           itemBuilder: (context, i) {
                             Widget row;
-                            if (i < cwCount) {
+                            if (i < listsCount) {
+                              row = _buildListsRailRow();
+                            } else if (i < listsCount + cwCount) {
                               row = _buildContinueWatchingRow(
-                                cwRows[i],
-                                i,
+                                cwRows[i - listsCount],
+                                i - listsCount,
                                 cwCount,
                                 favCount,
                               );
-                            } else if (i < cwCount + skelCount) {
-                              row = _buildTraktSkeletonRow(i - cwCount);
+                            } else if (i < listsCount + cwCount + skelCount) {
+                              row = _buildTraktSkeletonRow(
+                                i - listsCount - cwCount,
+                              );
                             } else if (i < leadingCount) {
-                              final favIndex = i - cwCount - skelCount;
+                              final favIndex =
+                                  i - listsCount - cwCount - skelCount;
                               row = _buildFavRow(
                                 favKinds[favIndex],
                                 favIndex,
@@ -9457,11 +9411,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 // col-0 DPAD-left drops to the sidebar (handled in _BoardCell
                 // when onLeftEdge is null).
                 VoidCallback up(int col) => rowIndex == 0
-                    ? (_anyFavVisible
-                          ? () => _focusFavRowAt(_favRowCount - 1, col)
-                          : (_cwVisible
-                                ? () => _focusCwRow(_cwRows.length - 1, col)
-                                : () => _leaveBoardTop()))
+                    ? (_listsRailVisible
+                          ? () => _focusListsRailAt(col)
+                          : (_anyFavVisible
+                                ? () => _focusFavRowAt(_favRowCount - 1, col)
+                                : (_cwVisible
+                                      ? () =>
+                                            _focusCwRow(_cwRows.length - 1, col)
+                                      : () => _leaveBoardTop())))
                     : () => _focusRow(rowIndex - 1, col);
                 // Down past the last loaded row kicks the next batch load
                 // (inside _focusRow) and defers the move until it lands.
@@ -12834,7 +12791,6 @@ class _ModeToggle extends StatelessWidget {
   /// InkWell handles pointer taps and normal Tab traversal instead).
   final FocusNode? catalogNode;
   final FocusNode? keywordNode;
-  final FocusNode? listsNode;
 
   /// Leave the toggle back to the search field (arrow-up, or arrow-left off the
   /// leftmost segment) / down into the board content.
@@ -12848,7 +12804,6 @@ class _ModeToggle extends StatelessWidget {
     this.fullWidth = false,
     this.catalogNode,
     this.keywordNode,
-    this.listsNode,
     this.onLeaveToField,
     this.onLeaveToContent,
   });
@@ -12872,8 +12827,6 @@ class _ModeToggle extends StatelessWidget {
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
       switch (value) {
-        case _Mode.lists:
-          keywordNode?.requestFocus();
         case _Mode.keyword:
           catalogNode?.requestFocus();
         case _Mode.catalog:
@@ -12886,8 +12839,6 @@ class _ModeToggle extends StatelessWidget {
         case _Mode.catalog:
           keywordNode?.requestFocus();
         case _Mode.keyword:
-          listsNode?.requestFocus();
-        case _Mode.lists:
           break; // rightmost — nothing beyond
       }
       return KeyEventResult.handled;
@@ -12910,12 +12861,6 @@ class _ModeToggle extends StatelessWidget {
       'Keyword',
       Icons.bolt_rounded,
     );
-    final lists = _segment(
-      context,
-      _Mode.lists,
-      'Lists',
-      Icons.playlist_play_rounded,
-    );
     return Container(
       height: isTelevision ? 54 : 48,
       padding: const EdgeInsets.all(4),
@@ -12930,9 +12875,8 @@ class _ModeToggle extends StatelessWidget {
             ? [
                 Expanded(child: catalog),
                 Expanded(child: keyword),
-                Expanded(child: lists),
               ]
-            : [catalog, keyword, lists],
+            : [catalog, keyword],
       ),
     );
   }
@@ -12947,7 +12891,6 @@ class _ModeToggle extends StatelessWidget {
     final node = switch (value) {
       _Mode.catalog => catalogNode,
       _Mode.keyword => keywordNode,
-      _Mode.lists => listsNode,
     };
 
     Widget content(bool focused) => AnimatedContainer(
