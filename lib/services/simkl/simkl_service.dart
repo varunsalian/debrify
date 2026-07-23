@@ -139,4 +139,99 @@ class SimklService {
       debugPrint('Simkl: username lookup failed: $e');
     }
   }
+
+  // ============================================================================
+  // Discover / list-browsing fetches
+  // ============================================================================
+
+  /// client_id/app-name/app-version — documented as required query params on
+  /// every Simkl request beyond the PIN flow.
+  Map<String, String> _requiredParams() => {
+    'client_id': kSimklClientId,
+    'app-name': kSimklAppName,
+    'app-version': kSimklAppVersion,
+  };
+
+  Uri _apiUri(String path, [Map<String, String>? extra]) => Uri.parse(
+    '$kSimklApiBaseUrl$path',
+  ).replace(queryParameters: {..._requiredParams(), ...?extra});
+
+  /// Shared GET scaffold for every fetch below: timeout, status check, JSON
+  /// decode, catch-and-null. Returns the decoded body (object or list) or
+  /// null on any failure.
+  Future<dynamic> _getOrNull(
+    Uri uri, {
+    required Map<String, String> headers,
+    required String label,
+  }) async {
+    try {
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        debugPrint('Simkl: $label failed (${response.statusCode})');
+        return null;
+      }
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint('Simkl: $label error: $e');
+      return null;
+    }
+  }
+
+  /// Fetch the user's library items for one type+status bucket via
+  /// `GET /sync/all-items/{type}/{status}`. [type] is
+  /// `movies`/`shows`/`anime`/`all` (Simkl's own combined value, returning
+  /// all three buckets in one response); [status] is
+  /// `plantowatch`/`watching`/`hold`/`completed`/`dropped`. Returns null when
+  /// not authenticated or on any failure, so callers can tell "nothing to
+  /// show yet" from "the bucket is genuinely empty".
+  Future<Map<String, dynamic>?> fetchAllItemsOrNull(
+    String type,
+    String status,
+  ) async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return null;
+    final uri = _apiUri('/sync/all-items/$type/$status', {'extended': 'full'});
+    final data = await _getOrNull(
+      uri,
+      headers: _apiHeaders(accessToken: token),
+      label: 'fetchAllItems $type/$status',
+    );
+    return data is Map<String, dynamic> ? data : null;
+  }
+
+  /// Fetch the user's rated items for one content type via
+  /// `GET /sync/ratings/{type}/{rating}`. Sends the explicit 1–10 comma list
+  /// (documented to work) rather than an unconfirmed range shorthand.
+  Future<Map<String, dynamic>?> fetchRatingsOrNull(String type) async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return null;
+    final uri = _apiUri('/sync/ratings/$type/1,2,3,4,5,6,7,8,9,10', {
+      'extended': 'full',
+    });
+    final data = await _getOrNull(
+      uri,
+      headers: _apiHeaders(accessToken: token),
+      label: 'fetchRatings $type',
+    );
+    return data is Map<String, dynamic> ? data : null;
+  }
+
+  /// Public (no-auth) GET against any Simkl API or CDN URL — used for
+  /// trending/best/genre/premiere endpoints, none of which need a token.
+  /// [url] may be a full URL (the CDN trending file) or built via
+  /// `'$kSimklApiBaseUrl/tv/best/all'`-style paths. Returns the decoded JSON
+  /// body (object or list) or null on failure.
+  Future<dynamic> fetchPublicOrNull(String url) async {
+    final parsed = Uri.parse(url);
+    final uri = parsed.replace(
+      queryParameters: {...parsed.queryParameters, ..._requiredParams()},
+    );
+    return _getOrNull(
+      uri,
+      headers: {'User-Agent': 'Debrify'},
+      label: 'public fetch $url',
+    );
+  }
 }

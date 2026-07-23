@@ -58,6 +58,7 @@ import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
 import 'see_all/trakt_see_all_screen.dart';
+import 'see_all/simkl_see_all_screen.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
 import '../widgets/see_all/discover_trailer_stage.dart';
@@ -184,6 +185,7 @@ class _KwPreservedState {
 /// 'a:{addonId}').
 const String _discCw = 'cw';
 const String _discTrakt = 'trakt';
+const String _discSimkl = 'simkl';
 const String _discAddonPrefix = 'a:';
 
 // Metrics for the inline caption under an [_ArtPoster] (the favourites rails).
@@ -2373,6 +2375,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// (series resume the last-played episode) without opening the detail.
   void _onContinuePlay(StremioMeta item) {
     _onCatalogPlay(item, _addonForContinue(_cwAddonId[item.imdbId]));
+  }
+
+  /// Open a Simkl-sourced title (Discover's Simkl list browsing) as a plain
+  /// catalog detail page — no Trakt-style `isTraktSource`/resume-preference
+  /// flags, since Simkl has no scrobble/resume logic built yet (list
+  /// browsing only, see the Simkl integration plan).
+  void _openSimklItem(StremioMeta item) {
+    _openItem(item, _addonForContinue(item.sourceAddon?.id));
+  }
+
+  /// Quick-play a Simkl-sourced title like any other catalog item.
+  void _playSimklItem(StremioMeta item) {
+    _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
   }
 
   // ── Trakt Continue Watching ───────────────────────────────────────────────
@@ -7836,6 +7851,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       options: [
         const StremioDropdownOption(_discCw, 'Continue Watching'),
         const StremioDropdownOption(_discTrakt, 'Trakt'),
+        const StremioDropdownOption(_discSimkl, 'Simkl'),
         for (final a in _discAddons)
           StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
       ],
@@ -7866,6 +7882,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         cwProgress: _traktProgress,
         onOpen: _openTraktItem,
         onQuickPlay: _pikpakOnly ? null : _playTraktItem,
+        onItemFocused: _onDiscFocused,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+        embedded: true,
+        leading: source,
+        leadingNode: _discSourceNode,
+      );
+    }
+
+    if (_discSource == _discSimkl) {
+      return SimklSeeAllScreen(
+        key: const ValueKey('disc_simkl'),
+        onOpen: _openSimklItem,
+        onQuickPlay: _pikpakOnly ? null : _playSimklItem,
         onItemFocused: _onDiscFocused,
         isBound: _isBound,
         isTelevision: widget.isTelevision,
