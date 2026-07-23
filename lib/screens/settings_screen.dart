@@ -20,6 +20,7 @@ import '../services/analytics_service.dart';
 import '../services/account_service.dart';
 import '../services/backup_restore_service.dart';
 import '../services/download_service.dart';
+import '../services/mdblist/mdblist_service.dart';
 import '../services/storage_service.dart';
 import '../services/support_remote_config_service.dart';
 import '../services/torbox_account_service.dart';
@@ -1330,6 +1331,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearPikPakAuth();
     await StorageService.clearWebDav();
     await StorageService.clearTraktAuth();
+    // Clears the key + username AND the in-memory list/items cache.
+    await MdblistService.instance.logout();
     await DownloadService.instance.clearDownloadDatabase();
     await StorageService.clearAllPlaybackData();
     await StorageService.clearContinueWatching();

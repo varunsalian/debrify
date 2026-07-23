@@ -43,6 +43,29 @@ class MdblistService {
   /// account details across rebuilds without re-hitting the network.
   MdblistAccount? currentAccount;
 
+  // ── In-memory response cache ────────────────────────────────────────────────
+  // Discover re-mounts the MDBList See-All on every source switch, so these
+  // spare a fresh network round-trip when the user flips back within the TTL.
+  // Only successful responses are cached (failures fall through and retry).
+  // Cleared on connect (possible account change) and logout.
+  static const Duration _cacheTtl = Duration(minutes: 5);
+  List<Map<String, dynamic>>? _userListsCache;
+  DateTime? _userListsAt;
+  List<Map<String, dynamic>>? _topListsCache;
+  DateTime? _topListsAt;
+  final Map<int, ({Map<String, dynamic> data, DateTime at})> _itemsCache = {};
+
+  bool _fresh(DateTime? at) =>
+      at != null && DateTime.now().difference(at) < _cacheTtl;
+
+  void _clearCache() {
+    _userListsCache = null;
+    _userListsAt = null;
+    _topListsCache = null;
+    _topListsAt = null;
+    _itemsCache.clear();
+  }
+
   Future<bool> isAuthenticated() async {
     final key = await StorageService.getMdblistApiKey();
     return key != null && key.isNotEmpty;
@@ -63,6 +86,7 @@ class MdblistService {
 
     await StorageService.saveMdblistApiKey(key);
     await StorageService.setMdblistUsername(snapshot.username);
+    _clearCache();
     currentAccount = snapshot;
     return snapshot;
   }
@@ -85,6 +109,7 @@ class MdblistService {
 
   Future<void> logout() async {
     currentAccount = null;
+    _clearCache();
     await StorageService.clearMdblistAuth();
   }
 
@@ -92,6 +117,9 @@ class MdblistService {
   /// `GET /lists/user`). Returns `[]` when not connected or on any failure —
   /// callers treat that the same as "no lists".
   Future<List<Map<String, dynamic>>> fetchUserLists() async {
+    if (_userListsCache != null && _fresh(_userListsAt)) {
+      return _userListsCache!;
+    }
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return const [];
     try {
@@ -101,10 +129,13 @@ class MdblistService {
       if (res.statusCode != 200) return const [];
       final decoded = jsonDecode(res.body);
       if (decoded is List) {
-        return [
+        final lists = [
           for (final e in decoded)
             if (e is Map<String, dynamic>) e,
         ];
+        _userListsCache = lists;
+        _userListsAt = DateTime.now();
+        return lists;
       }
     } catch (_) {
       // Fall through to empty — offline/parse errors read as "no lists".
@@ -116,6 +147,9 @@ class MdblistService {
   /// Each entry is another user's public list (carries `user_name`). Returns
   /// `[]` when not connected or on any failure.
   Future<List<Map<String, dynamic>>> fetchTopLists() async {
+    if (_topListsCache != null && _fresh(_topListsAt)) {
+      return _topListsCache!;
+    }
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return const [];
     try {
@@ -125,10 +159,13 @@ class MdblistService {
       if (res.statusCode != 200) return const [];
       final decoded = jsonDecode(res.body);
       if (decoded is List) {
-        return [
+        final lists = [
           for (final e in decoded)
             if (e is Map<String, dynamic>) e,
         ];
+        _topListsCache = lists;
+        _topListsAt = DateTime.now();
+        return lists;
       }
     } catch (_) {
       // Fall through to empty.
@@ -140,6 +177,8 @@ class MdblistService {
   /// `{ "movies": [...], "shows": [...] }`. Returns null on failure so callers
   /// can distinguish an error from a genuinely empty list.
   Future<Map<String, dynamic>?> fetchListItems(int listId) async {
+    final cached = _itemsCache[listId];
+    if (cached != null && _fresh(cached.at)) return cached.data;
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return null;
     try {
@@ -154,11 +193,16 @@ class MdblistService {
         if (decoded['error'] != null || decoded['response'] == false) {
           return null;
         }
+        _itemsCache[listId] = (data: decoded, at: DateTime.now());
         return decoded;
       }
       // Defensive: some list shapes come back as a flat array — bucket it as
       // movies so the caller still gets items.
-      if (decoded is List) return {'movies': decoded, 'shows': const []};
+      if (decoded is List) {
+        final data = <String, dynamic>{'movies': decoded, 'shows': const []};
+        _itemsCache[listId] = (data: data, at: DateTime.now());
+        return data;
+      }
     } catch (_) {
       return null;
     }
