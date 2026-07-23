@@ -281,6 +281,11 @@ class StorageService {
   static const String _traktUsernameKey = 'trakt_username';
   static const String _traktTokenExpiryKey = 'trakt_token_expiry';
 
+  // Simkl settings. No refresh-token/expiry keys — PIN-issued Simkl tokens
+  // don't expire (see SimklService).
+  static const String _simklAccessTokenKey = 'simkl_access_token';
+  static const String _simklUsernameKey = 'simkl_username';
+
   // Remote Control Settings
   static const String _remoteControlEnabledKey = 'remote_control_enabled';
   static const String _remoteIntroShownKey = 'remote_intro_shown';
@@ -3435,6 +3440,42 @@ class StorageService {
     await prefs.remove(_traktRefreshTokenKey);
     await prefs.remove(_traktUsernameKey);
     await prefs.remove(_traktTokenExpiryKey);
+  }
+
+  static Future<void> setSimklSyncCatalogItems(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('simkl_sync_catalog_items', value);
+  }
+
+  static Future<bool> getSimklSyncCatalogItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('simkl_sync_catalog_items') ?? false;
+  }
+
+  static Future<String?> getSimklAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_simklAccessTokenKey);
+  }
+
+  static Future<void> setSimklAccessToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_simklAccessTokenKey, token);
+  }
+
+  static Future<String?> getSimklUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_simklUsernameKey);
+  }
+
+  static Future<void> setSimklUsername(String username) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_simklUsernameKey, username);
+  }
+
+  static Future<void> clearSimklAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_simklAccessTokenKey);
+    await prefs.remove(_simklUsernameKey);
   }
 
   static Future<List<String>> getRedditRecentSubreddits() async {

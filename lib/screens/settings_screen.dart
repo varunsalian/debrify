@@ -49,6 +49,7 @@ import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/trakt_settings_page.dart';
+import 'settings/simkl_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
 import '../widgets/remote/remote_role_picker_screen.dart';
 
@@ -96,6 +97,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _traktConnected = false;
   String _traktStatus = 'Not connected';
   String _traktCaption = 'Tap to connect';
+
+  bool _simklConnected = false;
+  String _simklStatus = 'Not connected';
+  String _simklCaption = 'Tap to connect';
 
   bool _indexerManagersConfigured = false;
   String _indexerManagersStatus = 'Not configured';
@@ -156,6 +161,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getIndexerManagerConfigs(),
       StorageService.getPremiumizeApiKey(),
       StorageService.getAllDebridApiKey(),
+      StorageService.getSimklAccessToken(),
+      StorageService.getSimklUsername(),
     ]);
 
     if (!mounted) return;
@@ -174,6 +181,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final indexerManagers = results[11] as List;
     final premiumizeKey = results[12] as String?;
     final allDebridKey = results[13] as String?;
+    final simklToken = results[14] as String?;
+    final simklUsername = results[15] as String?;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -262,6 +271,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _traktStatus = 'Expired';
         _traktCaption = 'Tap to reconnect';
       }
+    }
+
+    // Simkl's PIN-issued tokens don't expire, so unlike Trakt there's no
+    // "Expired" branch here — a stored token means connected.
+    if (simklToken != null && simklToken.isNotEmpty) {
+      _simklConnected = true;
+      _simklStatus = 'Active';
+      _simklCaption = simklUsername != null
+          ? 'Logged in as $simklUsername'
+          : 'Logged in';
     }
 
     if (indexerManagers.isNotEmpty) {
@@ -499,6 +518,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     caption: _traktCaption,
     onTap: _openTraktSettings,
   );
+  ConnectionInfo get _simklInfo => ConnectionInfo(
+    title: 'Simkl',
+    connected: _simklConnected,
+    status: _simklStatus,
+    caption: _simklCaption,
+    onTap: _openSimklSettings,
+  );
   ConnectionInfo get _indexerManagersInfo => ConnectionInfo(
     title: 'Jackett & Prowlarr',
     connected: _indexerManagersConfigured,
@@ -520,6 +546,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // _redditInfo,
         _iptvInfo,
         _traktInfo,
+        _simklInfo,
         _indexerManagersInfo,
       ],
       firstFocusNode: _firstCardFocusNode,
@@ -561,6 +588,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         reddit: _redditInfo,
         iptv: _iptvInfo,
         trakt: _traktInfo,
+        simkl: _simklInfo,
         indexerManagers: _indexerManagersInfo,
         firstCardFocusNode: _firstCardFocusNode,
       ),
@@ -645,6 +673,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openTraktSettings() async {
     await pushSettingsPage(context, const TraktSettingsPage());
+    if (!mounted) return;
+    await _loadSummaries();
+  }
+
+  Future<void> _openSimklSettings() async {
+    await pushSettingsPage(context, const SimklSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
@@ -967,7 +1001,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ..._backupSummaryLines(summary).map((line) => Text('• $line')),
             const SizedBox(height: 12),
             const Text(
-              'Saved credentials (Real-Debrid, Torbox, Premiumize, AllDebrid, PikPak, Trakt) will '
+              'Saved credentials (Real-Debrid, Torbox, Premiumize, AllDebrid, PikPak, Trakt, Simkl) will '
               'be overwritten. Addons, search engines, WebDAV servers, and '
               'indexer managers you already have are kept as-is.',
               style: TextStyle(fontSize: 12),
@@ -1082,6 +1116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (s.hasAllDebrid) lines.add('AllDebrid');
     if (s.hasPikpak) lines.add('PikPak');
     if (s.hasTrakt) lines.add('Trakt');
+    if (s.hasSimkl) lines.add('Simkl');
     if (s.searchEngineCount > 0) {
       lines.add('Search engines (${s.searchEngineCount})');
     }
@@ -1103,6 +1138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (r.allDebrid) parts.add('AllDebrid');
     if (r.pikpak) parts.add('PikPak');
     if (r.trakt) parts.add('Trakt');
+    if (r.simkl) parts.add('Simkl');
     if (r.searchEnginesImported > 0) {
       parts.add('${r.searchEnginesImported} new engine(s)');
     }

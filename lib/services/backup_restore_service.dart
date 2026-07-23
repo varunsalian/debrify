@@ -22,6 +22,8 @@ import 'stremio_service.dart';
 ///   - Premiumize API key
 ///   - PikPak credentials (email + password)
 ///   - Trakt session (access, refresh, expiry, username)
+///   - Simkl session (access token, username — no refresh/expiry, Simkl
+///     tokens don't expire)
 ///   - Search engine IDs (restore re-downloads YAML from the remote registry)
 ///   - Stremio addon manifest URLs (restore re-fetches manifests)
 ///   - WebDAV servers (URL + credentials, may be LAN-only)
@@ -45,6 +47,8 @@ class BackupRestoreService {
     final traktRefresh = await StorageService.getTraktRefreshToken();
     final traktExpiry = await StorageService.getTraktTokenExpiry();
     final traktUsername = await StorageService.getTraktUsername();
+    final simklAccess = await StorageService.getSimklAccessToken();
+    final simklUsername = await StorageService.getSimklUsername();
 
     await LocalEngineStorage.instance.initialize();
     final engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
@@ -102,6 +106,12 @@ class BackupRestoreService {
           if (traktUsername != null && traktUsername.isNotEmpty)
             'username': traktUsername,
         },
+      if (simklAccess != null && simklAccess.isNotEmpty)
+        'simkl': <String, dynamic>{
+          'access_token': simklAccess,
+          if (simklUsername != null && simklUsername.isNotEmpty)
+            'username': simklUsername,
+        },
       if (engineIds.isNotEmpty) 'searchEngineIds': engineIds,
       if (addonUrls.isNotEmpty) 'addonManifestUrls': addonUrls,
       if (webDavServers.isNotEmpty) 'webDavServers': webDavServers,
@@ -123,6 +133,9 @@ class BackupRestoreService {
           ((map['pikpak'] as Map)['email'] as String?)?.isNotEmpty == true,
       hasTrakt: (map['trakt'] is Map) &&
           ((map['trakt'] as Map)['access_token'] as String?)?.isNotEmpty ==
+              true,
+      hasSimkl: (map['simkl'] is Map) &&
+          ((map['simkl'] as Map)['access_token'] as String?)?.isNotEmpty ==
               true,
       searchEngineCount:
           (map['searchEngineIds'] as List?)?.length ?? 0,
@@ -284,6 +297,28 @@ class BackupRestoreService {
             report.trakt = true;
           } catch (e) {
             report.errors.add('Trakt: $e');
+          }
+        }
+      }
+    }
+
+    if (selection.simkl) {
+      final s = map['simkl'];
+      if (s is Map) {
+        final access = s['access_token'] as String?;
+        if (access != null && access.isNotEmpty) {
+          try {
+            await StorageService.setSimklAccessToken(access);
+            final username = s['username'] as String?;
+            if (username != null && username.isNotEmpty) {
+              await StorageService.setSimklUsername(username);
+            }
+            // Match interactive connect: a freshly imported Simkl session
+            // starts with catalog scrobbling on.
+            await StorageService.setSimklSyncCatalogItems(true);
+            report.simkl = true;
+          } catch (e) {
+            report.errors.add('Simkl: $e');
           }
         }
       }
@@ -512,6 +547,7 @@ class BackupSummary {
   final bool hasAllDebrid;
   final bool hasPikpak;
   final bool hasTrakt;
+  final bool hasSimkl;
   final int searchEngineCount;
   final int addonCount;
   final int webDavServerCount;
@@ -526,6 +562,7 @@ class BackupSummary {
     required this.hasAllDebrid,
     required this.hasPikpak,
     required this.hasTrakt,
+    required this.hasSimkl,
     required this.searchEngineCount,
     required this.addonCount,
     required this.webDavServerCount,
@@ -539,6 +576,7 @@ class BackupSummary {
       !hasAllDebrid &&
       !hasPikpak &&
       !hasTrakt &&
+      !hasSimkl &&
       searchEngineCount == 0 &&
       addonCount == 0 &&
       webDavServerCount == 0 &&
@@ -553,6 +591,7 @@ class BackupSelection {
   final bool allDebrid;
   final bool pikpak;
   final bool trakt;
+  final bool simkl;
   final bool searchEngines;
   final bool addons;
   final bool webDav;
@@ -565,6 +604,7 @@ class BackupSelection {
     required this.allDebrid,
     required this.pikpak,
     required this.trakt,
+    required this.simkl,
     required this.searchEngines,
     required this.addons,
     required this.webDav,
@@ -578,6 +618,7 @@ class BackupSelection {
         allDebrid = true,
         pikpak = true,
         trakt = true,
+        simkl = true,
         searchEngines = true,
         addons = true,
         webDav = true,
@@ -590,6 +631,7 @@ class BackupSelection {
     bool? allDebrid,
     bool? pikpak,
     bool? trakt,
+    bool? simkl,
     bool? searchEngines,
     bool? addons,
     bool? webDav,
@@ -602,6 +644,7 @@ class BackupSelection {
       allDebrid: allDebrid ?? this.allDebrid,
       pikpak: pikpak ?? this.pikpak,
       trakt: trakt ?? this.trakt,
+      simkl: simkl ?? this.simkl,
       searchEngines: searchEngines ?? this.searchEngines,
       addons: addons ?? this.addons,
       webDav: webDav ?? this.webDav,
@@ -621,6 +664,7 @@ class RestoreReport {
   // wrong password, etc.). Saved credentials remain usable from settings.
   bool pikpakLoginFailed = false;
   bool trakt = false;
+  bool simkl = false;
   int searchEnginesImported = 0;
   int searchEnginesAlreadyPresent = 0;
   int searchEnginesFailed = 0;
@@ -642,6 +686,7 @@ class RestoreReport {
       (allDebrid ? 1 : 0) +
       (pikpak ? 1 : 0) +
       (trakt ? 1 : 0) +
+      (simkl ? 1 : 0) +
       searchEnginesImported +
       addonsImported +
       webDavServersImported +

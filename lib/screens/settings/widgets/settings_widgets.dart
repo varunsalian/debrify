@@ -736,6 +736,7 @@ class ConnectionsSummary extends StatefulWidget {
   final ConnectionInfo reddit;
   final ConnectionInfo iptv;
   final ConnectionInfo trakt;
+  final ConnectionInfo simkl;
   final FocusNode? firstCardFocusNode;
 
   const ConnectionsSummary({
@@ -750,6 +751,7 @@ class ConnectionsSummary extends StatefulWidget {
     required this.reddit,
     required this.iptv,
     required this.trakt,
+    required this.simkl,
     this.firstCardFocusNode,
   });
 
@@ -765,7 +767,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   // [premiumize,  allDebrid]
   // [pikpak,      webDav]
   // [indexerManagers, iptv]
-  // [trakt]
+  // [trakt,       simkl]
   late final FocusNode _torboxFocusNode;
   late final FocusNode _premiumizeFocusNode;
   late final FocusNode _allDebridFocusNode;
@@ -775,6 +777,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   late final FocusNode _redditFocusNode;
   late final FocusNode _iptvFocusNode;
   late final FocusNode _traktFocusNode;
+  late final FocusNode _simklFocusNode;
 
   @override
   void initState() {
@@ -790,6 +793,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
     _redditFocusNode = FocusNode(debugLabel: 'settings-reddit');
     _iptvFocusNode = FocusNode(debugLabel: 'settings-iptv');
     _traktFocusNode = FocusNode(debugLabel: 'settings-trakt');
+    _simklFocusNode = FocusNode(debugLabel: 'settings-simkl');
   }
 
   @override
@@ -803,6 +807,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
     _redditFocusNode.dispose();
     _iptvFocusNode.dispose();
     _traktFocusNode.dispose();
+    _simklFocusNode.dispose();
     super.dispose();
   }
 
@@ -933,19 +938,33 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                     upNeighbor: wide
                         ? _webDavFocusNode
                         : _indexerManagersFocusNode,
-                    downNeighbor: _traktFocusNode,
+                    // Wide grid: Simkl (row 5 right) now sits directly below
+                    // IPTV (row 4 right), not Trakt (row 5 left).
+                    downNeighbor: wide ? _simklFocusNode : _traktFocusNode,
                   ),
                 ),
-                // Row 5: Trakt (left)
+                // Row 5: Trakt (left), Simkl (right)
                 SizedBox(
                   width: itemWidth,
                   child: ConnectionCard(
                     info: widget.trakt,
                     focusNode: _traktFocusNode,
                     isLeftColumn: true,
+                    rightNeighbor: wide ? _simklFocusNode : null,
                     upNeighbor: wide
                         ? _indexerManagersFocusNode
                         : _iptvFocusNode,
+                    downNeighbor: wide ? null : _simklFocusNode,
+                  ),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: ConnectionCard(
+                    info: widget.simkl,
+                    focusNode: _simklFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _traktFocusNode : null,
+                    upNeighbor: wide ? _iptvFocusNode : _traktFocusNode,
                   ),
                 ),
               ],
