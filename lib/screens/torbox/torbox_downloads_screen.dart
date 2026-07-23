@@ -1262,7 +1262,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
       setState(() {
         _webDownloads.addAll(webDownloads);
-        _webDownloadOffset += webDownloads.length;
+        // Advance by the page size, not the filtered count — the service
+        // drops non-completed items, so filtered.length under-counts and
+        // would make the next page overlap this one (duplicate rows).
+        _webDownloadOffset += _limit;
         _hasMoreWebDownloads = hasMore;
         _isLoadingWebDownloads = false;
         _isLoadingMoreWebDownloads = false;

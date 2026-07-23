@@ -47,7 +47,10 @@ class TorboxWebDownload {
     required this.error,
   });
 
-  bool get isCompleted => downloadState.toLowerCase() == 'completed';
+  bool get isCompleted =>
+      downloadFinished ||
+      downloadState.toLowerCase() == 'cached' ||
+      downloadState.toLowerCase() == 'completed';
 
   factory TorboxWebDownload.fromJson(Map<String, dynamic> json) {
     final filesJson = json['files'];
