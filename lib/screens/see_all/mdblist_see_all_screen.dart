@@ -81,6 +81,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   List<StremioMeta> _items = const [];
   List<StremioMeta> _visible = const [];
 
+  String _show = 'all'; // all | movie | series
   _Sort _sort = _Sort.natural;
 
   bool _listsLoading = true;
@@ -93,6 +94,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   final FocusNode _backNode = FocusNode(debugLabel: 'msa_back');
   final FocusNode _categoryNode = FocusNode(debugLabel: 'msa_category');
   final FocusNode _listNode = FocusNode(debugLabel: 'msa_list');
+  final FocusNode _showNode = FocusNode(debugLabel: 'msa_show');
   final FocusNode _sortNode = FocusNode(debugLabel: 'msa_sort');
   final FocusNode _randomNode = FocusNode(debugLabel: 'msa_random');
 
@@ -113,6 +115,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (widget.leadingNode != null) widget.leadingNode!,
     if (_connected) _categoryNode,
     if (_connected && _selected != null) _listNode,
+    if (_connected && _selected != null) _showNode,
     if (_connected && _selected != null) _sortNode,
     if (_connected && _selected != null && _showRandom) _randomNode,
   ];
@@ -197,6 +200,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (cat == _category) return;
     setState(() {
       _category = cat;
+      _show = 'all';
       _sort = _Sort.natural;
     });
     _loadCategory(cat);
@@ -216,6 +220,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     _backNode.dispose();
     _categoryNode.dispose();
     _listNode.dispose();
+    _showNode.dispose();
     _sortNode.dispose();
     _randomNode.dispose();
     super.dispose();
@@ -224,7 +229,13 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   // ── Derived list ────────────────────────────────────────────────────────────
 
   void _recompute() {
-    final list = _items.toList();
+    Iterable<StremioMeta> it = _items;
+    if (_show == 'movie') {
+      it = it.where((m) => m.type != 'series');
+    } else if (_show == 'series') {
+      it = it.where((m) => m.type == 'series');
+    }
+    final list = it.toList();
     switch (_sort) {
       case _Sort.natural:
         break; // items already arrive in the list's natural order
@@ -242,6 +253,13 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     _visible = list;
   }
 
+  void _setShow(String v) {
+    setState(() {
+      _show = v;
+      _recompute();
+    });
+  }
+
   void _setSort(_Sort v) {
     setState(() {
       _sort = v;
@@ -253,6 +271,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (choice == _selected) return;
     setState(() {
       _selected = choice;
+      _show = 'all';
       _sort = _Sort.natural;
     });
     _fetchItems(choice);
@@ -359,7 +378,8 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
           isTelevision: widget.isTelevision,
           leading: widget.leading,
           quiet: _quiet,
-          activeCount: _sort != _Sort.natural ? 1 : 0,
+          activeCount:
+              (_sort != _Sort.natural ? 1 : 0) + (_show != 'all' ? 1 : 0),
           trailing: (_showRandom && _selected != null)
               ? SeeAllRandomButton(
                   quiet: _quiet,
@@ -399,6 +419,19 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
                       ),
                   ],
                   onSelected: _selectList,
+                ),
+                StremioDropdown<String>(
+                  label: 'Show',
+                  value: _show,
+                  isTelevision: widget.isTelevision,
+                  quiet: _quiet,
+                  focusNode: _showNode,
+                  options: const [
+                    StremioDropdownOption('all', 'All'),
+                    StremioDropdownOption('movie', 'Movies'),
+                    StremioDropdownOption('series', 'Series'),
+                  ],
+                  onSelected: _setShow,
                 ),
                 StremioDropdown<_Sort>(
                   label: 'Sort',
@@ -485,6 +518,8 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
           ? 'No top lists available right now'
           : 'You have no MDBList lists yet';
     }
+    // The list has items but the Show filter hid them all.
+    if (_items.isNotEmpty) return 'Nothing matches these filters';
     return '"${_selected?.label ?? ''}" is empty';
   }
 }

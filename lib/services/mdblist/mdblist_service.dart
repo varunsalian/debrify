@@ -173,40 +173,87 @@ class MdblistService {
     return const [];
   }
 
-  /// Fetches a list's items via `GET /lists/{id}/items`. The API returns
-  /// `{ "movies": [...], "shows": [...] }`. Returns null on failure so callers
-  /// can distinguish an error from a genuinely empty list.
+  /// Fetches a list's items via `GET /lists/{id}/items`, following pagination.
+  ///
+  /// The API returns `{ "movies": [...], "shows": [...] }` a page at a time
+  /// (default 1000 items) and sets an `X-Has-More: true` header while more
+  /// remain, so this walks pages by `offset` (advancing by the item count each
+  /// page — confirmed standard offset paging) until the header is false,
+  /// accumulating into one merged map. Lists ≤1000 items resolve in a single
+  /// request. Returns null on a first-page failure so callers can tell error
+  /// from an empty list; a *later*-page failure returns whatever loaded so far
+  /// (and is not cached, so it retries).
   Future<Map<String, dynamic>?> fetchListItems(int listId) async {
     final cached = _itemsCache[listId];
     if (cached != null && _fresh(cached.at)) return cached.data;
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return null;
+
+    final movies = <dynamic>[];
+    final shows = <dynamic>[];
+    var offset = 0;
+    var fetchedAny = false;
+    // Cache ONLY a cleanly-finished walk (X-Has-More went false). A mid-way
+    // failure or a maxPages cutoff leaves this false so the partial isn't cached
+    // and the next visit retries.
+    var complete = false;
+    // Safety backstop against a server that never clears X-Has-More:
+    // 1000/page × 25 = 25k items, far beyond any real MDBList list.
+    const maxPages = 25;
+
     try {
-      final res = await http
-          .get(Uri.parse('$_base/lists/$listId/items?apikey=$key'))
-          .timeout(const Duration(seconds: 20));
-      if (res.statusCode != 200) return null;
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic>) {
-        // A 200 can still carry an error body (bad/expired key, gone list) —
-        // treat that as a failure so callers show "couldn't load", not "empty".
-        if (decoded['error'] != null || decoded['response'] == false) {
-          return null;
+      for (var page = 0; page < maxPages; page++) {
+        final res = await http
+            .get(
+              Uri.parse('$_base/lists/$listId/items?apikey=$key&offset=$offset'),
+            )
+            .timeout(const Duration(seconds: 20));
+        if (res.statusCode != 200) {
+          if (!fetchedAny) return null; // first page failed → error
+          break; // later page failed → keep partial, leave complete=false
         }
-        _itemsCache[listId] = (data: decoded, at: DateTime.now());
-        return decoded;
-      }
-      // Defensive: some list shapes come back as a flat array — bucket it as
-      // movies so the caller still gets items.
-      if (decoded is List) {
-        final data = <String, dynamic>{'movies': decoded, 'shows': const []};
-        _itemsCache[listId] = (data: data, at: DateTime.now());
-        return data;
+        final decoded = jsonDecode(res.body);
+        List<dynamic> pageMovies = const [];
+        List<dynamic> pageShows = const [];
+        if (decoded is Map<String, dynamic>) {
+          // A 200 can still carry an error body (bad/expired key, gone list).
+          if (decoded['error'] != null || decoded['response'] == false) {
+            if (!fetchedAny) return null;
+            break;
+          }
+          final mv = decoded['movies'];
+          final sh = decoded['shows'];
+          if (mv is List) pageMovies = mv;
+          if (sh is List) pageShows = sh;
+        } else if (decoded is List) {
+          // Defensive: a flat array shape — treat as movies.
+          pageMovies = decoded;
+        } else {
+          if (!fetchedAny) return null;
+          break;
+        }
+        movies.addAll(pageMovies);
+        shows.addAll(pageShows);
+        fetchedAny = true;
+        final got = pageMovies.length + pageShows.length;
+        final hasMore =
+            (res.headers['x-has-more'] ?? '').trim().toLowerCase() == 'true';
+        if (!hasMore || got == 0) {
+          complete = true; // walked the whole list
+          break;
+        }
+        offset += got;
       }
     } catch (_) {
-      return null;
+      if (!fetchedAny) return null; // nothing loaded → error
+      // else: partial — return it below but leave complete=false (not cached).
     }
-    return null;
+
+    final data = <String, dynamic>{'movies': movies, 'shows': shows};
+    if (complete) {
+      _itemsCache[listId] = (data: data, at: DateTime.now());
+    }
+    return data;
   }
 
   /// `GET /user` validates the key (limits/user-id); `GET /lists/user` resolves
