@@ -88,6 +88,59 @@ class MdblistService {
     await StorageService.clearMdblistAuth();
   }
 
+  /// Fetches the authenticated user's own lists (raw JSON maps from
+  /// `GET /lists/user`). Returns `[]` when not connected or on any failure —
+  /// callers treat that the same as "no lists".
+  Future<List<Map<String, dynamic>>> fetchUserLists() async {
+    final key = await StorageService.getMdblistApiKey();
+    if (key == null || key.isEmpty) return const [];
+    try {
+      final res = await http
+          .get(Uri.parse('$_base/lists/user?apikey=$key'))
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return const [];
+      final decoded = jsonDecode(res.body);
+      if (decoded is List) {
+        return [
+          for (final e in decoded)
+            if (e is Map<String, dynamic>) e,
+        ];
+      }
+    } catch (_) {
+      // Fall through to empty — offline/parse errors read as "no lists".
+    }
+    return const [];
+  }
+
+  /// Fetches a list's items via `GET /lists/{id}/items`. The API returns
+  /// `{ "movies": [...], "shows": [...] }`. Returns null on failure so callers
+  /// can distinguish an error from a genuinely empty list.
+  Future<Map<String, dynamic>?> fetchListItems(int listId) async {
+    final key = await StorageService.getMdblistApiKey();
+    if (key == null || key.isEmpty) return null;
+    try {
+      final res = await http
+          .get(Uri.parse('$_base/lists/$listId/items?apikey=$key'))
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return null;
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic>) {
+        // A 200 can still carry an error body (bad/expired key, gone list) —
+        // treat that as a failure so callers show "couldn't load", not "empty".
+        if (decoded['error'] != null || decoded['response'] == false) {
+          return null;
+        }
+        return decoded;
+      }
+      // Defensive: some list shapes come back as a flat array — bucket it as
+      // movies so the caller still gets items.
+      if (decoded is List) return {'movies': decoded, 'shows': const []};
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
   /// `GET /user` validates the key (limits/user-id); `GET /lists/user` resolves
   /// the display username (from the first list's `user_name`) and the list
   /// count. Returns null if the key is rejected (non-200 on /user) or the
