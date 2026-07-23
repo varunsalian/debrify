@@ -286,6 +286,11 @@ class StorageService {
   static const String _simklAccessTokenKey = 'simkl_access_token';
   static const String _simklUsernameKey = 'simkl_username';
 
+  // MDBList settings. Auth is a single API key (from mdblist.com/preferences),
+  // so there's no token/expiry — just the key and a cached display username.
+  static const String _mdblistApiKeyKey = 'mdblist_api_key';
+  static const String _mdblistUsernameKey = 'mdblist_username';
+
   // Remote Control Settings
   static const String _remoteControlEnabledKey = 'remote_control_enabled';
   static const String _remoteIntroShownKey = 'remote_intro_shown';
@@ -633,6 +638,38 @@ class StorageService {
   static Future<void> deleteAllDebridApiKey() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_allDebridApiKey);
+  }
+
+  // MDBList API key + cached username helpers
+  static Future<String?> getMdblistApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_mdblistApiKeyKey);
+  }
+
+  static Future<void> saveMdblistApiKey(String apiKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_mdblistApiKeyKey, apiKey);
+  }
+
+  static Future<String?> getMdblistUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_mdblistUsernameKey);
+  }
+
+  static Future<void> setMdblistUsername(String? username) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (username == null || username.isEmpty) {
+      await prefs.remove(_mdblistUsernameKey);
+    } else {
+      await prefs.setString(_mdblistUsernameKey, username);
+    }
+  }
+
+  /// Clears all stored MDBList auth (key + cached username).
+  static Future<void> clearMdblistAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_mdblistApiKeyKey);
+    await prefs.remove(_mdblistUsernameKey);
   }
 
   static Future<bool> getAllDebridIntegrationEnabled() async {
