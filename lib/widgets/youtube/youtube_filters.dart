@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../see_all/stremio_dropdown.dart';
 
-/// Selectable max playback resolutions for YouTube (pixel height).
-const List<int> kYoutubeQualities = [1080, 720, 480, 360];
+/// Selectable max playback resolutions for YouTube (pixel height). 1440p/2160p
+/// are served by YouTube only in VP9 (no H.264 above 1080p); picking them opts
+/// into VP9 playback. Any preference at/under 1080p stays H.264.
+const List<int> kYoutubeQualities = [2160, 1440, 1080, 720, 480, 360];
 
 String youtubeQualityLabel(int height) => '${height}p';
 
@@ -52,6 +54,29 @@ class YoutubeFiltersBar extends StatelessWidget {
                 focusNode: qualityFocusNode,
                 isTelevision: isTelevision,
                 onUpArrowPressed: onUpArrowPressed,
+              ),
+              const SizedBox(width: 10),
+              // Explains the resolver's step-down: the preference is a ceiling,
+              // not a requirement — a video that lacks the chosen height plays
+              // the next best one down rather than failing.
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 13,
+                    color: Colors.white.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    "Plays the next best if a video doesn't have this quality",
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(width: 12),
               if (resultCount > 0)

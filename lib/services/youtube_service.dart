@@ -45,9 +45,13 @@ class YoutubeSearchResult {
   const YoutubeSearchResult({required this.videos, this.hasMore = false});
 }
 
-/// One selectable video quality (an H.264 video-only track). All qualities of a
+/// One selectable video quality (a video-only track). All qualities of a
 /// video share the same separate [YoutubeResolvedStreams.audioUrl], so switching
 /// quality only swaps the video URL — the player re-muxes the same audio.
+///
+/// Entries are H.264 up to 1080p and VP9 above it (YouTube serves 1440p/2160p in
+/// VP9/AV1 but never H.264); AV1 is never listed, as its decode is unreliable on
+/// our player matrix. See [YoutubeService._resolveStreamsBlocking].
 class YoutubeQuality {
   final int height;
   final String videoUrl;
@@ -59,8 +63,10 @@ class YoutubeQuality {
 /// Resolved playable/downloadable URLs for a single YouTube video.
 class YoutubeResolvedStreams {
   /// Video stream to play. When [audioUrl] is set this is a *video-only*
-  /// adaptive stream (up to 1080p) and the player must mux in [audioUrl];
-  /// otherwise it is a muxed (audio+video) progressive stream.
+  /// adaptive stream (always H.264, capped at the user's preferred height) and
+  /// the player must mux in [audioUrl]; otherwise it is a muxed (audio+video)
+  /// progressive stream. Higher-resolution VP9 rungs are offered via
+  /// [qualities] for opt-in switching, but are never the default here.
   final String? playUrl;
 
   /// Separate audio track to play alongside a video-only [playUrl]. Null when
@@ -73,9 +79,10 @@ class YoutubeResolvedStreams {
   final String? thumbnailUrl;
   final int? durationSeconds;
 
-  /// All H.264 video-only qualities available (highest first), for in-player
-  /// quality switching. Populated only in the separate-audio path (each entry
-  /// pairs with the shared [audioUrl]); empty when only a muxed stream exists.
+  /// All video-only qualities available (highest first), for in-player quality
+  /// switching. H.264 up to 1080p plus VP9 above it (1440p/2160p); AV1 excluded.
+  /// Populated only in the separate-audio path (each entry pairs with the shared
+  /// [audioUrl]); empty when only a muxed stream exists.
   final List<YoutubeQuality> qualities;
 
   const YoutubeResolvedStreams({
@@ -394,29 +401,54 @@ class YoutubeService {
               ?.url
               .toString();
 
-      // High-res playback: best H.264 video-only (<= cap) + best AAC audio.
-      // We deliberately require H.264 (avc) and AAC (mp4): VP9 and especially
-      // AV1 video-only streams fail to decode on many players/devices (mpv on
-      // macOS stalls on AV1), and would otherwise be picked at higher
-      // resolutions. When no H.264 stream exists we fall back to the muxed
-      // 360p stream below (also H.264).
+      // High-res playback: video-only track + best AAC audio (mp4). We allow
+      // H.264 (avc) AND VP9, but deliberately EXCLUDE AV1 (av01) — AV1 decode is
+      // unreliable across our player matrix (mpv on macOS stalls on it). VP9 is
+      // what unlocks resolutions above 1080p: YouTube serves 1440p/2160p only in
+      // VP9/AV1, never H.264.
+      //
+      // RISK CONTAINMENT — this must not regress existing playback:
+      //  * The shipped default preference is 1080p, and every height <=1080p
+      //    resolves to H.264 (the tie-break below keeps it), so out-of-the-box
+      //    auto-play is byte-equivalent to before VP9 was allowed.
+      //  * VP9 becomes the default pick ONLY when the user explicitly raises the
+      //    Quality preference to 1440p/2160p — heights YouTube serves only in
+      //    VP9. That is a deliberate opt-in they can lower again if their device
+      //    can't decode it smoothly.
+      //  * Every height is also offered in the in-player quality switcher for a
+      //    per-video override, independent of the preference.
+      bool isAvc(String c) => c.toLowerCase().contains('avc');
+      bool isVp9(String c) {
+        final l = c.toLowerCase();
+        return l.contains('vp9') || l.contains('vp09');
+      }
+
       String? playUrl;
       String? audioUrl;
       final qualities = <YoutubeQuality>[];
       final videoOnly = manifest.videoOnly
-          .where((s) => s.videoCodec.toLowerCase().contains('avc'))
+          .where((s) => isAvc(s.videoCodec) || isVp9(s.videoCodec))
           .toList();
       final audioStreams = manifest.audioOnly
           .where((s) => s.container.name.toLowerCase() == 'mp4')
           .toList();
       if (videoOnly.isNotEmpty && audioStreams.isNotEmpty) {
-        videoOnly.sort(
-            (a, b) => b.videoResolution.height.compareTo(a.videoResolution.height));
+        // Highest first; within a single height prefer H.264 so the <=1080p
+        // rungs keep the exact stream they used before VP9 was allowed.
+        videoOnly.sort((a, b) {
+          final byHeight =
+              b.videoResolution.height.compareTo(a.videoResolution.height);
+          if (byHeight != 0) return byHeight;
+          final aAvc = isAvc(a.videoCodec), bAvc = isAvc(b.videoCodec);
+          if (aAvc == bAvc) return 0;
+          return aAvc ? -1 : 1; // H.264 before VP9 at the same height
+        });
 
-        // Expose every distinct height (highest first) as a switchable quality —
-        // the whole point of in-player switching is to override the launch cap,
-        // so the list is NOT filtered to maxHeight (only the default pick below
-        // is). YouTube can list several bitrates per height; keep the first.
+        // One switchable entry per distinct height (highest first). Dedup keeps
+        // the first, which — after the sort above — is H.264 wherever it exists.
+        // The list is NOT filtered to maxHeight; the whole point of in-player
+        // switching is to override the launch cap. YouTube can list several
+        // bitrates per height; keep the first.
         final seenHeights = <int>{};
         for (final s in videoOnly) {
           final h = s.videoResolution.height;
@@ -424,14 +456,18 @@ class YoutubeService {
           qualities.add(YoutubeQuality(height: h, videoUrl: s.url.toString()));
         }
 
-        // Default pick = highest quality at or below the preferred height; if
-        // none that low, the lowest available. Chosen FROM the deduped list so
-        // [playUrl] is always one of [qualities] (the in-player "now playing"
-        // highlight matches by URL).
-        final atOrBelow =
-            qualities.where((q) => q.height <= maxHeight).toList();
-        final chosen = atOrBelow.isNotEmpty ? atOrBelow.first : qualities.last;
-        playUrl = chosen.videoUrl;
+        // Default pick = highest quality at or below the user's preferred height
+        // (the Quality dropdown); if the video has nothing that low, the lowest
+        // available so it still plays. [qualities] is descending and H.264 sorts
+        // first at equal heights, so any preference <=1080p resolves to the SAME
+        // H.264 stream as before — VP9 is chosen only when the preference is
+        // 1440p/2160p AND the video actually offers it. A video that lacks the
+        // preferred height steps down to the next best automatically. Chosen FROM
+        // [qualities] so [playUrl] always matches an entry (the in-player "now
+        // playing" highlight matches by URL).
+        final atOrBelow = qualities.where((q) => q.height <= maxHeight).toList();
+        playUrl =
+            (atOrBelow.isNotEmpty ? atOrBelow.first : qualities.last).videoUrl;
 
         audioStreams.sort(
             (a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
