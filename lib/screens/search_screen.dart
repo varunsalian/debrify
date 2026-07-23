@@ -5736,10 +5736,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Fires for Trakt-sourced titles and for the merged Resume's authenticated
     // series (preferTraktResume). Cached CW item → selectionForItem (carries a
     // movie's Trakt % and a series' next-episode). Otherwise a live playback
-    // lookup, series-only: a movie's Trakt resume is a percent the local player
-    // path can't honour, so movies without a cached CW item fall through to the
-    // local byte-offset resolution below (matching the label, which also skips
-    // the general Trakt lookup for movies — see [_traktResumeFor]).
+    // lookup, series-only HERE; movies without a cached CW item are handled by
+    // the movie branch below (which pulls their tracker % directly), so they
+    // still resume cross-device — the player now honours a movie's percent (it
+    // reconciles trakt%/simkl%/local), which it didn't when this block was
+    // written.
     // `_isTraktAuthenticated || isTraktSource`: a Trakt-sourced item always
     // resolves via Trakt (matching the pre-change `if (isTraktSource)` — which
     // never checked the auth flag), so a still-settling `_isTraktAuthenticated`
@@ -5807,9 +5808,35 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
 
     if (item.type != 'series') {
+      // Cross-device movie resume: on the detail-page Play/Resume flow
+      // (preferTraktResume, or a tracker-sourced open), pull the movie's paused
+      // tracker position and carry it on the selection. The player's resume
+      // reconciliation then seeks the furthest of trakt%/simkl%/local — so a
+      // movie paused on another device resumes here even when opened from a
+      // plain catalog result (previously movies started at 00:00). Row
+      // quick-play (no preferTraktResume) keeps its local-only resume.
+      double? traktPct;
+      double? simklPct;
+      if (preferTraktResume || isTraktSource) {
+        if (_isTraktAuthenticated || isTraktSource) {
+          traktPct = await _traktMoviePercent(item);
+          if (!mounted) return;
+        }
+        if (_isSimklAuthenticated) {
+          simklPct = await _simklMoviePercent(item);
+          if (!mounted) return;
+        }
+      }
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
-      _playSelection(_movieSelection(item, isTraktSource: isTraktSource));
+      _playSelection(
+        _movieSelection(
+          item,
+          isTraktSource: isTraktSource,
+          traktProgressPercent: traktPct,
+          simklProgressPercent: simklPct,
+        ),
+      );
       return;
     }
 
@@ -5900,11 +5927,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (sel == null) return null;
       return (started: true, season: sel.season, episode: sel.episode);
     }
-    // General (live) fallback only for SERIES. A movie's Trakt resume is a
-    // percent the local player path can't honour, and _onCatalogPlay only
-    // replays a cached CW movie's position (via selectionForItem) — so claiming
-    // a Trakt resume for an uncached movie would make the label promise a
-    // "Resume" that Play starts from 00:00. Uncached movies → null → local.
+    // General (live) fallback only for SERIES here. An uncached movie returns
+    // null from THIS helper on purpose — its cross-device resume is resolved by
+    // the dedicated movie branch of _resolveResumeInfo/_onCatalogPlay (via
+    // _traktMoviePercent), which the player can now honour. So "null" means
+    // "not handled here", not "no Trakt resume for movies".
     if (item.type != 'series') return null;
     // resolveSelection treats an empty itemId as "the first CW item", which would
     // match an unrelated title — so bail when we have no usable id.
@@ -5981,11 +6008,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
     }
 
-    // Movie: started == a saved playback position exists. No S/E tag.
+    // Movie: "started" if a local position OR a cross-device tracker position
+    // exists — so the button reads "Resume" for a movie paused on another
+    // device, matching what Play now seeks to (kept in lock-step with the
+    // movie branch of _onCatalogPlay).
     if (item.type != 'series') {
       final playId = item.imdbId ?? item.effectiveImdbId ?? item.id;
       final st = await StorageService.getVideoPlaybackStateByImdbId(playId);
-      return (started: st != null, season: null, episode: null);
+      if (!mounted) return (started: false, season: null, episode: null);
+      var started = st != null;
+      if (!started && (_isTraktAuthenticated || isTraktSource)) {
+        started = (await _traktMoviePercent(item)) != null;
+        if (!mounted) return (started: false, season: null, episode: null);
+      }
+      if (!started && _isSimklAuthenticated) {
+        started = (await _simklMoviePercent(item)) != null;
+        if (!mounted) return (started: false, season: null, episode: null);
+      }
+      return (started: started, season: null, episode: null);
     }
 
     // Series: last-played episode (by imdbId, then title). Nothing found ⇒ not
@@ -6039,6 +6079,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   AdvancedSearchSelection _movieSelection(
     StremioMeta item, {
     bool isTraktSource = false,
+    // Cross-device resume percents for a movie (0-100), when a tracker has a
+    // paused position. Null = no tracker position → the player resumes from
+    // the local byte offset as before.
+    double? traktProgressPercent,
+    double? simklProgressPercent,
   }) => AdvancedSearchSelection(
     // Keep the raw catalog id when there's no `tt…` id — for IPTV/TV channels
     // AND tmdb/kitsu-only movies — so playback/Sources resolve the addon's own
@@ -6056,7 +6101,48 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // movies leave this false so scrobble follows the "Sync Catalog Items"
     // setting.
     traktSource: isTraktSource,
+    traktProgressPercent: traktProgressPercent,
+    simklProgressPercent: simklProgressPercent,
   );
+
+  /// Trakt's paused position (0-100) for a movie, or null when it has none.
+  /// Reuses the existing Continue Watching resolver (which fetches
+  /// `/sync/playback/movies` and returns a selection carrying the percent) —
+  /// no new Trakt service code. Trakt is IMDb-keyed, so a non-`tt` id can't
+  /// match.
+  Future<double?> _traktMoviePercent(StremioMeta item) async {
+    final id = item.effectiveImdbId ?? item.id;
+    if (id.isEmpty || !id.startsWith('tt')) return null;
+    final sel = await TraktContinueWatchingService.instance.resolveSelection(
+      traktContentType: TraktContinueWatchingService.moviesContentType,
+      itemId: id,
+    );
+    return _resumableMoviePercent(sel?.traktProgressPercent);
+  }
+
+  /// Simkl's paused position (0-100) for a movie, or null when it has none.
+  /// Mirror of [_traktMoviePercent]; Simkl lookups are IMDb-keyed too.
+  Future<double?> _simklMoviePercent(StremioMeta item) async {
+    final id = item.effectiveImdbId ?? item.id;
+    if (id.isEmpty || !id.startsWith('tt')) return null;
+    return _resumableMoviePercent(
+      await SimklService.instance.fetchMoviePlaybackProgress(id),
+    );
+  }
+
+  /// A movie tracker percent, narrowed to what the player will actually
+  /// forward-seek, or null. The player's resume window is bounded on BOTH ends
+  /// (video_player_screen.dart): it seeks only `loMs < traktMs < hiMs`, where
+  /// hiMs = 90% of duration and loMs = the 2s minimum position. A percent
+  /// outside that band makes the detail button read "Resume" while Play starts
+  /// from 00:00 — a label↔Play mismatch. We only have the percent here (no
+  /// duration), so the lower guard is a conservative 1%, which maps above 2s for
+  /// any real-length movie (1% of even a 4-min clip is >2s). Keep both helpers
+  /// on this filter so the label promises only a Resume that Play honours.
+  double? _resumableMoviePercent(double? pct) {
+    if (pct == null || pct < 1 || pct >= 90) return null;
+    return pct;
+  }
 
   void _openEpisodes(
     StremioMeta item,

@@ -79,9 +79,19 @@ class SimklService {
   int _playbackCacheGeneration = 0;
   static const Duration _playbackTtl = Duration(seconds: 30);
 
+  // Parallel cache for `/sync/playback/movies` — same shape/rules as the
+  // episode cache above, sharing the one generation counter so a scrobble
+  // write invalidates both at once.
+  List<dynamic>? _moviePlaybackCacheData;
+  DateTime? _moviePlaybackCacheAt;
+  Future<List<dynamic>?>? _moviePlaybackInFlight;
+  int _moviePlaybackInFlightGeneration = -1;
+
   void _invalidatePlaybackCache() {
     _playbackCacheData = null;
     _playbackCacheAt = null;
+    _moviePlaybackCacheData = null;
+    _moviePlaybackCacheAt = null;
     _playbackCacheGeneration++;
   }
 
@@ -855,6 +865,72 @@ class SimklService {
       }
     }
     return best;
+  }
+
+  /// Raw paused-playback sessions for movies — parallel to
+  /// [_fetchEpisodePlaybackSessions] (same cache/coalescing rules, shared
+  /// generation counter).
+  Future<List<dynamic>?> _fetchMoviePlaybackSessions() async {
+    final at = _moviePlaybackCacheAt;
+    if (at != null && DateTime.now().difference(at) < _playbackTtl) {
+      return _moviePlaybackCacheData;
+    }
+    final inFlight = _moviePlaybackInFlight;
+    if (inFlight != null &&
+        _moviePlaybackInFlightGeneration == _playbackCacheGeneration) {
+      return inFlight;
+    }
+    final future = _loadMoviePlaybackSessions();
+    _moviePlaybackInFlight = future;
+    _moviePlaybackInFlightGeneration = _playbackCacheGeneration;
+    try {
+      return await future;
+    } finally {
+      if (identical(_moviePlaybackInFlight, future)) _moviePlaybackInFlight = null;
+    }
+  }
+
+  Future<List<dynamic>?> _loadMoviePlaybackSessions() async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return null;
+    final generation = _playbackCacheGeneration;
+    final data = await _getOrNull(
+      _apiUri('/sync/playback/movies'),
+      headers: _apiHeaders(accessToken: token),
+      label: 'playback movies',
+    );
+    final list = data is List ? data : null;
+    if (list != null && generation == _playbackCacheGeneration) {
+      _moviePlaybackCacheData = list;
+      _moviePlaybackCacheAt = DateTime.now();
+    }
+    return list;
+  }
+
+  /// The paused progress percent (0-100) of a movie's Simkl playback session,
+  /// or null when it has none (not paused / finished / not in playback / on
+  /// failure). Throw-free defensive parsing like the episode readers.
+  Future<double?> fetchMoviePlaybackProgress(String movieImdbId) async {
+    final sessions = await _fetchMoviePlaybackSessions();
+    if (sessions == null) return null;
+    for (final raw in sessions) {
+      if (raw is! Map) continue;
+      final movie = raw['movie'];
+      if (movie is! Map) continue;
+      final ids = movie['ids'];
+      if (ids is! Map || ids['imdb'] != movieImdbId) continue;
+      final progress = _asNum(raw['progress'])?.toDouble();
+      if (progress == null) continue;
+      // Mirror Trakt's _visibleProgress: a boundary session (<=0 not started,
+      // >=100 finished) is NOT a resumable position. Returning it would make
+      // the detail button promise a "Resume" the player won't seek to (it only
+      // seeks 0 < pct < 100), breaking label↔Play lock-step. Skip it (like the
+      // episode reader scans every session) so a later in-progress session for
+      // the same movie still wins; fall through to null if none is resumable.
+      if (progress <= 0 || progress >= 100) continue;
+      return progress;
+    }
+    return null;
   }
 
   /// Fully-watched episodes of a show as a `'$season-$episode'` key set, via
