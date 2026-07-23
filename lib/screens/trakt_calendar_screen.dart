@@ -5,6 +5,8 @@ import '../models/trakt/trakt_calendar_entry.dart';
 import '../services/analytics_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
+import '../services/simkl/simkl_calendar_service.dart';
+import '../services/simkl/simkl_service.dart';
 import '../services/trakt/trakt_calendar_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt_calendar_day_sheet.dart';
@@ -24,11 +26,26 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   final FocusNode _monthFocusNode = FocusNode(
     debugLabel: 'trakt-month-selector',
   );
+  final FocusNode _sourceFocusNode = FocusNode(
+    debugLabel: 'calendar-source-selector',
+  );
   final Map<DateTime, FocusNode> _dayFocusNodes = <DateTime, FocusNode>{};
   final Map<DateTime, Map<DateTime, List<TraktCalendarEntry>>> _monthCache =
       <DateTime, Map<DateTime, List<TraktCalendarEntry>>>{};
   final Map<DateTime, Future<void>> _inFlightMonthLoads =
       <DateTime, Future<void>>{};
+
+  // Calendar source: 'trakt' or 'simkl'. Both trackers can be connected at once,
+  // in which case a Source dropdown swaps between them; a single-tracker user
+  // sees no dropdown and their one calendar (identical to the pre-Simkl page).
+  static const String _sourceTrakt = 'trakt';
+  static const String _sourceSimkl = 'simkl';
+  String _source = _sourceTrakt;
+  bool _traktAuthed = false;
+  bool _simklAuthed = false;
+  // Bumped on every source switch; an in-flight month load carries the value it
+  // started with and drops its result if the source changed underneath it.
+  int _sourceGen = 0;
 
   late int _selectedYear;
   late int _selectedMonth;
@@ -38,6 +55,9 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   bool _isTelevision = false;
   int _latestMonthChangeRequestId = 0;
 
+  bool get _bothAuthed => _traktAuthed && _simklAuthed;
+  String get _sourceName => _source == _sourceSimkl ? 'Simkl' : 'Trakt';
+
   // Remember the last-viewed month across this app session. Opening a title from
   // the calendar switches to the Home tab (which hosts the detail page), which
   // disposes+remounts this screen; without this, returning would snap back to
@@ -45,6 +65,10 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   // intentionally resets to the current month on a full app restart.
   static int? _lastViewedYear;
   static int? _lastViewedMonth;
+  // Likewise remember the chosen source across the detail round-trip's
+  // dispose+remount (both-authed users), so returning keeps the schedule they
+  // were on instead of snapping back to the Trakt default.
+  static String? _lastSource;
 
   @override
   void initState() {
@@ -61,6 +85,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   void dispose() {
     _yearFocusNode.dispose();
     _monthFocusNode.dispose();
+    _sourceFocusNode.dispose();
     for (final node in _dayFocusNodes.values) {
       node.dispose();
     }
@@ -73,8 +98,31 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   }
 
   Future<void> _loadInitial() async {
-    final isAuth = await TraktService.instance.isAuthenticated();
+    final results = await Future.wait([
+      TraktService.instance.isAuthenticated(),
+      SimklService.instance.isAuthenticated(),
+    ]);
     if (!mounted) return;
+    final traktAuthed = results[0];
+    final simklAuthed = results[1];
+    // Keep the source chosen earlier this session (across the detail round-trip)
+    // IF it's still connected; otherwise default to Trakt when connected
+    // (preserves the pre-Simkl behaviour), falling back to Simkl-only.
+    final remembered = _lastSource;
+    final source =
+        (remembered == _sourceSimkl && simklAuthed) ||
+                (remembered == _sourceTrakt && traktAuthed)
+            ? remembered!
+            : (traktAuthed ? _sourceTrakt : (simklAuthed ? _sourceSimkl : _sourceTrakt));
+    final isAuth = source == _sourceSimkl ? simklAuthed : traktAuthed;
+
+    setState(() {
+      _traktAuthed = traktAuthed;
+      _simklAuthed = simklAuthed;
+      _source = source;
+    });
+    _lastSource = source;
+
     if (!isAuth) {
       setState(() {
         _isAuth = false;
@@ -83,17 +131,43 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       return;
     }
 
-    final currentMonth = _selectedMonthStart;
-    await _ensureMonthLoaded(currentMonth);
-    await _ensureMonthLoaded(
-      DateTime(currentMonth.year, currentMonth.month + 1, 1),
-    );
+    await _loadCurrentAndNextMonth();
 
     if (!mounted) return;
     setState(() {
       _isAuth = true;
       _isLoading = false;
     });
+  }
+
+  /// Preload the selected month and the next one (shared by initial load and
+  /// source switching).
+  Future<void> _loadCurrentAndNextMonth() async {
+    final currentMonth = _selectedMonthStart;
+    await _ensureMonthLoaded(currentMonth);
+    await _ensureMonthLoaded(
+      DateTime(currentMonth.year, currentMonth.month + 1, 1),
+    );
+  }
+
+  /// Swap the calendar source (only reachable when both trackers are
+  /// connected). Clears the per-month cache — it isn't keyed by source — and
+  /// bumps [_sourceGen] so any in-flight load for the old source is dropped,
+  /// then reloads the visible month for the new source.
+  Future<void> _onSourceChanged(String? source) async {
+    if (source == null || source == _source) return;
+    setState(() {
+      _source = source;
+      _sourceGen++;
+      _monthCache.clear();
+      _inFlightMonthLoads.clear();
+      _isChangingMonth = false;
+      _isLoading = true;
+    });
+    _lastSource = source; // survive the detail round-trip's remount
+    await _loadCurrentAndNextMonth();
+    if (!mounted) return;
+    setState(() => _isLoading = false);
   }
 
   DateTime get _selectedMonthStart =>
@@ -108,13 +182,17 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       return;
     }
 
+    final gen = _sourceGen;
+    final source = _source;
     final future = () async {
       final monthEnd = DateTime(normalized.year, normalized.month + 1, 0);
-      final grouped = await TraktCalendarService.instance.getRange(
-        normalized,
-        monthEnd,
-      );
+      final grouped = source == _sourceSimkl
+          ? await SimklCalendarService.instance.getRange(normalized, monthEnd)
+          : await TraktCalendarService.instance.getRange(normalized, monthEnd);
       if (!mounted) return;
+      // The source was switched while this fetch was in flight — its result is
+      // for the old tracker, so discard it (the new source reloads separately).
+      if (gen != _sourceGen) return;
       setState(() {
         _monthCache[normalized] = grouped;
       });
@@ -124,7 +202,11 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     try {
       await future;
     } finally {
-      _inFlightMonthLoads.remove(normalized);
+      // Only clear OUR entry: a source switch may have cleared the map and
+      // registered a newer future for this month, which we must not evict.
+      if (identical(_inFlightMonthLoads[normalized], future)) {
+        _inFlightMonthLoads.remove(normalized);
+      }
     }
   }
 
@@ -260,7 +342,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               backgroundColor: Colors.transparent,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
-              title: const Text('Trakt Calendar'),
+              title: Text('$_sourceName Calendar'),
             ),
       body: Container(
         decoration: const BoxDecoration(
@@ -277,11 +359,13 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
 
   Widget _buildBody(bool isWide) {
     if (!_isAuth) {
+      // Only reachable when neither tracker is connected (the default source is
+      // whichever IS connected), so phrase it for both.
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32),
           child: Text(
-            'Connect Trakt to see your calendar.',
+            'Connect Trakt or Simkl to see your calendar.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
@@ -375,6 +459,25 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     );
   }
 
+  /// The Trakt/Simkl source dropdown — only when BOTH trackers are connected
+  /// (a single-tracker user has nothing to switch). Returns null otherwise so
+  /// callers can conditionally omit it. Styled like the Year/Month selectors,
+  /// so DPAD steps into/out of it identically.
+  Widget? _buildSourceSelector({bool dense = false}) {
+    if (!_bothAuthed) return null;
+    return _SelectorField<String>(
+      label: 'Source',
+      value: _source,
+      focusNode: _sourceFocusNode,
+      dense: dense,
+      items: const [
+        DropdownMenuItem<String>(value: _sourceTrakt, child: Text('Trakt')),
+        DropdownMenuItem<String>(value: _sourceSimkl, child: Text('Simkl')),
+      ],
+      onChanged: _onSourceChanged,
+    );
+  }
+
   Widget _buildTvHeaderSurface(List<_AiringDay> days) {
     final monthLabel = '${_monthName(_selectedMonth)} $_selectedYear';
     final summary = days.isEmpty
@@ -409,9 +512,9 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               borderRadius: BorderRadius.circular(999),
               color: _kNetflixRed.withValues(alpha: 0.14),
             ),
-            child: const Text(
-              'YOUR TRAKT SCHEDULE',
-              style: TextStyle(
+            child: Text(
+              'YOUR ${_sourceName.toUpperCase()} SCHEDULE',
+              style: const TextStyle(
                 color: Color(0xFFFFC4C8),
                 fontSize: 9,
                 fontWeight: FontWeight.w800,
@@ -439,6 +542,10 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          if (_buildSourceSelector(dense: true) case final sourceField?) ...[
+            sourceField,
+            const SizedBox(height: 8),
+          ],
           Row(
             children: [
               Expanded(
@@ -559,7 +666,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               color: _kNetflixRed.withValues(alpha: 0.14),
             ),
             child: Text(
-              'YOUR TRAKT SCHEDULE',
+              'YOUR ${_sourceName.toUpperCase()} SCHEDULE',
               style: TextStyle(
                 color: const Color(0xFFFFC4C8),
                 fontSize: isCompact ? 10 : 11,
@@ -598,6 +705,10 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               ),
             ),
             const SizedBox(height: 12),
+          ],
+          if (_buildSourceSelector(dense: isCompact) case final sourceField?) ...[
+            sourceField,
+            SizedBox(height: isCompact ? 10 : 12),
           ],
           if (isCompact)
             Row(

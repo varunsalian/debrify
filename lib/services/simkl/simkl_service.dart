@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../storage_service.dart';
+import 'simkl_calendar_service.dart';
 import 'simkl_constants.dart';
 
 /// The user's Simkl relationship to a single title — mirrors
@@ -112,6 +113,16 @@ class SimklService {
     return data;
   }
 
+  /// The user's full library snapshot (`/sync/all-items/all/all`), where every
+  /// item is tagged with its own `status` and `user_rating`. Backed by the same
+  /// 45s cache the detail-page status lookups use, so callers that need the
+  /// whole library (e.g. the Simkl calendar's intersection) share one fetch
+  /// instead of issuing their own. Null when disconnected or the fetch failed
+  /// (never a poisoned empty), so callers can distinguish "failed" from a
+  /// genuinely empty library.
+  Future<Map<String, dynamic>?> fetchLibrarySnapshotOrNull() =>
+      _cachedLibAllAll();
+
   /// The user's relationship to a single title: which watchlist status (if
   /// any) it's in, and their rating. Backed by one cached `all/all` library
   /// fetch, scanned across all three content-type buckets (an anime title
@@ -199,8 +210,10 @@ class SimklService {
   Future<void> logout() async {
     await StorageService.clearSimklAuth();
     // Drop cached library state so a later sign-in (possibly a different
-    // account) never reads the previous user's watchlist/ratings.
+    // account) never reads the previous user's watchlist/ratings — including
+    // the derived calendar (mirrors TraktService clearing TraktCalendarService).
     _invalidateLibraryCache();
+    SimklCalendarService.instance.invalidate();
   }
 
   /// Get the stored username, if known.

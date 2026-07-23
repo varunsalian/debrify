@@ -20,5 +20,18 @@ const String kSimklAppVersion = '1.0';
 const String kSimklTrendingUrl =
     'https://data.simkl.in/discover/trending/today_100.json';
 
+/// CDN calendar file (public, no auth): upcoming episode air dates for all TV
+/// shows. Simkl has no per-user calendar endpoint like Trakt's
+/// `/calendars/my/shows`, so the calendar is synthesized by intersecting this
+/// against the shows in the user's Simkl library (see SimklCalendarService).
+/// Regenerated every ~6h and CDN-cached ~5h; query strings are ignored.
+///
+/// The sibling `calendar/anime.json` is deliberately NOT used: its entries
+/// carry only MAL/AniDB/Simkl ids (no IMDb id) and no season number, so this
+/// IMDb-keyed app can neither match them to the user's library nor open their
+/// detail page — every anime entry would drop. The Simkl calendar is therefore
+/// TV-shows-only, consistent with the app's existing IMDb-centric model.
+const String kSimklCalendarTvUrl = 'https://data.simkl.in/calendar/tv.json';
+
 const String kSimklPinUrl = '$kSimklApiBaseUrl/oauth/pin';
 String simklPinPollUrl(String userCode) => '$kSimklPinUrl/$userCode';
