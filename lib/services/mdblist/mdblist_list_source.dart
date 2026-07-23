@@ -80,9 +80,13 @@ class MdblistListSource {
   /// network/parse failure sets `failed: true`, so the UI can tell "empty" from
   /// "couldn't load".
   Future<({List<StremioMeta> items, bool failed})> loadListItems(
-    MdblistListChoice choice,
-  ) async {
-    final data = await MdblistService.instance.fetchListItems(choice.id);
+    MdblistListChoice choice, {
+    bool forceRefresh = false,
+  }) async {
+    final data = await MdblistService.instance.fetchListItems(
+      choice.id,
+      forceRefresh: forceRefresh,
+    );
     if (data == null) return (items: const <StremioMeta>[], failed: true);
     final movies = data['movies'];
     final shows = data['shows'];

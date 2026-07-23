@@ -266,6 +266,53 @@ class LocalCatalogImporter {
     return null;
   }
 
+  /// Refresh an MDBList-sourced catalog by re-fetching its items (bypassing the
+  /// service cache so newly-added titles show). Filters by the catalog's own
+  /// type, so a split "X — Movies"/"X — Series" pair each refreshes to its side.
+  /// Returns error message or null on success.
+  static Future<String?> refreshMdblistCatalog(
+    Map<String, dynamic> catalog,
+  ) async {
+    final listId = (catalog['mdblistListId'] as num?)?.toInt();
+    if (listId == null) return 'Not an MDBList catalog';
+
+    final loaded = await MdblistListSource.instance.loadListItems(
+      MdblistListChoice(id: listId, name: ''),
+      forceRefresh: true,
+    );
+    if (loaded.items.isEmpty && loaded.failed) {
+      return 'Failed to refresh from MDBList';
+    }
+
+    final catalogType = catalog['type'] as String? ?? 'movie';
+    final items = <Map<String, dynamic>>[];
+    for (final meta in loaded.items) {
+      // Filter by catalog type (movie catalogs only get movies, series only series).
+      if (catalogType == 'series' && meta.type != 'series') continue;
+      if (catalogType == 'movie' && meta.type == 'series') continue;
+      items.add({
+        'id': meta.id,
+        'name': meta.name,
+        'type': meta.type,
+        if (meta.year != null) 'year': int.tryParse(meta.year!) ?? meta.year,
+        if (meta.description != null) 'overview': meta.description,
+        if (meta.imdbRating != null) 'rating': meta.imdbRating,
+        if (meta.poster != null) 'poster': meta.poster,
+        if (meta.background != null) 'fanart': meta.background,
+        if (meta.genres != null && meta.genres!.isNotEmpty)
+          'genres': meta.genres,
+      });
+    }
+
+    final updated = Map<String, dynamic>.from(catalog);
+    updated['items'] = items;
+    updated['addedAt'] = DateTime.now().toIso8601String();
+    if (items.isEmpty) return 'No matching items after filtering by type';
+    final ok = await StorageService.updateStremioTvLocalCatalog(updated);
+    if (!ok) return 'Catalog not found — it may have been deleted';
+    return null;
+  }
+
   /// Validate and save JSON content as a local catalog.
   /// Pass [catalogName] for Trakt lists (which lack a root name).
   /// Returns error message or null on success.
@@ -1219,6 +1266,29 @@ class _StremioTvLocalCatalogsDialogState
     }
   }
 
+  Future<void> _refreshMdblistCatalog(Map<String, dynamic> catalog) async {
+    final id = catalog['id'] as String? ?? '';
+    final name = catalog['name'] as String? ?? 'Unknown';
+    setState(() => _refreshingCatalogId = id);
+    final err = await LocalCatalogImporter.refreshMdblistCatalog(catalog);
+    if (!mounted) return;
+    setState(() => _refreshingCatalogId = null);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Refresh failed: $err'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    } else {
+      _changed = true;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('"$name" refreshed')));
+      await _loadCatalogs();
+    }
+  }
+
   Future<void> _deleteLocalCatalog(Map<String, dynamic> catalog) async {
     final name = catalog['name'] as String? ?? 'Unknown';
     final confirmed = await showDialog<bool>(
@@ -1334,6 +1404,7 @@ class _StremioTvLocalCatalogsDialogState
                           ? _deleteFocusNodes[index]
                           : null;
                       final isTrakt = catalog['traktSource'] != null;
+                      final isMdblist = catalog['mdblistListId'] != null;
 
                       return ListTile(
                         dense: true,
@@ -1347,7 +1418,8 @@ class _StremioTvLocalCatalogsDialogState
                         ),
                         title: Text(name, style: theme.textTheme.bodyMedium),
                         subtitle: Text(
-                          '${items.length} items${isTrakt ? ' · Trakt' : ''}',
+                          '${items.length} items'
+                          '${isTrakt ? ' · Trakt' : isMdblist ? ' · MDBList' : ''}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -1355,7 +1427,7 @@ class _StremioTvLocalCatalogsDialogState
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (isTrakt)
+                            if (isTrakt || isMdblist)
                               _refreshingCatalogId == catalog['id']
                                   ? const Padding(
                                       padding: EdgeInsets.all(12),
@@ -1375,8 +1447,12 @@ class _StremioTvLocalCatalogsDialogState
                                       ),
                                       onPressed: _refreshingCatalogId != null
                                           ? null
-                                          : () => _refreshTraktCatalog(catalog),
-                                      tooltip: 'Refresh from Trakt',
+                                          : () => isMdblist
+                                                ? _refreshMdblistCatalog(catalog)
+                                                : _refreshTraktCatalog(catalog),
+                                      tooltip: isMdblist
+                                          ? 'Refresh from MDBList'
+                                          : 'Refresh from Trakt',
                                     ),
                             IconButton(
                               focusNode: deleteFocus,

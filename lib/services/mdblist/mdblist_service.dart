@@ -183,9 +183,14 @@ class MdblistService {
   /// request. Returns null on a first-page failure so callers can tell error
   /// from an empty list; a *later*-page failure returns whatever loaded so far
   /// (and is not cached, so it retries).
-  Future<Map<String, dynamic>?> fetchListItems(int listId) async {
-    final cached = _itemsCache[listId];
-    if (cached != null && _fresh(cached.at)) return cached.data;
+  Future<Map<String, dynamic>?> fetchListItems(
+    int listId, {
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = _itemsCache[listId];
+      if (cached != null && _fresh(cached.at)) return cached.data;
+    }
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return null;
 
