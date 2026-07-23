@@ -14,12 +14,21 @@ class MdblistListChoice {
   /// ("Name · owner"). Null/absent for the user's own lists.
   final String? ownerName;
 
+  /// Whether the authenticated user has liked this list (per-user `liked`
+  /// flag; flips immediately when toggled via the like endpoint).
+  final bool liked;
+
+  /// Total like count on MDBList.
+  final int likes;
+
   const MdblistListChoice({
     required this.id,
     required this.name,
     this.itemCount = 0,
     this.mediatype,
     this.ownerName,
+    this.liked = false,
+    this.likes = 0,
   });
 
   factory MdblistListChoice.fromJson(Map<String, dynamic> j) {
@@ -33,6 +42,8 @@ class MdblistListChoice {
       itemCount: (j['items'] as num?)?.toInt() ?? 0,
       mediatype: j['mediatype'] as String?,
       ownerName: (owner == null || owner.isEmpty) ? null : owner,
+      liked: j['liked'] == true,
+      likes: (j['likes'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -69,6 +80,10 @@ class MdblistListSource {
   /// The public lists the user has liked on MDBList. Same shape as the others.
   Future<List<MdblistListChoice>> loadLikedLists() async =>
       _mapChoices(await MdblistService.instance.fetchLikedLists());
+
+  /// Searches MDBList's public lists by name. Same shape as the others.
+  Future<List<MdblistListChoice>> searchLists(String query) async =>
+      _mapChoices(await MdblistService.instance.searchLists(query));
 
   List<MdblistListChoice> _mapChoices(List<Map<String, dynamic>> raw) {
     final out = <MdblistListChoice>[];

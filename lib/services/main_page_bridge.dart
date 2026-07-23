@@ -99,6 +99,13 @@ class MainPageBridge {
   /// episode (int?), originTab (int? — tab to return to when the detail closes).
   static Map<String, dynamic>? pendingCatalogDetailOpen;
 
+  /// A one-shot request from the Search tab's Lists mode to open a specific
+  /// MDBList list on the Discover tab. The requester fills this and switches to
+  /// Discover via [switchTab]; the Discover SearchScreen consumes it on mount.
+  /// Keys mirror MdblistListChoice: id (int), name, ownerName (String?),
+  /// itemCount (int), liked (bool), likes (int).
+  static Map<String, dynamic>? pendingMdblistListOpen;
+
   // ==========================================================================
   // Back Navigation Handling
   // ==========================================================================

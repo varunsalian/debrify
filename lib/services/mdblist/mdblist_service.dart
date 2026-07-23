@@ -208,6 +208,60 @@ class MdblistService {
     return const [];
   }
 
+  /// Searches MDBList's public lists by name (`GET /lists/search?query=`).
+  /// Returns raw list maps (same shape as the other list endpoints). Not
+  /// cached — every query is different. Returns `[]` when not connected, on
+  /// an empty query, or on any failure.
+  Future<List<Map<String, dynamic>>> searchLists(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final key = await StorageService.getMdblistApiKey();
+    if (key == null || key.isEmpty) return const [];
+    try {
+      final res = await http
+          .get(
+            Uri.parse(
+              '$_base/lists/search?query=${Uri.encodeQueryComponent(q)}&apikey=$key',
+            ),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return const [];
+      final decoded = jsonDecode(res.body);
+      if (decoded is List) {
+        return [
+          for (final e in decoded)
+            if (e is Map<String, dynamic>) e,
+        ];
+      }
+    } catch (_) {
+      // Fall through to empty.
+    }
+    return const [];
+  }
+
+  /// Likes ([like] true) or unlikes a public list on the user's MDBList
+  /// account. Verified endpoints: `PUT /lists/{id}/like` and
+  /// `DELETE /lists/{id}/like`, both answering
+  /// `{"status":"liked|unliked","like_count":N}`. Returns success. Drops the
+  /// liked-lists cache so the "Liked Lists" category refetches (the server
+  /// index itself can lag a little behind the list's own `liked` flag).
+  Future<bool> setListLiked(int listId, {required bool like}) async {
+    final key = await StorageService.getMdblistApiKey();
+    if (key == null || key.isEmpty) return false;
+    try {
+      final uri = Uri.parse('$_base/lists/$listId/like?apikey=$key');
+      final res = like
+          ? await http.put(uri).timeout(const Duration(seconds: 15))
+          : await http.delete(uri).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return false;
+      _likedListsCache = null;
+      _likedListsAt = null;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Fetches a list's items via `GET /lists/{id}/items`, following pagination.
   ///
   /// The API returns `{ "movies": [...], "shows": [...] }` a page at a time

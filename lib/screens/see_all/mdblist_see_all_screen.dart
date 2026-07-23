@@ -7,6 +7,7 @@ import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_service.dart';
+import '../../widgets/see_all/mdblist_like_button.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
@@ -48,6 +49,11 @@ class MdblistSeeAllScreen extends StatefulWidget {
   final Widget? leading;
   final FocusNode? leadingNode;
 
+  /// A list handed off from the Search tab's Lists search. When set, the
+  /// screen opens focused on it (a "Search Result" pseudo-category) and shows
+  /// the ♥ like toggle — the only path that gets the heart.
+  final MdblistListChoice? initialList;
+
   const MdblistSeeAllScreen({
     super.key,
     required this.onOpen,
@@ -58,6 +64,7 @@ class MdblistSeeAllScreen extends StatefulWidget {
     this.embedded = false,
     this.leading,
     this.leadingNode,
+    this.initialList,
   });
 
   @override
@@ -70,8 +77,10 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   bool _connected = false;
 
   // Category: 'mine' (the user's own lists), 'liked' (lists they liked on
-  // MDBList), or 'top' (public/top lists). Each category's lists are fetched
-  // once and cached (loaded flags below).
+  // MDBList), 'top' (public/top lists), or 'found' (a single list handed off
+  // from the Search tab — only present when [widget.initialList] is set).
+  // Each fetched category's lists are loaded once and cached (flags below);
+  // 'found' is in-memory from the start.
   String _category = 'mine';
   List<MdblistListChoice> _myLists = const [];
   bool _myLoaded = false;
@@ -79,6 +88,12 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   bool _likedLoaded = false;
   List<MdblistListChoice> _topLists = const [];
   bool _topLoaded = false;
+  List<MdblistListChoice> _foundLists = const [];
+
+  // ♥ state for the found list (the heart only shows on that path). Kept
+  // as local state because MdblistListChoice is immutable.
+  bool _foundLiked = false;
+  bool _likeBusy = false;
 
   MdblistListChoice? _selected;
 
@@ -100,6 +115,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   final FocusNode _listNode = FocusNode(debugLabel: 'msa_list');
   final FocusNode _showNode = FocusNode(debugLabel: 'msa_show');
   final FocusNode _sortNode = FocusNode(debugLabel: 'msa_sort');
+  final FocusNode _likeNode = FocusNode(debugLabel: 'msa_like');
   final FocusNode _randomNode = FocusNode(debugLabel: 'msa_random');
 
   final Random _random = Random();
@@ -114,16 +130,22 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       ? _topLists
       : _category == 'liked'
       ? _likedLists
+      : _category == 'found'
+      ? _foundLists
       : _myLists;
 
+  /// The ♥ toggle only exists on the search-handoff path (the found list).
+  bool get _showLike => _category == 'found' && _selected != null;
+
   /// Filter-bar focus order. Category is present whenever connected; List/Sort/
-  /// Random only once a list is selected.
+  /// Like/Random only once a list is selected.
   List<FocusNode> get _filterNodes => [
     if (widget.leadingNode != null) widget.leadingNode!,
     if (_connected) _categoryNode,
     if (_connected && _selected != null) _listNode,
     if (_connected && _selected != null) _showNode,
     if (_connected && _selected != null) _sortNode,
+    if (_showLike) _likeNode,
     if (_connected && _selected != null && _showRandom) _randomNode,
   ];
 
@@ -150,6 +172,21 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       return;
     }
     setState(() => _connected = true);
+    // A list handed off from the Search tab: open focused on it instead of the
+    // default My Lists category. It stays available in the Category dropdown
+    // ("Search Result") for the rest of this screen's life.
+    final found = widget.initialList;
+    if (found != null) {
+      setState(() {
+        _foundLists = [found];
+        _foundLiked = found.liked;
+        _category = 'found';
+        _selected = found;
+        _listsLoading = false;
+      });
+      _fetchItems(found);
+      return;
+    }
     await _loadCategory('mine');
   }
 
@@ -161,6 +198,9 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
         ? _topLoaded
         : cat == 'liked'
         ? _likedLoaded
+        : cat == 'found'
+        // The found list is in-memory from the handoff — never fetched here.
+        ? true
         : _myLoaded;
     setState(() {
       // Cancel any in-flight items fetch from the previous category (else its
@@ -238,6 +278,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     _listNode.dispose();
     _showNode.dispose();
     _sortNode.dispose();
+    _likeNode.dispose();
     _randomNode.dispose();
     super.dispose();
   }
@@ -329,6 +370,41 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     play(_visible[_random.nextInt(_visible.length)]);
   }
 
+  /// Toggle ♥ on the found list (the search-handoff path). The heart reflects
+  /// the list's per-user `liked` flag, which the API flips immediately; the
+  /// "Liked Lists" category may lag a little behind (server-side index).
+  Future<void> _toggleLike() async {
+    final list = _foundLists.isNotEmpty ? _foundLists.first : null;
+    if (list == null || _likeBusy) return;
+    final want = !_foundLiked;
+    setState(() => _likeBusy = true);
+    final ok = await MdblistService.instance.setListLiked(list.id, like: want);
+    if (!mounted) return;
+    setState(() {
+      _likeBusy = false;
+      if (ok) _foundLiked = want;
+    });
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            want ? "Couldn't like the list" : "Couldn't unlike the list",
+          ),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      return;
+    }
+    AnalyticsService.trackInBackground('mdblist_list_like', {'liked': want});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          want ? 'Liked "${list.name}" on MDBList' : 'Unliked "${list.name}"',
+        ),
+      ),
+    );
+  }
+
   // ── TV filter-bar focus wiring ──────────────────────────────────────────────
 
   KeyEventResult _handleFilterKeys(FocusNode _, KeyEvent event) {
@@ -396,14 +472,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
           quiet: _quiet,
           activeCount:
               (_sort != _Sort.natural ? 1 : 0) + (_show != 'all' ? 1 : 0),
-          trailing: (_showRandom && _selected != null)
-              ? SeeAllRandomButton(
-                  quiet: _quiet,
-                  enabled: _visible.isNotEmpty,
-                  focusNode: _randomNode,
-                  onPressed: _playRandom,
-                )
-              : null,
+          trailing: _buildTrailing(),
           buildChips: () => [
             if (_connected) ...[
               StremioDropdown<String>(
@@ -412,10 +481,13 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
                 isTelevision: widget.isTelevision,
                 quiet: _quiet,
                 focusNode: _categoryNode,
-                options: const [
-                  StremioDropdownOption('mine', 'My Lists'),
-                  StremioDropdownOption('liked', 'Liked Lists'),
-                  StremioDropdownOption('top', 'Top Lists'),
+                options: [
+                  const StremioDropdownOption('mine', 'My Lists'),
+                  const StremioDropdownOption('liked', 'Liked Lists'),
+                  const StremioDropdownOption('top', 'Top Lists'),
+                  // Only exists while a search-handoff list is held.
+                  if (_foundLists.isNotEmpty)
+                    const StremioDropdownOption('found', 'Search Result'),
                 ],
                 onSelected: _switchCategory,
               ),
@@ -469,6 +541,36 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Trailing filter-bar actions: the ♥ toggle (search-handoff path only) and
+  /// the Random button. Order matches [_filterNodes] so DPAD left/right walks
+  /// them in visual order.
+  Widget? _buildTrailing() {
+    final like = _showLike
+        ? MdblistLikeButton(
+            quiet: _quiet,
+            liked: _foundLiked,
+            busy: _likeBusy,
+            focusNode: _likeNode,
+            onPressed: _toggleLike,
+          )
+        : null;
+    final random = (_showRandom && _selected != null)
+        ? SeeAllRandomButton(
+            quiet: _quiet,
+            enabled: _visible.isNotEmpty,
+            focusNode: _randomNode,
+            onPressed: _playRandom,
+          )
+        : null;
+    if (like == null && random == null) return null;
+    if (like == null) return random;
+    if (random == null) return like;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [like, SizedBox(width: _quiet ? 6 : 8), random],
     );
   }
 
