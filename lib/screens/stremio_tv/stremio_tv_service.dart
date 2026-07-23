@@ -118,10 +118,46 @@ class StremioTvService {
         );
       }
 
+      _disambiguateDuplicateIds(channels, favoriteIds);
       return channels;
     } catch (e) {
       debugPrint('StremioTvService: Error discovering channels: $e');
       return [];
+    }
+  }
+
+  /// The id formula (`{addonId}:{catalogId}:{catalogType}[:{genre}]`) collides
+  /// when the same addon is installed twice with different config — both
+  /// installs share the same manifest `addon.id`. Left alone, two channels end
+  /// up with an identical [StremioTvChannel.id], which downstream code (e.g.
+  /// the dial's focus-node lookup) assumes is unique — causing two unrelated
+  /// channel cards to appear focused together.
+  ///
+  /// First-wins: the first channel to claim an id keeps it untouched (so the
+  /// common single-install case never changes), and every later duplicate is
+  /// disambiguated by appending a hash of its addon's `manifestUrl`, which
+  /// does vary between installs of the "same" addon.
+  ///
+  /// [favoriteIds] is re-consulted for every renamed channel: its `isFavorite`
+  /// was hydrated above against the pre-rename (shared) id, which would
+  /// otherwise either copy the first channel's favorite state onto the
+  /// duplicate, or — since the toggle in the screen persists under the
+  /// already-disambiguated id — make a favorite on the duplicate revert on
+  /// the next launch because that id was never checked.
+  void _disambiguateDuplicateIds(
+    List<StremioTvChannel> channels,
+    Set<String> favoriteIds,
+  ) {
+    final seen = <String>{};
+    for (final channel in channels) {
+      if (seen.add(channel.id)) continue;
+      final suffix = channel.addon.manifestUrl.hashCode.toRadixString(16);
+      var candidate = '${channel.id}:$suffix';
+      while (!seen.add(candidate)) {
+        candidate = '$candidate:$suffix';
+      }
+      channel.id = candidate;
+      channel.isFavorite = favoriteIds.contains(candidate);
     }
   }
 

@@ -8,8 +8,10 @@ import '../stremio_addon.dart';
 /// Catalogs without genre support remain as a single channel.
 class StremioTvChannel {
   /// Deterministic ID: "{addonId}:{catalogId}:{catalogType}" or
-  /// "{addonId}:{catalogId}:{catalogType}:{genre}" for genre-specific channels
-  final String id;
+  /// "{addonId}:{catalogId}:{catalogType}:{genre}" for genre-specific channels.
+  /// Mutable so [StremioTvService.discoverChannels] can disambiguate the rare
+  /// case where two installs of the same addon collide on this formula.
+  String id;
 
   /// Display name: "{addonName}: {catalogName}" or
   /// "{addonName}: {catalogName} - {genre}" for genre-specific channels
