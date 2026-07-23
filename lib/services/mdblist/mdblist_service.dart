@@ -112,6 +112,30 @@ class MdblistService {
     return const [];
   }
 
+  /// Fetches MDBList's top/public lists (raw JSON maps from `GET /lists/top`).
+  /// Each entry is another user's public list (carries `user_name`). Returns
+  /// `[]` when not connected or on any failure.
+  Future<List<Map<String, dynamic>>> fetchTopLists() async {
+    final key = await StorageService.getMdblistApiKey();
+    if (key == null || key.isEmpty) return const [];
+    try {
+      final res = await http
+          .get(Uri.parse('$_base/lists/top?apikey=$key'))
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode != 200) return const [];
+      final decoded = jsonDecode(res.body);
+      if (decoded is List) {
+        return [
+          for (final e in decoded)
+            if (e is Map<String, dynamic>) e,
+        ];
+      }
+    } catch (_) {
+      // Fall through to empty.
+    }
+    return const [];
+  }
+
   /// Fetches a list's items via `GET /lists/{id}/items`. The API returns
   /// `{ "movies": [...], "shows": [...] }`. Returns null on failure so callers
   /// can distinguish an error from a genuinely empty list.

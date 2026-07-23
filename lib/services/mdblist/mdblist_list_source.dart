@@ -10,15 +10,21 @@ class MdblistListChoice {
   final int itemCount;
   final String? mediatype;
 
+  /// The list owner's username (`user_name`), used to label public/top lists
+  /// ("Name · owner"). Null/absent for the user's own lists.
+  final String? ownerName;
+
   const MdblistListChoice({
     required this.id,
     required this.name,
     this.itemCount = 0,
     this.mediatype,
+    this.ownerName,
   });
 
   factory MdblistListChoice.fromJson(Map<String, dynamic> j) {
     final rawName = j['name'] as String?;
+    final owner = (j['user_name'] as String?)?.trim();
     return MdblistListChoice(
       id: (j['id'] as num?)?.toInt() ?? -1,
       name: (rawName == null || rawName.trim().isEmpty)
@@ -26,6 +32,7 @@ class MdblistListChoice {
           : rawName,
       itemCount: (j['items'] as num?)?.toInt() ?? 0,
       mediatype: j['mediatype'] as String?,
+      ownerName: (owner == null || owner.isEmpty) ? null : owner,
     );
   }
 
@@ -51,8 +58,15 @@ class MdblistListSource {
 
   /// The user's own lists, ready to populate the "List" dropdown. Skips lists
   /// without a usable id. Returns [] when MDBList isn't connected or on error.
-  Future<List<MdblistListChoice>> loadUserLists() async {
-    final raw = await MdblistService.instance.fetchUserLists();
+  Future<List<MdblistListChoice>> loadUserLists() async =>
+      _mapChoices(await MdblistService.instance.fetchUserLists());
+
+  /// MDBList's top/public lists (other users' popular lists). Same shape as
+  /// [loadUserLists]; each choice carries its [MdblistListChoice.ownerName].
+  Future<List<MdblistListChoice>> loadTopLists() async =>
+      _mapChoices(await MdblistService.instance.fetchTopLists());
+
+  List<MdblistListChoice> _mapChoices(List<Map<String, dynamic>> raw) {
     final out = <MdblistListChoice>[];
     for (final j in raw) {
       final choice = MdblistListChoice.fromJson(j);

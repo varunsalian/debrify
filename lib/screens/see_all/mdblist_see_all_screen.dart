@@ -22,13 +22,15 @@ enum _Sort { natural, az, za }
 
 /// Full-screen / embedded "See All" for the MDBList source.
 ///
-/// Step 2 scope: browse the user's OWN lists. A single "List" dropdown switches
-/// between them (all shown — no grouping), and each list's movies + shows are
-/// merged into one grid. There is intentionally no movie/show toggle yet
-/// (deferred), and no built-in/public lists (a later step).
+/// A "Category" dropdown switches between the user's OWN lists ('mine') and
+/// MDBList's top/public lists ('top'); a second "List" dropdown then picks a
+/// specific list within that category. Each list's movies + shows are merged
+/// into one grid. Own lists load on entry; top lists load lazily the first time
+/// the user switches to that category, then are cached.
 ///
-/// Mirrors [TraktSeeAllScreen]'s structure but far simpler: no Continue
-/// Watching, no per-item progress, no State filter.
+/// There is intentionally no movie/show toggle (deferred) and no list search
+/// (a later step). Mirrors [TraktSeeAllScreen]'s structure but simpler: no
+/// Continue Watching, no per-item progress, no State filter.
 class MdblistSeeAllScreen extends StatefulWidget {
   final void Function(StremioMeta item) onOpen;
   final void Function(StremioMeta item)? onQuickPlay;
@@ -65,8 +67,15 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   final GlobalKey<SeeAllPosterGridState> _gridKey = GlobalKey();
 
   bool _connected = false;
-  bool _listsLoading = true;
-  List<MdblistListChoice> _lists = const [];
+
+  // Category: 'mine' (the user's own lists) or 'top' (public/top lists). Each
+  // category's lists are fetched once and cached (loaded flags below).
+  String _category = 'mine';
+  List<MdblistListChoice> _myLists = const [];
+  bool _myLoaded = false;
+  List<MdblistListChoice> _topLists = const [];
+  bool _topLoaded = false;
+
   MdblistListChoice? _selected;
 
   List<StremioMeta> _items = const [];
@@ -74,13 +83,15 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   _Sort _sort = _Sort.natural;
 
+  bool _listsLoading = true;
   bool _itemsLoading = false;
   bool _error = false;
 
-  // Guards against a slow fetch landing after the user moved to another list.
+  // Guards against a slow items fetch landing after the user moved on.
   int _fetchToken = 0;
 
   final FocusNode _backNode = FocusNode(debugLabel: 'msa_back');
+  final FocusNode _categoryNode = FocusNode(debugLabel: 'msa_category');
   final FocusNode _listNode = FocusNode(debugLabel: 'msa_list');
   final FocusNode _sortNode = FocusNode(debugLabel: 'msa_sort');
   final FocusNode _randomNode = FocusNode(debugLabel: 'msa_random');
@@ -93,13 +104,17 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   bool get _quiet => widget.embedded && widget.isTelevision;
 
-  /// Filter-bar focus order. The List/Sort/Random controls only exist once a
-  /// list is selected; before that the row is just the leading Source dropdown.
+  List<MdblistListChoice> get _categoryLists =>
+      _category == 'top' ? _topLists : _myLists;
+
+  /// Filter-bar focus order. Category is present whenever connected; List/Sort/
+  /// Random only once a list is selected.
   List<FocusNode> get _filterNodes => [
     if (widget.leadingNode != null) widget.leadingNode!,
-    if (_selected != null) _listNode,
-    if (_selected != null) _sortNode,
-    if (_selected != null && _showRandom) _randomNode,
+    if (_connected) _categoryNode,
+    if (_connected && _selected != null) _listNode,
+    if (_connected && _selected != null) _sortNode,
+    if (_connected && _selected != null && _showRandom) _randomNode,
   ];
 
   @override
@@ -124,23 +139,67 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       });
       return;
     }
-    final lists = await MdblistListSource.instance.loadUserLists();
-    if (!mounted) return;
-    if (lists.isEmpty) {
+    setState(() => _connected = true);
+    await _loadCategory('mine');
+  }
+
+  /// Load [cat]'s lists (fetching once, then cached), then select its first
+  /// list and fetch its items. Safe against rapid category switches: every
+  /// await re-checks that [cat] is still the active category.
+  Future<void> _loadCategory(String cat) async {
+    final alreadyLoaded = cat == 'top' ? _topLoaded : _myLoaded;
+    setState(() {
+      // Cancel any in-flight items fetch from the previous category (else its
+      // result could land under the new category) and clear its loading flag —
+      // otherwise switching into an empty category would strand the skeleton.
+      _fetchToken++;
+      _itemsLoading = false;
+      _listsLoading = !alreadyLoaded;
+      _selected = null;
+      _items = const [];
+      _visible = const [];
+      _error = false;
+    });
+
+    if (!alreadyLoaded) {
+      final lists = cat == 'top'
+          ? await MdblistListSource.instance.loadTopLists()
+          : await MdblistListSource.instance.loadUserLists();
+      if (!mounted || _category != cat) return;
       setState(() {
-        _connected = true;
-        _lists = const [];
+        // Cache only a non-empty result. loadTop/UserLists() return [] on
+        // network failure too (indistinguishable from genuinely empty), so
+        // NOT caching an empty result lets a transient failure retry on the
+        // next switch instead of being stuck on the empty state.
+        if (cat == 'top') {
+          _topLists = lists;
+          _topLoaded = lists.isNotEmpty;
+        } else {
+          _myLists = lists;
+          _myLoaded = lists.isNotEmpty;
+        }
         _listsLoading = false;
       });
+    }
+
+    if (!mounted || _category != cat) return;
+    final lists = _categoryLists;
+    if (lists.isEmpty) {
+      setState(() => _selected = null);
+      if (widget.isTelevision) _categoryNode.requestFocus();
       return;
     }
-    setState(() {
-      _connected = true;
-      _lists = lists;
-      _selected = lists.first;
-      _listsLoading = false;
-    });
+    setState(() => _selected = lists.first);
     _fetchItems(lists.first);
+  }
+
+  void _switchCategory(String cat) {
+    if (cat == _category) return;
+    setState(() {
+      _category = cat;
+      _sort = _Sort.natural;
+    });
+    _loadCategory(cat);
   }
 
   void _focusEntry() {
@@ -155,6 +214,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   @override
   void dispose() {
     _backNode.dispose();
+    _categoryNode.dispose();
     _listNode.dispose();
     _sortNode.dispose();
     _randomNode.dispose();
@@ -276,7 +336,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
               isTelevision: widget.isTelevision,
               backNode: _backNode,
               onFilterDown: () =>
-                  (_selected != null ? _listNode : _backNode).requestFocus(),
+                  (_connected ? _categoryNode : _backNode).requestFocus(),
             ),
             _buildFilterBar(),
             Expanded(child: _buildBody()),
@@ -309,31 +369,51 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
                 )
               : null,
           buildChips: () => [
-            if (_selected != null) ...[
-              StremioDropdown<MdblistListChoice>(
-                label: 'List',
-                value: _selected!,
+            if (_connected) ...[
+              StremioDropdown<String>(
+                label: 'Category',
+                value: _category,
                 isTelevision: widget.isTelevision,
                 quiet: _quiet,
-                focusNode: _listNode,
-                options: [
-                  for (final l in _lists) StremioDropdownOption(l, l.label),
-                ],
-                onSelected: _selectList,
-              ),
-              StremioDropdown<_Sort>(
-                label: 'Sort',
-                value: _sort,
-                isTelevision: widget.isTelevision,
-                quiet: _quiet,
-                focusNode: _sortNode,
+                focusNode: _categoryNode,
                 options: const [
-                  StremioDropdownOption(_Sort.natural, 'Default'),
-                  StremioDropdownOption(_Sort.az, 'A–Z'),
-                  StremioDropdownOption(_Sort.za, 'Z–A'),
+                  StremioDropdownOption('mine', 'My Lists'),
+                  StremioDropdownOption('top', 'Top Lists'),
                 ],
-                onSelected: _setSort,
+                onSelected: _switchCategory,
               ),
+              if (_selected != null) ...[
+                StremioDropdown<MdblistListChoice>(
+                  label: 'List',
+                  value: _selected!,
+                  isTelevision: widget.isTelevision,
+                  quiet: _quiet,
+                  focusNode: _listNode,
+                  options: [
+                    for (final l in _categoryLists)
+                      StremioDropdownOption(
+                        l,
+                        (_category == 'top' && l.ownerName != null)
+                            ? '${l.name} · ${l.ownerName}'
+                            : l.label,
+                      ),
+                  ],
+                  onSelected: _selectList,
+                ),
+                StremioDropdown<_Sort>(
+                  label: 'Sort',
+                  value: _sort,
+                  isTelevision: widget.isTelevision,
+                  quiet: _quiet,
+                  focusNode: _sortNode,
+                  options: const [
+                    StremioDropdownOption(_Sort.natural, 'Default'),
+                    StremioDropdownOption(_Sort.az, 'A–Z'),
+                    StremioDropdownOption(_Sort.za, 'Z–A'),
+                  ],
+                  onSelected: _setSort,
+                ),
+              ],
             ],
           ],
         ),
@@ -400,7 +480,11 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   String _emptyMessage() {
     if (!_connected) return 'Connect MDBList in Settings to browse your lists';
     if (_error) return "Couldn't load \"${_selected?.label ?? ''}\" from MDBList";
-    if (_lists.isEmpty) return 'You have no MDBList lists yet';
+    if (_selected == null) {
+      return _category == 'top'
+          ? 'No top lists available right now'
+          : 'You have no MDBList lists yet';
+    }
     return '"${_selected?.label ?? ''}" is empty';
   }
 }
