@@ -5778,6 +5778,34 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
     }
 
+    // Simkl fallback — only reached when the Trakt resolution above produced
+    // nothing, matching the label's priority order (_resolveResumeInfo:
+    // Trakt → Simkl → local). Same preferTraktResume scope as the Trakt step:
+    // the detail Resume flow honours tracker positions; Home/row quick-play
+    // keeps its local split untouched.
+    if (_isSimklAuthenticated && preferTraktResume && item.type == 'series') {
+      final simkl = await _simklResumeFor(item);
+      if (!mounted) return;
+      if (simkl != null) {
+        _playSelection(
+          AdvancedSearchSelection(
+            imdbId: item.effectiveImdbId ?? item.id,
+            isSeries: true,
+            title: item.name,
+            year: item.year,
+            season: simkl.season,
+            episode: simkl.episode,
+            contentType: item.type,
+            posterUrl: item.poster,
+            traktSource: isTraktSource,
+            simklProgressPercent: simkl.progress,
+            simklSource: true,
+          ),
+        );
+        return;
+      }
+    }
+
     if (item.type != 'series') {
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
@@ -5896,6 +5924,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return (started: true, season: sel.season, episode: sel.episode);
   }
 
+  /// Simkl's resume position for [item] — SERIES ONLY, from the show's most
+  /// recently paused Simkl playback session. Consulted after Trakt returns
+  /// nothing and before local history (episode pick is priority-ordered
+  /// Trakt → Simkl → local). Shared by the detail-button label
+  /// ([_resolveResumeInfo]) and the actual Play ([_onCatalogPlay]) so the two
+  /// never disagree — same lock-step contract as [_traktResumeFor]. Movies
+  /// are excluded for the same reason as Trakt's uncached-movie rule: the
+  /// movie play path resumes from the local byte offset and can't honour a
+  /// tracker percent, so a Simkl-first label would over-promise.
+  Future<({int season, int episode, double? progress})?> _simklResumeFor(
+    StremioMeta item,
+  ) async {
+    if (item.type != 'series') return null;
+    final id = item.effectiveImdbId ?? item.id;
+    // Simkl lookups are IMDb-keyed — a non-IMDb catalog id can't match.
+    if (id.isEmpty || !id.startsWith('tt')) return null;
+    return SimklService.instance.fetchShowPlaybackSelection(id);
+  }
+
   Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
     StremioMeta item,
     StremioAddon addon, {
@@ -5921,6 +5968,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       final resume = await _traktResumeFor(item);
       if (!mounted) return (started: false, season: null, episode: null);
       if (resume != null) return resume;
+    }
+
+    // Simkl fallback — only when Trakt had nothing (priority-ordered pick;
+    // see _simklResumeFor). Same series-only scope, mirrored in
+    // _onCatalogPlay so label and Play stay in lock-step.
+    if (_isSimklAuthenticated && item.type == 'series') {
+      final simkl = await _simklResumeFor(item);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (simkl != null) {
+        return (started: true, season: simkl.season, episode: simkl.episode);
+      }
     }
 
     // Movie: started == a saved playback position exists. No S/E tag.
@@ -6117,6 +6175,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Trakt-row plays scrobble to Trakt instead of saving a duplicate local
     // Continue Watching entry (mirrors Home passing selection.traktSource).
     traktScrobble: sel.traktSource,
+    simklProgressPercent: sel.simklProgressPercent,
+    simklScrobble: sel.simklSource,
   );
 
   /// Catalog auto-best play — the service picks the provider, shows the real

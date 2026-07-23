@@ -249,6 +249,32 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       debugPrint('EpisodesPanel: Trakt episode progress fetch failed: $e');
     }
 
+    // Overlay Simkl state — a third source, same merge rules as Trakt's
+    // (watched wins outright, partials only raise). Skipped entirely when
+    // Simkl isn't connected so disconnected users pay zero extra calls.
+    if (_isSimklAuthenticated) {
+      try {
+        final watched = await _simklService.fetchWatchedShowEpisodes(imdbId);
+        if (!mounted || generation != _episodeModeGeneration) return;
+        final playback =
+            await _simklService.fetchEpisodePlaybackProgress(imdbId);
+        if (!mounted || generation != _episodeModeGeneration) return;
+
+        for (final key in watched) {
+          merged[key] = 100.0;
+        }
+        for (final entry in playback.entries) {
+          final existing = merged[entry.key] ?? 0;
+          if (existing >= 100.0) continue;
+          if (entry.value > 5.0 && entry.value > existing) {
+            merged[entry.key] = entry.value;
+          }
+        }
+      } catch (e) {
+        debugPrint('EpisodesPanel: Simkl episode progress fetch failed: $e');
+      }
+    }
+
     if (mounted && generation == _episodeModeGeneration) {
       setState(() => _episodeWatchProgress = merged);
     }
@@ -340,10 +366,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   /// Handle the episode long-press menu against Simkl — mirrors
-  /// [_onEpisodeMenuAction]. No local watched-state update: Simkl's
-  /// episode-level watched state isn't tracked client-side for this pass (the
-  /// menu always offers both Mark Watched and Mark Unwatched rather than a
-  /// state-aware toggle — see the Simkl integration plan).
+  /// [_onEpisodeMenuAction], including the immediate local tick/bar update on
+  /// a successful watched-state change (a later refresh re-merges the truth
+  /// from all three sources).
   Future<void> _onEpisodeSimklMenuAction(
     TraktEpisode episode,
     SimklEpisodeMenuAction action,
@@ -351,6 +376,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _selectedShow;
     if (show == null) return;
     final showImdbId = show.effectiveImdbId ?? show.id;
+    final key = '${episode.season}-${episode.number}';
     bool success = false;
     String actionLabel = '';
 
@@ -362,6 +388,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           episode.season,
           episode.number,
         );
+        if (success && mounted) {
+          setState(() => _episodeWatchProgress[key] = 100.0);
+        }
       case SimklEpisodeMenuAction.markUnwatched:
         actionLabel = 'Marked as Unwatched on Simkl';
         success = await _simklService.markEpisodeUnwatched(
@@ -369,6 +398,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           episode.season,
           episode.number,
         );
+        if (success && mounted) {
+          setState(() => _episodeWatchProgress.remove(key));
+        }
       case SimklEpisodeMenuAction.rate:
         if (!mounted) return;
         final rating = await showSimklRatingDialog(context);

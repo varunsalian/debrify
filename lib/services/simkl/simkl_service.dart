@@ -62,6 +62,29 @@ class SimklService {
     _libCacheGeneration++;
   }
 
+  // ── Paused-playback-sessions cache ──────────────────────────────────────────
+  // The whole `/sync/playback/episodes` list is account-wide, and a single
+  // detail open reads it 2-3 times (episode progress bars + the resume-label
+  // loader + a Resume press). Cache the raw list briefly AND coalesce
+  // concurrent readers so one detail open costs one fetch. Invalidated on any
+  // scrobble write (which is exactly what changes these sessions), so the
+  // post-playback refresh always re-fetches.
+  List<dynamic>? _playbackCacheData;
+  DateTime? _playbackCacheAt;
+  Future<List<dynamic>?>? _playbackInFlight;
+  // The generation the in-flight fetch was started at — a reader that arrives
+  // after a scrobble write invalidated the cache must NOT join a fetch started
+  // before it (that fetch carries pre-write, stale sessions); it starts fresh.
+  int _playbackInFlightGeneration = -1;
+  int _playbackCacheGeneration = 0;
+  static const Duration _playbackTtl = Duration(seconds: 30);
+
+  void _invalidatePlaybackCache() {
+    _playbackCacheData = null;
+    _playbackCacheAt = null;
+    _playbackCacheGeneration++;
+  }
+
   Future<Map<String, dynamic>?> _cachedLibAllAll() async {
     final at = _libCacheAt;
     if (at != null && DateTime.now().difference(at) < _libTtl) {
@@ -367,15 +390,17 @@ class SimklService {
   // ============================================================================
 
   /// Shared POST scaffold: timeout, status check (200 or 201 — Simkl's
-  /// add-to-list returns 201), JSON decode, catch-and-null.
+  /// add-to-list returns 201), JSON decode, catch-and-null. [body] may be a
+  /// Map or a List (the `/sync/watched` endpoint takes a top-level array).
   Future<dynamic> _postOrNull(
     String path,
-    Map<String, dynamic> body, {
+    Object body, {
     required String token,
     required String label,
+    Map<String, String>? query,
   }) async {
     try {
-      final uri = _apiUri(path);
+      final uri = _apiUri(path, query);
       final response = await http
           .post(
             uri,
@@ -602,5 +627,271 @@ class SimklService {
         },
       ],
     };
+  }
+
+  // ============================================================================
+  // Scrobbling (real-time playback)
+  // ============================================================================
+
+  /// Report playback started/resumed. [progress] is 0-100.
+  Future<bool> scrobbleStart(
+    String imdbId,
+    double progress, {
+    int? season,
+    int? episode,
+  }) {
+    return _scrobble(
+      '/scrobble/start',
+      imdbId,
+      progress,
+      season: season,
+      episode: episode,
+    );
+  }
+
+  /// Report playback paused — Simkl saves the progress as a resumable
+  /// playback session any signed-in device can fetch.
+  Future<bool> scrobblePause(
+    String imdbId,
+    double progress, {
+    int? season,
+    int? episode,
+  }) {
+    return _scrobble(
+      '/scrobble/pause',
+      imdbId,
+      progress,
+      season: season,
+      episode: episode,
+    );
+  }
+
+  /// Finalize the playback session. Simkl decides server-side: ≥80% → mark
+  /// watched, <80% → save as a paused playback.
+  Future<bool> scrobbleStop(
+    String imdbId,
+    double progress, {
+    int? season,
+    int? episode,
+  }) {
+    return _scrobble(
+      '/scrobble/stop',
+      imdbId,
+      progress,
+      season: season,
+      episode: episode,
+    );
+  }
+
+  /// Shared scrobble POST — mirrors TraktService._scrobble's guards: a
+  /// non-positive season/episode is treated as absent, and a request with
+  /// exactly ONE of them is refused (it would corrupt into a movie-shaped
+  /// body carrying a show id).
+  Future<bool> _scrobble(
+    String path,
+    String imdbId,
+    double progress, {
+    int? season,
+    int? episode,
+  }) async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return false;
+    final s = (season != null && season <= 0) ? null : season;
+    final e = (episode != null && episode <= 0) ? null : episode;
+    if ((s == null) != (e == null)) {
+      debugPrint('Simkl: scrobble refused — season/episode mismatch');
+      return false;
+    }
+    final Map<String, dynamic> body = s != null
+        ? {
+            'show': {
+              'ids': {'imdb': imdbId},
+            },
+            'episode': {'season': s, 'number': e},
+            'progress': progress,
+          }
+        : {
+            'movie': {
+              'ids': {'imdb': imdbId},
+            },
+            'progress': progress,
+          };
+    final result = await _postOrNull(
+      path,
+      body,
+      token: token,
+      label: 'scrobble $path',
+    );
+    // Any scrobble write changes the account's paused sessions — drop the
+    // read cache so a later resume/progress read reflects it.
+    if (result != null) _invalidatePlaybackCache();
+    return result != null;
+  }
+
+  // ============================================================================
+  // Playback / watched reads (resume + episode progress bars)
+  // ============================================================================
+
+  /// Raw paused-playback sessions for episodes, or null on failure. Cached for
+  /// [_playbackTtl] and coalesced across concurrent callers, so a detail open's
+  /// several readers share a single fetch.
+  Future<List<dynamic>?> _fetchEpisodePlaybackSessions() async {
+    final at = _playbackCacheAt;
+    if (at != null && DateTime.now().difference(at) < _playbackTtl) {
+      return _playbackCacheData;
+    }
+    // Only join an in-flight fetch started at the current generation — a fetch
+    // that predates a scrobble-write invalidation would hand back stale data.
+    final inFlight = _playbackInFlight;
+    if (inFlight != null &&
+        _playbackInFlightGeneration == _playbackCacheGeneration) {
+      return inFlight;
+    }
+    final future = _loadEpisodePlaybackSessions();
+    _playbackInFlight = future;
+    _playbackInFlightGeneration = _playbackCacheGeneration;
+    try {
+      return await future;
+    } finally {
+      // Don't clear a newer fetch that may have replaced this one mid-flight.
+      if (identical(_playbackInFlight, future)) _playbackInFlight = null;
+    }
+  }
+
+  Future<List<dynamic>?> _loadEpisodePlaybackSessions() async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return null;
+    final generation = _playbackCacheGeneration;
+    final data = await _getOrNull(
+      _apiUri('/sync/playback/episodes'),
+      headers: _apiHeaders(accessToken: token),
+      label: 'playback episodes',
+    );
+    final list = data is List ? data : null;
+    // Only cache an authoritative result that wasn't superseded by a scrobble
+    // write while this fetch was in flight.
+    if (list != null && generation == _playbackCacheGeneration) {
+      _playbackCacheData = list;
+      _playbackCacheAt = DateTime.now();
+    }
+    return list;
+  }
+
+  /// Coerce a decoded JSON value to a num without ever throwing — accepts a
+  /// real number or a numeric string ("1"), else null. Used for every leaf
+  /// numeric field of a playback session so a wrong-typed field degrades to
+  /// "skip this session" instead of a CastError escaping the Play path.
+  static num? _asNum(dynamic v) {
+    if (v is num) return v;
+    if (v is String) return num.tryParse(v);
+    return null;
+  }
+
+  /// The show+episode+progress of one playback session, or null when the
+  /// session is malformed / not for [showImdbId]. Central so both readers
+  /// parse identically and neither can throw.
+  ({int season, int episode, double? progress})? _parseEpisodeSession(
+    dynamic raw,
+    String showImdbId,
+  ) {
+    if (raw is! Map) return null;
+    final show = raw['show'];
+    if (show is! Map) return null;
+    final ids = show['ids'];
+    if (ids is! Map || ids['imdb'] != showImdbId) return null;
+    final ep = raw['episode'];
+    if (ep is! Map) return null;
+    final season = _asNum(ep['season'])?.toInt();
+    final number = _asNum(ep['number'])?.toInt();
+    if (season == null || number == null) return null;
+    return (
+      season: season,
+      episode: number,
+      progress: _asNum(raw['progress'])?.toDouble(),
+    );
+  }
+
+  /// In-progress (paused) episode percents for one show, keyed
+  /// `'$season-$episode'` → 0-100. Empty map on failure — mirrors
+  /// TraktService.fetchEpisodePlaybackProgress's contract. Throw-free: a
+  /// malformed session is skipped, not fatal.
+  Future<Map<String, double>> fetchEpisodePlaybackProgress(
+    String showImdbId,
+  ) async {
+    final sessions = await _fetchEpisodePlaybackSessions();
+    if (sessions == null) return {};
+    final out = <String, double>{};
+    for (final raw in sessions) {
+      final parsed = _parseEpisodeSession(raw, showImdbId);
+      final progress = parsed?.progress;
+      if (parsed == null || progress == null) continue;
+      out['${parsed.season}-${parsed.episode}'] = progress.clamp(0.0, 100.0);
+    }
+    return out;
+  }
+
+  /// The show's most recently paused episode (by `paused_at`) — the resume
+  /// target for the detail page's Play button. Null when the show has no
+  /// well-formed paused session (or on failure). Only well-formed sessions are
+  /// selection candidates, so a malformed newest session never shadows a valid
+  /// older one, and the whole path is throw-free.
+  Future<({int season, int episode, double? progress})?>
+  fetchShowPlaybackSelection(String showImdbId) async {
+    final sessions = await _fetchEpisodePlaybackSessions();
+    if (sessions == null) return null;
+    ({int season, int episode, double? progress})? best;
+    DateTime? bestAt;
+    var haveBest = false;
+    for (final raw in sessions) {
+      final parsed = _parseEpisodeSession(raw, showImdbId);
+      if (parsed == null) continue;
+      final rawAt = (raw as Map)['paused_at'];
+      final at = rawAt is String ? DateTime.tryParse(rawAt) : null;
+      // A session without a parseable timestamp still beats no session.
+      if (!haveBest || (at != null && (bestAt == null || at.isAfter(bestAt)))) {
+        best = parsed;
+        bestAt = at;
+        haveBest = true;
+      }
+    }
+    return best;
+  }
+
+  /// Fully-watched episodes of a show as a `'$season-$episode'` key set, via
+  /// `POST /sync/watched?extended=episodes`. Empty set on failure — mirrors
+  /// TraktService.fetchWatchedShowEpisodes's contract.
+  Future<Set<String>> fetchWatchedShowEpisodes(String showImdbId) async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return {};
+    final result = await _postOrNull(
+      '/sync/watched',
+      [
+        {
+          'ids': {'imdb': showImdbId},
+        },
+      ],
+      token: token,
+      label: 'fetchWatchedShowEpisodes',
+      query: {'extended': 'episodes'},
+    );
+    if (result is! List || result.isEmpty) return {};
+    final item = result.first;
+    if (item is! Map<String, dynamic>) return {};
+    final out = <String>{};
+    final seasons = item['seasons'];
+    if (seasons is! List) return out;
+    for (final s in seasons) {
+      if (s is! Map<String, dynamic>) continue;
+      final seasonNum = (s['number'] as num?)?.toInt();
+      final episodes = s['episodes'];
+      if (seasonNum == null || episodes is! List) continue;
+      for (final e in episodes) {
+        if (e is! Map<String, dynamic>) continue;
+        if (e['watched'] != true) continue;
+        final epNum = (e['number'] as num?)?.toInt();
+        if (epNum != null) out.add('$seasonNum-$epNum');
+      }
+    }
+    return out;
   }
 }

@@ -13,6 +13,10 @@ class AdvancedSearchSelection {
   final double? traktProgressPercent;
   /// Whether this selection originated from Trakt (continue watching, watchlist, etc.)
   final bool traktSource;
+  /// Simkl watch progress (0-100) — parallel to [traktProgressPercent].
+  final double? simklProgressPercent;
+  /// Whether this selection's resume position came from Simkl.
+  final bool simklSource;
 
   /// True only when built by [EpisodesScreen]'s episode "Browse/Sources" tap.
   /// Lets the host return to the episode list (not the catalog grid) when the
@@ -39,6 +43,8 @@ class AdvancedSearchSelection {
     this.posterUrl,
     this.traktProgressPercent,
     this.traktSource = false,
+    this.simklProgressPercent,
+    this.simklSource = false,
     this.fromCatalogEpisodeDrillDown = false,
     this.fromCatalogItemDetail = false,
   });
@@ -61,6 +67,8 @@ class AdvancedSearchSelection {
     posterUrl: posterUrl,
     traktProgressPercent: traktProgressPercent,
     traktSource: traktSource,
+    simklProgressPercent: simklProgressPercent,
+    simklSource: simklSource,
     fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
     fromCatalogItemDetail: fromCatalogItemDetail,
   );
