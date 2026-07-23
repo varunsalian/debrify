@@ -454,6 +454,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (imported && mounted) _refresh();
   }
 
+  Future<void> _importFromMdblist() async {
+    final imported = await StremioTvLocalCatalogsDialog.importFromMdblist(
+      context,
+    );
+    if (imported && mounted) _refresh();
+  }
+
   Future<void> _openStremioTvSettings() async {
     await Navigator.of(
       context,
@@ -2903,6 +2910,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         icon: Icons.movie_filter_rounded,
                                         label: 'From Trakt',
                                         onPressed: _importFromTrakt,
+                                      ),
+                                      _submenuItem(
+                                        icon: Icons.playlist_add_check_circle_outlined,
+                                        label: 'From MDBList',
+                                        onPressed: _importFromMdblist,
                                       ),
                                     ],
                                     child: const Text('Import'),
