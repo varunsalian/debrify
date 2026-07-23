@@ -262,6 +262,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<MdblistListChoice> _listsResults = const [];
   int _listsToken = 0;
   final List<FocusNode> _listsNodes = [];
+  // Debounce for opening a list from the rail — one fast double-press must not
+  // stack two pushed item screens (TV) / double-fire the handoff.
+  DateTime? _lastListOpenAt;
 
   _Mode _mode = _Mode.catalog;
 
@@ -3812,9 +3815,44 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Hand the picked list to the Discover tab, which opens it focused (with
   /// the ♥ like toggle). Mirrors the pendingCatalogDetailOpen handoff.
   void _openListsResult(MdblistListChoice choice) {
+    // Debounce: a fast double OK/tap must not stack two pushed screens (TV) or
+    // double-fire the tab handoff. A route push + Back takes far longer than
+    // this, so re-opening the same card after returning still works.
+    final now = DateTime.now();
+    if (_lastListOpenAt != null &&
+        now.difference(_lastListOpenAt!) < const Duration(milliseconds: 600)) {
+      return;
+    }
+    _lastListOpenAt = now;
     AnalyticsService.trackInBackground('mdblist_list_search_open', {
       'liked': choice.liked,
     });
+    // TV: switching to the Discover tab rebuilds this Search screen fresh on
+    // return (main.dart keys tab content by index), losing the results, scroll,
+    // and focused card. Instead PUSH the list's items over the Search board —
+    // the screen stays mounted underneath, so Back returns to exactly this
+    // state, and we re-focus the tapped rail card so the DPAD cursor lands back
+    // on it (its focus handler scrolls it into view). Mobile/laptop keep the
+    // Discover-tab landing (with its Source switcher).
+    if (widget.isTelevision) {
+      _openMdblistListItems(
+        context,
+        choice,
+        onReturn: () {
+          if (!mounted) return;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            // Re-find by id at return time, so a rail that changed while it was
+            // covered still focuses the card that now holds this list.
+            final i = _listsResults.indexWhere((l) => l.id == choice.id);
+            if (i >= 0 && i < _listsNodes.length) {
+              _listsNodes[i].requestFocus();
+            }
+          });
+        },
+      );
+      return;
+    }
     MainPageBridge.pendingMdblistListOpen = {
       'id': choice.id,
       'name': choice.name,
@@ -6813,8 +6851,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// [MdblistSeeAllScreen]) above [pushCtx]'s route. Reuses the exact item-open
   /// and quick-play handlers the Discover tab wires for MDBList items, so a
   /// title opens / quick-plays identically — just with a Back that returns to
-  /// the lists grid instead of a tab switch.
-  void _openMdblistListItems(BuildContext pushCtx, MdblistListChoice list) {
+  /// whatever was under the route (the lists grid, or the Search board on TV)
+  /// instead of a tab switch. [onReturn] runs after the route pops.
+  void _openMdblistListItems(
+    BuildContext pushCtx,
+    MdblistListChoice list, {
+    VoidCallback? onReturn,
+  }) {
     Navigator.of(pushCtx)
         .push(
           MaterialPageRoute(
@@ -6833,14 +6876,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             ),
           ),
         )
-        .then((_) => _afterSeeAllReturn());
+        .then((_) {
+          _afterSeeAllReturn();
+          onReturn?.call();
+        });
   }
 
   /// The "MDBList Lists" card rail shown atop the results board. Same 2:3 card
   /// footprint as the poster rows; each card is a gradient tile (list glyph +
-  /// centred name + items/likes footer, no artwork) that opens the list in
-  /// Discover on select. DPAD: up → search field, down → first catalog row,
-  /// left off card 0 → sidebar (TV).
+  /// centred name + items/likes footer, no artwork). Select opens the list's
+  /// items — pushed over the board on TV (Back returns here), or in the
+  /// Discover tab on mobile/laptop. DPAD: up → search field, down → first
+  /// catalog row, left off card 0 → sidebar (TV).
   Widget _buildListsRailRow() {
     final posterW = _railPosterW(context);
     final posterH = posterW * 3 / 2;
