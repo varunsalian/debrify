@@ -2567,12 +2567,18 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
 /// Which MDBList lists to browse in the import picker.
 enum _MdblistListCategory {
   mine,
+  liked,
   top;
 
-  String get label => this == _MdblistListCategory.top ? 'Top Lists' : 'My Lists';
+  String get label => switch (this) {
+    _MdblistListCategory.mine => 'My Lists',
+    _MdblistListCategory.liked => 'Liked Lists',
+    _MdblistListCategory.top => 'Top Lists',
+  };
 }
 
-/// Picks an MDBList list (the user's own, or a public/top list) and saves it as
+/// Picks an MDBList list (the user's own, a liked, or a public/top list) and
+/// saves it as
 /// a local catalog — which the service then surfaces as a Stremio TV channel.
 /// Mirrors [_ImportTraktDialog]; items come from [MdblistListSource] already as
 /// [StremioMeta], and `mdblistListId` is stored so the catalog can be refreshed.
@@ -2626,6 +2632,8 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
     try {
       final lists = _category == _MdblistListCategory.top
           ? await MdblistListSource.instance.loadTopLists()
+          : _category == _MdblistListCategory.liked
+          ? await MdblistListSource.instance.loadLikedLists()
           : await MdblistListSource.instance.loadUserLists();
       if (!mounted) return;
       setState(() {
@@ -2829,6 +2837,8 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
                 child: Text(
                   _category == _MdblistListCategory.top
                       ? 'No top lists found.'
+                      : _category == _MdblistListCategory.liked
+                      ? "You haven't liked any lists yet."
                       : 'No lists found. Create some on mdblist.com.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,

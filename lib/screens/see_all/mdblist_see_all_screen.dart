@@ -22,11 +22,12 @@ enum _Sort { natural, az, za }
 
 /// Full-screen / embedded "See All" for the MDBList source.
 ///
-/// A "Category" dropdown switches between the user's OWN lists ('mine') and
-/// MDBList's top/public lists ('top'); a second "List" dropdown then picks a
-/// specific list within that category. Each list's movies + shows are merged
-/// into one grid. Own lists load on entry; top lists load lazily the first time
-/// the user switches to that category, then are cached.
+/// A "Category" dropdown switches between the user's OWN lists ('mine'), the
+/// lists they've LIKED on MDBList ('liked'), and MDBList's top/public lists
+/// ('top'); a second "List" dropdown then picks a specific list within that
+/// category. Each list's movies + shows are merged into one grid. Own lists
+/// load on entry; the other categories load lazily the first time the user
+/// switches to them, then are cached.
 ///
 /// There is intentionally no movie/show toggle (deferred) and no list search
 /// (a later step). Mirrors [TraktSeeAllScreen]'s structure but simpler: no
@@ -68,11 +69,14 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   bool _connected = false;
 
-  // Category: 'mine' (the user's own lists) or 'top' (public/top lists). Each
-  // category's lists are fetched once and cached (loaded flags below).
+  // Category: 'mine' (the user's own lists), 'liked' (lists they liked on
+  // MDBList), or 'top' (public/top lists). Each category's lists are fetched
+  // once and cached (loaded flags below).
   String _category = 'mine';
   List<MdblistListChoice> _myLists = const [];
   bool _myLoaded = false;
+  List<MdblistListChoice> _likedLists = const [];
+  bool _likedLoaded = false;
   List<MdblistListChoice> _topLists = const [];
   bool _topLoaded = false;
 
@@ -106,8 +110,11 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   bool get _quiet => widget.embedded && widget.isTelevision;
 
-  List<MdblistListChoice> get _categoryLists =>
-      _category == 'top' ? _topLists : _myLists;
+  List<MdblistListChoice> get _categoryLists => _category == 'top'
+      ? _topLists
+      : _category == 'liked'
+      ? _likedLists
+      : _myLists;
 
   /// Filter-bar focus order. Category is present whenever connected; List/Sort/
   /// Random only once a list is selected.
@@ -150,7 +157,11 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   /// list and fetch its items. Safe against rapid category switches: every
   /// await re-checks that [cat] is still the active category.
   Future<void> _loadCategory(String cat) async {
-    final alreadyLoaded = cat == 'top' ? _topLoaded : _myLoaded;
+    final alreadyLoaded = cat == 'top'
+        ? _topLoaded
+        : cat == 'liked'
+        ? _likedLoaded
+        : _myLoaded;
     setState(() {
       // Cancel any in-flight items fetch from the previous category (else its
       // result could land under the new category) and clear its loading flag —
@@ -167,16 +178,21 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (!alreadyLoaded) {
       final lists = cat == 'top'
           ? await MdblistListSource.instance.loadTopLists()
+          : cat == 'liked'
+          ? await MdblistListSource.instance.loadLikedLists()
           : await MdblistListSource.instance.loadUserLists();
       if (!mounted || _category != cat) return;
       setState(() {
-        // Cache only a non-empty result. loadTop/UserLists() return [] on
-        // network failure too (indistinguishable from genuinely empty), so
-        // NOT caching an empty result lets a transient failure retry on the
-        // next switch instead of being stuck on the empty state.
+        // Cache only a non-empty result. The loaders return [] on network
+        // failure too (indistinguishable from genuinely empty), so NOT caching
+        // an empty result lets a transient failure retry on the next switch
+        // instead of being stuck on the empty state.
         if (cat == 'top') {
           _topLists = lists;
           _topLoaded = lists.isNotEmpty;
+        } else if (cat == 'liked') {
+          _likedLists = lists;
+          _likedLoaded = lists.isNotEmpty;
         } else {
           _myLists = lists;
           _myLoaded = lists.isNotEmpty;
@@ -398,6 +414,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
                 focusNode: _categoryNode,
                 options: const [
                   StremioDropdownOption('mine', 'My Lists'),
+                  StremioDropdownOption('liked', 'Liked Lists'),
                   StremioDropdownOption('top', 'Top Lists'),
                 ],
                 onSelected: _switchCategory,
@@ -413,7 +430,8 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
                     for (final l in _categoryLists)
                       StremioDropdownOption(
                         l,
-                        (_category == 'top' && l.ownerName != null)
+                        // Liked/top lists belong to other users — show the owner.
+                        (_category != 'mine' && l.ownerName != null)
                             ? '${l.name} · ${l.ownerName}'
                             : l.label,
                       ),
@@ -514,9 +532,9 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (!_connected) return 'Connect MDBList in Settings to browse your lists';
     if (_error) return "Couldn't load \"${_selected?.label ?? ''}\" from MDBList";
     if (_selected == null) {
-      return _category == 'top'
-          ? 'No top lists available right now'
-          : 'You have no MDBList lists yet';
+      if (_category == 'top') return 'No top lists available right now';
+      if (_category == 'liked') return "You haven't liked any lists yet";
+      return 'You have no MDBList lists yet';
     }
     // The list has items but the Show filter hid them all.
     if (_items.isNotEmpty) return 'Nothing matches these filters';
