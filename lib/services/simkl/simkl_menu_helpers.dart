@@ -132,21 +132,34 @@ Future<void> handleSimklMenuAction(
     case SimklItemMenuAction.moveToCompleted:
       actionLabel = 'Marked Completed on Simkl';
       success = await simklService.addToList(imdbId, type, 'completed');
-      // Completing a title means you're done watching it — also clear its paused
-      // playback session so it leaves Continue Watching (a status change alone
-      // doesn't touch playback on Simkl's side). Fold the result in: if the
-      // clear fails the title lingers in the CW row, so don't report a clean
-      // success.
+      // Completed/Dropped titles are NOT hidden by status (a paused session on
+      // them is an active rewatch), so clearing the paused session is what takes
+      // this OFF Continue Watching — fold the result in: a failed clear leaves
+      // it in the row, so don't report a clean success.
       if (success) success = await simklService.deletePlaybackForImdb(imdbId);
     case SimklItemMenuAction.moveToDropped:
       actionLabel = 'Marked Dropped on Simkl';
       success = await simklService.addToList(imdbId, type, 'dropped');
-      // Dropping likewise means stop tracking it — clear the paused session so
-      // it leaves Continue Watching (fold the result in, as above).
+      // As above — the session-clear is what removes it, so fold the result in.
       if (success) success = await simklService.deletePlaybackForImdb(imdbId);
     case SimklItemMenuAction.removeFromContinueWatching:
-      actionLabel = 'Removed from Continue Watching';
-      success = await simklService.deletePlaybackForImdb(imdbId);
+      if (type == 'series') {
+        // A still-"watching" series shows in the paused row (its session) and
+        // would also re-surface as an "up next" card. Move it to On Hold: that
+        // takes it out of BOTH (the paused row is status-filtered, up-next
+        // fetches only 'watching'). Best-effort clear the paused session too
+        // (definitive — drops the resume position; a failure here doesn't leave
+        // it in the row, so it must not flip the action to "failed").
+        actionLabel = 'Removed — moved to On Hold on Simkl';
+        success = await simklService.addToList(imdbId, type, 'hold');
+        if (success) await simklService.deletePlaybackForImdb(imdbId);
+      } else {
+        // Movie: no watching/up-next status to change (a paused movie is
+        // plantowatch/none, which the row still shows), so clearing the paused
+        // session is what removes it — its result IS the success.
+        actionLabel = 'Removed from Continue Watching';
+        success = await simklService.deletePlaybackForImdb(imdbId);
+      }
     case SimklItemMenuAction.rate:
       if (!context.mounted) return;
       final rating = await showSimklRatingDialog(context);

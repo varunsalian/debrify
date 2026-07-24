@@ -5257,15 +5257,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         buildSimklMenuOptions(
           isSeries: item.type == 'series',
           isSimklAuthenticated: _isSimklAuthenticated && imdb != null,
-          // Offer "Remove from Continue Watching" only for a paused MOVIE. It
-          // needs a paused session to delete (so not an "up next" entry, which
-          // has none), AND clearing a still-watching SERIES' pause would just
-          // re-surface it as an up-next card — so the explicit remove wouldn't
-          // actually remove it. For series, Dropped/Completed fully remove.
+          // Offer "Remove from Continue Watching" for a paused entry (movie or
+          // series) — it has a session to delete. Not for "up next" entries
+          // (progress null, no session; they leave via a status change). For a
+          // series the remove also moves it to On Hold so it doesn't re-surface
+          // as an up-next card (see handleSimklMenuAction).
           inContinueWatching:
-              imdb != null &&
-              (_simklByImdb[imdb]?.progress != null) &&
-              (_simklByImdb[imdb]?.isMovie ?? false),
+              imdb != null && (_simklByImdb[imdb]?.progress != null),
           status: status,
         );
     final simklOptions = buildSimklOptions(null);
@@ -5479,15 +5477,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     SimklItemMenuAction action,
   ) async {
     await handleSimklMenuAction(context, item, action);
-    // These actions clear the title's Simkl paused session (explicit remove, or
-    // completing/dropping it — which now also clears playback), so it should
-    // drop off the Simkl Continue Watching rows. Reload them. Skipped on the
-    // dedicated Search tab, which never renders those rows.
+    // Any status change can add/remove a title from the Simkl CW rows: On Hold
+    // and remove/completed/dropped take it OFF, while Watching makes a series
+    // newly eligible as an "up next" card. So reload the rows on every one that
+    // shifts CW membership. Skipped on the dedicated Search tab (no rows there).
     if (mounted &&
         !widget.searchMode &&
         (action == SimklItemMenuAction.removeFromContinueWatching ||
             action == SimklItemMenuAction.moveToCompleted ||
-            action == SimklItemMenuAction.moveToDropped)) {
+            action == SimklItemMenuAction.moveToDropped ||
+            action == SimklItemMenuAction.moveToOnHold ||
+            action == SimklItemMenuAction.moveToWatching)) {
       _loadSimklContinueWatching(refreshBound: false);
     }
   }

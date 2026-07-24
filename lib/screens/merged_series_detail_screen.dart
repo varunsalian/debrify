@@ -1554,8 +1554,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         return 'Mark this dropped on Simkl so it stops showing up as '
             'something you\'re meaning to finish.';
       case SimklItemMenuAction.removeFromContinueWatching:
-        return 'Clear this title\'s paused position on Simkl so it leaves your '
-            'Simkl Continue Watching rows, without changing its watchlist status.';
+        return 'Take this off your Simkl Continue Watching rows. A movie just '
+            'clears its paused position; a series is moved to On Hold so its '
+            'next episode doesn\'t re-surface as an "up next" card.';
       case SimklItemMenuAction.rate:
         return 'Give this a 1–10 rating on Simkl.';
       case SimklItemMenuAction.removeRating:

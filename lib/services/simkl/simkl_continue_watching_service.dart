@@ -100,14 +100,18 @@ class SimklContinueWatchingService {
       // otherwise-valid rows. The up-next fetch is pure augmentation: a null just
       // means no up-next entries this time, never a reason to hide paused ones.
       if (episodeSessions == null || movieSessions == null) return null;
-      final libIndex = _buildLibraryIndex(lib);
-      final paused = _buildShowItems(episodeSessions, libIndex);
+      final lib0 = _buildLibraryIndex(lib);
+      final libIndex = lib0.meta;
+      final statusIndex = lib0.status;
+      // Paused rows exclude parked/finished/dropped titles (up-next already
+      // fetches only 'watching', so it's inherently filtered).
+      final paused = _buildShowItems(episodeSessions, libIndex, statusIndex);
       // Up-next entries for shows NOT already paused (the paused entry is more
       // specific and wins). Merge with the paused shows and re-sort by recency.
       final pausedShowIds = paused.map((i) => i.id).toSet();
       final upNext = _buildUpNextItems(upNextShows, libIndex, pausedShowIds);
       return (
-        movies: _buildMovieItems(movieSessions, libIndex),
+        movies: _buildMovieItems(movieSessions, libIndex, statusIndex),
         shows: _sortedNewestFirst([...paused, ...upNext]),
       );
     } catch (e) {
@@ -135,27 +139,48 @@ class SimklContinueWatchingService {
 
   // ── Parsing ────────────────────────────────────────────────────────────────
 
+  /// Library statuses whose paused session should NOT show in Continue Watching.
+  /// Only 'hold' (explicitly parked) — hiding it by status preserves the resume
+  /// position (vs deleting the session), and up-next already excludes it
+  /// (watching-only). 'completed'/'dropped' are deliberately NOT here: a fresh
+  /// paused session on such a title means an ACTIVE rewatch (Simkl keeps a movie
+  /// 'completed' on rewatch — there's no 'watching' movie status), which must
+  /// still show. Those leave CW via the menu handlers' session-clear instead.
+  static const Set<String> _hiddenStatuses = {'hold'};
+
   /// Index the user's library snapshot by IMDb id → [StremioMeta] (title +
-  /// poster), reusing the same transformer the Discover/See-All views use.
-  Map<String, StremioMeta> _buildLibraryIndex(Map<String, dynamic>? lib) {
-    final index = <String, StremioMeta>{};
-    if (lib == null) return index;
+  /// poster) AND → watchlist status. Meta reuses the same transformer the
+  /// Discover/See-All views use; status drives the "hide parked/finished
+  /// titles" filter below.
+  ({Map<String, StremioMeta> meta, Map<String, String> status})
+  _buildLibraryIndex(Map<String, dynamic>? lib) {
+    final meta = <String, StremioMeta>{};
+    final status = <String, String>{};
+    if (lib == null) return (meta: meta, status: status);
     for (final bucket in const ['movies', 'shows', 'anime']) {
       final list = lib[bucket];
       if (list is! List) continue;
       for (final raw in list) {
         if (raw is! Map<String, dynamic>) continue;
-        final meta = SimklItemTransformer.transformItem(raw);
-        final imdb = meta?.imdbId;
-        if (meta != null && imdb != null) index[imdb] = meta;
+        // Extract imdb straight from the ids so status is captured even if the
+        // transformer drops the item (e.g. imdb-less anime — no meta, but if it
+        // has a tt id here we still want its status).
+        final content = raw['show'] ?? raw['movie'];
+        final imdb = _imdbOf(content is Map ? content['ids'] : null);
+        if (imdb == null) continue;
+        final s = raw['status'];
+        if (s is String) status[imdb] = s;
+        final m = SimklItemTransformer.transformItem(raw);
+        if (m != null) meta[imdb] = m;
       }
     }
-    return index;
+    return (meta: meta, status: status);
   }
 
   List<SimklContinueWatchingItem> _buildMovieItems(
     List<dynamic>? sessions,
     Map<String, StremioMeta> libIndex,
+    Map<String, String> statusIndex,
   ) {
     if (sessions == null) return const [];
     final byImdb = <String, SimklContinueWatchingItem>{};
@@ -165,6 +190,8 @@ class SimklContinueWatchingService {
       if (movie is! Map) continue;
       final imdb = _imdbOf(movie['ids']);
       if (imdb == null) continue;
+      // Parked/finished/dropped in the library ⇒ not "continue watching".
+      if (_hiddenStatuses.contains(statusIndex[imdb])) continue;
       final progress = _visibleProgress(raw['progress']);
       if (progress == null) continue;
       final cand = SimklContinueWatchingItem(
@@ -183,6 +210,7 @@ class SimklContinueWatchingService {
   List<SimklContinueWatchingItem> _buildShowItems(
     List<dynamic>? sessions,
     Map<String, StremioMeta> libIndex,
+    Map<String, String> statusIndex,
   ) {
     if (sessions == null) return const [];
     // One row per show — the most-recently-paused episode of each.
@@ -193,6 +221,8 @@ class SimklContinueWatchingService {
       if (show is! Map) continue;
       final imdb = _imdbOf(show['ids']);
       if (imdb == null) continue;
+      // Parked/finished/dropped in the library ⇒ not "continue watching".
+      if (_hiddenStatuses.contains(statusIndex[imdb])) continue;
       final ep = raw['episode'];
       if (ep is! Map) continue;
       final season = _asInt(ep['season']);
