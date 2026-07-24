@@ -1011,6 +1011,10 @@ class _ExternalPlayerSettingsPageState
     ('da', 'Danish'),
     ('no', 'Norwegian'),
     ('fi', 'Finnish'),
+    ('hr', 'Croatian'),
+    ('sr', 'Serbian'),
+    ('bs', 'Bosnian'),
+    ('mk', 'Macedonian'),
   ];
 
   int get _subtitleLanguageIndex {
