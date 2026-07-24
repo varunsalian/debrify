@@ -872,12 +872,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
     _simklScrobbleEnabled = await SimklService.instance.isAuthenticated();
     if (!mounted) return;
-    // If player started playing before auth resolved, scrobble start now
+    // Pause-centric model: do NOT POST Simkl's /scrobble/start. Unlike Trakt,
+    // it persists NO resumable position AND deletes the existing /sync/playback
+    // entry (verified: returns id:0, wipes the session). We leave the resume
+    // point untouched and let the pause-based heartbeat keep it current.
+    // BUT still stamp the marker 'start' (no POST) — the local action marker
+    // must read "playing" so a later user-pause / exit-stop isn't dedup-
+    // suppressed at _simklScrobble's guard. Mirrors the Trakt block and the TV
+    // launcher's self-healing marker. (Field assignment, NOT _simklScrobble
+    // ('start'), which now routes to a pause POST.)
     if (_simklScrobbleEnabled && _isPlaying && _duration > Duration.zero) {
-      _simklScrobble('start');
-      if (_simklLastScrobbleAction == 'start') {
-        _startSimklHeartbeat();
-      }
+      _simklLastScrobbleAction = 'start';
+      _startSimklHeartbeat();
     }
   }
 
@@ -903,14 +909,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_simklLastScrobbleAction == action) return;
     _simklLastScrobbleAction = action;
     switch (action) {
+      // 'start' shares the pause path (no caller passes it in the pause-centric
+      // model; play stamps the marker directly). Kept defensive and merged so
+      // the two can't silently diverge: NEVER send Simkl's /scrobble/start — it
+      // persists nothing and wipes the resume point, so a 'start' intent maps to
+      // a pause checkpoint.
       case 'start':
-        SimklService.instance.scrobbleStart(
-          imdbId,
-          progress,
-          season: se.season,
-          episode: se.episode,
-        );
-        break;
       case 'pause':
         SimklService.instance.scrobblePause(
           imdbId,
@@ -930,8 +934,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// Periodic Simkl checkpoint every 2 minutes — comfortably above Simkl's
-  /// 20-second per-user rate lock on /scrobble/start.
+  /// Periodic Simkl checkpoint — comfortably above Simkl's 20-second per-user
+  /// scrobble rate lock. Uses /scrobble/pause (NOT /scrobble/start): on Simkl,
+  /// start returns id:0 and persists NO resumable position — only pause/stop
+  /// create the /sync/playback entry that Continue Watching + episode-card
+  /// resume read. So the heartbeat pauses to keep a resume point current every
+  /// interval; a hard kill (SIGINT/power-off, no graceful stop) then still
+  /// resumes from the last checkpoint instead of the episode start.
   void _startSimklHeartbeat() {
     _simklHeartbeatTimer?.cancel();
     _simklHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
@@ -955,16 +964,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _stopSimklHeartbeat();
         return;
       }
-      // Force-send start (bypass dedup) to keep session alive and checkpoint progress
+      // Force-send pause (direct call, bypasses dedup) to checkpoint a RESUMABLE
+      // position. Simkl's /scrobble/start saves nothing (id:0); only pause/stop
+      // persist to /sync/playback, so this must be pause to survive a hard kill.
+      // Leave the marker 'start' (live), NOT 'pause': stamping 'pause' here would
+      // make the user's real pause dedup-suppress at _simklScrobble and strand
+      // the true pause position at this (older) heartbeat %.
       _simklLastScrobbleAction = 'start';
-      SimklService.instance.scrobbleStart(
+      SimklService.instance.scrobblePause(
         imdbId,
         progress,
         season: se.season,
         episode: se.episode,
       );
       debugPrint(
-        'Simkl: Heartbeat scrobble at ${progress.toStringAsFixed(1)}%',
+        'Simkl: Heartbeat pause checkpoint at ${progress.toStringAsFixed(1)}%',
       );
     });
   }
@@ -1002,8 +1016,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       _stopSimklHeartbeat();
     } else if (progress <= 80 && _simklLastScrobbleAction == 'stop') {
-      _simklLastScrobbleAction = 'start';
-      SimklService.instance.scrobbleStart(
+      // Seeked back under 80% after a finalize — re-establish a RESUMABLE
+      // session via pause (start would wipe it and persist nothing) and resume
+      // the heartbeat.
+      _simklLastScrobbleAction = 'pause';
+      SimklService.instance.scrobblePause(
         imdbId,
         progress,
         season: se.season,
@@ -1361,12 +1378,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _traktScrobble('pause');
         _stopTraktHeartbeat();
       }
-      // Simkl scrobble on play/pause — parallel to the Trakt block above
-      if (p && _duration > Duration.zero) {
-        _simklScrobble('start');
-        if (_simklLastScrobbleAction == 'start') {
-          _startSimklHeartbeat();
-        }
+      // Simkl scrobble on play/pause — parallel to the Trakt block above, but
+      // pause-centric: NO 'start' POST on play (it wipes the Simkl resume
+      // point; see _initSimklScrobble). We DO stamp the marker 'start' (no POST)
+      // so it reads "playing" — otherwise a leftover 'pause'/'stop' marker (from
+      // the heartbeat or an episode-switch stop) would dedup-suppress this
+      // episode's user-pause and exit-stop. Then run the pause-based heartbeat.
+      // Gated on _simklScrobbleEnabled (the old _simklScrobble('start') call did
+      // this implicitly) so a non-Simkl session doesn't leak an idle heartbeat.
+      if (_simklScrobbleEnabled && p && _duration > Duration.zero) {
+        _simklLastScrobbleAction = 'start';
+        _startSimklHeartbeat();
       } else if (!p &&
           wasPlaying &&
           !_isTransitioning &&

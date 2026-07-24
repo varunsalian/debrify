@@ -2410,13 +2410,13 @@ class VideoPlayerLauncher {
               episode: episode,
             );
           } else {
+            // Pause-centric: do NOT scrobble 'start' to Simkl — it persists
+            // nothing (id:0) AND wipes the existing /sync/playback resume point.
+            // Leave the resume point intact; the pause-based heartbeat below
+            // checkpoints it. 'start' is kept only as an in-play state marker
+            // (no POST sent) so this isPlaying branch doesn't re-enter on every
+            // progress tick.
             _simklLastScrobbleAction = 'start';
-            SimklService.instance.scrobbleStart(
-              imdbId,
-              simklProgress,
-              season: season,
-              episode: episode,
-            );
             // 2-minute checkpoint — comfortably above Simkl's 20s rate lock
             _simklHeartbeatTimer?.cancel();
             _simklHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (
@@ -2438,15 +2438,25 @@ class VideoPlayerLauncher {
                 _simklHeartbeatTimer = null;
                 return;
               }
+              // Checkpoint a RESUMABLE position via pause. Simkl's /scrobble/start
+              // saves nothing (returns id:0) AND wipes any existing /sync/playback
+              // entry, so start-based heartbeats never survived a hard kill. Pause
+              // is the only call that persists a resume point.
+              // Keep _simklLastScrobbleAction as 'start' (do NOT set 'pause'): the
+              // native player re-runs this scrobble block on every progress event,
+              // and a 'pause' value would re-enter the isPlaying start-branch above
+              // on the next tick, re-sending start and wiping the position we just
+              // saved. 'start' keeps that branch inert while pause refreshes the
+              // resume point each interval.
               _simklLastScrobbleAction = 'start';
-              SimklService.instance.scrobbleStart(
+              SimklService.instance.scrobblePause(
                 payload.imdbId!,
                 _simklLastKnownProgress,
                 season: _simklLastKnownSeason,
                 episode: _simklLastKnownEpisode,
               );
               debugPrint(
-                'Simkl: Heartbeat scrobble at ${_simklLastKnownProgress.toStringAsFixed(1)}%',
+                'Simkl: Heartbeat pause checkpoint at ${_simklLastKnownProgress.toStringAsFixed(1)}%',
               );
             });
           }
