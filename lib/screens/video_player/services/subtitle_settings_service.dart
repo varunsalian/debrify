@@ -152,6 +152,10 @@ class SubtitleSettingsService {
   static const String _keyBgIndex = 'subtitle_bg_index';
   static const String _keyOutlineColorIndex = 'subtitle_outline_color_index';
   static const String _keyElevationIndex = 'subtitle_elevation_index';
+  static const String _keyBold = 'subtitle_bold';
+
+  /// Default: bold off (normal weight). Matches Android's DEFAULT_BOLD.
+  static const bool defaultBold = false;
 
   static const int syncOffsetMinMs = -3600000;
   static const int syncOffsetMaxMs = 3600000;
@@ -211,6 +215,11 @@ class SubtitleSettingsService {
         SubtitleElevation.defaultIndex;
   }
 
+  Future<bool> getBold() async {
+    await _ensurePrefs();
+    return _prefs!.getBool(_keyBold) ?? defaultBold;
+  }
+
   // Setters
   Future<void> setSizeIndex(int index) async {
     await _ensurePrefs();
@@ -246,6 +255,11 @@ class SubtitleSettingsService {
     await _ensurePrefs();
     await _prefs!.setInt(_keyElevationIndex,
         index.clamp(0, SubtitleElevation.options.length - 1));
+  }
+
+  Future<void> setBold(bool value) async {
+    await _ensurePrefs();
+    await _prefs!.setBool(_keyBold, value);
   }
 
   Future<int> getSyncOffsetMs() async {
@@ -312,6 +326,7 @@ class SubtitleSettingsService {
           SubtitleOutlineColor.defaultIndex,
       elevationIndex: _prefs!.getInt(_keyElevationIndex) ??
           SubtitleElevation.defaultIndex,
+      bold: _prefs!.getBool(_keyBold) ?? defaultBold,
       syncOffsetMs: _syncOffsetMs,
       fontIndex: fontIndex,
       fontFamily: fontFamily,
@@ -329,6 +344,7 @@ class SubtitleSettingsService {
     await _prefs!.setInt(
         _keyOutlineColorIndex, SubtitleOutlineColor.defaultIndex);
     await _prefs!.setInt(_keyElevationIndex, SubtitleElevation.defaultIndex);
+    await _prefs!.setBool(_keyBold, defaultBold);
     // Sync offset is in-memory and per-subtitle, not a persisted style.
     resetSyncOffset();
     await SubtitleFontService.instance.resetToDefault();
@@ -343,6 +359,7 @@ class SubtitleSettingsService {
         data.bgIndex == SubtitleBackground.defaultIndex &&
         data.outlineColorIndex == SubtitleOutlineColor.defaultIndex &&
         data.elevationIndex == SubtitleElevation.defaultIndex &&
+        data.bold == defaultBold &&
         data.fontIndex == SubtitleFont.defaultIndex &&
         data.syncOffsetMs == 0;
   }
@@ -356,6 +373,7 @@ class SubtitleSettingsData {
   final int bgIndex;
   final int outlineColorIndex;
   final int elevationIndex;
+  final bool bold;
   final int fontIndex;
   final String? fontFamily;
   final String fontLabel;
@@ -368,6 +386,7 @@ class SubtitleSettingsData {
     required this.bgIndex,
     this.outlineColorIndex = 0,
     this.elevationIndex = 0,
+    this.bold = false,
     this.fontIndex = 0,
     this.fontFamily,
     this.fontLabel = 'Default',
@@ -433,7 +452,7 @@ class SubtitleSettingsData {
     return TextStyle(
       fontSize: size.sizePx,
       color: color.color,
-      fontWeight: FontWeight.w600,
+      fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
       shadows: resolvedShadows,
       backgroundColor: background.color,
       fontFamily: fontFamily,
@@ -447,6 +466,7 @@ class SubtitleSettingsData {
     int? bgIndex,
     int? outlineColorIndex,
     int? elevationIndex,
+    bool? bold,
     int? fontIndex,
     String? fontFamily,
     String? fontLabel,
@@ -459,6 +479,7 @@ class SubtitleSettingsData {
       bgIndex: bgIndex ?? this.bgIndex,
       outlineColorIndex: outlineColorIndex ?? this.outlineColorIndex,
       elevationIndex: elevationIndex ?? this.elevationIndex,
+      bold: bold ?? this.bold,
       fontIndex: fontIndex ?? this.fontIndex,
       fontFamily: fontFamily ?? this.fontFamily,
       fontLabel: fontLabel ?? this.fontLabel,

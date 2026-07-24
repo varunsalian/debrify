@@ -20,6 +20,7 @@ object SubtitleSettings {
     private const val KEY_BG_INDEX = "subtitle_bg_index"
     private const val KEY_OUTLINE_COLOR_INDEX = "subtitle_outline_color_index"
     private const val KEY_ELEVATION_INDEX = "subtitle_elevation_index"
+    private const val KEY_BOLD = "subtitle_bold"
     private const val KEY_DEFAULT_SUBTITLE_LANGUAGE = "flutter.player_default_subtitle_language"
     private const val KEY_DEFAULT_AUDIO_LANGUAGE = "flutter.player_default_audio_language"
 
@@ -30,6 +31,7 @@ object SubtitleSettings {
     const val DEFAULT_BG_INDEX = 0        // None
     const val DEFAULT_OUTLINE_COLOR_INDEX = 0  // Auto
     const val DEFAULT_ELEVATION_INDEX = 0      // Bottom
+    const val DEFAULT_BOLD = false             // normal weight
     const val SYNC_OFFSET_MIN_MS = -3_600_000L
     const val SYNC_OFFSET_MAX_MS =  3_600_000L
     const val SYNC_OFFSET_STEP_MS =    100L
@@ -161,6 +163,11 @@ object SubtitleSettings {
         return getPrefs(context).getInt(KEY_ELEVATION_INDEX, DEFAULT_ELEVATION_INDEX)
     }
 
+    @JvmStatic
+    fun getBold(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_BOLD, DEFAULT_BOLD)
+    }
+
     // Setters
     @JvmStatic
     fun setSizeIndex(context: Context, index: Int) {
@@ -190,6 +197,11 @@ object SubtitleSettings {
     @JvmStatic
     fun setElevationIndex(context: Context, index: Int) {
         getPrefs(context).edit().putInt(KEY_ELEVATION_INDEX, index.coerceIn(0, ELEVATION_OPTIONS.size - 1)).apply()
+    }
+
+    @JvmStatic
+    fun setBold(context: Context, value: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_BOLD, value).apply()
     }
 
     // Get current values
@@ -408,6 +420,7 @@ object SubtitleSettings {
             .putInt(KEY_BG_INDEX, DEFAULT_BG_INDEX)
             .putInt(KEY_OUTLINE_COLOR_INDEX, DEFAULT_OUTLINE_COLOR_INDEX)
             .putInt(KEY_ELEVATION_INDEX, DEFAULT_ELEVATION_INDEX)
+            .putBoolean(KEY_BOLD, DEFAULT_BOLD)
             .apply()
         // The sync offset is in-memory and per-subtitle, not a persisted style.
         resetSyncOffset()
@@ -424,6 +437,7 @@ object SubtitleSettings {
                 getBgIndex(context) == DEFAULT_BG_INDEX &&
                 getOutlineColorIndex(context) == DEFAULT_OUTLINE_COLOR_INDEX &&
                 getElevationIndex(context) == DEFAULT_ELEVATION_INDEX &&
+                getBold(context) == DEFAULT_BOLD &&
                 getSyncOffsetMs(context) == 0L
     }
 
@@ -449,8 +463,8 @@ object SubtitleSettings {
             outlineColorOption.color ?: Color.BLACK
         }
 
-        // Get typeface from font manager
-        val typeface = SubtitleFontManager.getTypeface(context)
+        // Get typeface from font manager, with the Bold toggle applied
+        val typeface = getEffectiveTypeface(context)
 
         return CaptionStyleCompat(
             colorOption.color,       // foreground (text color)
@@ -460,6 +474,17 @@ object SubtitleSettings {
             edgeColor,               // edge color
             typeface                 // custom or default typeface
         )
+    }
+
+    /**
+     * The current font typeface with the Bold toggle applied. Falls back to
+     * synthesized (faux) bold for regular-only fonts, matching the Flutter player.
+     * Use this everywhere a subtitle typeface is needed (overlay + previews).
+     */
+    @JvmStatic
+    fun getEffectiveTypeface(context: Context): Typeface {
+        val base = SubtitleFontManager.getTypeface(context)
+        return if (getBold(context)) Typeface.create(base, Typeface.BOLD) else base
     }
 
     /**

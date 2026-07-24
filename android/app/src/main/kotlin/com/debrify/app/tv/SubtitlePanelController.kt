@@ -433,7 +433,7 @@ class SubtitlePanelController(
         val size = SubtitleSettings.getCurrentSize(activity)
         val bg = SubtitleSettings.getCurrentBg(activity)
         val outline = SubtitleSettings.getCurrentOutlineColor(activity)
-        val typeface = SubtitleFontManager.getTypeface(activity)
+        val typeface = SubtitleSettings.getEffectiveTypeface(activity)
 
         val edgeColor = if (outline.isAuto || outline.color == null) Color.BLACK else outline.color!!
 
@@ -551,6 +551,14 @@ class SubtitlePanelController(
             override fun getOptionLabel(i: Int) = SubtitleFontManager.FONT_OPTIONS[i].label
             override fun getCurrentIndex() = SubtitleFontManager.getFontIndex(activity)
             override fun onSelect(i: Int) { SubtitleFontManager.setFontIndex(activity, i) }
+        },
+        object : Category {
+            override val name = "Bold"
+            override fun getCurrentLabel() = if (SubtitleSettings.getBold(activity)) "On" else "Off"
+            override fun getOptionCount() = 2
+            override fun getOptionLabel(i: Int) = if (i == 1) "On" else "Off"
+            override fun getCurrentIndex() = if (SubtitleSettings.getBold(activity)) 1 else 0
+            override fun onSelect(i: Int) { SubtitleSettings.setBold(activity, i == 1) }
         },
         object : Category {
             override val name = "Sync"
