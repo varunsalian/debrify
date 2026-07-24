@@ -3994,6 +3994,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// rail (it renders only when [_listsResults] is non-empty). Does NOT steal
   /// focus — the catalog search drives where the remote lands.
   Future<void> _runListsSearch(String query) async {
+    // MDBList is hidden for the alpha — never populate the lists rail, even for
+    // an already-connected device. See [kMdblistEnabled].
+    if (!kMdblistEnabled) return;
     final q = query.trim();
     final token = ++_listsToken;
     _listsQuery = q;
@@ -8708,10 +8711,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         const StremioDropdownOption(_discCw, 'Continue Watching'),
         const StremioDropdownOption(_discTrakt, 'Trakt'),
         const StremioDropdownOption(_discSimkl, 'Simkl'),
-        // Only offer MDBList once connected — an unauthed user shouldn't see a
-        // dead source. Kept if it's somehow already the active source so the
+        // MDBList is hidden for the alpha (kMdblistEnabled) AND only when
+        // connected — kept if it's somehow already the active source so the
         // dropdown's value always has a matching option.
-        if (_isMdblistAuthenticated || _discSource == _discMdblist)
+        if (kMdblistEnabled &&
+            (_isMdblistAuthenticated || _discSource == _discMdblist))
           const StremioDropdownOption(_discMdblist, 'MDBList'),
         for (final a in _discAddons)
           StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),

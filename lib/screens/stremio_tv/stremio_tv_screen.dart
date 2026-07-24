@@ -2921,9 +2921,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         label: 'From Trakt',
                                         onPressed: _importFromTrakt,
                                       ),
-                                      // Only when MDBList is connected — no dead
-                                      // import for unauthed users.
-                                      if (_mdblistConnected)
+                                      // Hidden for the alpha (kMdblistEnabled)
+                                      // and only when connected — no dead import.
+                                      if (kMdblistEnabled && _mdblistConnected)
                                         _submenuItem(
                                           icon: Icons
                                               .playlist_add_check_circle_outlined,
