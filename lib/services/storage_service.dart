@@ -670,6 +670,52 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_mdblistApiKeyKey);
     await prefs.remove(_mdblistUsernameKey);
+    await prefs.remove(_mdblistSavedClonesKey);
+  }
+
+  // Maps a source MDBList list id -> the id of the static list we CLONED it
+  // into on the user's account (the "Save" action). Lets the Save button know a
+  // list is already saved and which clone to delete on un-save. JSON object of
+  // {"<sourceId>": clonedId}.
+  static const String _mdblistSavedClonesKey = 'mdblist_saved_clones';
+
+  static Future<Map<int, int>> getMdblistSavedClones() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_mdblistSavedClonesKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final out = <int, int>{};
+      decoded.forEach((k, v) {
+        final sid = int.tryParse(k.toString());
+        final cid = v is int ? v : (v is num ? v.toInt() : null);
+        if (sid != null && cid != null) out[sid] = cid;
+      });
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> setMdblistSavedClone(int sourceId, int clonedId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final map = await getMdblistSavedClones();
+    map[sourceId] = clonedId;
+    await prefs.setString(
+      _mdblistSavedClonesKey,
+      jsonEncode(map.map((k, v) => MapEntry(k.toString(), v))),
+    );
+  }
+
+  static Future<void> removeMdblistSavedClone(int sourceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final map = await getMdblistSavedClones();
+    map.remove(sourceId);
+    await prefs.setString(
+      _mdblistSavedClonesKey,
+      jsonEncode(map.map((k, v) => MapEntry(k.toString(), v))),
+    );
   }
 
   static Future<bool> getAllDebridIntegrationEnabled() async {

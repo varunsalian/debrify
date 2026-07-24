@@ -7,7 +7,8 @@ import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_service.dart';
-import '../../widgets/see_all/mdblist_like_button.dart';
+import '../../services/storage_service.dart';
+import '../../widgets/see_all/mdblist_save_button.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
@@ -90,10 +91,13 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   bool _topLoaded = false;
   List<MdblistListChoice> _foundLists = const [];
 
-  // ♥ state for the found list (the heart only shows on that path). Kept
-  // as local state because MdblistListChoice is immutable.
-  bool _foundLiked = false;
-  bool _likeBusy = false;
+  // "Save" state for the found list (the button only shows on that path). A
+  // save CLONES the list into "My Lists"; [_savedCloneId] is the id of that
+  // clone (null when not saved) so un-save can delete it. Kept as local state
+  // because MdblistListChoice is immutable.
+  bool _foundSaved = false;
+  bool _saveBusy = false;
+  int? _savedCloneId;
 
   MdblistListChoice? _selected;
 
@@ -115,7 +119,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   final FocusNode _listNode = FocusNode(debugLabel: 'msa_list');
   final FocusNode _showNode = FocusNode(debugLabel: 'msa_show');
   final FocusNode _sortNode = FocusNode(debugLabel: 'msa_sort');
-  final FocusNode _likeNode = FocusNode(debugLabel: 'msa_like');
+  final FocusNode _saveNode = FocusNode(debugLabel: 'msa_save');
   final FocusNode _randomNode = FocusNode(debugLabel: 'msa_random');
 
   final Random _random = Random();
@@ -134,8 +138,8 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       ? _foundLists
       : _myLists;
 
-  /// The ♥ toggle only exists on the search-handoff path (the found list).
-  bool get _showLike => _category == 'found' && _selected != null;
+  /// The Save toggle only exists on the search-handoff path (the found list).
+  bool get _showSave => _category == 'found' && _selected != null;
 
   /// Filter-bar focus order. Category is present whenever connected; List/Sort/
   /// Like/Random only once a list is selected.
@@ -145,7 +149,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (_connected && _selected != null) _listNode,
     if (_connected && _selected != null) _showNode,
     if (_connected && _selected != null) _sortNode,
-    if (_showLike) _likeNode,
+    if (_showSave) _saveNode,
     if (_connected && _selected != null && _showRandom) _randomNode,
   ];
 
@@ -179,11 +183,11 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (found != null) {
       setState(() {
         _foundLists = [found];
-        _foundLiked = found.liked;
         _category = 'found';
         _selected = found;
         _listsLoading = false;
       });
+      _loadSavedState(found);
       _fetchItems(found);
       return;
     }
@@ -278,7 +282,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     _listNode.dispose();
     _showNode.dispose();
     _sortNode.dispose();
-    _likeNode.dispose();
+    _saveNode.dispose();
     _randomNode.dispose();
     super.dispose();
   }
@@ -370,37 +374,89 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     play(_visible[_random.nextInt(_visible.length)]);
   }
 
-  /// Toggle ♥ on the found list (the search-handoff path). The heart reflects
-  /// the list's per-user `liked` flag, which the API flips immediately; the
-  /// "Liked Lists" category may lag a little behind (server-side index).
-  Future<void> _toggleLike() async {
-    final list = _foundLists.isNotEmpty ? _foundLists.first : null;
-    if (list == null || _likeBusy) return;
-    final want = !_foundLiked;
-    setState(() => _likeBusy = true);
-    final ok = await MdblistService.instance.setListLiked(list.id, like: want);
+  /// Load whether the found list is already saved (a clone exists), from the
+  /// local source-id -> clone-id map.
+  Future<void> _loadSavedState(MdblistListChoice found) async {
+    final clones = await StorageService.getMdblistSavedClones();
     if (!mounted) return;
+    final id = clones[found.id];
     setState(() {
-      _likeBusy = false;
-      if (ok) _foundLiked = want;
+      _savedCloneId = id;
+      _foundSaved = id != null;
     });
-    if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            want ? "Couldn't like the list" : "Couldn't unlike the list",
-          ),
-          backgroundColor: Colors.red.shade700,
-        ),
-      );
+  }
+
+  /// Toggle "Save" on the found list. MDBList has no link/like-into-account API,
+  /// so saving CLONES the list into the user's "My Lists" (create a static list
+  /// + copy items); un-saving deletes that clone. The clone is a snapshot — it
+  /// won't auto-update if the source list changes.
+  Future<void> _toggleSave() async {
+    final list = _foundLists.isNotEmpty ? _foundLists.first : null;
+    if (list == null || _saveBusy) return;
+    final wasSaved = _foundSaved;
+    setState(() => _saveBusy = true);
+
+    if (wasSaved) {
+      final cloneId = _savedCloneId;
+      final ok = cloneId == null
+          ? false
+          : await MdblistService.instance.deleteList(cloneId);
+      // Clear the local record BEFORE the mounted check — the delete already
+      // committed server-side (or the list was already gone), so the map must
+      // not keep pointing at a dead clone even if we navigated away.
+      if (ok) {
+        await StorageService.removeMdblistSavedClone(list.id);
+      }
+      if (!mounted) return;
+      setState(() {
+        _saveBusy = false;
+        if (ok) {
+          _foundSaved = false;
+          _savedCloneId = null;
+          _myLoaded = false; // My Lists changed — refetch on next visit
+        }
+      });
+      _snackSave(ok, saved: false, name: list.name);
       return;
     }
-    AnalyticsService.trackInBackground('mdblist_list_like', {'liked': want});
+
+    final newId = await MdblistService.instance.saveListAsClone(
+      sourceListId: list.id,
+      name: list.name,
+    );
+    // Persist the map BEFORE the mounted check: the clone is already on the
+    // server, so record it even if we navigated away during the (possibly long)
+    // copy — otherwise it's an untracked orphan that a re-save would duplicate.
+    if (newId != null) {
+      await StorageService.setMdblistSavedClone(list.id, newId);
+    }
+    if (!mounted) return;
+    setState(() {
+      _saveBusy = false;
+      if (newId != null) {
+        _foundSaved = true;
+        _savedCloneId = newId;
+        _myLoaded = false; // My Lists gained a list — refetch on next visit
+      }
+    });
+    if (newId != null) {
+      AnalyticsService.trackInBackground('mdblist_list_save', const {});
+    }
+    _snackSave(newId != null, saved: true, name: list.name);
+  }
+
+  void _snackSave(bool ok, {required bool saved, required String name}) {
+    if (!mounted) return;
+    final String msg;
+    if (!ok) {
+      msg = saved ? "Couldn't save the list" : "Couldn't remove the list";
+    } else {
+      msg = saved ? 'Saved "$name" to My Lists' : 'Removed "$name" from My Lists';
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          want ? 'Liked "${list.name}" on MDBList' : 'Unliked "${list.name}"',
-        ),
+        content: Text(msg),
+        backgroundColor: ok ? null : Colors.red.shade700,
       ),
     );
   }
@@ -544,17 +600,17 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     );
   }
 
-  /// Trailing filter-bar actions: the ♥ toggle (search-handoff path only) and
-  /// the Random button. Order matches [_filterNodes] so DPAD left/right walks
-  /// them in visual order.
+  /// Trailing filter-bar actions: the Save toggle (search-handoff path only)
+  /// and the Random button. Order matches [_filterNodes] so DPAD left/right
+  /// walks them in visual order.
   Widget? _buildTrailing() {
-    final like = _showLike
-        ? MdblistLikeButton(
+    final like = _showSave
+        ? MdblistSaveButton(
             quiet: _quiet,
-            liked: _foundLiked,
-            busy: _likeBusy,
-            focusNode: _likeNode,
-            onPressed: _toggleLike,
+            saved: _foundSaved,
+            busy: _saveBusy,
+            focusNode: _saveNode,
+            onPressed: _toggleSave,
           )
         : null;
     final random = (_showRandom && _selected != null)

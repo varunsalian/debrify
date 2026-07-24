@@ -4,24 +4,27 @@ import 'package:flutter/services.dart';
 import '../../utils/tv_keys.dart';
 import 'see_all_theme.dart';
 
-/// The Discover filter bar's "♥ Like" action for an MDBList list opened from
-/// search. Toggles the list's liked state on the user's MDBList account.
+/// The Discover filter bar's "Save" action for an MDBList list opened from
+/// search. Saves the list into the user's own MDBList "My Lists" by CLONING it
+/// (create a static list + copy its items) — MDBList has no API to link/like a
+/// list, so a clone is the only way to make it appear in the user's lists.
+///
 /// Styled to sit beside [SeeAllRandomButton] — a boxed glass pill normally, a
 /// bare quiet segment on the Discover TV stage — with the same constant-size
 /// focus decoration so DPAD moves never reflow the row.
 ///
-/// [busy] swaps the heart for a spinner while the toggle request is in flight
-/// (presses are ignored).
-class MdblistLikeButton extends StatefulWidget {
+/// [busy] swaps the icon for a spinner while the save/remove request is in
+/// flight (presses are ignored). [saved] is true once a clone exists.
+class MdblistSaveButton extends StatefulWidget {
   final bool quiet;
-  final bool liked;
+  final bool saved;
   final bool busy;
   final FocusNode? focusNode;
   final VoidCallback onPressed;
 
-  const MdblistLikeButton({
+  const MdblistSaveButton({
     super.key,
-    required this.liked,
+    required this.saved,
     required this.onPressed,
     this.quiet = false,
     this.busy = false,
@@ -29,10 +32,10 @@ class MdblistLikeButton extends StatefulWidget {
   });
 
   @override
-  State<MdblistLikeButton> createState() => _MdblistLikeButtonState();
+  State<MdblistSaveButton> createState() => _MdblistSaveButtonState();
 }
 
-class _MdblistLikeButtonState extends State<MdblistLikeButton> {
+class _MdblistSaveButtonState extends State<MdblistSaveButton> {
   bool _focused = false;
   bool _hovered = false;
 
@@ -52,7 +55,9 @@ class _MdblistLikeButtonState extends State<MdblistLikeButton> {
       );
     }
     return Icon(
-      widget.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+      widget.saved
+          ? Icons.bookmark_added_rounded
+          : Icons.bookmark_add_outlined,
       size: size,
       color: color,
     );
@@ -96,9 +101,8 @@ class _MdblistLikeButtonState extends State<MdblistLikeButton> {
     );
   }
 
-  /// A liked heart reads red in both variants; unliked follows the accent.
-  Color get _heartColor =>
-      widget.liked ? const Color(0xFFE0245E) : kSeeAllAccent2;
+  /// A saved bookmark reads in the accent; unsaved follows the same accent.
+  Color get _iconColor => kSeeAllAccent2;
 
   /// Boxed pill matching StremioDropdown's non-quiet chip.
   Widget _buildBoxed(bool active) {
@@ -117,10 +121,10 @@ class _MdblistLikeButtonState extends State<MdblistLikeButton> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _leadingIcon(16, _heartColor),
+          _leadingIcon(16, _iconColor),
           const SizedBox(width: 8),
           Text(
-            widget.liked ? 'Liked' : 'Like',
+            widget.saved ? 'Saved' : 'Save',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 13,
@@ -148,7 +152,7 @@ class _MdblistLikeButtonState extends State<MdblistLikeButton> {
               : (active ? kSeeAllAccentBorder : Colors.transparent),
         ),
       ),
-      child: _leadingIcon(15, _focused ? Colors.white : _heartColor),
+      child: _leadingIcon(15, _focused ? Colors.white : _iconColor),
     );
   }
 }

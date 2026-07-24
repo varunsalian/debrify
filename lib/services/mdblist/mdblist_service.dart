@@ -239,29 +239,6 @@ class MdblistService {
     return const [];
   }
 
-  /// Likes ([like] true) or unlikes a public list on the user's MDBList
-  /// account. Verified endpoints: `PUT /lists/{id}/like` and
-  /// `DELETE /lists/{id}/like`, both answering
-  /// `{"status":"liked|unliked","like_count":N}`. Returns success. Drops the
-  /// liked-lists cache so the "Liked Lists" category refetches (the server
-  /// index itself can lag a little behind the list's own `liked` flag).
-  Future<bool> setListLiked(int listId, {required bool like}) async {
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return false;
-    try {
-      final uri = Uri.parse('$_base/lists/$listId/like?apikey=$key');
-      final res = like
-          ? await http.put(uri).timeout(const Duration(seconds: 15))
-          : await http.delete(uri).timeout(const Duration(seconds: 15));
-      if (res.statusCode != 200) return false;
-      _likedListsCache = null;
-      _likedListsAt = null;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// Fetches a list's items via `GET /lists/{id}/items`, following pagination.
   ///
   /// The API returns `{ "movies": [...], "shows": [...] }` a page at a time
@@ -343,11 +320,134 @@ class MdblistService {
       // else: partial — return it below but leave complete=false (not cached).
     }
 
-    final data = <String, dynamic>{'movies': movies, 'shows': shows};
+    // 'complete' flags a fully-walked list (X-Has-More reached false). A partial
+    // read (a mid-pagination page failed) returns non-null so the display path
+    // can still show what loaded, but [saveListAsClone] must NOT clone a partial.
+    final data = <String, dynamic>{
+      'movies': movies,
+      'shows': shows,
+      'complete': complete,
+    };
     if (complete) {
       _itemsCache[listId] = (data: data, at: DateTime.now());
     }
     return data;
+  }
+
+  // ── Saving lists (clone into "My Lists") ───────────────────────────────────
+  // MDBList has no API to link/like a list into a user's account, so "Save"
+  // creates a static list and copies the source list's items into it. See
+  // [saveListAsClone].
+
+  /// Create an empty static list on the user's account. Returns the new list id
+  /// (or null on failure).
+  Future<int?> createList(String name, {bool private = false}) async {
+    final key = await StorageService.getMdblistApiKey();
+    if (key == null || key.isEmpty) return null;
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$_base/lists/user/add?apikey=$key'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'name': name, 'private': private}),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200 && res.statusCode != 201) return null;
+      final decoded = jsonDecode(res.body);
+      final obj = decoded is List && decoded.isNotEmpty
+          ? decoded.first
+          : decoded;
+      final id = obj is Map ? obj['id'] : null;
+      return id is int ? id : (id is num ? id.toInt() : null);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Add items to a static list. [movies]/[shows] are `{tmdb, imdb}` maps.
+  Future<bool> addItemsToList(
+    int listId, {
+    required List<Map<String, dynamic>> movies,
+    required List<Map<String, dynamic>> shows,
+  }) async {
+    if (movies.isEmpty && shows.isEmpty) return true;
+    final key = await StorageService.getMdblistApiKey();
+    if (key == null || key.isEmpty) return false;
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$_base/lists/$listId/items/add?apikey=$key'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'movies': movies, 'shows': shows}),
+          )
+          .timeout(const Duration(seconds: 30));
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Delete one of the user's static lists. Treats "already gone" (404) and a
+  /// bodyless success (204) as success too, so a clone deleted out-of-band (on
+  /// the MDBList website) still lets the app clear its saved-state rather than
+  /// getting stuck showing "Saved".
+  Future<bool> deleteList(int listId) async {
+    final key = await StorageService.getMdblistApiKey();
+    if (key == null || key.isEmpty) return false;
+    try {
+      final res = await http
+          .delete(Uri.parse('$_base/lists/$listId?apikey=$key'))
+          .timeout(const Duration(seconds: 15));
+      final c = res.statusCode;
+      return c == 200 || c == 204 || c == 404;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Save [sourceListId] into the user's account by cloning it: create a new
+  /// static list named [name] and copy the source's items in. Returns the new
+  /// list id, or null on failure (an empty list is rolled back so we don't
+  /// litter "My Lists"). Snapshot only — it does NOT auto-update if the source
+  /// changes. Drops the user-lists cache so "My Lists" reflects the new list.
+  Future<int?> saveListAsClone({
+    required int sourceListId,
+    required String name,
+  }) async {
+    List<Map<String, dynamic>> extract(List<dynamic> raw) {
+      final out = <Map<String, dynamic>>[];
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final ids = item['ids'];
+        final tmdb = ids is Map ? ids['tmdb'] : null;
+        final imdb = (ids is Map ? ids['imdb'] : null) ?? item['imdb_id'];
+        if (tmdb == null && (imdb is! String || imdb.isEmpty)) continue;
+        out.add({
+          if (tmdb != null) 'tmdb': tmdb,
+          if (imdb is String && imdb.isNotEmpty) 'imdb': imdb,
+        });
+      }
+      return out;
+    }
+
+    final data = await fetchListItems(sourceListId);
+    // Abort on a failed OR partial read — cloning a truncated list would
+    // silently save a subset. Better to fail loudly (UI shows "Couldn't save").
+    if (data == null || data['complete'] != true) return null;
+    final movies = extract(data['movies'] as List? ?? const []);
+    final shows = extract(data['shows'] as List? ?? const []);
+
+    final newId = await createList(name);
+    if (newId == null) return null;
+    final added = await addItemsToList(newId, movies: movies, shows: shows);
+    if (!added) {
+      await deleteList(newId); // roll back the empty list
+      return null;
+    }
+    // My Lists now has a new entry — force a refetch on next read.
+    _userListsCache = null;
+    _userListsAt = null;
+    return newId;
   }
 
   /// `GET /user` validates the key (limits/user-id); `GET /lists/user` resolves
