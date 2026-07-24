@@ -644,9 +644,10 @@ class VideoPlayerLauncher {
 
     // Simkl auto-enable — parallel to the Trakt upgrade above, same context
     // exclusions (suppressTraktAutoSync is context-scoped, not Trakt-specific).
-    // Unlike the Trakt branch this does NOT remove the local Continue Watching
-    // entry: the app's CW rows read Trakt/local only, so a Simkl-only user
-    // still needs the local entry.
+    // Now that a Simkl Continue Watching row exists, this mirrors the Trakt
+    // branch: the title lives in the Simkl CW row, so the stale local entry is
+    // removed below (and the write-guard at the persist step skips creating a
+    // new one) — otherwise it would show in BOTH the local and Simkl rows.
     if (!args.simklScrobble &&
         !args.suppressTraktAutoSync &&
         args.contentImdbId != null &&
@@ -718,14 +719,24 @@ class VideoPlayerLauncher {
           contentYear: args.contentYear,
           addonId: args.addonId,
         );
+        // Clean up any pre-existing local Continue Watching entry (from before
+        // Simkl was connected, or a prior non-Simkl play) — Simkl's own CW row
+        // tracks it now, so leaving the local entry would duplicate it. Mirrors
+        // the Trakt branch above.
+        await StorageService.removeContinueWatchingItem(args.contentImdbId!);
       }
     }
 
     // Persist before launching playback so Android TV handoff cannot race the write.
-    // Skip for Trakt content (tracked by Trakt section) and Stremio TV (channel rotation)
+    // Skip when a tracker already owns this title's Continue Watching entry —
+    // Trakt (its own CW row) OR Simkl (its own CW row) — so it lives in exactly
+    // one row instead of duplicating into local Continue Watching. Also skip
+    // Stremio TV (channel rotation). This runs on the shared pre-launch path, so
+    // it applies to both the native-TV and in-app players.
     if (args.contentImdbId != null &&
         args.contentType != null &&
         !args.traktScrobble &&
+        !args.simklScrobble &&
         args.stremioTvChannels == null) {
       await StorageService.saveContinueWatchingItem(
         imdbId: args.contentImdbId!,

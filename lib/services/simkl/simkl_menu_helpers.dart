@@ -18,6 +18,7 @@ enum SimklItemMenuAction {
   moveToOnHold,
   moveToCompleted,
   moveToDropped,
+  removeFromContinueWatching,
   rate,
   removeRating,
 }
@@ -131,9 +132,21 @@ Future<void> handleSimklMenuAction(
     case SimklItemMenuAction.moveToCompleted:
       actionLabel = 'Marked Completed on Simkl';
       success = await simklService.addToList(imdbId, type, 'completed');
+      // Completing a title means you're done watching it — also clear its paused
+      // playback session so it leaves Continue Watching (a status change alone
+      // doesn't touch playback on Simkl's side). Fold the result in: if the
+      // clear fails the title lingers in the CW row, so don't report a clean
+      // success.
+      if (success) success = await simklService.deletePlaybackForImdb(imdbId);
     case SimklItemMenuAction.moveToDropped:
       actionLabel = 'Marked Dropped on Simkl';
       success = await simklService.addToList(imdbId, type, 'dropped');
+      // Dropping likewise means stop tracking it — clear the paused session so
+      // it leaves Continue Watching (fold the result in, as above).
+      if (success) success = await simklService.deletePlaybackForImdb(imdbId);
+    case SimklItemMenuAction.removeFromContinueWatching:
+      actionLabel = 'Removed from Continue Watching';
+      success = await simklService.deletePlaybackForImdb(imdbId);
     case SimklItemMenuAction.rate:
       if (!context.mounted) return;
       final rating = await showSimklRatingDialog(context);
@@ -207,6 +220,7 @@ SimklItemMenuAction _statusMoveAction(String status) {
 List<SimklMenuOption> buildSimklMenuOptions({
   bool isSeries = false,
   bool isSimklAuthenticated = false,
+  bool inContinueWatching = false,
   SimklTitleStatus? status,
 }) {
   if (!isSimklAuthenticated) return const [];
@@ -258,6 +272,17 @@ List<SimklMenuOption> buildSimklMenuOptions({
         'Dropped',
         Icons.cancel_rounded,
         const Color(0xFFEF4444),
+      ),
+    // Only when the title is actually in Continue Watching (has a paused
+    // playback session) — clears that session so it leaves the CW row without
+    // changing its watchlist status.
+    if (inContinueWatching)
+      const SimklMenuOption(
+        action: SimklItemMenuAction.removeFromContinueWatching,
+        icon: Icons.playlist_remove_rounded,
+        color: Color(0xFFF87171),
+        label: 'Remove from Continue Watching',
+        caption: 'Remove',
       ),
     SimklMenuOption(
       action: SimklItemMenuAction.rate,

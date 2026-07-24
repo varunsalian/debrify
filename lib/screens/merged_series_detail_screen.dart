@@ -1553,6 +1553,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       case SimklItemMenuAction.moveToDropped:
         return 'Mark this dropped on Simkl so it stops showing up as '
             'something you\'re meaning to finish.';
+      case SimklItemMenuAction.removeFromContinueWatching:
+        return 'Clear this title\'s paused position on Simkl so it leaves your '
+            'Simkl Continue Watching rows, without changing its watchlist status.';
       case SimklItemMenuAction.rate:
         return 'Give this a 1–10 rating on Simkl.';
       case SimklItemMenuAction.removeRating:

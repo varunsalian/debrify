@@ -374,6 +374,29 @@ class SimklService {
     return data is Map<String, dynamic> ? data : null;
   }
 
+  /// The user's "watching" TV shows with Simkl's server-computed `next_to_watch`
+  /// (via `next_watch_info=yes`) — powers the Continue Watching "up next"
+  /// entries (the next episode of a show you're mid-way through but haven't
+  /// paused). Deliberately no `extended=full`: the per-show next-watch fields +
+  /// the show summary object are enough, and `full` would bloat the response
+  /// with the whole watched-episode list. Returns the raw `shows` list (empty
+  /// when the list is genuinely empty), or null on failure / when disconnected.
+  Future<List<dynamic>?> fetchUpNextShowsOrNull() async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return null;
+    final uri = _apiUri('/sync/all-items/shows/watching', {
+      'next_watch_info': 'yes',
+    });
+    final data = await _getOrNull(
+      uri,
+      headers: _apiHeaders(accessToken: token),
+      label: 'upNext shows',
+    );
+    if (data is! Map<String, dynamic>) return null;
+    final shows = data['shows'];
+    return shows is List ? shows : const [];
+  }
+
   /// Fetch the user's rated items for one content type via
   /// `GET /sync/ratings/{type}/{rating}`. Sends the explicit 1–10 comma list
   /// (documented to work) rather than an unconfirmed range shorthand.
@@ -918,6 +941,130 @@ class SimklService {
       _moviePlaybackCacheAt = DateTime.now();
     }
     return list;
+  }
+
+  /// The RAW account-wide paused-playback session lists (cached 30s, coalesced,
+  /// invalidated on any scrobble write). Null on failure / when disconnected.
+  /// The per-title resume lookups above filter these to one imdb id; the
+  /// Continue Watching row needs the whole list (every paused title), so these
+  /// public accessors expose it without a second network round-trip.
+  Future<List<dynamic>?> fetchEpisodePlaybackSessions() =>
+      _fetchEpisodePlaybackSessions();
+  Future<List<dynamic>?> fetchMoviePlaybackSessions() =>
+      _fetchMoviePlaybackSessions();
+
+  /// Fire a `DELETE` and report success (any 2xx). Simkl's delete-playback
+  /// returns an empty body, so only the status code matters.
+  Future<bool> _deleteOk(
+    String path, {
+    required String token,
+    required String label,
+  }) async {
+    try {
+      final response = await http
+          .delete(_apiUri(path), headers: _apiHeaders(accessToken: token))
+          .timeout(const Duration(seconds: 15));
+      // 204 = deleted. 404 = the session is already gone (stale cache / double
+      // action) — the desired end state holds, so treat it as success too.
+      if ((response.statusCode >= 200 && response.statusCode < 300) ||
+          response.statusCode == 404) {
+        return true;
+      }
+      debugPrint(
+        'Simkl: $label failed (${response.statusCode}): ${response.body}',
+      );
+      return false;
+    } catch (e) {
+      debugPrint('Simkl: $label error: $e');
+      return false;
+    }
+  }
+
+  /// Remove a title from Continue Watching by clearing ALL its paused playback
+  /// sessions — movie AND any episodes — via `DELETE /sync/playback/{id}` per
+  /// matching session (each session in the `/sync/playback` list carries a
+  /// 64-bit `id`). A watchlist-status change (Completed/Dropped) does NOT clear
+  /// these on its own, so callers that want the title gone from the CW row call
+  /// this too. Invalidates the playback cache so the row refetches without the
+  /// removed sessions. Returns true when every matching session was deleted (or
+  /// there was nothing to delete). Never throws.
+  Future<bool> deletePlaybackForImdb(String imdbId) async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return false;
+    // Independent GETs — fetch concurrently. A null list means the fetch failed.
+    final lists = await Future.wait([
+      _fetchEpisodePlaybackSessions(),
+      _fetchMoviePlaybackSessions(),
+    ]);
+    final episodes = lists[0];
+    final movies = lists[1];
+    final ids = <int>{};
+    for (final raw in [...?episodes, ...?movies]) {
+      if (raw is! Map) continue;
+      final content = raw['show'] ?? raw['movie'];
+      final cids = content is Map ? content['ids'] : null;
+      if (cids is! Map || cids['imdb'] != imdbId) continue;
+      final id = _asNum(raw['id'])?.toInt();
+      if (id != null) ids.add(id);
+    }
+    // Nothing to delete: only an authoritative "success" if BOTH lists were
+    // actually readable — a failed fetch (null) means we might have missed the
+    // session, so don't report success (the caller would show a false toast).
+    if (ids.isEmpty) return episodes != null && movies != null;
+    var allOk = true;
+    for (final id in ids) {
+      final ok = await _deleteOk(
+        '/sync/playback/$id',
+        token: token,
+        label: 'deletePlayback $id',
+      );
+      if (!ok) allOk = false;
+    }
+    _invalidatePlaybackCache();
+    return allOk;
+  }
+
+  /// Clear the paused session for ONE specific episode of a show (matched by
+  /// show imdb + season + episode number) via `DELETE /sync/playback/{id}` — so
+  /// marking that episode watched also drops it from Continue Watching. A no-op
+  /// (returns true without touching the cache) when there's no matching paused
+  /// session, so the common "mark an unpaused episode watched" case is free.
+  /// Only invalidates the playback cache when it actually deleted something.
+  Future<bool> deletePlaybackForEpisode(
+    String imdbId,
+    int season,
+    int episode,
+  ) async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return false;
+    final episodes = await _fetchEpisodePlaybackSessions();
+    final ids = <int>{};
+    for (final raw in [...?episodes]) {
+      if (raw is! Map) continue;
+      final show = raw['show'];
+      final sids = show is Map ? show['ids'] : null;
+      if (sids is! Map || sids['imdb'] != imdbId) continue;
+      final ep = raw['episode'];
+      if (ep is! Map) continue;
+      if (_asNum(ep['season'])?.toInt() != season) continue;
+      if (_asNum(ep['number'])?.toInt() != episode) continue;
+      final id = _asNum(raw['id'])?.toInt();
+      if (id != null) ids.add(id);
+    }
+    // Nothing to delete — authoritative only if the fetch actually succeeded
+    // (a null list is a failure we shouldn't report as success).
+    if (ids.isEmpty) return episodes != null;
+    var allOk = true;
+    for (final id in ids) {
+      final ok = await _deleteOk(
+        '/sync/playback/$id',
+        token: token,
+        label: 'deletePlaybackEp $id',
+      );
+      if (!ok) allOk = false;
+    }
+    _invalidatePlaybackCache();
+    return allOk;
   }
 
   /// The paused progress percent (0-100) of a movie's Simkl playback session,

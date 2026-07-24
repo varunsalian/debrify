@@ -34,6 +34,7 @@ import '../services/torbox_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
 import '../services/torrent_service.dart';
+import '../services/simkl/simkl_continue_watching_service.dart';
 import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
@@ -533,6 +534,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   final List<FocusNode> _traktMovieNodes = [];
   final List<FocusNode> _traktSeriesNodes = [];
 
+  // SIMKL Continue Watching rows ("Simkl Movies" / "Simkl Shows") — a parallel
+  // strip below the Trakt rows, built from the account's paused playback
+  // sessions (same `/sync/playback` lists the scrobble resume already fetches).
+  // Independent of the Trakt block above so neither can regress the other.
+  List<StremioMeta> _simklMovies = [];
+  List<StremioMeta> _simklSeries = [];
+  List<StremioMeta> _simklAll = []; // paused_at order, for the See-All grid
+  final Map<String, double> _simklProgress = {}; // imdbId → 0..1
+  final Map<String, String> _simklEpisode = {}; // imdbId → 'S2 · E5' (series)
+  final Map<String, SimklContinueWatchingItem> _simklByImdb = {};
+  final List<FocusNode> _simklMovieNodes = [];
+  final List<FocusNode> _simklSeriesNodes = [];
+  int _simklCwToken = 0;
+
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
@@ -665,6 +680,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         onQuickPlay: _playTraktItem,
         onSeeAll: () => _openTraktSeeAll('series'),
       ),
+    // Simkl rows come after the Trakt rows. Both trackers fetch over the network
+    // on a cold start (Simkl's playback/library caches are only warmed by a
+    // scrobble or a prior read, not pre-warmed at launch), but only Trakt holds
+    // its slot open with skeletons — so when the Simkl rows land they settle in
+    // once, like any other content row. (A dedicated Simkl skeleton could make
+    // that zero-shift too, but it isn't worth the board index-math complexity.)
+    if (_simklMovies.isNotEmpty && !_homeDisabled.contains('simkl:movies'))
+      _CwRow(
+        title: 'Simkl Continue Watching',
+        tag: 'Movies',
+        items: _simklMovies,
+        nodes: _simklMovieNodes,
+        progressOf: (m) => _simklProgress[m.imdbId],
+        episodeOf: (_) => null,
+        onOpen: _openSimklCwItem,
+        onQuickPlay: _playSimklCwItem,
+        onSeeAll: () => _openSimklCwSeeAll('movie'),
+      ),
+    if (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows'))
+      _CwRow(
+        title: 'Simkl Continue Watching',
+        tag: 'Shows',
+        items: _simklSeries,
+        nodes: _simklSeriesNodes,
+        progressOf: (m) => _simklProgress[m.imdbId],
+        episodeOf: (m) => _simklEpisode[m.imdbId],
+        onOpen: _openSimklCwItem,
+        onQuickPlay: _playSimklCwItem,
+        onSeeAll: () => _openSimklCwSeeAll('series'),
+      ),
   ];
 
   /// Whether any Continue Watching row is currently on-screen (drives focus
@@ -678,7 +723,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           (_traktMovies.isNotEmpty &&
               !_homeDisabled.contains('trakt:movies')) ||
           (_traktSeries.isNotEmpty &&
-              !_homeDisabled.contains('trakt:shows'))) &&
+              !_homeDisabled.contains('trakt:shows')) ||
+          (_simklMovies.isNotEmpty &&
+              !_homeDisabled.contains('simkl:movies')) ||
+          (_simklSeries.isNotEmpty &&
+              !_homeDisabled.contains('simkl:shows'))) &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
@@ -1027,6 +1076,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _load(),
         _loadContinueWatching(),
         _loadTraktContinueWatching(),
+        // refreshBound:false — _load()'s bound-source scan (which now covers the
+        // Simkl rows) runs after this on cold start, so a 2nd concurrent scan
+        // here would be pure duplicate startup work on weak TV hardware.
+        _loadSimklContinueWatching(refreshBound: false),
         _loadTvFavorites(),
         _loadStremioTvFavorites(),
         _loadIptvFavorites(),
@@ -1079,9 +1132,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _refreshTraktAuthState();
     _refreshSimklAuthState();
     _refreshPikpakOnly();
-    // Trakt Continue Watching rows are never rendered on the dedicated Search
-    // tab, so don't refetch them there.
-    if (!widget.searchMode) _loadTraktContinueWatching();
+    // Trakt/Simkl Continue Watching rows are never rendered on the dedicated
+    // Search tab, so don't refetch them there.
+    if (!widget.searchMode) {
+      _loadTraktContinueWatching();
+      _loadSimklContinueWatching();
+    }
   }
 
   Future<void> _refreshTraktAuthState() async {
@@ -1275,6 +1331,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._cwSeriesNodes,
       ..._traktMovieNodes,
       ..._traktSeriesNodes,
+      ..._simklMovieNodes,
+      ..._simklSeriesNodes,
       ..._tvFavNodes,
       ..._stvFavNodes,
       ..._iptvFavNodes,
@@ -1287,6 +1345,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _cwSeriesNodes.clear();
     _traktMovieNodes.clear();
     _traktSeriesNodes.clear();
+    _simklMovieNodes.clear();
+    _simklSeriesNodes.clear();
     _tvFavNodes.clear();
     _stvFavNodes.clear();
     _iptvFavNodes.clear();
@@ -1580,6 +1640,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._cwSeries,
       ..._traktMovies,
       ..._traktSeries,
+      ..._simklMovies,
+      ..._simklSeries,
     ];
     for (final item in items) {
       final imdb = _imdbOf(item);
@@ -2594,6 +2656,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return; // already looking at them
     } else if (onRow(_cwMovieNodes) || onRow(_cwSeriesNodes)) {
       dir = 'down';
+    } else if (onRow(_simklMovieNodes) || onRow(_simklSeriesNodes)) {
+      dir = 'up'; // Simkl rows render just below the Trakt rows
     } else {
       for (final kind in _favRowKinds) {
         if (onRow(_favNodesFor(kind))) {
@@ -2730,6 +2794,132 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     ).popUntil((route) => route.settings.name != kCatalogDetailRouteName);
     _snack('Removed from Trakt Continue Watching');
     _loadTraktContinueWatching(refreshBound: false);
+  }
+
+  // ── Simkl Continue Watching ───────────────────────────────────────────────
+
+  /// Fetch the Simkl "Continue Watching" rows (paused movies + paused episodes)
+  /// from the connected account's playback sessions — the same `/sync/playback`
+  /// lists the scrobble resume already fetches + caches, so this is cheap. Runs
+  /// once on init / integration change and caches in memory. Token-guarded
+  /// against overlap; hides the rows when Simkl isn't connected. [refreshBound]
+  /// runs a bound-source refresh at the end (skip when the caller already does).
+  Future<void> _loadSimklContinueWatching({bool refreshBound = true}) async {
+    final token = ++_simklCwToken;
+    final result = await SimklContinueWatchingService.instance.fetchItems();
+    if (!mounted || token != _simklCwToken) return;
+    // Null = a transient fetch failure — leave any existing rows in place (a
+    // real disconnect returns empty lists, which fall through and clear them).
+    if (result == null) return;
+
+    final movieMetas = <StremioMeta>[];
+    final showMetas = <StremioMeta>[];
+    final progress = <String, double>{};
+    final episode = <String, String>{};
+    final byImdb = <String, SimklContinueWatchingItem>{};
+    void ingest(
+      List<SimklContinueWatchingItem> items,
+      List<StremioMeta> into,
+    ) {
+      for (final it in items) {
+        final id = it.id;
+        if (id.isEmpty || byImdb.containsKey(id)) continue; // dedup by imdbId
+        into.add(it.meta);
+        byImdb[id] = it;
+        // "Up next" entries have no paused position — no progress bar for them.
+        final p = it.progress;
+        if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
+        final se = _seLabel(it.season, it.episode);
+        if (se != null) episode[id] = se;
+      }
+    }
+
+    ingest(result.movies, movieMetas);
+    ingest(result.shows, showMetas);
+    // Merge into one paused-order list for the See-All grid: newest paused_at
+    // first, timestamp-less items last, ties fall back to movies-then-shows.
+    final allMetas = [...movieMetas, ...showMetas];
+    final origIndex = <StremioMeta, int>{
+      for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
+    };
+    allMetas.sort((a, b) {
+      final pa = byImdb[a.imdbId]?.pausedAtMs;
+      final pb = byImdb[b.imdbId]?.pausedAtMs;
+      if (pa != null && pb != null) {
+        final c = pb.compareTo(pa);
+        if (c != 0) return c;
+      } else if (pa == null && pb != null) {
+        return 1;
+      } else if (pa != null && pb == null) {
+        return -1;
+      }
+      return origIndex[a]!.compareTo(origIndex[b]!);
+    });
+
+    _syncCwNodes(_simklMovieNodes, movieMetas.length, 'smovie');
+    _syncCwNodes(_simklSeriesNodes, showMetas.length, 'sseries');
+    setState(() {
+      _simklMovies = movieMetas;
+      _simklSeries = showMetas;
+      _simklAll = allMetas;
+      _simklProgress
+        ..clear()
+        ..addAll(progress);
+      _simklEpisode
+        ..clear()
+        ..addAll(episode);
+      _simklByImdb
+        ..clear()
+        ..addAll(byImdb);
+    });
+    _maybeAutoFocusBoard();
+    if (refreshBound) unawaited(_refreshBoundSources());
+  }
+
+  /// Open a Simkl Continue Watching title as a detail page. For a series, scroll
+  /// the episodes panel to the paused episode (the same path the Calendar uses);
+  /// resume itself is handled by the detail's three-way resume when Simkl is
+  /// connected. No `isTraktSource` flag — this is a plain, source-neutral open.
+  void _openSimklCwItem(StremioMeta item) {
+    final cw = _simklByImdb[_imdbOf(item)];
+    _openItem(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      initialSeason: (cw != null && !cw.isMovie) ? cw.season : null,
+      initialEpisode: (cw != null && !cw.isMovie) ? cw.episode : null,
+    );
+  }
+
+  /// Resume a Simkl Continue Watching title directly (quick-play): builds a
+  /// selection carrying the paused season/episode + Simkl progress percent and
+  /// plays it, mirroring the Trakt quick-play.
+  Future<void> _playSimklCwItem(StremioMeta item) async {
+    final cw = _simklByImdb[_imdbOf(item)];
+    if (cw == null) {
+      // Not in the CW map (a See-All grid title that fell out of the list) —
+      // play it like a plain catalog title; three-way resume still applies.
+      await _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
+      return;
+    }
+    _playSelection(SimklContinueWatchingService.instance.selectionForItem(cw));
+  }
+
+  /// Desktop "See All" for the Simkl Continue Watching rows — reuses the generic
+  /// Continue Watching grid, seeded with the paused-order list + progress.
+  void _openSimklCwSeeAll([String initialCategory = 'all']) {
+    _pushCwSeeAll(
+      title: 'Simkl Continue Watching',
+      initialCategory: initialCategory,
+      items: _simklAll,
+      progressOf: (m) => _simklProgress[m.imdbId],
+      onOpen: _openSimklCwItem,
+      onQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
+      onReload: () async {
+        await _loadSimklContinueWatching(refreshBound: false);
+        await _afterSeeAllReturn();
+        return List<StremioMeta>.of(_simklAll);
+      },
+    );
   }
 
   /// Swap the displayed sections (homepage or search results): rebuild the
@@ -2982,6 +3172,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         anyOf(_cwSeriesNodes) ||
         anyOf(_traktMovieNodes) ||
         anyOf(_traktSeriesNodes) ||
+        anyOf(_simklMovieNodes) ||
+        anyOf(_simklSeriesNodes) ||
         anyOf(_tvFavNodes) ||
         anyOf(_stvFavNodes) ||
         anyOf(_iptvFavNodes) ||
@@ -5065,6 +5257,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         buildSimklMenuOptions(
           isSeries: item.type == 'series',
           isSimklAuthenticated: _isSimklAuthenticated && imdb != null,
+          // Offer "Remove from Continue Watching" only for a paused MOVIE. It
+          // needs a paused session to delete (so not an "up next" entry, which
+          // has none), AND clearing a still-watching SERIES' pause would just
+          // re-surface it as an up-next card — so the explicit remove wouldn't
+          // actually remove it. For series, Dropped/Completed fully remove.
+          inContinueWatching:
+              imdb != null &&
+              (_simklByImdb[imdb]?.progress != null) &&
+              (_simklByImdb[imdb]?.isMovie ?? false),
           status: status,
         );
     final simklOptions = buildSimklOptions(null);
@@ -5278,6 +5479,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     SimklItemMenuAction action,
   ) async {
     await handleSimklMenuAction(context, item, action);
+    // These actions clear the title's Simkl paused session (explicit remove, or
+    // completing/dropping it — which now also clears playback), so it should
+    // drop off the Simkl Continue Watching rows. Reload them. Skipped on the
+    // dedicated Search tab, which never renders those rows.
+    if (mounted &&
+        !widget.searchMode &&
+        (action == SimklItemMenuAction.removeFromContinueWatching ||
+            action == SimklItemMenuAction.moveToCompleted ||
+            action == SimklItemMenuAction.moveToDropped)) {
+      _loadSimklContinueWatching(refreshBound: false);
+    }
   }
 
   /// "Select/Edit Source" entry: edit dialog when a source is already bound,

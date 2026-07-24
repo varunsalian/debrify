@@ -388,8 +388,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           episode.season,
           episode.number,
         );
-        if (success && mounted) {
-          setState(() => _episodeWatchProgress[key] = 100.0);
+        if (success) {
+          // Finishing this episode also clears its paused session, so the show
+          // stops lingering in Continue Watching at this episode (and can
+          // surface as "up next" for the following one). Best-effort.
+          await _simklService.deletePlaybackForEpisode(
+            showImdbId,
+            episode.season,
+            episode.number,
+          );
+          if (mounted) {
+            setState(() => _episodeWatchProgress[key] = 100.0);
+          }
         }
       case SimklEpisodeMenuAction.markUnwatched:
         actionLabel = 'Marked as Unwatched on Simkl';
