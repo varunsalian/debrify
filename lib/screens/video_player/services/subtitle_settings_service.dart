@@ -447,13 +447,38 @@ class SubtitleSettingsData {
     return const Color(0xFFFF5722);
   }
 
+  /// Same-colour glyph "halo" that fakes bold for fonts without a real bold
+  /// face. Flutter only honours [FontWeight] when the font family ships a
+  /// matching weight asset — but most bundled subtitle fonts (and every
+  /// imported custom font) are single-weight, so `w700` alone renders no
+  /// differently for them. Stamping offset copies of the text in eight
+  /// directions thickens the strokes, which works for ANY font and mirrors the
+  /// native player's `Typeface.create(base, BOLD)` synthetic bold.
+  List<Shadow> fauxBoldShadows(double fontSizePx) {
+    final d = (fontSizePx * 0.018).clamp(0.5, 1.4);
+    const dirs = <Offset>[
+      Offset(1, 0), Offset(-1, 0), Offset(0, 1), Offset(0, -1),
+      Offset(0.7, 0.7), Offset(-0.7, 0.7),
+      Offset(0.7, -0.7), Offset(-0.7, -0.7),
+    ];
+    return [
+      for (final o in dirs)
+        Shadow(offset: Offset(o.dx * d, o.dy * d), color: color.color),
+    ];
+  }
+
   /// Build TextStyle for subtitles
   TextStyle buildTextStyle() {
+    final base = resolvedShadows;
+    // Outline shadows first (drawn furthest back), then the faux-bold halo on
+    // top of them but under the glyph fill — so the outline still rims the
+    // thickened text rather than being swallowed by it.
+    final shadows = bold ? [...?base, ...fauxBoldShadows(size.sizePx)] : base;
     return TextStyle(
       fontSize: size.sizePx,
       color: color.color,
       fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
-      shadows: resolvedShadows,
+      shadows: shadows,
       backgroundColor: background.color,
       fontFamily: fontFamily,
     );

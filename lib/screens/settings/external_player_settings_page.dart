@@ -87,6 +87,7 @@ class _ExternalPlayerSettingsPageState
   int _subtitleColorIndex = 0; // White
   int _subtitleBgIndex = 0; // None
   int _subtitleFontIndex = 0; // Default
+  bool _subtitleBold = false; // normal weight
   List<SubtitleFont> _allFonts =
       SubtitleFont.builtInOptions; // Built-in + custom fonts
 
@@ -103,6 +104,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _subtitleColorFocusNode = FocusNode();
   final FocusNode _subtitleBgFocusNode = FocusNode();
   final FocusNode _subtitleFontFocusNode = FocusNode();
+  final FocusNode _subtitleBoldFocusNode = FocusNode();
   bool _aspectFocused = false;
   bool _defaultAudioLangFocused = false;
   bool _defaultSubtitleLangFocused = false;
@@ -111,6 +113,7 @@ class _ExternalPlayerSettingsPageState
   bool _subtitleColorFocused = false;
   bool _subtitleBgFocused = false;
   bool _subtitleFontFocused = false;
+  bool _subtitleBoldFocused = false;
 
   // DeoVR FocusNodes for DPAD navigation
   final FocusNode _screenTypeFocusNode = FocusNode();
@@ -224,6 +227,12 @@ class _ExternalPlayerSettingsPageState
         _subtitleFontFocused = _subtitleFontFocusNode.hasFocus;
       });
     });
+    _subtitleBoldFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _subtitleBoldFocused = _subtitleBoldFocusNode.hasFocus;
+      });
+    });
   }
 
   @override
@@ -250,6 +259,7 @@ class _ExternalPlayerSettingsPageState
     _subtitleColorFocusNode.dispose();
     _subtitleBgFocusNode.dispose();
     _subtitleFontFocusNode.dispose();
+    _subtitleBoldFocusNode.dispose();
     super.dispose();
   }
 
@@ -394,6 +404,7 @@ class _ExternalPlayerSettingsPageState
         _subtitleColorIndex = subtitleSettings.colorIndex;
         _subtitleBgIndex = subtitleSettings.bgIndex;
         _subtitleFontIndex = subtitleSettings.fontIndex;
+        _subtitleBold = subtitleSettings.bold;
         _loading = false;
       });
       // Load fonts (built-in + custom) separately (async)
@@ -869,6 +880,11 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setSubtitleFontIndex(int index) async {
     setState(() => _subtitleFontIndex = index);
     await SubtitleFontService.instance.setFontIndex(index);
+  }
+
+  Future<void> _setSubtitleBold(bool value) async {
+    setState(() => _subtitleBold = value);
+    await SubtitleSettingsService.instance.setBold(value);
   }
 
   Future<void> _loadFonts() async {
@@ -1999,6 +2015,18 @@ class _ExternalPlayerSettingsPageState
                             focusNode: _subtitleFontFocusNode,
                             isFocused: _subtitleFontFocused,
                           ),
+                          const SizedBox(height: 12),
+
+                          // Bold
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Bold',
+                            value: _subtitleBold ? 1 : 0,
+                            items: const ['Off', 'On'],
+                            onChanged: (index) => _setSubtitleBold(index == 1),
+                            focusNode: _subtitleBoldFocusNode,
+                            isFocused: _subtitleBoldFocused,
+                          ),
 
                           // Import custom font button (always visible)
                           const SizedBox(height: 8),
@@ -2132,29 +2160,46 @@ class _ExternalPlayerSettingsPageState
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Center(
-                              child: Text(
-                                'Sample Subtitle',
-                                style: TextStyle(
-                                  fontSize:
-                                      SubtitleSize
+                              child: Builder(
+                                builder: (context) {
+                                  final previewSize = SubtitleSize
                                           .options[_subtitleSizeIndex]
                                           .sizePx *
-                                      0.4,
-                                  color: SubtitleColor
-                                      .options[_subtitleColorIndex]
-                                      .color,
-                                  fontWeight: FontWeight.w600,
-                                  shadows: SubtitleStyle
-                                      .options[_subtitleStyleIndex]
-                                      .shadows,
-                                  backgroundColor: SubtitleBackground
-                                      .options[_subtitleBgIndex]
-                                      .color,
-                                  fontFamily:
-                                      _subtitleFontIndex < _allFonts.length
-                                      ? _allFonts[_subtitleFontIndex].fontFamily
-                                      : null,
-                                ),
+                                      0.4;
+                                  final data = SubtitleSettingsData(
+                                    sizeIndex: _subtitleSizeIndex,
+                                    styleIndex: _subtitleStyleIndex,
+                                    colorIndex: _subtitleColorIndex,
+                                    bgIndex: _subtitleBgIndex,
+                                    bold: _subtitleBold,
+                                    fontIndex: _subtitleFontIndex,
+                                    fontFamily:
+                                        _subtitleFontIndex < _allFonts.length
+                                        ? _allFonts[_subtitleFontIndex]
+                                              .fontFamily
+                                        : null,
+                                  );
+                                  return Text(
+                                    'Sample Subtitle',
+                                    style: TextStyle(
+                                      fontSize: previewSize,
+                                      color: data.color.color,
+                                      fontWeight: _subtitleBold
+                                          ? FontWeight.w700
+                                          : FontWeight.w400,
+                                      shadows: _subtitleBold
+                                          ? [
+                                              ...?data.style.shadows,
+                                              ...data.fauxBoldShadows(
+                                                previewSize,
+                                              ),
+                                            ]
+                                          : data.style.shadows,
+                                      backgroundColor: data.background.color,
+                                      fontFamily: data.fontFamily,
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ),

@@ -1099,7 +1099,13 @@ class _StyleTab extends StatelessWidget {
                     fontFamily: subtitleStyle.fontFamily,
                     fontWeight:
                         subtitleStyle.bold ? FontWeight.w700 : FontWeight.w400,
-                    shadows: subtitleStyle.resolvedShadows,
+                    shadows: subtitleStyle.bold
+                        ? [
+                            ...?subtitleStyle.resolvedShadows,
+                            ...subtitleStyle
+                                .fauxBoldShadows(subtitleStyle.size.sizePx * 0.5),
+                          ]
+                        : subtitleStyle.resolvedShadows,
                   ),
                 ),
               ),
