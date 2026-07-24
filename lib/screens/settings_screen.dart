@@ -584,7 +584,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _iptvInfo,
         _traktInfo,
         _simklInfo,
-        _mdblistInfo,
+        // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
+        if (kMdblistEnabled) _mdblistInfo,
         _indexerManagersInfo,
       ],
       firstFocusNode: _firstCardFocusNode,
@@ -627,7 +628,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         iptv: _iptvInfo,
         trakt: _traktInfo,
         simkl: _simklInfo,
-        mdblist: _mdblistInfo,
+        // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
+        mdblist: kMdblistEnabled ? _mdblistInfo : null,
         indexerManagers: _indexerManagersInfo,
         firstCardFocusNode: _firstCardFocusNode,
       ),

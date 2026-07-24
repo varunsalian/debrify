@@ -737,7 +737,8 @@ class ConnectionsSummary extends StatefulWidget {
   final ConnectionInfo iptv;
   final ConnectionInfo trakt;
   final ConnectionInfo simkl;
-  final ConnectionInfo mdblist;
+  // Null when MDBList is hidden (alpha) — its card + focus node are then omitted.
+  final ConnectionInfo? mdblist;
   final FocusNode? firstCardFocusNode;
 
   const ConnectionsSummary({
@@ -753,7 +754,7 @@ class ConnectionsSummary extends StatefulWidget {
     required this.iptv,
     required this.trakt,
     required this.simkl,
-    required this.mdblist,
+    this.mdblist,
     this.firstCardFocusNode,
   });
 
@@ -963,8 +964,11 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                         : _iptvFocusNode,
                     // Wide: MDBList sits alone in the left column of row 6,
                     // directly below Trakt. Narrow (single column): the next
-                    // card down is Simkl, not MDBList.
-                    downNeighbor: wide ? _mdblistFocusNode : _simklFocusNode,
+                    // card down is Simkl, not MDBList. When MDBList is hidden
+                    // (alpha), down goes nowhere in wide.
+                    downNeighbor: wide
+                        ? (widget.mdblist != null ? _mdblistFocusNode : null)
+                        : _simklFocusNode,
                   ),
                 ),
                 SizedBox(
@@ -975,20 +979,24 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                     isLeftColumn: !wide,
                     leftNeighbor: wide ? _traktFocusNode : null,
                     upNeighbor: wide ? _iptvFocusNode : _traktFocusNode,
-                    // No row-6 right card; down lands on the lone MDBList card.
-                    downNeighbor: _mdblistFocusNode,
+                    // Down lands on the lone MDBList card, or nowhere when it's
+                    // hidden (alpha).
+                    downNeighbor:
+                        widget.mdblist != null ? _mdblistFocusNode : null,
                   ),
                 ),
-                // Row 6: MDBList (left column, alone — no right partner)
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.mdblist,
-                    focusNode: _mdblistFocusNode,
-                    isLeftColumn: true,
-                    upNeighbor: wide ? _traktFocusNode : _simklFocusNode,
+                // Row 6: MDBList (left column, alone — no right partner).
+                // Omitted entirely when MDBList is hidden for the alpha.
+                if (widget.mdblist != null)
+                  SizedBox(
+                    width: itemWidth,
+                    child: ConnectionCard(
+                      info: widget.mdblist!,
+                      focusNode: _mdblistFocusNode,
+                      isLeftColumn: true,
+                      upNeighbor: wide ? _traktFocusNode : _simklFocusNode,
+                    ),
                   ),
-                ),
               ],
             );
           },

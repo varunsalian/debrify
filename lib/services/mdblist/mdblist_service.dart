@@ -4,6 +4,13 @@ import 'package:http/http.dart' as http;
 
 import '../storage_service.dart';
 
+/// Feature flag — MDBList is unfinished, so its Settings entry is hidden for
+/// the alpha. Flip to `true` to re-expose it. (Deliberately not `const` so the
+/// gated branches don't read as dead code to the analyzer.) The Discover/Search
+/// surfaces gate on being connected instead, so with this off and no stored key
+/// nothing MDBList is reachable.
+final bool kMdblistEnabled = false;
+
 /// A small snapshot of the connected MDBList account, used to render the
 /// settings page's status/account card. Not persisted as a whole — only the
 /// API key and resolved username are stored (see [StorageService]).
