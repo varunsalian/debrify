@@ -619,6 +619,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Whether Simkl is connected — gates the Simkl detail quick actions,
   /// rendered as their own strip alongside Trakt's (see [_isTraktAuthenticated]).
   bool _isSimklAuthenticated = false;
+
+  /// Whether MDBList is connected — gates the MDBList entry in the Discover
+  /// source dropdown (hidden when disconnected, so an unauthed user isn't shown
+  /// a dead source; kept visible if it's somehow the active source).
+  bool _isMdblistAuthenticated = false;
   // Addons that produced homepage rows, indexed by id, so a Continue Watching
   // tap can route back through the right addon (for Episodes / next-episode).
   final Map<String, StremioAddon> _addonsById = {};
@@ -1033,6 +1038,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     });
     _refreshTraktAuthState();
     _refreshSimklAuthState();
+    _refreshMdblistAuthState();
     _loadMergedSeriesFlag();
     // Restore a keyword search preserved from a prior tab visit (results +
     // scroll). If one restored, it carries its own filters, so don't overwrite
@@ -1131,6 +1137,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   void _onIntegrationsChanged() {
     _refreshTraktAuthState();
     _refreshSimklAuthState();
+    _refreshMdblistAuthState();
     _refreshPikpakOnly();
     // Trakt/Simkl Continue Watching rows are never rendered on the dedicated
     // Search tab, so don't refetch them there.
@@ -1150,6 +1157,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final auth = await SimklService.instance.isAuthenticated();
     if (!mounted || auth == _isSimklAuthenticated) return;
     setState(() => _isSimklAuthenticated = auth);
+  }
+
+  Future<void> _refreshMdblistAuthState() async {
+    final auth = await MdblistService.instance.isAuthenticated();
+    if (!mounted || auth == _isMdblistAuthenticated) return;
+    setState(() => _isMdblistAuthenticated = auth);
   }
 
   /// Restore a preserved keyword search into this instance if one exists for
@@ -5354,6 +5367,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             _loadContinueWatching();
             _refreshTraktAuthState();
             _refreshSimklAuthState();
+            _refreshMdblistAuthState();
             if (returnToTabOnClose != null) {
               MainPageBridge.switchTab?.call(returnToTabOnClose);
             }
@@ -5419,6 +5433,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _loadContinueWatching();
           _refreshTraktAuthState();
           _refreshSimklAuthState();
+          _refreshMdblistAuthState();
           if (returnToTabOnClose != null) {
             MainPageBridge.switchTab?.call(returnToTabOnClose);
           }
@@ -8693,7 +8708,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         const StremioDropdownOption(_discCw, 'Continue Watching'),
         const StremioDropdownOption(_discTrakt, 'Trakt'),
         const StremioDropdownOption(_discSimkl, 'Simkl'),
-        const StremioDropdownOption(_discMdblist, 'MDBList'),
+        // Only offer MDBList once connected — an unauthed user shouldn't see a
+        // dead source. Kept if it's somehow already the active source so the
+        // dropdown's value always has a matching option.
+        if (_isMdblistAuthenticated || _discSource == _discMdblist)
+          const StremioDropdownOption(_discMdblist, 'MDBList'),
         for (final a in _discAddons)
           StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
       ],
