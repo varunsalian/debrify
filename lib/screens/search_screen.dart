@@ -6251,6 +6251,23 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       season ??= byTitle?['season'] as int?;
       episode ??= byTitle?['episode'] as int?;
     }
+    // No local history — last resort: Simkl's next-to-watch, mirroring the
+    // label (_resolveResumeInfo) so the two agree. Only on the detail Resume
+    // flow, and TIME-BOXED (4s) like the movie branch so a slow Simkl API never
+    // freezes the Play press — on timeout it falls through to S01E01.
+    if ((season == null || episode == null) &&
+        _isSimklAuthenticated &&
+        preferTraktResume) {
+      final next = await _simklNextToWatchFor(item).timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => null,
+      );
+      if (!mounted) return;
+      if (next != null) {
+        season = next.season;
+        episode = next.episode;
+      }
+    }
     season ??= 1;
     episode ??= 1;
     // If the last-played episode is finished, resume the NEXT one instead of
@@ -6351,7 +6368,27 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final id = item.effectiveImdbId ?? item.id;
     // Simkl lookups are IMDb-keyed — a non-IMDb catalog id can't match.
     if (id.isEmpty || !id.startsWith('tt')) return null;
+    // Only a paused mid-episode session (resume where you left off) — this runs
+    // at Simkl's slot in the priority order, ABOVE local, so a cross-device
+    // pause wins. The weaker next-to-watch fallback is applied separately, AFTER
+    // local (see _simklNextToWatchFor), so it never pre-empts a further-ahead
+    // local position.
     return SimklService.instance.fetchShowPlaybackSelection(id);
+  }
+
+  /// Simkl's next unwatched episode (server-computed `next_to_watch`) for a
+  /// series, or null. This is the WEAKEST resume signal — a computed "next"
+  /// rather than a real position — so callers apply it only when neither a
+  /// tracker session NOR local history resolved an episode (e.g. a fresh login
+  /// on a new device): it turns the default S01E01 into "resume at the next
+  /// unwatched episode", matching the Continue Watching up-next card.
+  Future<({int season, int episode})?> _simklNextToWatchFor(
+    StremioMeta item,
+  ) async {
+    if (item.type != 'series') return null;
+    final id = item.effectiveImdbId ?? item.id;
+    if (id.isEmpty || !id.startsWith('tt')) return null;
+    return SimklService.instance.fetchNextToWatch(id);
   }
 
   Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
@@ -6429,10 +6466,31 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       season ??= byTitle?['season'] as int?;
       episode ??= byTitle?['episode'] as int?;
     }
-    final started = season != null && episode != null;
+    var started = season != null && episode != null;
+    // No local history at all — last resort: Simkl's next-to-watch (the next
+    // unwatched episode), so a series watched up to E3 on another device (fresh
+    // login here) reads "Resume · S1E4" instead of defaulting to S01E01. Kept
+    // AFTER local so a further-ahead local position always wins. Same 4s cap and
+    // fall-through-to-default as the Play path (_onCatalogPlay) so the label and
+    // Play resolve the SAME episode — an un-capped label here would render S1E4
+    // while the capped Play timed out to S01E01, the exact mismatch this fixes.
+    if (!started && _isSimklAuthenticated) {
+      final next = await _simklNextToWatchFor(item).timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => null,
+      );
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (next != null) {
+        season = next.season;
+        episode = next.episode;
+        started = true;
+      }
+    }
     season ??= 1;
     episode ??= 1;
     // Finished the last episode ⇒ the button plays the NEXT one, so show it.
+    // (Only when local resolved a finished episode — the next-to-watch fallback
+    // above already returns the next unwatched one.)
     if (lastFinished) {
       final next = await NextEpisodeService.findNextEpisode(
         playId,

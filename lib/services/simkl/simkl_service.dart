@@ -903,6 +903,43 @@ class SimklService {
     return best;
   }
 
+  /// The next unwatched episode of a show, from Simkl's server-computed
+  /// `next_to_watch` (watched-progress based, via `next_watch_info=yes`).
+  /// Returns null when the show isn't in the 'watching' list, has nothing left
+  /// (completed / `next_to_watch` null), or its `next_to_watch` is an anime-style
+  /// absolute number (no season) rather than `SxxExx`. This is the series-resume
+  /// FALLBACK used when a show has no paused playback session — so a series
+  /// watched up to E3 on another device resumes at E4, not the default S01E01.
+  Future<({int season, int episode})?> fetchNextToWatch(
+    String showImdbId,
+  ) async {
+    final shows = await fetchUpNextShowsOrNull();
+    if (shows == null) return null;
+    for (final raw in shows) {
+      if (raw is! Map) continue;
+      final show = raw['show'];
+      final ids = show is Map ? show['ids'] : null;
+      if (ids is! Map || ids['imdb'] != showImdbId) continue;
+      return parseSimklEpisodeCode(raw['next_to_watch']);
+    }
+    return null;
+  }
+
+  /// Parse a Simkl `SxxExx` episode code (e.g. `next_to_watch`'s `"S02E06"`)
+  /// into season/episode. Returns null for anything that isn't `SxxExx` — a null
+  /// value, or an anime-style absolute code (`"E148"`, no season) the app's IMDb
+  /// S/E model can't place. Shared by the Continue Watching up-next builder and
+  /// the series-resume fallback so they never disagree on the parse rule.
+  static ({int season, int episode})? parseSimklEpisodeCode(dynamic value) {
+    if (value is! String) return null;
+    final m = RegExp(r'^[Ss](\d+)[Ee](\d+)$').firstMatch(value.trim());
+    if (m == null) return null;
+    final s = int.tryParse(m.group(1)!);
+    final e = int.tryParse(m.group(2)!);
+    if (s == null || e == null) return null;
+    return (season: s, episode: e);
+  }
+
   /// Raw paused-playback sessions for movies — parallel to
   /// [_fetchEpisodePlaybackSessions] (same cache/coalescing rules, shared
   /// generation counter).

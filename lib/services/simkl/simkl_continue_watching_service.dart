@@ -247,7 +247,7 @@ class SimklContinueWatchingService {
   /// (a paused entry is more specific and wins) and shows with no next episode
   /// (`next_to_watch == null`). TV-only: an anime `next_to_watch` is absolute
   /// (`"E01"`, no season) which doesn't map to the app's IMDb S/E model, so
-  /// [_parseSxxExx] returns null for it and the entry is skipped.
+  /// [SimklService.parseSimklEpisodeCode] returns null for it and it's skipped.
   List<SimklContinueWatchingItem> _buildUpNextItems(
     List<dynamic>? shows,
     Map<String, StremioMeta> libIndex,
@@ -257,7 +257,7 @@ class SimklContinueWatchingService {
     final byImdb = <String, SimklContinueWatchingItem>{};
     for (final raw in shows) {
       if (raw is! Map) continue;
-      final se = _parseSxxExx(raw['next_to_watch']);
+      final se = SimklService.parseSimklEpisodeCode(raw['next_to_watch']);
       if (se == null) continue; // null / completed / anime-absolute → no up-next
       final show = raw['show'];
       if (show is! Map) continue;
@@ -274,19 +274,6 @@ class SimklContinueWatchingService {
       );
     }
     return byImdb.values.toList();
-  }
-
-  /// Parse a Simkl `next_to_watch` like `"S02E06"` into season/episode. Returns
-  /// null for anything that isn't the `SxxExx` TV shape (e.g. an anime absolute
-  /// `"E148"`, or null), which the callers treat as "no up-next entry".
-  ({int season, int episode})? _parseSxxExx(dynamic value) {
-    if (value is! String) return null;
-    final m = RegExp(r'^[Ss](\d+)[Ee](\d+)$').firstMatch(value.trim());
-    if (m == null) return null;
-    final s = int.tryParse(m.group(1)!);
-    final e = int.tryParse(m.group(2)!);
-    if (s == null || e == null) return null;
-    return (season: s, episode: e);
   }
 
   /// Keep whichever of the existing/candidate item was paused most recently.
