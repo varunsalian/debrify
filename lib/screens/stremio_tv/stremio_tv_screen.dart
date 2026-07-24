@@ -11,6 +11,7 @@ import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../models/torrent.dart';
 import '../../services/analytics_service.dart';
+import '../../services/mdblist/mdblist_service.dart';
 import '../../services/debrid_service.dart';
 import '../../services/stream_url_validator.dart';
 import '../../services/main_page_bridge.dart';
@@ -116,6 +117,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
   bool _showSearchField = false;
+  // Whether MDBList is connected — gates the "Import → From MDBList" entry so
+  // an unauthed user isn't offered a dead import (MDBList is also hidden from
+  // Settings for the alpha).
+  bool _mdblistConnected = false;
 
   // Lazy loading: track channels currently being fetched to avoid duplicates
   final Set<String> _loadingChannelIds = {};
@@ -132,6 +137,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     super.initState();
     AnalyticsService.screenView('stremio_tv');
     _loadSettings().then((_) => _discoverAndLoad());
+    MdblistService.instance.isAuthenticated().then((v) {
+      if (mounted && v != _mdblistConnected) {
+        setState(() => _mdblistConnected = v);
+      }
+    });
 
     // Search DPAD key handler
     _searchFocusNode.onKeyEvent = _handleSearchKeyEvent;
@@ -449,6 +459,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   Future<void> _importFromTrakt() async {
     final imported = await StremioTvLocalCatalogsDialog.importFromTrakt(
+      context,
+    );
+    if (imported && mounted) _refresh();
+  }
+
+  Future<void> _importFromMdblist() async {
+    final imported = await StremioTvLocalCatalogsDialog.importFromMdblist(
       context,
     );
     if (imported && mounted) _refresh();
@@ -2904,6 +2921,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         label: 'From Trakt',
                                         onPressed: _importFromTrakt,
                                       ),
+                                      // Hidden for the alpha (kMdblistEnabled)
+                                      // and only when connected — no dead import.
+                                      if (kMdblistEnabled && _mdblistConnected)
+                                        _submenuItem(
+                                          icon: Icons
+                                              .playlist_add_check_circle_outlined,
+                                          label: 'From MDBList',
+                                          onPressed: _importFromMdblist,
+                                        ),
                                     ],
                                     child: const Text('Import'),
                                   ),

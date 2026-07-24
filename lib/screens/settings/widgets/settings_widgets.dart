@@ -736,6 +736,9 @@ class ConnectionsSummary extends StatefulWidget {
   final ConnectionInfo reddit;
   final ConnectionInfo iptv;
   final ConnectionInfo trakt;
+  final ConnectionInfo simkl;
+  // Null when MDBList is hidden (alpha) — its card + focus node are then omitted.
+  final ConnectionInfo? mdblist;
   final FocusNode? firstCardFocusNode;
 
   const ConnectionsSummary({
@@ -750,6 +753,8 @@ class ConnectionsSummary extends StatefulWidget {
     required this.reddit,
     required this.iptv,
     required this.trakt,
+    required this.simkl,
+    this.mdblist,
     this.firstCardFocusNode,
   });
 
@@ -765,7 +770,8 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   // [premiumize,  allDebrid]
   // [pikpak,      webDav]
   // [indexerManagers, iptv]
-  // [trakt]
+  // [trakt,       simkl]
+  // [mdblist]     (alone)
   late final FocusNode _torboxFocusNode;
   late final FocusNode _premiumizeFocusNode;
   late final FocusNode _allDebridFocusNode;
@@ -775,6 +781,8 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   late final FocusNode _redditFocusNode;
   late final FocusNode _iptvFocusNode;
   late final FocusNode _traktFocusNode;
+  late final FocusNode _simklFocusNode;
+  late final FocusNode _mdblistFocusNode;
 
   @override
   void initState() {
@@ -790,6 +798,8 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
     _redditFocusNode = FocusNode(debugLabel: 'settings-reddit');
     _iptvFocusNode = FocusNode(debugLabel: 'settings-iptv');
     _traktFocusNode = FocusNode(debugLabel: 'settings-trakt');
+    _simklFocusNode = FocusNode(debugLabel: 'settings-simkl');
+    _mdblistFocusNode = FocusNode(debugLabel: 'settings-mdblist');
   }
 
   @override
@@ -803,6 +813,8 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
     _redditFocusNode.dispose();
     _iptvFocusNode.dispose();
     _traktFocusNode.dispose();
+    _simklFocusNode.dispose();
+    _mdblistFocusNode.dispose();
     super.dispose();
   }
 
@@ -823,7 +835,8 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
             // [Premiumize] [AllDebrid]
             // [PikPak]     [WebDAV]
             // [Indexers]   [IPTV]
-            // [Trakt]
+            // [Trakt]       [Simkl]
+            // [MDBList]
             return Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -933,21 +946,57 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                     upNeighbor: wide
                         ? _webDavFocusNode
                         : _indexerManagersFocusNode,
-                    downNeighbor: _traktFocusNode,
+                    // Wide grid: Simkl (row 5 right) now sits directly below
+                    // IPTV (row 4 right), not Trakt (row 5 left).
+                    downNeighbor: wide ? _simklFocusNode : _traktFocusNode,
                   ),
                 ),
-                // Row 5: Trakt (left)
+                // Row 5: Trakt (left), Simkl (right)
                 SizedBox(
                   width: itemWidth,
                   child: ConnectionCard(
                     info: widget.trakt,
                     focusNode: _traktFocusNode,
                     isLeftColumn: true,
+                    rightNeighbor: wide ? _simklFocusNode : null,
                     upNeighbor: wide
                         ? _indexerManagersFocusNode
                         : _iptvFocusNode,
+                    // Wide: MDBList sits alone in the left column of row 6,
+                    // directly below Trakt. Narrow (single column): the next
+                    // card down is Simkl, not MDBList. When MDBList is hidden
+                    // (alpha), down goes nowhere in wide.
+                    downNeighbor: wide
+                        ? (widget.mdblist != null ? _mdblistFocusNode : null)
+                        : _simklFocusNode,
                   ),
                 ),
+                SizedBox(
+                  width: itemWidth,
+                  child: ConnectionCard(
+                    info: widget.simkl,
+                    focusNode: _simklFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _traktFocusNode : null,
+                    upNeighbor: wide ? _iptvFocusNode : _traktFocusNode,
+                    // Down lands on the lone MDBList card, or nowhere when it's
+                    // hidden (alpha).
+                    downNeighbor:
+                        widget.mdblist != null ? _mdblistFocusNode : null,
+                  ),
+                ),
+                // Row 6: MDBList (left column, alone — no right partner).
+                // Omitted entirely when MDBList is hidden for the alpha.
+                if (widget.mdblist != null)
+                  SizedBox(
+                    width: itemWidth,
+                    child: ConnectionCard(
+                      info: widget.mdblist!,
+                      focusNode: _mdblistFocusNode,
+                      isLeftColumn: true,
+                      upNeighbor: wide ? _traktFocusNode : _simklFocusNode,
+                    ),
+                  ),
               ],
             );
           },

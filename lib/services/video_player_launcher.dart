@@ -32,6 +32,7 @@ import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
 import '../services/movie_metadata_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/simkl/simkl_service.dart';
 
 /// Trakt scrobble dedup guard for Android TV player (mirrors _traktLastScrobbleAction in VideoPlayerScreen)
 String? _traktLastScrobbleAction;
@@ -39,6 +40,14 @@ double _traktLastKnownProgress = 0.0;
 int? _traktLastKnownSeason;
 int? _traktLastKnownEpisode;
 Timer? _traktHeartbeatTimer;
+
+/// Simkl scrobble state — fully parallel mirror of the Trakt vars above
+/// (independent dedup guard + heartbeat; the two trackers never share state).
+String? _simklLastScrobbleAction;
+double _simklLastKnownProgress = 0.0;
+int? _simklLastKnownSeason;
+int? _simklLastKnownEpisode;
+Timer? _simklHeartbeatTimer;
 
 final Map<String, String> _resolvedStreamCache = <String, String>{};
 final Map<String, String> _redirectCache = <String, String>{};
@@ -237,9 +246,14 @@ class VideoPlayerLaunchArgs {
   // Trakt scrobble: send playback progress to Trakt
   final bool traktScrobble;
   // Prevent launcher-level Trakt auto-sync upgrade for playlist-origin playback.
+  // Context-scoped, not Trakt-specific: contexts that suppress Trakt auto-sync
+  // (playlists, Stremio TV) suppress the Simkl auto-sync upgrade too.
   final bool suppressTraktAutoSync;
   // Trakt progress: resume fallback when no local resume exists (0-100)
   final double? traktProgressPercent;
+  // Simkl scrobble/progress — fully parallel to the Trakt pair above.
+  final bool simklScrobble;
+  final double? simklProgressPercent;
   // Continue watching metadata (for home screen section)
   final String? contentTitle; // Clean display name (IMDB title)
   final String? posterUrl;
@@ -299,6 +313,8 @@ class VideoPlayerLaunchArgs {
     this.traktScrobble = false,
     this.suppressTraktAutoSync = false,
     this.traktProgressPercent,
+    this.simklScrobble = false,
+    this.simklProgressPercent,
     this.contentTitle,
     this.posterUrl,
     this.contentYear,
@@ -350,6 +366,8 @@ class VideoPlayerLaunchArgs {
       stremioTvNextProvider: stremioTvNextProvider,
       traktScrobble: traktScrobble,
       traktProgressPercent: traktProgressPercent,
+      simklScrobble: simklScrobble,
+      simklProgressPercent: simklProgressPercent,
     );
   }
 }
@@ -612,6 +630,8 @@ class VideoPlayerLauncher {
           traktScrobble: true,
           suppressTraktAutoSync: args.suppressTraktAutoSync,
           traktProgressPercent: args.traktProgressPercent,
+          simklScrobble: args.simklScrobble,
+          simklProgressPercent: args.simklProgressPercent,
           contentTitle: args.contentTitle,
           posterUrl: args.posterUrl,
           contentYear: args.contentYear,
@@ -622,11 +642,101 @@ class VideoPlayerLauncher {
       }
     }
 
+    // Simkl auto-enable — parallel to the Trakt upgrade above, same context
+    // exclusions (suppressTraktAutoSync is context-scoped, not Trakt-specific).
+    // Now that a Simkl Continue Watching row exists, this mirrors the Trakt
+    // branch: the title lives in the Simkl CW row, so the stale local entry is
+    // removed below (and the write-guard at the persist step skips creating a
+    // new one) — otherwise it would show in BOTH the local and Simkl rows.
+    if (!args.simklScrobble &&
+        !args.suppressTraktAutoSync &&
+        args.contentImdbId != null &&
+        args.stremioTvChannels == null) {
+      final results = await Future.wait([
+        StorageService.getSimklSyncCatalogItems(),
+        SimklService.instance.isAuthenticated(),
+      ]);
+      final syncCatalog = results[0];
+      final isAuth = results[1];
+      if (syncCatalog && isAuth) {
+        args = VideoPlayerLaunchArgs(
+          videoUrl: args.videoUrl,
+          audioUrl: args.audioUrl,
+          fallbackUrl: args.fallbackUrl,
+          title: args.title,
+          subtitle: args.subtitle,
+          playlist: args.playlist,
+          startIndex: args.startIndex,
+          rdTorrentId: args.rdTorrentId,
+          torboxTorrentId: args.torboxTorrentId,
+          pikpakCollectionId: args.pikpakCollectionId,
+          webDavServerId: args.webDavServerId,
+          webDavBaseUrl: args.webDavBaseUrl,
+          webDavPath: args.webDavPath,
+          requestMagicNext: args.requestMagicNext,
+          requestNextChannel: args.requestNextChannel,
+          startFromRandom: args.startFromRandom,
+          randomStartMaxPercent: args.randomStartMaxPercent,
+          startAtPercent: args.startAtPercent,
+          hideSeekbar: args.hideSeekbar,
+          showChannelName: args.showChannelName,
+          channelName: args.channelName,
+          channelNumber: args.channelNumber,
+          showVideoTitle: args.showVideoTitle,
+          hideOptions: args.hideOptions,
+          hideBackButton: args.hideBackButton,
+          httpHeaders: args.httpHeaders,
+          disableExternalPlayer: args.disableExternalPlayer,
+          isAndroidTvOverride: args.isAndroidTvOverride,
+          disableAutoResume: args.disableAutoResume,
+          viewMode: args.viewMode,
+          contentImdbId: args.contentImdbId,
+          contentType: args.contentType,
+          contentSeason: args.contentSeason,
+          contentEpisode: args.contentEpisode,
+          iptvChannels: args.iptvChannels,
+          iptvStartIndex: args.iptvStartIndex,
+          stremioSources: args.stremioSources,
+          stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
+          resolveStremioSource: args.resolveStremioSource,
+          resolveSourceToPlaylist: args.resolveSourceToPlaylist,
+          seriesSourceFetcher: args.seriesSourceFetcher,
+          stremioTvChannels: args.stremioTvChannels,
+          stremioTvCurrentChannelId: args.stremioTvCurrentChannelId,
+          stremioTvRotationMinutes: args.stremioTvRotationMinutes,
+          stremioTvSeriesRotationMinutes: args.stremioTvSeriesRotationMinutes,
+          stremioTvMixSalt: args.stremioTvMixSalt,
+          stremioTvGuideDataProvider: args.stremioTvGuideDataProvider,
+          stremioTvChannelSwitchProvider: args.stremioTvChannelSwitchProvider,
+          stremioTvNextProvider: args.stremioTvNextProvider,
+          traktScrobble: args.traktScrobble,
+          suppressTraktAutoSync: args.suppressTraktAutoSync,
+          traktProgressPercent: args.traktProgressPercent,
+          simklScrobble: true,
+          simklProgressPercent: args.simklProgressPercent,
+          contentTitle: args.contentTitle,
+          posterUrl: args.posterUrl,
+          contentYear: args.contentYear,
+          addonId: args.addonId,
+        );
+        // Clean up any pre-existing local Continue Watching entry (from before
+        // Simkl was connected, or a prior non-Simkl play) — Simkl's own CW row
+        // tracks it now, so leaving the local entry would duplicate it. Mirrors
+        // the Trakt branch above.
+        await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+      }
+    }
+
     // Persist before launching playback so Android TV handoff cannot race the write.
-    // Skip for Trakt content (tracked by Trakt section) and Stremio TV (channel rotation)
+    // Skip when a tracker already owns this title's Continue Watching entry —
+    // Trakt (its own CW row) OR Simkl (its own CW row) — so it lives in exactly
+    // one row instead of duplicating into local Continue Watching. Also skip
+    // Stremio TV (channel rotation). This runs on the shared pre-launch path, so
+    // it applies to both the native-TV and in-app players.
     if (args.contentImdbId != null &&
         args.contentType != null &&
         !args.traktScrobble &&
+        !args.simklScrobble &&
         args.stremioTvChannels == null) {
       await StorageService.saveContinueWatchingItem(
         imdbId: args.contentImdbId!,
@@ -1352,6 +1462,14 @@ class VideoPlayerLauncher {
     _traktLastKnownSeason = null;
     _traktLastKnownEpisode = null;
 
+    // Reset Simkl scrobble state for clean session
+    _simklHeartbeatTimer?.cancel();
+    _simklHeartbeatTimer = null;
+    _simklLastScrobbleAction = null;
+    _simklLastKnownProgress = 0.0;
+    _simklLastKnownSeason = null;
+    _simklLastKnownEpisode = null;
+
     try {
       final builder = _AndroidTvPlaybackPayloadBuilder(args);
       final result = await builder.build();
@@ -2054,6 +2172,20 @@ class VideoPlayerLauncher {
     }
   }
 
+  /// A series frame whose season/episode hasn't been populated yet must not be
+  /// scrobbled to Simkl — [SimklService._scrobble] would send the show id in a
+  /// movie-shaped body, recording a bogus movie on the account. A movie
+  /// legitimately reports (null, null), so this only blocks the series case.
+  /// (Trakt has the same latent gap; guard is Simkl-only per the no-touch-Trakt
+  /// convention.)
+  static bool _simklSeriesSEUnresolved(
+    _AndroidTvPlaybackPayload payload,
+    Map<String, dynamic> progress,
+  ) {
+    if (payload.contentType != _PlaybackContentType.series) return false;
+    return progress['season'] == null || progress['episode'] == null;
+  }
+
   static Future<void> _handleProgressUpdate(
     _AndroidTvPlaybackPayload payload,
     Map<String, dynamic> progress,
@@ -2201,6 +2333,153 @@ class VideoPlayerLauncher {
             TraktService.instance.scrobblePause(
               imdbId,
               traktProgress,
+              season: season,
+              episode: episode,
+            );
+          }
+        }
+      }
+
+      // Simkl scrobble for Android TV player — fully parallel mirror of the
+      // Trakt block above (own state vars/heartbeat, same event stream, same
+      // 80% rule — Simkl also finalizes watched server-side at ≥80% on stop).
+      // Skips a series frame with unresolved S/E so it can't be recorded as a
+      // movie (see _simklSeriesSEUnresolved).
+      if (payload.simklScrobble &&
+          payload.imdbId != null &&
+          durationMs > 0 &&
+          !_simklSeriesSEUnresolved(payload, progress)) {
+        final isPlaying =
+            progress['isPlaying'] == true || progress['isBuffering'] == true;
+        final simklProgress = (positionMs / durationMs * 100).clamp(0.0, 100.0);
+        final imdbId = payload.imdbId!;
+        final season = payload.contentType == _PlaybackContentType.series
+            ? progress['season'] as int?
+            : null;
+        final episode = payload.contentType == _PlaybackContentType.series
+            ? progress['episode'] as int?
+            : null;
+
+        // Detect episode switch — scrobble stop for the old episode
+        if (_simklLastKnownSeason != null &&
+            _simklLastKnownEpisode != null &&
+            (season != _simklLastKnownSeason ||
+                episode != _simklLastKnownEpisode) &&
+            _simklLastScrobbleAction != 'stop') {
+          _simklHeartbeatTimer?.cancel();
+          _simklHeartbeatTimer = null;
+          SimklService.instance.scrobbleStop(
+            imdbId,
+            _simklLastKnownProgress,
+            season: _simklLastKnownSeason,
+            episode: _simklLastKnownEpisode,
+          );
+          _simklLastScrobbleAction = 'stop';
+        }
+
+        _simklLastKnownProgress = simklProgress;
+        _simklLastKnownSeason = season;
+        _simklLastKnownEpisode = episode;
+        // Recover session if stopped at >80% and user sought back under 80%
+        if (_simklLastScrobbleAction == 'stop' &&
+            isPlaying &&
+            simklProgress <= 80 &&
+            !completed) {
+          _simklLastScrobbleAction = null;
+        }
+        if (completed && _simklLastScrobbleAction != 'stop') {
+          _simklLastScrobbleAction = 'stop';
+          _simklHeartbeatTimer?.cancel();
+          _simklHeartbeatTimer = null;
+          SimklService.instance.scrobbleStop(
+            imdbId,
+            simklProgress,
+            season: season,
+            episode: episode,
+          );
+        } else if (isPlaying &&
+            _simklLastScrobbleAction != 'start' &&
+            _simklLastScrobbleAction != 'stop') {
+          // ≥80% would just finalize server-side — send stop, no heartbeat
+          if (simklProgress > 80) {
+            _simklLastScrobbleAction = 'stop';
+            SimklService.instance.scrobbleStop(
+              imdbId,
+              simklProgress,
+              season: season,
+              episode: episode,
+            );
+          } else {
+            // Pause-centric: do NOT scrobble 'start' to Simkl — it persists
+            // nothing (id:0) AND wipes the existing /sync/playback resume point.
+            // Leave the resume point intact; the pause-based heartbeat below
+            // checkpoints it. 'start' is kept only as an in-play state marker
+            // (no POST sent) so this isPlaying branch doesn't re-enter on every
+            // progress tick.
+            _simklLastScrobbleAction = 'start';
+            // 2-minute checkpoint — comfortably above Simkl's 20s rate lock
+            _simklHeartbeatTimer?.cancel();
+            _simklHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (
+              _,
+            ) {
+              if (payload.imdbId == null) return;
+              if (_simklLastKnownProgress > 80) {
+                _simklLastScrobbleAction = 'stop';
+                SimklService.instance.scrobbleStop(
+                  payload.imdbId!,
+                  _simklLastKnownProgress,
+                  season: _simklLastKnownSeason,
+                  episode: _simklLastKnownEpisode,
+                );
+                debugPrint(
+                  'Simkl: Heartbeat stop at ${_simklLastKnownProgress.toStringAsFixed(1)}% (>80%)',
+                );
+                _simklHeartbeatTimer?.cancel();
+                _simklHeartbeatTimer = null;
+                return;
+              }
+              // Checkpoint a RESUMABLE position via pause. Simkl's /scrobble/start
+              // saves nothing (returns id:0) AND wipes any existing /sync/playback
+              // entry, so start-based heartbeats never survived a hard kill. Pause
+              // is the only call that persists a resume point.
+              // Keep _simklLastScrobbleAction as 'start' (do NOT set 'pause'): the
+              // native player re-runs this scrobble block on every progress event,
+              // and a 'pause' value would re-enter the isPlaying start-branch above
+              // on the next tick, re-sending start and wiping the position we just
+              // saved. 'start' keeps that branch inert while pause refreshes the
+              // resume point each interval.
+              _simklLastScrobbleAction = 'start';
+              SimklService.instance.scrobblePause(
+                payload.imdbId!,
+                _simklLastKnownProgress,
+                season: _simklLastKnownSeason,
+                episode: _simklLastKnownEpisode,
+              );
+              debugPrint(
+                'Simkl: Heartbeat pause checkpoint at ${_simklLastKnownProgress.toStringAsFixed(1)}%',
+              );
+            });
+          }
+        } else if (!isPlaying &&
+            !completed &&
+            _simklLastScrobbleAction != null &&
+            _simklLastScrobbleAction != 'pause' &&
+            _simklLastScrobbleAction != 'stop') {
+          _simklHeartbeatTimer?.cancel();
+          _simklHeartbeatTimer = null;
+          if (simklProgress > 80) {
+            _simklLastScrobbleAction = 'stop';
+            SimklService.instance.scrobbleStop(
+              imdbId,
+              simklProgress,
+              season: season,
+              episode: episode,
+            );
+          } else {
+            _simklLastScrobbleAction = 'pause';
+            SimklService.instance.scrobblePause(
+              imdbId,
+              simklProgress,
               season: season,
               episode: episode,
             );
@@ -2364,6 +2643,35 @@ class VideoPlayerLauncher {
     _traktLastKnownProgress = 0.0;
     _traktLastKnownSeason = null;
     _traktLastKnownEpisode = null;
+
+    // Final Simkl scrobble stop on playback exit — parallel to the Trakt
+    // cleanup above, including the same skip-after-pause nuance (a pause
+    // already created Simkl's playback entry; stop would duplicate it).
+    // The extra series-S/E guard: unlike the per-frame block, this direct
+    // stop isn't gated by _simklSeriesSEUnresolved, so a series whose S/E
+    // never resolved (every frame was skipped, last-known stays null) would
+    // otherwise be finalized as a bogus movie. Skip it in that case.
+    _simklHeartbeatTimer?.cancel();
+    _simklHeartbeatTimer = null;
+    final simklSeriesUnresolved =
+        payload.contentType == _PlaybackContentType.series &&
+        (_simklLastKnownSeason == null || _simklLastKnownEpisode == null);
+    if (payload.simklScrobble &&
+        payload.imdbId != null &&
+        _simklLastScrobbleAction != 'stop' &&
+        _simklLastScrobbleAction != 'pause' &&
+        !simklSeriesUnresolved) {
+      SimklService.instance.scrobbleStop(
+        payload.imdbId!,
+        _simklLastKnownProgress,
+        season: _simklLastKnownSeason,
+        episode: _simklLastKnownEpisode,
+      );
+    }
+    _simklLastScrobbleAction = null;
+    _simklLastKnownProgress = 0.0;
+    _simklLastKnownSeason = null;
+    _simklLastKnownEpisode = null;
   }
 
   static Future<String> _resolveEntryUrl(
@@ -2539,6 +2847,10 @@ class _AndroidTvPlaybackPayload {
   final bool hasPlaylistResolver;
   final bool traktScrobble;
   final double? traktProgressPercent;
+  // Simkl parallel pair. Only the scrobble flag matters Dart-side (the
+  // progress percent folds into the native resume seed via toMap below).
+  final bool simklScrobble;
+  final double? simklProgressPercent;
 
   const _AndroidTvPlaybackPayload({
     required this.contentType,
@@ -2559,7 +2871,23 @@ class _AndroidTvPlaybackPayload {
     this.hasPlaylistResolver = false,
     this.traktScrobble = false,
     this.traktProgressPercent,
+    this.simklScrobble = false,
+    this.simklProgressPercent,
   });
+
+  /// The effective cross-tracker launch resume percent: the FURTHEST of the
+  /// Trakt and Simkl promises (each 0-100, exclusive). The native player only
+  /// knows one launch-resume input (`traktProgressPercent` in the map below),
+  /// so the three-way merge happens here — native then reconciles this
+  /// explicit percent against its local position as before.
+  double? get _effectiveLaunchPercent {
+    double? best;
+    for (final pct in [traktProgressPercent, simklProgressPercent]) {
+      if (pct == null || pct <= 0 || pct >= 100) continue;
+      if (best == null || pct > best) best = pct;
+    }
+    return best;
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -2584,10 +2912,10 @@ class _AndroidTvPlaybackPayload {
       if (stremioCurrentSourceIndex != null)
         'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
       if (hasPlaylistResolver) 'hasPlaylistResolver': true,
-      if (traktProgressPercent != null &&
-          traktProgressPercent! > 0 &&
-          traktProgressPercent! < 100)
-        'traktProgressPercent': traktProgressPercent,
+      // Keyed 'traktProgressPercent' for the native side's existing resume
+      // input, but carries the furthest of the Trakt/Simkl launch percents.
+      if (_effectiveLaunchPercent != null)
+        'traktProgressPercent': _effectiveLaunchPercent,
     };
   }
 }
@@ -3056,6 +3384,8 @@ class _AndroidTvPlaybackPayloadBuilder {
       hasPlaylistResolver: args.resolveSourceToPlaylist != null,
       traktScrobble: args.traktScrobble,
       traktProgressPercent: args.traktProgressPercent,
+      simklScrobble: args.simklScrobble,
+      simklProgressPercent: args.simklProgressPercent,
     );
 
     return _AndroidTvPlaybackPayloadResult(

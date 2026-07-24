@@ -22,6 +22,7 @@ import '../utils/platform_util.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/simkl/simkl_service.dart';
 import 'pikpak_folder_picker_dialog.dart';
 
 class InitialSetupFlow extends StatefulWidget {
@@ -287,6 +288,22 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
   final FocusNode _traktFinishButtonFocusNode = FocusNode(
     debugLabel: 'trakt-finish-button',
   );
+  // Simkl onboarding focus nodes — parallel to the Trakt ones above.
+  final FocusNode _simklYesButtonFocusNode = FocusNode(
+    debugLabel: 'simkl-yes-button',
+  );
+  final FocusNode _simklSkipButtonFocusNode = FocusNode(
+    debugLabel: 'simkl-skip-button',
+  );
+  final FocusNode _simklOpenUrlButtonFocusNode = FocusNode(
+    debugLabel: 'simkl-open-url',
+  );
+  final FocusNode _simklCancelButtonFocusNode = FocusNode(
+    debugLabel: 'simkl-cancel-button',
+  );
+  final FocusNode _simklFinishButtonFocusNode = FocusNode(
+    debugLabel: 'simkl-finish-button',
+  );
 
   bool _traktConnected = false;
   bool _isTraktStarting = false;
@@ -302,6 +319,23 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
   Timer? _traktCountdownTimer;
   int _traktLoginAttemptId = 0;
   bool _isTraktPolling = false;
+
+  // Simkl onboarding state — parallel to the Trakt block above. No device
+  // code: Simkl polls by the user code (see simkl_settings_page.dart), and
+  // Simkl tokens don't expire so there's no refresh/expiry to track.
+  bool _simklConnected = false;
+  bool _isSimklStarting = false;
+  bool _isResolvingSimklAuth = false;
+  String? _simklUsername;
+  String? _simklErrorMessage;
+  String? _simklUserCode;
+  String? _simklVerificationUrl;
+  int _simklPollInterval = 5;
+  DateTime? _simklCodeExpiresAt;
+  Timer? _simklPollTimer;
+  Timer? _simklCountdownTimer;
+  int _simklLoginAttemptId = 0;
+  bool _isSimklPolling = false;
 
   // DPAD shortcuts for arrow key navigation
   static const Map<ShortcutActivator, Intent> _dpadShortcuts = {
@@ -411,6 +445,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
       _traktOpenUrlButtonFocusNode,
       _traktCancelButtonFocusNode,
       _traktFinishButtonFocusNode,
+      _simklYesButtonFocusNode,
+      _simklSkipButtonFocusNode,
+      _simklOpenUrlButtonFocusNode,
+      _simklCancelButtonFocusNode,
+      _simklFinishButtonFocusNode,
     ];
 
     for (final node in focusNodes) {
@@ -481,6 +520,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
   void dispose() {
     _traktPollTimer?.cancel();
     _traktCountdownTimer?.cancel();
+    _simklPollTimer?.cancel();
+    _simklCountdownTimer?.cancel();
     _importAutoTimer?.cancel();
     _detachImportListeners();
     _importPulseController.dispose();
@@ -525,6 +566,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
     _traktOpenUrlButtonFocusNode.dispose();
     _traktCancelButtonFocusNode.dispose();
     _traktFinishButtonFocusNode.dispose();
+    _simklYesButtonFocusNode.dispose();
+    _simklSkipButtonFocusNode.dispose();
+    _simklOpenUrlButtonFocusNode.dispose();
+    _simklCancelButtonFocusNode.dispose();
+    _simklFinishButtonFocusNode.dispose();
     for (final node in _engineItemFocusNodes.values) {
       node.dispose();
     }
@@ -666,6 +712,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
                                                         )
                                                       : _isEngineSelectionStep
                                                       ? _buildEngineSelectionStep(
+                                                          theme,
+                                                          innerConstraints
+                                                              .maxWidth,
+                                                          screenHeight,
+                                                        )
+                                                      : _isSimklStep
+                                                      ? _buildSimklStep(
                                                           theme,
                                                           innerConstraints
                                                               .maxWidth,
@@ -1021,6 +1074,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
         return 'PikPak';
       case ConfigCommand.trakt:
         return 'Trakt';
+      case ConfigCommand.simkl:
+        return 'Simkl';
       case ConfigCommand.searchEngines:
         return 'Search engines';
       case ConfigCommand.webDav:
@@ -2382,7 +2437,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Text(
-          'Final step',
+          'Almost there',
           style: theme.textTheme.labelLarge?.copyWith(color: Colors.white60),
         ),
         SizedBox(height: spacing1),
@@ -2625,9 +2680,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
               order: const NumericFocusOrder(1),
               child: FilledButton.icon(
                 focusNode: _traktFinishButtonFocusNode,
-                onPressed: _finishOnboarding,
-                icon: const Icon(Icons.check_rounded),
-                label: const Text('Finish setup'),
+                onPressed: _goToSimklStep,
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: const Text('Continue'),
               ),
             ),
           )
@@ -2663,8 +2718,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
                       order: const NumericFocusOrder(3),
                       child: FilledButton(
                         focusNode: _traktFinishButtonFocusNode,
-                        onPressed: isTraktPollLocked ? null : _finishOnboarding,
-                        child: const Text('Finish without Trakt'),
+                        onPressed: isTraktPollLocked ? null : _goToSimklStep,
+                        child: const Text('Continue without Trakt'),
                       ),
                     ),
                   ],
@@ -2684,8 +2739,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
                       order: const NumericFocusOrder(3),
                       child: FilledButton(
                         focusNode: _traktFinishButtonFocusNode,
-                        onPressed: isTraktPollLocked ? null : _finishOnboarding,
-                        child: const Text('Finish without Trakt'),
+                        onPressed: isTraktPollLocked ? null : _goToSimklStep,
+                        child: const Text('Continue without Trakt'),
                       ),
                     ),
                   ],
@@ -2722,8 +2777,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
                       order: const NumericFocusOrder(2),
                       child: TextButton(
                         focusNode: _traktSkipButtonFocusNode,
-                        onPressed: _finishOnboarding,
-                        child: const Text('No, finish setup'),
+                        onPressed: _goToSimklStep,
+                        child: const Text('No, continue'),
                       ),
                     ),
                   ],
@@ -2757,6 +2812,421 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
                       order: const NumericFocusOrder(2),
                       child: TextButton(
                         focusNode: _traktSkipButtonFocusNode,
+                        onPressed: _goToSimklStep,
+                        child: const Text('No, continue'),
+                      ),
+                    ),
+                  ],
+                ),
+      ],
+    );
+  }
+
+  Widget _buildSimklStep(
+    ThemeData theme,
+    double availableWidth,
+    double screenHeight,
+  ) {
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing2 = screenHeight < 800 ? 12.0 : 16.0;
+    final spacing3 = screenHeight < 800 ? 16.0 : 24.0;
+    final bool isCompact = availableWidth < 420;
+    final bool hasPendingCode =
+        _simklUserCode != null && !_simklConnected && !_isResolvingSimklAuth;
+    final bool isSimklPollLocked = hasPendingCode && _isSimklPolling;
+    final String activationUrl =
+        _simklVerificationUrl ?? 'https://simkl.com/pin';
+
+    return Column(
+      key: ValueKey<String>(
+        'simkl-step-${_simklConnected
+            ? 'connected'
+            : hasPendingCode
+            ? 'code'
+            : 'prompt'}',
+      ),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          'Final step',
+          style: theme.textTheme.labelLarge?.copyWith(color: Colors.white60),
+        ),
+        SizedBox(height: spacing1),
+        Text(
+          'Connect Simkl',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        SizedBox(height: spacing1),
+        Text(
+          'Do you have Simkl? If yes, connect it now to sync your watch activity and continue watching.',
+          style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+        ),
+        SizedBox(height: spacing3),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: _isResolvingSimklAuth
+              ? Row(
+                  children: <Widget>[
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Checking your Simkl status...',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : _simklConnected
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: Colors.greenAccent,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _simklUsername == null
+                                ? 'Simkl connected'
+                                : 'Connected as $_simklUsername',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: spacing1),
+                    Text(
+                      'You can manage scrobbling and sync behavior later in Settings.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                )
+              : hasPendingCode
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Enter this code at Simkl:',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: spacing2),
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompact ? 12 : 16,
+                        vertical: isCompact ? 16 : 20,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.14),
+                        ),
+                      ),
+                      child: Column(
+                        children: <Widget>[
+                          if (_isAndroidTv)
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _simklUserCode!,
+                                style: TextStyle(
+                                  fontSize: isCompact ? 30 : 40,
+                                  height: 1,
+                                  letterSpacing: isCompact ? 4 : 6,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          else
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                Flexible(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      _simklUserCode!,
+                                      style: TextStyle(
+                                        fontSize: isCompact ? 30 : 40,
+                                        height: 1,
+                                        letterSpacing: isCompact ? 4 : 6,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: _copySimklCode,
+                                  tooltip: 'Copy code',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(
+                                    Icons.copy_rounded,
+                                    color: Colors.white70,
+                                    size: 20,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          SizedBox(height: spacing1),
+                          Text(
+                            'Code expires in ${_formatSimklCountdown()}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.white60,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: spacing2),
+                    Text(
+                      activationUrl,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: spacing1),
+                    Text(
+                      'Open the link on your phone or computer, approve Debrify, and then finish setup here.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    ),
+                    if (isSimklPollLocked) ...<Widget>[
+                      SizedBox(height: spacing1),
+                      Text(
+                        'Checking Simkl now. Cancel and skip are temporarily disabled.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white60,
+                        ),
+                      ),
+                    ],
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        const Icon(
+                          Icons.movie_filter_rounded,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Simkl is optional',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: spacing1),
+                    Text(
+                      'If you have a Simkl account, Debrify can track what you watch and keep your progress in sync.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+        if (_simklErrorMessage != null) ...<Widget>[
+          SizedBox(height: spacing2),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+            ),
+            child: Text(
+              _simklErrorMessage!,
+              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
+            ),
+          ),
+        ],
+        SizedBox(height: spacing3),
+        if (_isResolvingSimklAuth)
+          const SizedBox.shrink()
+        else if (_simklConnected)
+          Align(
+            alignment: Alignment.centerRight,
+            child: FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: FilledButton.icon(
+                focusNode: _simklFinishButtonFocusNode,
+                onPressed: _finishOnboarding,
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Finish setup'),
+              ),
+            ),
+          )
+        else if (hasPendingCode) ...<Widget>[
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(1),
+            child: OutlinedButton.icon(
+              focusNode: _simklOpenUrlButtonFocusNode,
+              onPressed: () => _launch(activationUrl),
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('Open activation page'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+              ),
+            ),
+          ),
+          SizedBox(height: spacing2),
+          isCompact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(2),
+                      child: TextButton(
+                        focusNode: _simklCancelButtonFocusNode,
+                        onPressed: isSimklPollLocked ? null : _cancelSimklLogin,
+                        child: const Text('Cancel login'),
+                      ),
+                    ),
+                    SizedBox(height: spacing1),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(3),
+                      child: FilledButton(
+                        focusNode: _simklFinishButtonFocusNode,
+                        onPressed: isSimklPollLocked ? null : _finishOnboarding,
+                        child: const Text('Finish without Simkl'),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: <Widget>[
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(2),
+                      child: TextButton(
+                        focusNode: _simklCancelButtonFocusNode,
+                        onPressed: isSimklPollLocked ? null : _cancelSimklLogin,
+                        child: const Text('Cancel login'),
+                      ),
+                    ),
+                    const Spacer(),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(3),
+                      child: FilledButton(
+                        focusNode: _simklFinishButtonFocusNode,
+                        onPressed: isSimklPollLocked ? null : _finishOnboarding,
+                        child: const Text('Finish without Simkl'),
+                      ),
+                    ),
+                  ],
+                ),
+        ] else
+          isCompact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(1),
+                      child: FilledButton.icon(
+                        focusNode: _simklYesButtonFocusNode,
+                        onPressed: _isSimklStarting ? null : _startSimklLogin,
+                        icon: _isSimklStarting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.login_rounded),
+                        label: Text(
+                          _isSimklStarting
+                              ? 'Getting code...'
+                              : 'Yes, connect Simkl',
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: spacing1),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(2),
+                      child: TextButton(
+                        focusNode: _simklSkipButtonFocusNode,
+                        onPressed: _finishOnboarding,
+                        child: const Text('No, finish setup'),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: <Widget>[
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(1),
+                      child: FilledButton.icon(
+                        focusNode: _simklYesButtonFocusNode,
+                        onPressed: _isSimklStarting ? null : _startSimklLogin,
+                        icon: _isSimklStarting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.login_rounded),
+                        label: Text(
+                          _isSimklStarting
+                              ? 'Getting code...'
+                              : 'Yes, connect Simkl',
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(2),
+                      child: TextButton(
+                        focusNode: _simklSkipButtonFocusNode,
                         onPressed: _finishOnboarding,
                         child: const Text('No, finish setup'),
                       ),
@@ -3175,9 +3645,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
 
   int get _traktStepIndex => _flow.length + 2;
 
+  int get _simklStepIndex => _flow.length + 3;
+
   bool get _isEngineSelectionStep => _stepIndex == _engineStepIndex;
 
   bool get _isTraktStep => _stepIndex == _traktStepIndex;
+
+  bool get _isSimklStep => _stepIndex == _simklStepIndex;
 
   Future<void> _goToTraktStep() async {
     _stopTraktDeviceCodeFlow(updateState: false);
@@ -3200,7 +3674,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
       _traktUsername = username;
       _hasConfigured = true;
       _queueTraktConnectedSnackBar(username);
-      await _finishOnboarding();
+      await _goToSimklStep();
       return;
     }
 
@@ -3317,7 +3791,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
       });
       MainPageBridge.notifyIntegrationChanged();
       _queueTraktConnectedSnackBar(username);
-      await _finishOnboarding();
+      await _goToSimklStep();
       return;
     }
 
@@ -3407,10 +3881,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
   }
 
   Future<void> _finishOnboarding() async {
+    // Defuse BOTH pollers before popping — otherwise an in-flight poll can
+    // resolve during the exit-animation window (widget still mounted) and
+    // fire a second _finishOnboarding → a double Navigator.pop.
     _stopTraktDeviceCodeFlow(updateState: false);
+    _stopSimklPinFlow(updateState: false);
 
     if (!mounted) return;
-    Navigator.of(context).pop(_hasConfigured || _traktConnected);
+    Navigator.of(
+      context,
+    ).pop(_hasConfigured || _traktConnected || _simklConnected);
   }
 
   void _queueTraktConnectedSnackBar(String? username) {
@@ -3428,6 +3908,253 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Trakt code copied')));
+  }
+
+  // ── Simkl onboarding state machine — parallel to the Trakt one above.
+  // Uses the Simkl PIN flow (poll by user code, no expired_token/access_denied
+  // error cases, no refresh/expiry) exactly like simkl_settings_page.dart.
+
+  Future<void> _goToSimklStep() async {
+    // This step is reached FROM the Trakt step, so tear down any in-flight
+    // Trakt device-code poll/countdown first — otherwise a zombie Trakt poll
+    // keeps firing on the Simkl step (can re-enter this method and wipe the
+    // Simkl code, or auto-finish the wizard). Idempotent when Trakt already
+    // stopped (auto-advance / connect success cancel their own timers).
+    _stopTraktDeviceCodeFlow(updateState: false);
+    _stopSimklPinFlow(updateState: false);
+
+    setState(() {
+      _stepIndex = _simklStepIndex;
+      _isSimklStarting = false;
+      _isResolvingSimklAuth = true;
+      _simklErrorMessage = null;
+    });
+
+    final isAuth = await SimklService.instance.isAuthenticated();
+    final username = await SimklService.instance.getUsername();
+
+    if (!mounted) return;
+
+    if (isAuth) {
+      _simklConnected = true;
+      _simklUsername = username;
+      _hasConfigured = true;
+      _queueSimklConnectedSnackBar(username);
+      await _finishOnboarding();
+      return;
+    }
+
+    setState(() {
+      _isResolvingSimklAuth = false;
+      _simklConnected = isAuth;
+      _simklUsername = username;
+    });
+
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
+  }
+
+  Future<void> _startSimklLogin() async {
+    final attemptId = ++_simklLoginAttemptId;
+
+    setState(() {
+      _isSimklStarting = true;
+      _simklErrorMessage = null;
+    });
+
+    final result = await SimklService.instance.requestPin();
+
+    if (!mounted || attemptId != _simklLoginAttemptId) return;
+
+    if (result == null) {
+      setState(() {
+        _isSimklStarting = false;
+        _simklErrorMessage = 'Failed to get a code from Simkl. Please try again.';
+      });
+      return;
+    }
+
+    // Guard against a present-but-zero (or negative) value, not just null:
+    // a 0 expiry would elapse on the first countdown tick and tear the code
+    // down instantly; a 0 interval would busy-loop Timer.periodic.
+    final rawExpiresIn = result['expires_in'] as int? ?? 900;
+    final expiresIn = rawExpiresIn > 0 ? rawExpiresIn : 900;
+
+    final rawInterval = result['interval'] as int? ?? 5;
+    _simklPollInterval = rawInterval > 0 ? rawInterval : 5;
+    setState(() {
+      _simklUserCode = result['user_code'] as String?;
+      _simklVerificationUrl = result['verification_url'] as String?;
+      _simklCodeExpiresAt = DateTime.now().add(Duration(seconds: expiresIn));
+      _isSimklStarting = false;
+      _isResolvingSimklAuth = false;
+      _isSimklPolling = false;
+    });
+
+    _startSimklCountdownTimer();
+    _startSimklPolling();
+
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
+  }
+
+  void _startSimklPolling() {
+    _simklPollTimer?.cancel();
+    _simklPollTimer = Timer.periodic(
+      Duration(seconds: _simklPollInterval),
+      (_) => _pollSimklOnce(),
+    );
+  }
+
+  Future<void> _pollSimklOnce() async {
+    final userCode = _simklUserCode;
+    final attemptId = _simklLoginAttemptId;
+    if (userCode == null || _isSimklPolling) return;
+
+    _isSimklPolling = true;
+
+    String? error;
+    try {
+      error = await SimklService.instance.pollPin(userCode);
+    } finally {
+      if (attemptId == _simklLoginAttemptId) {
+        _isSimklPolling = false;
+      }
+    }
+
+    if (!mounted ||
+        attemptId != _simklLoginAttemptId ||
+        _simklUserCode != userCode) {
+      return;
+    }
+
+    if (error == null) {
+      _simklPollTimer?.cancel();
+      _simklCountdownTimer?.cancel();
+
+      final username = await SimklService.instance.getUsername();
+      if (!mounted ||
+          attemptId != _simklLoginAttemptId ||
+          _simklUserCode != userCode) {
+        return;
+      }
+
+      _simklConnected = true;
+      _simklUsername = username;
+      _hasConfigured = true;
+      _simklErrorMessage = null;
+      _resetSimklPinState();
+
+      await StorageService.setSimklSyncCatalogItems(true);
+      AnalyticsService.integrationConnected('simkl', {
+        'surface': 'onboarding',
+        'method': 'pin',
+      });
+      MainPageBridge.notifyIntegrationChanged();
+      _queueSimklConnectedSnackBar(username);
+      await _finishOnboarding();
+      return;
+    }
+
+    switch (error) {
+      case 'authorization_pending':
+      case 'network_error':
+        break;
+      case 'slow_down':
+        _simklPollInterval += 5;
+        _simklPollTimer?.cancel();
+        _startSimklPolling();
+        break;
+      default:
+        _stopSimklPinFlow(message: 'Authorization failed. Please try again.');
+    }
+  }
+
+  void _startSimklCountdownTimer() {
+    _simklCountdownTimer?.cancel();
+    _simklCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+
+      if (_simklCodeExpiresAt != null &&
+          DateTime.now().isAfter(_simklCodeExpiresAt!)) {
+        _stopSimklPinFlow(message: 'Code expired. Please try again.');
+        return;
+      }
+
+      setState(() {});
+    });
+  }
+
+  void _cancelSimklLogin() {
+    _stopSimklPinFlow();
+  }
+
+  void _stopSimklPinFlow({String? message, bool updateState = true}) {
+    _simklLoginAttemptId++;
+    _isSimklPolling = false;
+    _simklPollTimer?.cancel();
+    _simklCountdownTimer?.cancel();
+
+    if (!updateState || !mounted) {
+      _resetSimklPinState();
+      return;
+    }
+
+    setState(() {
+      _isSimklStarting = false;
+      _isResolvingSimklAuth = false;
+      _simklErrorMessage = message;
+      _resetSimklPinState();
+    });
+
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
+  }
+
+  void _resetSimklPinState() {
+    _simklUserCode = null;
+    _simklVerificationUrl = null;
+    _simklCodeExpiresAt = null;
+  }
+
+  String _formatSimklCountdown() {
+    if (_simklCodeExpiresAt == null) return '';
+
+    final remaining = _simklCodeExpiresAt!.difference(DateTime.now());
+    if (remaining.isNegative) return 'Expired';
+
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds % 60;
+    return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+  }
+
+  void _queueSimklConnectedSnackBar(String? username) {
+    final message = username == null || username.isEmpty
+        ? 'Simkl connected'
+        : 'Connected to Simkl as $username';
+    MainPageBridge.queuePostSetupSnackBar(message);
+  }
+
+  void _copySimklCode() {
+    final code = _simklUserCode;
+    if (code == null || code.isEmpty) return;
+
+    Clipboard.setData(ClipboardData(text: code));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Simkl code copied')));
   }
 
   /// Request focus on the appropriate widget for the current step (Android TV)
@@ -3461,6 +4188,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
         _traktOpenUrlButtonFocusNode.requestFocus();
       } else {
         _traktYesButtonFocusNode.requestFocus();
+      }
+    } else if (_isSimklStep) {
+      if (_simklConnected) {
+        _simklFinishButtonFocusNode.requestFocus();
+      } else if (_simklUserCode != null) {
+        _simklOpenUrlButtonFocusNode.requestFocus();
+      } else {
+        _simklYesButtonFocusNode.requestFocus();
       }
     }
   }

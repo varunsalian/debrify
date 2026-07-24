@@ -152,6 +152,10 @@ class SubtitleSettingsService {
   static const String _keyBgIndex = 'subtitle_bg_index';
   static const String _keyOutlineColorIndex = 'subtitle_outline_color_index';
   static const String _keyElevationIndex = 'subtitle_elevation_index';
+  static const String _keyBold = 'subtitle_bold';
+
+  /// Default: bold off (normal weight). Matches Android's DEFAULT_BOLD.
+  static const bool defaultBold = false;
 
   static const int syncOffsetMinMs = -3600000;
   static const int syncOffsetMaxMs = 3600000;
@@ -211,6 +215,11 @@ class SubtitleSettingsService {
         SubtitleElevation.defaultIndex;
   }
 
+  Future<bool> getBold() async {
+    await _ensurePrefs();
+    return _prefs!.getBool(_keyBold) ?? defaultBold;
+  }
+
   // Setters
   Future<void> setSizeIndex(int index) async {
     await _ensurePrefs();
@@ -246,6 +255,11 @@ class SubtitleSettingsService {
     await _ensurePrefs();
     await _prefs!.setInt(_keyElevationIndex,
         index.clamp(0, SubtitleElevation.options.length - 1));
+  }
+
+  Future<void> setBold(bool value) async {
+    await _ensurePrefs();
+    await _prefs!.setBool(_keyBold, value);
   }
 
   Future<int> getSyncOffsetMs() async {
@@ -312,6 +326,7 @@ class SubtitleSettingsService {
           SubtitleOutlineColor.defaultIndex,
       elevationIndex: _prefs!.getInt(_keyElevationIndex) ??
           SubtitleElevation.defaultIndex,
+      bold: _prefs!.getBool(_keyBold) ?? defaultBold,
       syncOffsetMs: _syncOffsetMs,
       fontIndex: fontIndex,
       fontFamily: fontFamily,
@@ -329,6 +344,7 @@ class SubtitleSettingsService {
     await _prefs!.setInt(
         _keyOutlineColorIndex, SubtitleOutlineColor.defaultIndex);
     await _prefs!.setInt(_keyElevationIndex, SubtitleElevation.defaultIndex);
+    await _prefs!.setBool(_keyBold, defaultBold);
     // Sync offset is in-memory and per-subtitle, not a persisted style.
     resetSyncOffset();
     await SubtitleFontService.instance.resetToDefault();
@@ -343,6 +359,7 @@ class SubtitleSettingsService {
         data.bgIndex == SubtitleBackground.defaultIndex &&
         data.outlineColorIndex == SubtitleOutlineColor.defaultIndex &&
         data.elevationIndex == SubtitleElevation.defaultIndex &&
+        data.bold == defaultBold &&
         data.fontIndex == SubtitleFont.defaultIndex &&
         data.syncOffsetMs == 0;
   }
@@ -356,6 +373,7 @@ class SubtitleSettingsData {
   final int bgIndex;
   final int outlineColorIndex;
   final int elevationIndex;
+  final bool bold;
   final int fontIndex;
   final String? fontFamily;
   final String fontLabel;
@@ -368,6 +386,7 @@ class SubtitleSettingsData {
     required this.bgIndex,
     this.outlineColorIndex = 0,
     this.elevationIndex = 0,
+    this.bold = false,
     this.fontIndex = 0,
     this.fontFamily,
     this.fontLabel = 'Default',
@@ -428,13 +447,38 @@ class SubtitleSettingsData {
     return const Color(0xFFFF5722);
   }
 
+  /// Same-colour glyph "halo" that fakes bold for fonts without a real bold
+  /// face. Flutter only honours [FontWeight] when the font family ships a
+  /// matching weight asset — but most bundled subtitle fonts (and every
+  /// imported custom font) are single-weight, so `w700` alone renders no
+  /// differently for them. Stamping offset copies of the text in eight
+  /// directions thickens the strokes, which works for ANY font and mirrors the
+  /// native player's `Typeface.create(base, BOLD)` synthetic bold.
+  List<Shadow> fauxBoldShadows(double fontSizePx) {
+    final d = (fontSizePx * 0.018).clamp(0.5, 1.4);
+    const dirs = <Offset>[
+      Offset(1, 0), Offset(-1, 0), Offset(0, 1), Offset(0, -1),
+      Offset(0.7, 0.7), Offset(-0.7, 0.7),
+      Offset(0.7, -0.7), Offset(-0.7, -0.7),
+    ];
+    return [
+      for (final o in dirs)
+        Shadow(offset: Offset(o.dx * d, o.dy * d), color: color.color),
+    ];
+  }
+
   /// Build TextStyle for subtitles
   TextStyle buildTextStyle() {
+    final base = resolvedShadows;
+    // Outline shadows first (drawn furthest back), then the faux-bold halo on
+    // top of them but under the glyph fill — so the outline still rims the
+    // thickened text rather than being swallowed by it.
+    final shadows = bold ? [...?base, ...fauxBoldShadows(size.sizePx)] : base;
     return TextStyle(
       fontSize: size.sizePx,
       color: color.color,
-      fontWeight: FontWeight.w600,
-      shadows: resolvedShadows,
+      fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+      shadows: shadows,
       backgroundColor: background.color,
       fontFamily: fontFamily,
     );
@@ -447,6 +491,7 @@ class SubtitleSettingsData {
     int? bgIndex,
     int? outlineColorIndex,
     int? elevationIndex,
+    bool? bold,
     int? fontIndex,
     String? fontFamily,
     String? fontLabel,
@@ -459,6 +504,7 @@ class SubtitleSettingsData {
       bgIndex: bgIndex ?? this.bgIndex,
       outlineColorIndex: outlineColorIndex ?? this.outlineColorIndex,
       elevationIndex: elevationIndex ?? this.elevationIndex,
+      bold: bold ?? this.bold,
       fontIndex: fontIndex ?? this.fontIndex,
       fontFamily: fontFamily ?? this.fontFamily,
       fontLabel: fontLabel ?? this.fontLabel,

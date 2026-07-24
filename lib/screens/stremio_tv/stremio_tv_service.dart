@@ -88,10 +88,14 @@ class StremioTvService {
         final catalogId = catalog['id'] as String? ?? '';
         final catalogName = catalog['name'] as String? ?? 'Unknown';
         final catalogType = catalog['type'] as String? ?? 'movie';
-        final channelId = 'local:$catalogId:$catalogType';
+        // MDBList-sourced catalogs live under the 'mdblist' filter group, the
+        // rest under 'local' — must match getFilterTree's addon ids so the
+        // per-list/group toggles line up.
+        final groupId = catalog['mdblistListId'] != null ? 'mdblist' : 'local';
+        final channelId = '$groupId:$catalogId:$catalogType';
 
-        // Skip if disabled (addon-level 'local' or specific channel ID)
-        if (disabled.contains('local') || disabled.contains(channelId)) {
+        // Skip if disabled (group-level id or specific channel ID)
+        if (disabled.contains(groupId) || disabled.contains(channelId)) {
           continue;
         }
 
@@ -114,14 +118,54 @@ class StremioTvService {
             channelNumber: channelNumber++,
             items: items,
             isFavorite: favoriteIds.contains(channelId),
+            // Keeps the model's id equal to [channelId] above, so the favorite
+            // toggle (persisted under channel.id) round-trips with this
+            // hydration check.
+            groupId: groupId,
           ),
         );
       }
 
+      _disambiguateDuplicateIds(channels, favoriteIds);
       return channels;
     } catch (e) {
       debugPrint('StremioTvService: Error discovering channels: $e');
       return [];
+    }
+  }
+
+  /// The id formula (`{addonId}:{catalogId}:{catalogType}[:{genre}]`) collides
+  /// when the same addon is installed twice with different config — both
+  /// installs share the same manifest `addon.id`. Left alone, two channels end
+  /// up with an identical [StremioTvChannel.id], which downstream code (e.g.
+  /// the dial's focus-node lookup) assumes is unique — causing two unrelated
+  /// channel cards to appear focused together.
+  ///
+  /// First-wins: the first channel to claim an id keeps it untouched (so the
+  /// common single-install case never changes), and every later duplicate is
+  /// disambiguated by appending a hash of its addon's `manifestUrl`, which
+  /// does vary between installs of the "same" addon.
+  ///
+  /// [favoriteIds] is re-consulted for every renamed channel: its `isFavorite`
+  /// was hydrated above against the pre-rename (shared) id, which would
+  /// otherwise either copy the first channel's favorite state onto the
+  /// duplicate, or — since the toggle in the screen persists under the
+  /// already-disambiguated id — make a favorite on the duplicate revert on
+  /// the next launch because that id was never checked.
+  void _disambiguateDuplicateIds(
+    List<StremioTvChannel> channels,
+    Set<String> favoriteIds,
+  ) {
+    final seen = <String>{};
+    for (final channel in channels) {
+      if (seen.add(channel.id)) continue;
+      final suffix = channel.addon.manifestUrl.hashCode.toRadixString(16);
+      var candidate = '${channel.id}:$suffix';
+      while (!seen.add(candidate)) {
+        candidate = '$candidate:$suffix';
+      }
+      channel.id = candidate;
+      channel.isFavorite = favoriteIds.contains(candidate);
     }
   }
 
@@ -139,23 +183,46 @@ class StremioTvService {
         .where((entry) => entry.catalogs.isNotEmpty)
         .toList();
 
-    // Append local catalogs as a synthetic addon entry
+    // Append local catalogs as synthetic addon entries. MDBList-sourced
+    // catalogs get their own "MDBList" group (addon id 'mdblist'); the rest
+    // stay under "Local Catalogs" (addon id 'local'). The addon id here becomes
+    // the group prefix of each catalog's filter id, and discoverChannels derives
+    // the same prefix from mdblistListId — keep the two in sync.
     final localCatalogs = await StorageService.getStremioTvLocalCatalogs();
-    if (localCatalogs.isNotEmpty) {
-      final localAddon = StremioAddon(
-        id: 'local',
-        name: 'Local Catalogs',
-        manifestUrl: '',
-        baseUrl: '',
-      );
-      final localCatalogEntries = localCatalogs.map((c) {
-        return StremioAddonCatalog(
-          id: c['id'] as String? ?? '',
-          type: c['type'] as String? ?? 'movie',
-          name: c['name'] as String? ?? 'Unknown',
-        );
-      }).toList();
-      tree.add((addon: localAddon, catalogs: localCatalogEntries));
+    StremioAddonCatalog toCatalog(Map<String, dynamic> c) => StremioAddonCatalog(
+      id: c['id'] as String? ?? '',
+      type: c['type'] as String? ?? 'movie',
+      name: c['name'] as String? ?? 'Unknown',
+    );
+    final mdblistCatalogs = localCatalogs
+        .where((c) => c['mdblistListId'] != null)
+        .map(toCatalog)
+        .toList();
+    final otherCatalogs = localCatalogs
+        .where((c) => c['mdblistListId'] == null)
+        .map(toCatalog)
+        .toList();
+    if (mdblistCatalogs.isNotEmpty) {
+      tree.add((
+        addon: StremioAddon(
+          id: 'mdblist',
+          name: 'MDBList',
+          manifestUrl: '',
+          baseUrl: '',
+        ),
+        catalogs: mdblistCatalogs,
+      ));
+    }
+    if (otherCatalogs.isNotEmpty) {
+      tree.add((
+        addon: StremioAddon(
+          id: 'local',
+          name: 'Local Catalogs',
+          manifestUrl: '',
+          baseUrl: '',
+        ),
+        catalogs: otherCatalogs,
+      ));
     }
 
     return tree;

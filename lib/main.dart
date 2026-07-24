@@ -34,6 +34,7 @@ import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
+import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
 import 'widgets/app_initializer.dart';
 
@@ -606,8 +607,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _premiumizeHiddenFromNav = false;
   bool _allDebridEnabled = false;
   bool _allDebridHiddenFromNav = false;
-  // Whether a Trakt account is connected — gates the Trakt Calendar tab (19).
+  // Whether a Trakt account is connected — gates the Calendar tab (19).
   bool _traktAuthenticated = false;
+  // Whether a Simkl account is connected — also gates the Calendar tab (19),
+  // which can show either tracker's schedule via an in-page Source dropdown.
+  bool _simklAuthenticated = false;
   // Seeded from the cache warmed in main() before runApp, so the very first
   // frame already builds the right layout branch — waiting for the async
   // platform check here used to flash the non-TV chrome (the old top bar) on
@@ -696,7 +700,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Cloud', // 16: consolidated cloud-provider hub (RD/Torbox/PikPak/…/WebDAV)
     'Search', // 17: dedicated search tab (TV only)
     'Discover', // 18: source-dropdown browser (Continue Watching / Trakt / …)
-    'Calendar', // 19: Trakt calendar (visible only when Trakt is connected)
+    'Calendar', // 19: Trakt/Simkl calendar (visible when either is connected)
   ];
 
   final List<IconData> _icons = [
@@ -719,7 +723,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.cloud_rounded, // 16: Cloud
     Icons.search_rounded, // 17: Search
     Icons.explore_rounded, // 18: Discover
-    Icons.calendar_month_rounded, // 19: Calendar (Trakt)
+    Icons.calendar_month_rounded, // 19: Calendar (Trakt/Simkl)
   ];
 
   @override
@@ -1826,9 +1830,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final allDebridEnabledPref =
         await StorageService.getAllDebridIntegrationEnabled();
     final allDebridHidden = await StorageService.getAllDebridHiddenFromNav();
-    // Trakt connection gates the Calendar tab. Trakt login/logout both fire
-    // notifyIntegrationChanged(), so this re-reads on those events too.
+    // Trakt/Simkl connection gates the Calendar tab. Login/logout of either
+    // fires notifyIntegrationChanged(), so this re-reads on those events too.
     final traktAuthed = await TraktService.instance.isAuthenticated();
+    final simklAuthed = await SimklService.instance.isAuthenticated();
 
     if (!mounted) return;
 
@@ -1858,6 +1863,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       allDebridEnabled: hasAllDebrid,
       allDebridHidden: allDebridHidden,
       traktAuthenticated: traktAuthed,
+      simklAuthenticated: simklAuthed,
     );
   }
 
@@ -1877,6 +1883,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool allDebridEnabled,
     required bool allDebridHidden,
     required bool traktAuthenticated,
+    required bool simklAuthenticated,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
@@ -1892,6 +1899,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       allDebridEnabled: allDebridEnabled,
       allDebridHidden: allDebridHidden,
       traktAuthenticated: traktAuthenticated,
+      simklAuthenticated: simklAuthenticated,
     );
 
     int nextIndex = _selectedIndex;
@@ -1918,6 +1926,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _allDebridEnabled == allDebridEnabled &&
         _allDebridHiddenFromNav == allDebridHidden &&
         _traktAuthenticated == traktAuthenticated &&
+        _simklAuthenticated == simklAuthenticated &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -1938,6 +1947,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _allDebridEnabled = allDebridEnabled;
       _allDebridHiddenFromNav = allDebridHidden;
       _traktAuthenticated = traktAuthenticated;
+      _simklAuthenticated = simklAuthenticated;
       _selectedIndex = nextIndex;
     });
   }
@@ -1970,8 +1980,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     bool? allDebridEnabled,
     bool? allDebridHidden,
     bool? traktAuthenticated,
+    bool? simklAuthenticated,
   }) {
     final trakt = traktAuthenticated ?? _traktAuthenticated;
+    final simkl = simklAuthenticated ?? _simklAuthenticated;
+    // The Calendar tab shows for EITHER tracker (the screen swaps sources).
+    final calendar = trakt || simkl;
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
       final rdHidden = realDebridHidden ?? _rdHiddenFromNav;
@@ -2011,7 +2025,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       }
       indices.add(7); // Addons
       indices.add(8); // Settings
-      _insertTraktCalendarTab(indices, trakt);
+      _insertTraktCalendarTab(indices, calendar);
       return indices;
     }
 
@@ -2037,7 +2051,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         7,
         8,
       ]; // Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
-      _insertTraktCalendarTab(indices, trakt);
+      _insertTraktCalendarTab(indices, calendar);
       return indices;
     }
 
@@ -2054,7 +2068,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
     indices.add(7); // Addons
     indices.add(8); // Settings
-    _insertTraktCalendarTab(indices, trakt);
+    _insertTraktCalendarTab(indices, calendar);
     return indices;
   }
 
@@ -2067,7 +2081,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       case 18: // Discover
       case 0: // Home
       case 2: // Downloads
-      case 19: // Trakt Calendar
+      case 19: // Trakt/Simkl Calendar
         return 'Main';
       case 13: // IPTV
       case 14: // YouTube
@@ -2161,7 +2175,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return SearchScreen(isTelevision: _isAndroidTv, searchMode: true);
       case 18: // Discover (source-dropdown browser)
         return SearchScreen(isTelevision: _isAndroidTv, discoverMode: true);
-      case 19: // Trakt Calendar (gated on Trakt auth in the nav below)
+      case 19: // Calendar (gated on Trakt OR Simkl auth in the nav below)
         return const TraktCalendarScreen();
       default:
         return _pages[index];

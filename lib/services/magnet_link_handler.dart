@@ -262,7 +262,7 @@ class MagnetLinkHandler {
         return;
       }
 
-      final webDownloadId = result['data']?['webdownload_id'] as int?;
+      final webDownloadId = (result['data']?['webdownload_id'] as num?)?.toInt();
       final name = result['data']?['name']?.toString() ?? displayName;
 
       if (webDownloadId == null) {

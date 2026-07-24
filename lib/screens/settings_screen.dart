@@ -20,6 +20,8 @@ import '../services/analytics_service.dart';
 import '../services/account_service.dart';
 import '../services/backup_restore_service.dart';
 import '../services/download_service.dart';
+import '../services/mdblist/mdblist_service.dart';
+import '../services/simkl/simkl_service.dart';
 import '../services/storage_service.dart';
 import '../services/support_remote_config_service.dart';
 import '../services/torbox_account_service.dart';
@@ -49,6 +51,8 @@ import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/trakt_settings_page.dart';
+import 'settings/simkl_settings_page.dart';
+import 'settings/mdblist_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
 import '../widgets/remote/remote_role_picker_screen.dart';
 
@@ -96,6 +100,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _traktConnected = false;
   String _traktStatus = 'Not connected';
   String _traktCaption = 'Tap to connect';
+
+  bool _simklConnected = false;
+  String _simklStatus = 'Not connected';
+  String _simklCaption = 'Tap to connect';
+
+  bool _mdblistConnected = false;
+  String _mdblistStatus = 'Not connected';
+  String _mdblistCaption = 'Tap to connect';
 
   bool _indexerManagersConfigured = false;
   String _indexerManagersStatus = 'Not configured';
@@ -156,6 +168,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getIndexerManagerConfigs(),
       StorageService.getPremiumizeApiKey(),
       StorageService.getAllDebridApiKey(),
+      StorageService.getSimklAccessToken(),
+      StorageService.getSimklUsername(),
+      StorageService.getMdblistApiKey(),
+      StorageService.getMdblistUsername(),
     ]);
 
     if (!mounted) return;
@@ -174,6 +190,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final indexerManagers = results[11] as List;
     final premiumizeKey = results[12] as String?;
     final allDebridKey = results[13] as String?;
+    final simklToken = results[14] as String?;
+    final simklUsername = results[15] as String?;
+    final mdblistKey = results[16] as String?;
+    final mdblistUsername = results[17] as String?;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -262,6 +282,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _traktStatus = 'Expired';
         _traktCaption = 'Tap to reconnect';
       }
+    }
+
+    // Simkl's PIN-issued tokens don't expire, so unlike Trakt there's no
+    // "Expired" branch here — a stored token means connected.
+    if (simklToken != null && simklToken.isNotEmpty) {
+      _simklConnected = true;
+      _simklStatus = 'Active';
+      _simklCaption = simklUsername != null
+          ? 'Logged in as $simklUsername'
+          : 'Logged in';
+    } else {
+      _simklConnected = false;
+      _simklStatus = 'Not connected';
+      _simklCaption = 'Tap to connect';
+    }
+
+    // MDBList uses a plain API key (no expiry) — a stored key means connected.
+    // Reset on the empty branch (like WebDAV above) so the card clears after a
+    // logout, since this method re-runs when returning from the settings page.
+    if (mdblistKey != null && mdblistKey.isNotEmpty) {
+      _mdblistConnected = true;
+      _mdblistStatus = 'Active';
+      _mdblistCaption = mdblistUsername != null
+          ? 'Logged in as $mdblistUsername'
+          : 'Logged in';
+    } else {
+      _mdblistConnected = false;
+      _mdblistStatus = 'Not connected';
+      _mdblistCaption = 'Tap to connect';
     }
 
     if (indexerManagers.isNotEmpty) {
@@ -499,6 +548,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     caption: _traktCaption,
     onTap: _openTraktSettings,
   );
+  ConnectionInfo get _simklInfo => ConnectionInfo(
+    title: 'Simkl',
+    connected: _simklConnected,
+    status: _simklStatus,
+    caption: _simklCaption,
+    onTap: _openSimklSettings,
+  );
+  ConnectionInfo get _mdblistInfo => ConnectionInfo(
+    title: 'MDBList',
+    connected: _mdblistConnected,
+    status: _mdblistStatus,
+    caption: _mdblistCaption,
+    onTap: _openMdblistSettings,
+  );
   ConnectionInfo get _indexerManagersInfo => ConnectionInfo(
     title: 'Jackett & Prowlarr',
     connected: _indexerManagersConfigured,
@@ -520,6 +583,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // _redditInfo,
         _iptvInfo,
         _traktInfo,
+        _simklInfo,
+        // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
+        if (kMdblistEnabled) _mdblistInfo,
         _indexerManagersInfo,
       ],
       firstFocusNode: _firstCardFocusNode,
@@ -561,6 +627,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         reddit: _redditInfo,
         iptv: _iptvInfo,
         trakt: _traktInfo,
+        simkl: _simklInfo,
+        // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
+        mdblist: kMdblistEnabled ? _mdblistInfo : null,
         indexerManagers: _indexerManagersInfo,
         firstCardFocusNode: _firstCardFocusNode,
       ),
@@ -645,6 +714,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openTraktSettings() async {
     await pushSettingsPage(context, const TraktSettingsPage());
+    if (!mounted) return;
+    await _loadSummaries();
+  }
+
+  Future<void> _openSimklSettings() async {
+    await pushSettingsPage(context, const SimklSettingsPage());
+    if (!mounted) return;
+    await _loadSummaries();
+  }
+
+  Future<void> _openMdblistSettings() async {
+    await pushSettingsPage(context, const MdblistSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
@@ -967,7 +1048,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ..._backupSummaryLines(summary).map((line) => Text('• $line')),
             const SizedBox(height: 12),
             const Text(
-              'Saved credentials (Real-Debrid, Torbox, Premiumize, AllDebrid, PikPak, Trakt) will '
+              'Saved credentials (Real-Debrid, Torbox, Premiumize, AllDebrid, PikPak, Trakt, Simkl) will '
               'be overwritten. Addons, search engines, WebDAV servers, and '
               'indexer managers you already have are kept as-is.',
               style: TextStyle(fontSize: 12),
@@ -1082,6 +1163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (s.hasAllDebrid) lines.add('AllDebrid');
     if (s.hasPikpak) lines.add('PikPak');
     if (s.hasTrakt) lines.add('Trakt');
+    if (s.hasSimkl) lines.add('Simkl');
     if (s.searchEngineCount > 0) {
       lines.add('Search engines (${s.searchEngineCount})');
     }
@@ -1103,6 +1185,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (r.allDebrid) parts.add('AllDebrid');
     if (r.pikpak) parts.add('PikPak');
     if (r.trakt) parts.add('Trakt');
+    if (r.simkl) parts.add('Simkl');
     if (r.searchEnginesImported > 0) {
       parts.add('${r.searchEnginesImported} new engine(s)');
     }
@@ -1255,6 +1338,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearPikPakAuth();
     await StorageService.clearWebDav();
     await StorageService.clearTraktAuth();
+    // Clears the token + username AND the in-memory library cache.
+    await SimklService.instance.logout();
+    // Clears the key + username AND the in-memory list/items cache.
+    await MdblistService.instance.logout();
     await DownloadService.instance.clearDownloadDatabase();
     await StorageService.clearAllPlaybackData();
     await StorageService.clearContinueWatching();

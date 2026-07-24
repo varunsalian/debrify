@@ -12,6 +12,7 @@ import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
 import '../utils/tv_keys.dart';
 
 /// Cinematic detail screen for a catalog item.
@@ -44,6 +45,11 @@ class CatalogItemDetailScreen extends StatefulWidget {
   /// Invoked when the user picks a Trakt action from the "More" sheet.
   final void Function(TraktItemMenuAction action)? onTraktAction;
 
+  /// Simkl actions — renders as its own independent quick-actions section
+  /// next to Trakt's, not merged (both trackers run in parallel).
+  final List<SimklMenuOption> simklMenuOptions;
+  final void Function(SimklItemMenuAction action)? onSimklAction;
+
   /// Lazily loads "Watch Next" recommendations for [item]. When null (no
   /// recommendation-capable addon, or this host doesn't support it) the
   /// rail is omitted entirely. Resolves to an empty list to omit it too.
@@ -57,8 +63,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
   /// arrives without year/rating/genres and a raw addon-formatted overview)
   /// so the screen renders identically to a normal catalog open. Null skips
   /// enrichment; resolving to null leaves the original item untouched.
-  final Future<StremioMeta?> Function(String imdbId, String type)?
-  metaEnricher;
+  final Future<StremioMeta?> Function(String imdbId, String type)? metaEnricher;
 
   const CatalogItemDetailScreen({
     super.key,
@@ -71,6 +76,8 @@ class CatalogItemDetailScreen extends StatefulWidget {
     this.hasBoundSource = false,
     this.traktMenuOptions = const [],
     this.onTraktAction,
+    this.simklMenuOptions = const [],
+    this.onSimklAction,
     this.recommendationsLoader,
     this.onRecommendationTap,
     this.metaEnricher,
@@ -280,7 +287,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
     try {
       final extra = await ImdbEnrichmentService.fetch(imdbId);
-      if (mounted) setState(() { _imdbExtra = extra; _imdbLoaded = true; });
+      if (mounted)
+        setState(() {
+          _imdbExtra = extra;
+          _imdbLoaded = true;
+        });
     } catch (_) {
       if (mounted) setState(() => _imdbLoaded = true);
     }
@@ -294,7 +305,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
     try {
       final guide = await ImdbParentsGuideService.fetch(imdbId);
-      if (mounted) setState(() { _parentsGuide = guide; _parentsGuideLoaded = true; });
+      if (mounted)
+        setState(() {
+          _parentsGuide = guide;
+          _parentsGuideLoaded = true;
+        });
     } catch (_) {
       if (mounted) setState(() => _parentsGuideLoaded = true);
     }
@@ -310,7 +325,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
     try {
       final recs = await loader();
-      if (mounted) setState(() { _recommendations = recs; _recommendationsLoaded = true; });
+      if (mounted)
+        setState(() {
+          _recommendations = recs;
+          _recommendationsLoaded = true;
+        });
       final enrich = widget.metaEnricher;
       if (enrich != null) {
         for (final rec in recs.take(8)) {
@@ -363,9 +382,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           // (Apple-TV/Netflix style). On narrow it scrolls under the
           // backdrop normally.
           SafeArea(
-            child: isWide
-                ? _buildWideContent(size)
-                : _buildNarrowContent(size),
+            child: isWide ? _buildWideContent(size) : _buildNarrowContent(size),
           ),
 
           // ── Back button ──────────────────────────────────────────────────
@@ -418,9 +435,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
           child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(
-              scrollbars: false,
-            ),
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
             child: SingleChildScrollView(
               controller: _wideScroll,
               physics: const BouncingScrollPhysics(),
@@ -459,26 +476,58 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _secMeta(0.20),
     ];
     final g = _secGenres(0.28);
-    if (g != null) children..add(SizedBox(height: t ? 10 : 18))..add(g);
+    if (g != null)
+      children
+        ..add(SizedBox(height: t ? 10 : 18))
+        ..add(g);
     final aw = _secAwards(0.32);
-    if (aw != null) children..add(SizedBox(height: t ? 8 : 12))..add(aw);
+    if (aw != null)
+      children
+        ..add(SizedBox(height: t ? 8 : 12))
+        ..add(aw);
     children
       ..add(SizedBox(height: t ? 16 : 26))
       ..add(_buildActionRow(0.38));
     final d = _secDescription(0.46);
-    if (d != null) children..add(SizedBox(height: t ? 12 : 24))..add(d);
+    if (d != null)
+      children
+        ..add(SizedBox(height: t ? 12 : 24))
+        ..add(d);
     final cr = _secCredits(0.50);
-    if (cr != null) children..add(SizedBox(height: t ? 10 : 18))..add(cr);
+    if (cr != null)
+      children
+        ..add(SizedBox(height: t ? 10 : 18))
+        ..add(cr);
     final ca = _secCast(0.52);
-    if (ca != null) children..add(SizedBox(height: t ? 14 : 24))..add(ca);
+    if (ca != null)
+      children
+        ..add(SizedBox(height: t ? 14 : 24))
+        ..add(ca);
     final q = _secQuickActions(0.54);
-    if (q != null) children..add(SizedBox(height: t ? 14 : 26))..add(q);
+    if (q != null)
+      children
+        ..add(SizedBox(height: t ? 14 : 26))
+        ..add(q);
+    final sq = _secSimklQuickActions(0.55);
+    if (sq != null)
+      children
+        ..add(SizedBox(height: t ? 14 : 26))
+        ..add(sq);
     final dt = _secDetails(0.56);
-    if (dt != null) children..add(SizedBox(height: t ? 12 : 22))..add(dt);
+    if (dt != null)
+      children
+        ..add(SizedBox(height: t ? 12 : 22))
+        ..add(dt);
     final pg = _secParentsGuide(0.58);
-    if (pg != null) children..add(SizedBox(height: t ? 12 : 22))..add(pg);
+    if (pg != null)
+      children
+        ..add(SizedBox(height: t ? 12 : 22))
+        ..add(pg);
     final r = _secRecommendations(0.66);
-    if (r != null) children..add(SizedBox(height: t ? 16 : 28))..add(r);
+    if (r != null)
+      children
+        ..add(SizedBox(height: t ? 16 : 28))
+        ..add(r);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -495,9 +544,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _secMeta(0.20),
     ];
     final g = _secGenres(0.28);
-    if (g != null) children..add(const SizedBox(height: 14))..add(g);
+    if (g != null)
+      children
+        ..add(const SizedBox(height: 14))
+        ..add(g);
     final aw = _secAwards(0.32);
-    if (aw != null) children..add(const SizedBox(height: 12))..add(aw);
+    if (aw != null)
+      children
+        ..add(const SizedBox(height: 12))
+        ..add(aw);
     children
       ..add(const SizedBox(height: 24))
       ..add(_buildActionRow(0.38));
@@ -522,15 +577,25 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (infoChildren.isNotEmpty) {
       children
         ..add(const SizedBox(height: 24))
-        ..add(_Reveal(
-          parent: _revealCtrl,
-          start: infoStart,
-          child: _GlassCard(children: infoChildren),
-        ));
+        ..add(
+          _Reveal(
+            parent: _revealCtrl,
+            start: infoStart,
+            child: _GlassCard(children: infoChildren),
+          ),
+        );
     }
 
     final q = _secQuickActions(0.54);
-    if (q != null) children..add(const SizedBox(height: 24))..add(q);
+    if (q != null)
+      children
+        ..add(const SizedBox(height: 24))
+        ..add(q);
+    final sq = _secSimklQuickActions(0.55);
+    if (sq != null)
+      children
+        ..add(const SizedBox(height: 24))
+        ..add(sq);
 
     // ── Glass details card: production details + parents guide ──
     const detailStart = 0.56;
@@ -545,15 +610,20 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (detailChildren.isNotEmpty) {
       children
         ..add(const SizedBox(height: 24))
-        ..add(_Reveal(
-          parent: _revealCtrl,
-          start: detailStart,
-          child: _GlassCard(children: detailChildren),
-        ));
+        ..add(
+          _Reveal(
+            parent: _revealCtrl,
+            start: detailStart,
+            child: _GlassCard(children: detailChildren),
+          ),
+        );
     }
 
     final r = _secRecommendations(0.66);
-    if (r != null) children..add(const SizedBox(height: 28))..add(r);
+    if (r != null)
+      children
+        ..add(const SizedBox(height: 28))
+        ..add(r);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -562,70 +632,67 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget _divider() => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Container(
-          height: 0.5,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Color(0x00FFFFFF),
-                Color(0x18FFFFFF),
-                Color(0x18FFFFFF),
-                Color(0x00FFFFFF),
-              ],
-              stops: [0.0, 0.2, 0.8, 1.0],
-            ),
-          ),
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    child: Container(
+      height: 0.5,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0x00FFFFFF),
+            Color(0x18FFFFFF),
+            Color(0x18FFFFFF),
+            Color(0x00FFFFFF),
+          ],
+          stops: [0.0, 0.2, 0.8, 1.0],
         ),
-      );
+      ),
+    ),
+  );
 
   // ── Sections ──────────────────────────────────────────────────────────────
 
   Widget _secEyebrow(double start) => _Reveal(
-        parent: _revealCtrl,
-        start: start,
-        child: Text(
-          widget.item.type == 'series' ? 'SERIES' : 'MOVIE',
-          style: TextStyle(
-            color: HomeTheme.focusGold,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.4,
-            shadows: const [
-              Shadow(color: Color(0x993B2A00), blurRadius: 12),
-              Shadow(color: Color(0x66000000), blurRadius: 6),
-            ],
-          ),
-        ),
-      );
+    parent: _revealCtrl,
+    start: start,
+    child: Text(
+      widget.item.type == 'series' ? 'SERIES' : 'MOVIE',
+      style: TextStyle(
+        color: HomeTheme.focusGold,
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 2.4,
+        shadows: const [
+          Shadow(color: Color(0x993B2A00), blurRadius: 12),
+          Shadow(color: Color(0x66000000), blurRadius: 6),
+        ],
+      ),
+    ),
+  );
 
   Widget _secTitle(double start) => _Reveal(
-        parent: _revealCtrl,
-        start: start,
-        child: Text(
-          _item.name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: _wide ? (_tight ? 30 : 44) : 28,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -1.0,
-            height: 1.05,
-            shadows: const [
-              Shadow(
-                color: Color(0xDD000000),
-                blurRadius: 24,
-                offset: Offset(0, 4),
-              ),
-              Shadow(
-                color: Color(0x66000000),
-                blurRadius: 8,
-              ),
-            ],
+    parent: _revealCtrl,
+    start: start,
+    child: Text(
+      _item.name,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: _wide ? (_tight ? 30 : 44) : 28,
+        fontWeight: FontWeight.w900,
+        letterSpacing: -1.0,
+        height: 1.05,
+        shadows: const [
+          Shadow(
+            color: Color(0xDD000000),
+            blurRadius: 24,
+            offset: Offset(0, 4),
           ),
-        ),
-      );
+          Shadow(color: Color(0x66000000), blurRadius: 8),
+        ],
+      ),
+    ),
+  );
 
   Widget _secMeta(double start) {
     final item = _item;
@@ -658,19 +725,24 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             if (hasYear) Text(year),
-            if (cert != null) ...[
-              if (hasYear) _dot(),
-              _CertBadge(label: cert),
-            ],
+            if (cert != null) ...[if (hasYear) _dot(), _CertBadge(label: cert)],
             if (runtime != null) ...[
               if (hasYear || cert != null) _dot(),
               Text(runtime),
             ],
             if (showMetaShimmer && cert == null && runtime == null) ...[
               if (hasYear) _dot(),
-              Shimmer(width: 28, height: 16, borderRadius: BorderRadius.circular(4)),
+              Shimmer(
+                width: 28,
+                height: 16,
+                borderRadius: BorderRadius.circular(4),
+              ),
               _dot(),
-              Shimmer(width: 48, height: 14, borderRadius: BorderRadius.circular(4)),
+              Shimmer(
+                width: 48,
+                height: 14,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ],
             if (rating != null) ...[
               if (hasYear || cert != null || runtime != null) _dot(),
@@ -699,7 +771,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
               ),
             ] else if (showMetaShimmer) ...[
               if (hasYear || cert != null || runtime != null) _dot(),
-              Shimmer(width: 60, height: 14, borderRadius: BorderRadius.circular(4)),
+              Shimmer(
+                width: 60,
+                height: 14,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ],
             if (extra?.metacriticScore != null) ...[
               _dot(),
@@ -723,9 +799,21 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           spacing: 7,
           runSpacing: 7,
           children: const [
-            Shimmer(width: 64, height: 28, borderRadius: BorderRadius.all(Radius.circular(14))),
-            Shimmer(width: 52, height: 28, borderRadius: BorderRadius.all(Radius.circular(14))),
-            Shimmer(width: 72, height: 28, borderRadius: BorderRadius.all(Radius.circular(14))),
+            Shimmer(
+              width: 64,
+              height: 28,
+              borderRadius: BorderRadius.all(Radius.circular(14)),
+            ),
+            Shimmer(
+              width: 52,
+              height: 28,
+              borderRadius: BorderRadius.all(Radius.circular(14)),
+            ),
+            Shimmer(
+              width: 72,
+              height: 28,
+              borderRadius: BorderRadius.all(Radius.circular(14)),
+            ),
           ],
         ),
       );
@@ -757,10 +845,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             colors: [Color(0x22FBBF24), Color(0x0AFBBF24)],
           ),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: const Color(0x33FBBF24),
-            width: 0.5,
-          ),
+          border: Border.all(color: const Color(0x33FBBF24), width: 0.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -798,17 +883,37 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(children: [
-              Shimmer(width: 60, height: h, borderRadius: BorderRadius.circular(4)),
-              const SizedBox(width: 10),
-              Shimmer(width: 140, height: h, borderRadius: BorderRadius.circular(4)),
-            ]),
+            Row(
+              children: [
+                Shimmer(
+                  width: 60,
+                  height: h,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                const SizedBox(width: 10),
+                Shimmer(
+                  width: 140,
+                  height: h,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            ),
             SizedBox(height: _tight ? 4 : 8),
-            Row(children: [
-              Shimmer(width: 60, height: h, borderRadius: BorderRadius.circular(4)),
-              const SizedBox(width: 10),
-              Shimmer(width: 200, height: h, borderRadius: BorderRadius.circular(4)),
-            ]),
+            Row(
+              children: [
+                Shimmer(
+                  width: 60,
+                  height: h,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                const SizedBox(width: 10),
+                Shimmer(
+                  width: 200,
+                  height: h,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            ),
           ],
         ),
       );
@@ -843,13 +948,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 70,
-                  child: Text('Director', style: labelStyle),
-                ),
-                Expanded(
-                  child: Text(extra.director!, style: valueStyle),
-                ),
+                SizedBox(width: 70, child: Text('Director', style: labelStyle)),
+                Expanded(child: Text(extra.director!, style: valueStyle)),
               ],
             ),
             if (hasStars) SizedBox(height: _tight ? 4 : 6),
@@ -858,10 +958,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 70,
-                  child: Text('Stars', style: labelStyle),
-                ),
+                SizedBox(width: 70, child: Text('Stars', style: labelStyle)),
                 Expanded(
                   child: Text(
                     extra.stars.take(4).join(', '),
@@ -904,7 +1001,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                           borderRadius: BorderRadius.circular(999),
                         ),
                         const SizedBox(height: 6),
-                        Shimmer(width: 50, height: 10, borderRadius: BorderRadius.circular(3)),
+                        Shimmer(
+                          width: 50,
+                          height: 10,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
                       ],
                     ),
                   ],
@@ -937,10 +1038,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                 children: [
                   for (var i = 0; i < cast.length; i++) ...[
                     if (i > 0) const SizedBox(width: 14),
-                    _CastAvatar(
-                      member: cast[i],
-                      size: avatarSize,
-                    ),
+                    _CastAvatar(member: cast[i], size: avatarSize),
                   ],
                 ],
               ),
@@ -966,11 +1064,21 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             const SizedBox(height: 10),
             for (var i = 0; i < 3; i++) ...[
               if (i > 0) const SizedBox(height: 6),
-              Row(children: [
-                Shimmer(width: 70, height: 11, borderRadius: BorderRadius.circular(3)),
-                const SizedBox(width: 10),
-                Shimmer(width: 120, height: 11, borderRadius: BorderRadius.circular(3)),
-              ]),
+              Row(
+                children: [
+                  Shimmer(
+                    width: 70,
+                    height: 11,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  const SizedBox(width: 10),
+                  Shimmer(
+                    width: 120,
+                    height: 11,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ],
+              ),
             ],
           ],
         ),
@@ -1055,7 +1163,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Shimmer(width: 130, height: 14, borderRadius: BorderRadius.circular(4)),
+            Shimmer(
+              width: 130,
+              height: 14,
+              borderRadius: BorderRadius.circular(4),
+            ),
             SizedBox(height: _tight ? 8 : 10),
             for (var i = 0; i < 3; i++) ...[
               if (i > 0) SizedBox(height: _tight ? 6 : 8),
@@ -1077,6 +1189,22 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         guide: guide,
         tv: widget.isTelevision,
         dense: _tight,
+      ),
+    );
+  }
+
+  Widget? _secSimklQuickActions(double start) {
+    if (widget.simklMenuOptions.isEmpty || widget.onSimklAction == null) {
+      return null;
+    }
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: _SimklQuickActions(
+        options: widget.simklMenuOptions,
+        tv: widget.isTelevision,
+        phone: !_wide,
+        onSelected: widget.onSimklAction!,
       ),
     );
   }
@@ -1105,9 +1233,13 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final tight = _tight;
     final cardW = _wide ? (tight ? 104.0 : 120.0) : 112.0;
     final posterH = cardW * 1.5;
-    final loading = recs == null && !_recommendationsLoaded && widget.recommendationsLoader != null;
+    final loading =
+        recs == null &&
+        !_recommendationsLoaded &&
+        widget.recommendationsLoader != null;
 
-    if (!loading && (recs == null || recs.isEmpty || onTap == null)) return null;
+    if (!loading && (recs == null || recs.isEmpty || onTap == null))
+      return null;
 
     return _Reveal(
       parent: _revealCtrl,
@@ -1117,7 +1249,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           loading
-              ? Shimmer(width: 130, height: 16, borderRadius: BorderRadius.circular(4))
+              ? Shimmer(
+                  width: 130,
+                  height: 16,
+                  borderRadius: BorderRadius.circular(4),
+                )
               : Text(
                   'More Like This',
                   style: TextStyle(
@@ -1125,7 +1261,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                     fontSize: _wide && !tight ? 18 : 15,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.2,
-                    shadows: const [Shadow(color: Color(0x99000000), blurRadius: 8)],
+                    shadows: const [
+                      Shadow(color: Color(0x99000000), blurRadius: 8),
+                    ],
                   ),
                 ),
           SizedBox(height: tight ? 8 : 12),
@@ -1207,7 +1345,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                 fontStyle: FontStyle.italic,
                 height: 1.4,
                 letterSpacing: 0.2,
-                shadows: const [Shadow(color: Color(0x88000000), blurRadius: 8)],
+                shadows: const [
+                  Shadow(color: Color(0x88000000), blurRadius: 8),
+                ],
               ),
             ),
             SizedBox(height: _tight ? 6 : 10),
@@ -1219,9 +1359,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
               dense: _tight,
               collapsedLines: _tight ? 2 : 4,
               expanded: _descriptionExpanded,
-              onToggle: () => setState(
-                () => _descriptionExpanded = !_descriptionExpanded,
-              ),
+              onToggle: () =>
+                  setState(() => _descriptionExpanded = !_descriptionExpanded),
             )
           else
             Text(
@@ -1231,7 +1370,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                 fontSize: 15,
                 height: 1.5,
                 letterSpacing: 0.1,
-                shadows: const [Shadow(color: Color(0x66000000), blurRadius: 6)],
+                shadows: const [
+                  Shadow(color: Color(0x66000000), blurRadius: 6),
+                ],
               ),
             ),
         ],
@@ -1281,12 +1422,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget _dot() => Text(
-        '·',
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.4),
-          fontSize: 14,
-        ),
-      );
+    '·',
+    style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
+  );
 }
 
 // ── Staggered entrance reveal ───────────────────────────────────────────────
@@ -1667,15 +1805,15 @@ class _CastAvatar extends StatelessWidget {
   }
 
   Widget _initials() => Center(
-        child: Text(
-          member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4),
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
+    child: Text(
+      member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.4),
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
 }
 
 // ── Recommendation ("Watch Next") card ─────────────────────────────────────
@@ -1726,8 +1864,9 @@ class _RecCardState extends State<_RecCard> {
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: AnimatedScale(
-            duration:
-                widget.tv ? Duration.zero : const Duration(milliseconds: 150),
+            duration: widget.tv
+                ? Duration.zero
+                : const Duration(milliseconds: 150),
             curve: Curves.easeOutCubic,
             scale: _active ? 1.05 : 1.0,
             child: SizedBox(
@@ -1766,8 +1905,9 @@ class _RecCardState extends State<_RecCard> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white
-                          .withValues(alpha: _active ? 1.0 : 0.82),
+                      color: Colors.white.withValues(
+                        alpha: _active ? 1.0 : 0.82,
+                      ),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       height: 1.2,
@@ -1783,21 +1923,21 @@ class _RecCardState extends State<_RecCard> {
   }
 
   Widget _posterFallback() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Text(
-            widget.item.name,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+    child: Padding(
+      padding: const EdgeInsets.all(8),
+      child: Text(
+        widget.item.name,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.6),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
         ),
-      );
+      ),
+    ),
+  );
 }
 
 // ── Description with "Read more" ───────────────────────────────────────────
@@ -2063,17 +2203,13 @@ class _QuickActions extends StatelessWidget {
   }
 
   Widget _wrap() => Wrap(
-        spacing: 8,
-        runSpacing: 18,
-        children: [
-          for (final o in options)
-            _QuickAction(
-              option: o,
-              tv: tv,
-              onTap: () => onSelected(o.action),
-            ),
-        ],
-      );
+    spacing: 8,
+    runSpacing: 18,
+    children: [
+      for (final o in options)
+        _QuickAction(option: o, tv: tv, onTap: () => onSelected(o.action)),
+    ],
+  );
 
   Widget _grid() {
     const cols = 3;
@@ -2179,8 +2315,9 @@ class _QuickActionState extends State<_QuickAction> {
                         height: 54,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.white
-                              .withValues(alpha: _active ? 0.16 : 0.07),
+                          color: Colors.white.withValues(
+                            alpha: _active ? 0.16 : 0.07,
+                          ),
                           border: Border.all(
                             color: _active
                                 ? HomeTheme.focusGold
@@ -2190,8 +2327,9 @@ class _QuickActionState extends State<_QuickAction> {
                           boxShadow: _active
                               ? [
                                   BoxShadow(
-                                    color: HomeTheme.focusGold
-                                        .withValues(alpha: 0.32),
+                                    color: HomeTheme.focusGold.withValues(
+                                      alpha: 0.32,
+                                    ),
                                     blurRadius: 18,
                                     spreadRadius: 0.5,
                                   ),
@@ -2201,8 +2339,9 @@ class _QuickActionState extends State<_QuickAction> {
                         child: Icon(
                           o.icon,
                           size: 24,
-                          color: Colors.white
-                              .withValues(alpha: _active ? 1.0 : 0.92),
+                          color: Colors.white.withValues(
+                            alpha: _active ? 1.0 : 0.92,
+                          ),
                         ),
                       ),
                       if (o.isTrakt)
@@ -2243,8 +2382,243 @@ class _QuickActionState extends State<_QuickAction> {
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white
-                          .withValues(alpha: _active ? 1.0 : 0.62),
+                      color: Colors.white.withValues(
+                        alpha: _active ? 1.0 : 0.62,
+                      ),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.1,
+                      height: 1.15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Simkl's quick-actions section — duplicated from [_QuickActions] rather
+/// than genericized, since sharing a widget across [TraktMenuOption] and
+/// [SimklMenuOption] would mean a shared type between the two trackers,
+/// which the rest of this integration deliberately avoids.
+class _SimklQuickActions extends StatelessWidget {
+  final List<SimklMenuOption> options;
+  final bool tv;
+  final bool phone;
+  final void Function(SimklItemMenuAction) onSelected;
+
+  const _SimklQuickActions({
+    required this.options,
+    required this.tv,
+    required this.phone,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'SIMKL ACTIONS',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.5),
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.2,
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (phone) _grid() else _wrap(),
+      ],
+    );
+  }
+
+  Widget _wrap() => Wrap(
+    spacing: 8,
+    runSpacing: 18,
+    children: [
+      for (final o in options)
+        _SimklQuickAction(option: o, tv: tv, onTap: () => onSelected(o.action)),
+    ],
+  );
+
+  Widget _grid() {
+    const cols = 3;
+    const gap = 8.0;
+    final rows = <Widget>[];
+    for (var i = 0; i < options.length; i += cols) {
+      final cells = <Widget>[];
+      for (var j = 0; j < cols; j++) {
+        if (j > 0) cells.add(const SizedBox(width: gap));
+        final idx = i + j;
+        cells.add(
+          Expanded(
+            child: idx < options.length
+                ? _SimklQuickAction(
+                    option: options[idx],
+                    tv: tv,
+                    expand: true,
+                    onTap: () => onSelected(options[idx].action),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        );
+      }
+      if (i > 0) rows.add(const SizedBox(height: 18));
+      rows.add(
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: cells),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: rows,
+    );
+  }
+}
+
+class _SimklQuickAction extends StatefulWidget {
+  final SimklMenuOption option;
+  final bool tv;
+  final bool expand;
+  final VoidCallback onTap;
+
+  const _SimklQuickAction({
+    required this.option,
+    required this.tv,
+    required this.onTap,
+    this.expand = false,
+  });
+
+  @override
+  State<_SimklQuickAction> createState() => _SimklQuickActionState();
+}
+
+class _SimklQuickActionState extends State<_SimklQuickAction> {
+  bool _focused = false;
+  bool _hovered = false;
+  bool get _active => _focused || _hovered;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = widget.option;
+
+    return Focus(
+      onFocusChange: (f) => setState(() => _focused = f),
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (isActivateKey(event.logicalKey) ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedScale(
+            duration: widget.tv
+                ? Duration.zero
+                : const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            scale: _active ? 1.06 : 1.0,
+            child: SizedBox(
+              width: widget.expand ? null : 80,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      AnimatedContainer(
+                        duration: widget.tv
+                            ? Duration.zero
+                            : const Duration(milliseconds: 150),
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(
+                            alpha: _active ? 0.16 : 0.07,
+                          ),
+                          border: Border.all(
+                            color: _active
+                                ? HomeTheme.focusGold
+                                : Colors.white.withValues(alpha: 0.12),
+                            width: _active ? 1.6 : 1,
+                          ),
+                          boxShadow: _active
+                              ? [
+                                  BoxShadow(
+                                    color: HomeTheme.focusGold.withValues(
+                                      alpha: 0.32,
+                                    ),
+                                    blurRadius: 18,
+                                    spreadRadius: 0.5,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Icon(
+                          o.icon,
+                          size: 24,
+                          color: Colors.white.withValues(
+                            alpha: _active ? 1.0 : 0.92,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: -4,
+                        right: -2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF22D3EE),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: const Color(0xFF050507),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Text(
+                            'SIMKL',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 7,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.6,
+                              height: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 9),
+                  Text(
+                    o.caption,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(
+                        alpha: _active ? 1.0 : 0.62,
+                      ),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.1,
@@ -2314,12 +2688,10 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
     final filledFg = accent == null ? Colors.black : Colors.white;
 
     final bg = filled
-        ? (_focused
-            ? Color.lerp(filledBg, Colors.white, 0.12)!
-            : filledBg)
+        ? (_focused ? Color.lerp(filledBg, Colors.white, 0.12)! : filledBg)
         : (_focused
-            ? Colors.white.withValues(alpha: 0.18)
-            : Colors.white.withValues(alpha: 0.06));
+              ? Colors.white.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.06));
 
     final fg = filled ? filledFg : Colors.white;
 
@@ -2436,11 +2808,7 @@ class _GlassCard extends StatelessWidget {
           width: 0.5,
         ),
         boxShadow: const [
-          BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
+          BoxShadow(color: Color(0x22000000), blurRadius: 20, spreadRadius: 2),
         ],
       ),
       child: Column(
@@ -2490,4 +2858,3 @@ class _GlassIconButton extends StatelessWidget {
     );
   }
 }
-

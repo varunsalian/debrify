@@ -1097,7 +1097,15 @@ class _StyleTab extends StatelessWidget {
                     color: subtitleStyle.color.color,
                     fontSize: subtitleStyle.size.sizePx * 0.5,
                     fontFamily: subtitleStyle.fontFamily,
-                    shadows: subtitleStyle.resolvedShadows,
+                    fontWeight:
+                        subtitleStyle.bold ? FontWeight.w700 : FontWeight.w400,
+                    shadows: subtitleStyle.bold
+                        ? [
+                            ...?subtitleStyle.resolvedShadows,
+                            ...subtitleStyle
+                                .fauxBoldShadows(subtitleStyle.size.sizePx * 0.5),
+                          ]
+                        : subtitleStyle.resolvedShadows,
                   ),
                 ),
               ),
@@ -1245,6 +1253,21 @@ class _StyleTab extends StatelessWidget {
                   fontLabel: font.label,
                 ),
               );
+            },
+          ),
+
+          _StyleOption(
+            label: 'Bold',
+            value: subtitleStyle.bold ? 'On' : 'Off',
+            onDecrease: () async {
+              final newBold = !subtitleStyle.bold;
+              await SubtitleSettingsService.instance.setBold(newBold);
+              onStyleChanged(subtitleStyle.copyWith(bold: newBold));
+            },
+            onIncrease: () async {
+              final newBold = !subtitleStyle.bold;
+              await SubtitleSettingsService.instance.setBold(newBold);
+              onStyleChanged(subtitleStyle.copyWith(bold: newBold));
             },
           ),
 

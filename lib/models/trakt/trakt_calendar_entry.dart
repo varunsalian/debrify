@@ -92,4 +92,68 @@ class TraktCalendarEntry {
       posterUrl: poster,
     );
   }
+
+  /// Parse a raw Simkl public-calendar item (from
+  /// `data.simkl.in/calendar/{tv,anime}.json`) into the same shape, so the
+  /// calendar screen can render Trakt and Simkl entries identically. Returns
+  /// `null` when an essential field is missing OR the item has no `tt…` IMDb id
+  /// — the app is IMDb-keyed, so a Simkl-only id can't be matched to the user's
+  /// library or handed to the detail page. Simkl's calendar carries no episode
+  /// title/overview/runtime, so those stay null; `showTraktId` is null too
+  /// (only used for Trakt de-dup). Shape (per Simkl docs / live response):
+  /// `{ title, poster, date (ISO w/ tz offset), release_date, ids: { imdb,
+  /// simkl_id, ... }, episode: { season, episode } }`.
+  static TraktCalendarEntry? fromSimklCalendarJson(Map<String, dynamic> json) {
+    final dateStr = json['date'] as String?;
+    if (dateStr == null || dateStr.length < 10) return null;
+
+    // Simkl's `date` is a nominal calendar-day marker (midnight US-Eastern,
+    // e.g. `2026-07-22T00:00:00-04:00`), NOT a real air instant. Re-localizing
+    // it (toLocal) would shift the day one earlier for everyone west of Eastern
+    // — a US-Pacific user would see a July-22 episode under July 21. So bucket
+    // by the DATE COMPONENT: anchor a LOCAL midnight on that Y-M-D, so
+    // getRange's local-day grouping lands on the day Simkl intended for every
+    // timezone. (Trakt's `first_aired` IS a true UTC instant, so its parser
+    // above correctly re-localizes; only Simkl's nominal marker needs this.)
+    final airedYear = int.tryParse(dateStr.substring(0, 4));
+    final airedMonth = int.tryParse(dateStr.substring(5, 7));
+    final airedDay = int.tryParse(dateStr.substring(8, 10));
+    if (airedYear == null || airedMonth == null || airedDay == null) return null;
+    final airedLocal = DateTime(airedYear, airedMonth, airedDay);
+    final firstAiredUtc = airedLocal.toUtc();
+
+    final title = json['title'] as String?;
+    if (title == null || title.isEmpty) return null;
+
+    final episode = json['episode'];
+    if (episode is! Map) return null;
+    final seasonRaw = episode['season'];
+    final numberRaw = episode['episode'];
+    if (seasonRaw is! int || numberRaw is! int) return null;
+
+    final ids = json['ids'];
+    final imdb = ids is Map ? ids['imdb'] as String? : null;
+    if (imdb == null || !imdb.startsWith('tt')) return null;
+
+    int? showYear;
+    final releaseDate = json['release_date'];
+    if (releaseDate is String && releaseDate.length >= 4) {
+      showYear = int.tryParse(releaseDate.substring(0, 4));
+    }
+
+    return TraktCalendarEntry(
+      firstAiredUtc: firstAiredUtc,
+      firstAiredLocal: airedLocal,
+      showTitle: title,
+      showYear: showYear,
+      showImdbId: imdb,
+      showTraktId: null,
+      seasonNumber: seasonRaw,
+      episodeNumber: numberRaw,
+      episodeTitle: null,
+      episodeOverview: null,
+      runtimeMinutes: null,
+      posterUrl: 'https://images.metahub.space/poster/medium/$imdb/img',
+    );
+  }
 }

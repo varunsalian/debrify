@@ -9,6 +9,7 @@ import '../utils/tv_keys.dart';
 import '../services/main_page_bridge.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/simkl/simkl_service.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
@@ -18,6 +19,7 @@ import '../screens/torbox/torbox_downloads_screen.dart';
 import 'add_source_picker_dialog.dart';
 import 'catalog_item_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
 import '../screens/catalog_item_detail_screen.dart';
 
 /// Displays aggregated search results from all catalog sources
@@ -119,6 +121,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   // Trakt integration
   bool _isTraktAuthenticated = false;
 
+  // Simkl integration — mirrors Trakt's, rendered as its own independent
+  // strip (see the Simkl integration plan).
+  bool _isSimklAuthenticated = false;
+
   // Bound sources for movies
   Map<String, List<SeriesSource>> _boundSources = {};
 
@@ -133,6 +139,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       widget.onKeywordFocusNodeReady?.call(_keywordSearchFocusNode);
     });
     _refreshTraktAuthState();
+    _refreshSimklAuthState();
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     // Initial search without debounce
     _performSearch();
@@ -144,8 +151,15 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     setState(() => _isTraktAuthenticated = auth);
   }
 
+  Future<void> _refreshSimklAuthState() async {
+    final auth = await SimklService.instance.isAuthenticated();
+    if (!mounted) return;
+    setState(() => _isSimklAuthenticated = auth);
+  }
+
   void _handleIntegrationChanged() {
     _refreshTraktAuthState();
+    _refreshSimklAuthState();
   }
 
   /// Request focus on the first result card (for DPAD navigation from Sources)
@@ -360,6 +374,17 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
           )
         : const <TraktMenuOption>[];
 
+    // Simkl's own strip — a strict IMDb-id gate, NOT the looser `hasTrakt`
+    // (which also accepts a valid non-IMDb id): every SimklService write
+    // sends `ids: {imdb: ...}`, so a non-IMDb item's actions would always
+    // fail server-side. Built and rendered entirely separately from Trakt's
+    // (see the Simkl integration plan). buildSimklMenuOptions itself returns
+    // empty when not authenticated.
+    final simklItems = buildSimklMenuOptions(
+      isSeries: item.type == 'series',
+      isSimklAuthenticated: item.hasValidImdbId && _isSimklAuthenticated,
+    );
+
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CatalogItemDetailScreen(
@@ -398,6 +423,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               onAddToStremioTv: _handleAddToStremioTv,
             );
           },
+          simklMenuOptions: simklItems,
+          onSimklAction: (action) =>
+              handleSimklMenuAction(context, item, action),
           onPlay: () => _onQuickPlay(item),
           // The shared detail screen no longer self-pops on Browse; preserve
           // the prior pop-then-callback behaviour here (aggregated episode

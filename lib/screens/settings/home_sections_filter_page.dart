@@ -9,7 +9,7 @@ import '../../widgets/home/home_theme.dart';
 
 /// Full-screen DPAD-first Home-row manager — a two-pane "group → item" filter,
 /// modelled on the Stremio TV channel filter's grammar but 2 levels deep (no
-/// genre wall). The left rail lists groups (Continue Watching, Trakt,
+/// genre wall). The left rail lists groups (Continue Watching, Trakt, Simkl,
 /// Favorites, then each catalog addon); the right pane lists that group's rows
 /// as on/off toggles. Header actions: All on / All off / Invert.
 ///
@@ -125,6 +125,10 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       _Group('Trakt', [
         _Item('trakt:movies', 'Movies', on('trakt:movies')),
         _Item('trakt:shows', 'Shows', on('trakt:shows')),
+      ]),
+      _Group('Simkl', [
+        _Item('simkl:movies', 'Movies', on('simkl:movies')),
+        _Item('simkl:shows', 'Shows', on('simkl:shows')),
       ]),
       _Group('Favorites', [
         _Item('fav:playlist', 'Playlist', on('fav:playlist')),

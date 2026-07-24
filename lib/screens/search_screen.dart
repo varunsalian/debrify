@@ -34,8 +34,10 @@ import '../services/torbox_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
 import '../services/torrent_service.dart';
+import '../services/simkl/simkl_continue_watching_service.dart';
 import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/simkl/simkl_service.dart';
 import '../services/video_player_launcher.dart';
 import '../utils/concurrency.dart';
 import '../utils/dialog_tap_guard.dart';
@@ -58,10 +60,17 @@ import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
 import 'see_all/trakt_see_all_screen.dart';
+import 'see_all/simkl_see_all_screen.dart';
+import 'see_all/mdblist_see_all_screen.dart';
+import 'see_all/mdblist_lists_see_all_screen.dart';
+import '../widgets/see_all/mdblist_list_card.dart';
+import '../services/mdblist/mdblist_list_source.dart';
+import '../services/mdblist/mdblist_service.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
 import '../widgets/see_all/discover_trailer_stage.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'merged_series_detail_screen.dart';
 import 'debrid_downloads_screen.dart';
@@ -184,6 +193,8 @@ class _KwPreservedState {
 /// 'a:{addonId}').
 const String _discCw = 'cw';
 const String _discTrakt = 'trakt';
+const String _discSimkl = 'simkl';
+const String _discMdblist = 'mdblist';
 const String _discAddonPrefix = 'a:';
 
 // Metrics for the inline caption under an [_ArtPoster] (the favourites rails).
@@ -243,6 +254,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // toggle is reachable with a remote (arrow-up from the search field).
   final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
   final FocusNode _modeKeywordNode = FocusNode(debugLabel: 'mode_keyword');
+
+  // MDBList list-search state. Runs in parallel with a Catalog search and
+  // surfaces as a "MDBList Lists" card rail at the top of the results board;
+  // each card hands off to the Discover tab via
+  // MainPageBridge.pendingMdblistListOpen. One focus node per card.
+  String _listsQuery = '';
+  List<MdblistListChoice> _listsResults = const [];
+  int _listsToken = 0;
+  final List<FocusNode> _listsNodes = [];
+  // Debounce for opening a list from the rail — one fast double-press must not
+  // stack two pushed item screens (TV) / double-fire the handoff.
+  DateTime? _lastListOpenAt;
 
   _Mode _mode = _Mode.catalog;
 
@@ -511,6 +534,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   final List<FocusNode> _traktMovieNodes = [];
   final List<FocusNode> _traktSeriesNodes = [];
 
+  // SIMKL Continue Watching rows ("Simkl Movies" / "Simkl Shows") — a parallel
+  // strip below the Trakt rows, built from the account's paused playback
+  // sessions (same `/sync/playback` lists the scrobble resume already fetches).
+  // Independent of the Trakt block above so neither can regress the other.
+  List<StremioMeta> _simklMovies = [];
+  List<StremioMeta> _simklSeries = [];
+  List<StremioMeta> _simklAll = []; // paused_at order, for the See-All grid
+  final Map<String, double> _simklProgress = {}; // imdbId → 0..1
+  final Map<String, String> _simklEpisode = {}; // imdbId → 'S2 · E5' (series)
+  final Map<String, SimklContinueWatchingItem> _simklByImdb = {};
+  final List<FocusNode> _simklMovieNodes = [];
+  final List<FocusNode> _simklSeriesNodes = [];
+  int _simklCwToken = 0;
+
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
@@ -578,6 +615,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// (watchlist / collection / watched / rate / list). App actions (Select
   /// Source, Add to Stremio TV, Search Packs) show regardless.
   bool _isTraktAuthenticated = false;
+
+  /// Whether Simkl is connected — gates the Simkl detail quick actions,
+  /// rendered as their own strip alongside Trakt's (see [_isTraktAuthenticated]).
+  bool _isSimklAuthenticated = false;
+
+  /// Whether MDBList is connected — gates the MDBList entry in the Discover
+  /// source dropdown (hidden when disconnected, so an unauthed user isn't shown
+  /// a dead source; kept visible if it's somehow the active source).
+  bool _isMdblistAuthenticated = false;
   // Addons that produced homepage rows, indexed by id, so a Continue Watching
   // tap can route back through the right addon (for Episodes / next-episode).
   final Map<String, StremioAddon> _addonsById = {};
@@ -639,6 +685,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         onQuickPlay: _playTraktItem,
         onSeeAll: () => _openTraktSeeAll('series'),
       ),
+    // Simkl rows come after the Trakt rows. Both trackers fetch over the network
+    // on a cold start (Simkl's playback/library caches are only warmed by a
+    // scrobble or a prior read, not pre-warmed at launch), but only Trakt holds
+    // its slot open with skeletons — so when the Simkl rows land they settle in
+    // once, like any other content row. (A dedicated Simkl skeleton could make
+    // that zero-shift too, but it isn't worth the board index-math complexity.)
+    if (_simklMovies.isNotEmpty && !_homeDisabled.contains('simkl:movies'))
+      _CwRow(
+        title: 'Simkl Continue Watching',
+        tag: 'Movies',
+        items: _simklMovies,
+        nodes: _simklMovieNodes,
+        progressOf: (m) => _simklProgress[m.imdbId],
+        episodeOf: (_) => null,
+        onOpen: _openSimklCwItem,
+        onQuickPlay: _playSimklCwItem,
+        onSeeAll: () => _openSimklCwSeeAll('movie'),
+      ),
+    if (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows'))
+      _CwRow(
+        title: 'Simkl Continue Watching',
+        tag: 'Shows',
+        items: _simklSeries,
+        nodes: _simklSeriesNodes,
+        progressOf: (m) => _simklProgress[m.imdbId],
+        episodeOf: (m) => _simklEpisode[m.imdbId],
+        onOpen: _openSimklCwItem,
+        onQuickPlay: _playSimklCwItem,
+        onSeeAll: () => _openSimklCwSeeAll('series'),
+      ),
   ];
 
   /// Whether any Continue Watching row is currently on-screen (drives focus
@@ -652,7 +728,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           (_traktMovies.isNotEmpty &&
               !_homeDisabled.contains('trakt:movies')) ||
           (_traktSeries.isNotEmpty &&
-              !_homeDisabled.contains('trakt:shows'))) &&
+              !_homeDisabled.contains('trakt:shows')) ||
+          (_simklMovies.isNotEmpty &&
+              !_homeDisabled.contains('simkl:movies')) ||
+          (_simklSeries.isNotEmpty &&
+              !_homeDisabled.contains('simkl:shows'))) &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
@@ -728,6 +808,35 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// fades in — the film takes the room.
   final ValueNotifier<double> _heroTrailerTakeover = ValueNotifier<double>(0);
 
+  // Live IPTV favourite hero preview: when DPAD focus rests on an "IPTV" row
+  // card, its stream plays in the SAME boxed video region as the catalog
+  // trailer above — reusing HeroTrailerBackdrop's `live: true` mode, exactly
+  // like the IPTV page's own inline channel preview
+  // (IptvResultsView._buildPreviewStage). Painted as a layer above
+  // [_HeroTrailerLayer] so the two never need to swap types; whichever one
+  // actually has a URL to show wins (see [_setHeroLiveIptv]).
+  final ValueNotifier<String?> _heroLiveUrl = ValueNotifier<String?>(null);
+
+  /// Set the INSTANT an IPTV favourite gains focus — well before its stream
+  /// (if a Stremio-addon channel) finishes resolving. [_HeroLiveLayer] uses
+  /// this to occlude the region with the channel's OWN art immediately, so
+  /// the previously-focused catalog title's Cinemeta poster never shows
+  /// through the resolve/buffer gap underneath.
+  final ValueNotifier<IptvChannel?> _heroLiveChannel =
+      ValueNotifier<IptvChannel?>(null);
+
+  /// Boolean mirror of [_heroLiveChannel] for [_HeroSpotlight.liveTakeover] —
+  /// the spotlight fades its (now-stale) colour field and identity text on
+  /// this, and has no other reason to know the IPTV-specific channel type.
+  final ValueNotifier<bool> _heroLiveTakeover = ValueNotifier<bool>(false);
+  int _heroLiveReq = 0;
+
+  /// Candidate ladder for the live IPTV favourite when it's a Stremio-addon
+  /// channel (several upstream links to try in order) — mirrors the IPTV
+  /// page's own ladder (IptvResultsView._onPreviewPlaybackFailed). Null for a
+  /// plain M3U/Xtream favourite, which has just the one URL.
+  List<String>? _heroLiveCandidates;
+
   /// Set when real content playback launches (any path — in-app route,
   /// native TV activity, external app): the ambient trailer must not resume
   /// behind or after the feature (the behavior ef5f555 shipped; the
@@ -757,6 +866,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   String _discSource = _discCw;
   List<StremioAddon> _discAddons = const [];
   final FocusNode _discSourceNode = FocusNode(debugLabel: 'disc_source');
+
+  /// An MDBList list handed off from the Search tab's Lists mode (consumed
+  /// from MainPageBridge.pendingMdblistListOpen on mount). Passed into the
+  /// MDBList panel, which opens focused on it with the ♥ like toggle.
+  MdblistListChoice? _discMdblistList;
 
   // The grid tile the DPAD is currently on, mirrored into the two-pane detail
   // rail (TV Discover). A ValueNotifier — not setState — so a focus move only
@@ -835,6 +949,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         });
       }
     }
+    // An MDBList list handed off from the Search tab's Lists mode: start the
+    // Discover tab on the MDBList source, focused on that list. The nav
+    // rebuilds this screen fresh on every tab switch, so the payload set right
+    // before switchTab(18) is present by the time we mount.
+    if (widget.discoverMode) {
+      final pending = MainPageBridge.pendingMdblistListOpen;
+      if (pending != null) {
+        MainPageBridge.pendingMdblistListOpen = null;
+        _discMdblistList = MdblistListChoice(
+          id: (pending['id'] as num?)?.toInt() ?? -1,
+          name: pending['name'] as String? ?? 'Untitled list',
+          ownerName: pending['ownerName'] as String?,
+          itemCount: (pending['itemCount'] as num?)?.toInt() ?? 0,
+          liked: pending['liked'] == true,
+          likes: (pending['likes'] as num?)?.toInt() ?? 0,
+        );
+        _discSource = _discMdblist;
+      }
+    }
     // Ambient hero trailer gates (Home board TV only) — read before the board
     // loads so the seeded first spotlight can already schedule its trailer.
     if (_heroTrailerActive) {
@@ -904,6 +1037,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (_kwScroll.hasClients) _kwLastScroll = _kwScroll.offset;
     });
     _refreshTraktAuthState();
+    _refreshSimklAuthState();
+    _refreshMdblistAuthState();
     _loadMergedSeriesFlag();
     // Restore a keyword search preserved from a prior tab visit (results +
     // scroll). If one restored, it carries its own filters, so don't overwrite
@@ -947,6 +1082,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _load(),
         _loadContinueWatching(),
         _loadTraktContinueWatching(),
+        // refreshBound:false — _load()'s bound-source scan (which now covers the
+        // Simkl rows) runs after this on cold start, so a 2nd concurrent scan
+        // here would be pure duplicate startup work on weak TV hardware.
+        _loadSimklContinueWatching(refreshBound: false),
         _loadTvFavorites(),
         _loadStremioTvFavorites(),
         _loadIptvFavorites(),
@@ -976,11 +1115,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final hasQuery =
         _searchController.text.isNotEmpty ||
         _catalogQuery.isNotEmpty ||
-        _kwQuery.isNotEmpty;
+        _kwQuery.isNotEmpty ||
+        _listsQuery.isNotEmpty;
     if (!hasQuery) return false;
-    // Back also drops out of Keyword mode, so the tab returns to its default
-    // Catalog prompt (matches the old overlay-close behaviour). _clearQuery
-    // rebuilds, so setting the field first is enough.
+    // Back also drops out of Keyword/Lists mode, so the tab returns to its
+    // default Catalog prompt (matches the old overlay-close behaviour).
+    // _clearQuery rebuilds, so setting the field first is enough.
     _mode = _Mode.catalog;
     _clearQuery();
     if (widget.isTelevision) {
@@ -996,16 +1136,33 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// detail quick actions, the PikPak-only Play hiding, and the Trakt rows.
   void _onIntegrationsChanged() {
     _refreshTraktAuthState();
+    _refreshSimklAuthState();
+    _refreshMdblistAuthState();
     _refreshPikpakOnly();
-    // Trakt Continue Watching rows are never rendered on the dedicated Search
-    // tab, so don't refetch them there.
-    if (!widget.searchMode) _loadTraktContinueWatching();
+    // Trakt/Simkl Continue Watching rows are never rendered on the dedicated
+    // Search tab, so don't refetch them there.
+    if (!widget.searchMode) {
+      _loadTraktContinueWatching();
+      _loadSimklContinueWatching();
+    }
   }
 
   Future<void> _refreshTraktAuthState() async {
     final auth = await TraktService.instance.isAuthenticated();
     if (!mounted || auth == _isTraktAuthenticated) return;
     setState(() => _isTraktAuthenticated = auth);
+  }
+
+  Future<void> _refreshSimklAuthState() async {
+    final auth = await SimklService.instance.isAuthenticated();
+    if (!mounted || auth == _isSimklAuthenticated) return;
+    setState(() => _isSimklAuthenticated = auth);
+  }
+
+  Future<void> _refreshMdblistAuthState() async {
+    final auth = await MdblistService.instance.isAuthenticated();
+    if (!mounted || auth == _isMdblistAuthenticated) return;
+    setState(() => _isMdblistAuthenticated = auth);
   }
 
   /// Restore a preserved keyword search into this instance if one exists for
@@ -1135,6 +1292,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _heroTrailerLoading.dispose();
     _heroTrailerShowing.dispose();
     _heroTrailerTakeover.dispose();
+    _heroLiveUrl.dispose();
+    _heroLiveChannel.dispose();
+    _heroLiveTakeover.dispose();
     _heroTint.dispose();
     _searchController.dispose();
     _catalogSourcesHideTimer?.cancel();
@@ -1142,6 +1302,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _searchFocusNode.dispose();
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
+    _disposeListsNodes();
     _discSourceNode.dispose();
     _discFocused.dispose();
     if (widget.discoverMode && widget.isTelevision) {
@@ -1183,6 +1344,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._cwSeriesNodes,
       ..._traktMovieNodes,
       ..._traktSeriesNodes,
+      ..._simklMovieNodes,
+      ..._simklSeriesNodes,
       ..._tvFavNodes,
       ..._stvFavNodes,
       ..._iptvFavNodes,
@@ -1195,6 +1358,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _cwSeriesNodes.clear();
     _traktMovieNodes.clear();
     _traktSeriesNodes.clear();
+    _simklMovieNodes.clear();
+    _simklSeriesNodes.clear();
     _tvFavNodes.clear();
     _stvFavNodes.clear();
     _iptvFavNodes.clear();
@@ -1488,6 +1653,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._cwSeries,
       ..._traktMovies,
       ..._traktSeries,
+      ..._simklMovies,
+      ..._simklSeries,
     ];
     for (final item in items) {
       final imdb = _imdbOf(item);
@@ -2343,6 +2510,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _onCatalogPlay(item, _addonForContinue(_cwAddonId[item.imdbId]));
   }
 
+  /// Open a plain Simkl-list title (Discover's Simkl Trending/watchlist lists) —
+  /// a normal catalog detail, no resume. The CW list uses [_openSimklCwItem]
+  /// instead, so a title browsed fresh here never opens mid-episode.
+  void _openSimklItem(StremioMeta item) {
+    _openItem(item, _addonForContinue(item.sourceAddon?.id));
+  }
+
+  /// Quick-play a plain Simkl-list title like any other catalog item (no
+  /// resume). The CW list uses [_playSimklCwItem].
+  void _playSimklItem(StremioMeta item) {
+    _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
+  }
+
   // ── Trakt Continue Watching ───────────────────────────────────────────────
 
   /// Fetch the Trakt "Continue Watching" rows (in-progress movies + up-next
@@ -2489,6 +2669,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return; // already looking at them
     } else if (onRow(_cwMovieNodes) || onRow(_cwSeriesNodes)) {
       dir = 'down';
+    } else if (onRow(_simklMovieNodes) || onRow(_simklSeriesNodes)) {
+      dir = 'up'; // Simkl rows render just below the Trakt rows
     } else {
       for (final kind in _favRowKinds) {
         if (onRow(_favNodesFor(kind))) {
@@ -2625,6 +2807,132 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     ).popUntil((route) => route.settings.name != kCatalogDetailRouteName);
     _snack('Removed from Trakt Continue Watching');
     _loadTraktContinueWatching(refreshBound: false);
+  }
+
+  // ── Simkl Continue Watching ───────────────────────────────────────────────
+
+  /// Fetch the Simkl "Continue Watching" rows (paused movies + paused episodes)
+  /// from the connected account's playback sessions — the same `/sync/playback`
+  /// lists the scrobble resume already fetches + caches, so this is cheap. Runs
+  /// once on init / integration change and caches in memory. Token-guarded
+  /// against overlap; hides the rows when Simkl isn't connected. [refreshBound]
+  /// runs a bound-source refresh at the end (skip when the caller already does).
+  Future<void> _loadSimklContinueWatching({bool refreshBound = true}) async {
+    final token = ++_simklCwToken;
+    final result = await SimklContinueWatchingService.instance.fetchItems();
+    if (!mounted || token != _simklCwToken) return;
+    // Null = a transient fetch failure — leave any existing rows in place (a
+    // real disconnect returns empty lists, which fall through and clear them).
+    if (result == null) return;
+
+    final movieMetas = <StremioMeta>[];
+    final showMetas = <StremioMeta>[];
+    final progress = <String, double>{};
+    final episode = <String, String>{};
+    final byImdb = <String, SimklContinueWatchingItem>{};
+    void ingest(
+      List<SimklContinueWatchingItem> items,
+      List<StremioMeta> into,
+    ) {
+      for (final it in items) {
+        final id = it.id;
+        if (id.isEmpty || byImdb.containsKey(id)) continue; // dedup by imdbId
+        into.add(it.meta);
+        byImdb[id] = it;
+        // "Up next" entries have no paused position — no progress bar for them.
+        final p = it.progress;
+        if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
+        final se = _seLabel(it.season, it.episode);
+        if (se != null) episode[id] = se;
+      }
+    }
+
+    ingest(result.movies, movieMetas);
+    ingest(result.shows, showMetas);
+    // Merge into one paused-order list for the See-All grid: newest paused_at
+    // first, timestamp-less items last, ties fall back to movies-then-shows.
+    final allMetas = [...movieMetas, ...showMetas];
+    final origIndex = <StremioMeta, int>{
+      for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
+    };
+    allMetas.sort((a, b) {
+      final pa = byImdb[a.imdbId]?.pausedAtMs;
+      final pb = byImdb[b.imdbId]?.pausedAtMs;
+      if (pa != null && pb != null) {
+        final c = pb.compareTo(pa);
+        if (c != 0) return c;
+      } else if (pa == null && pb != null) {
+        return 1;
+      } else if (pa != null && pb == null) {
+        return -1;
+      }
+      return origIndex[a]!.compareTo(origIndex[b]!);
+    });
+
+    _syncCwNodes(_simklMovieNodes, movieMetas.length, 'smovie');
+    _syncCwNodes(_simklSeriesNodes, showMetas.length, 'sseries');
+    setState(() {
+      _simklMovies = movieMetas;
+      _simklSeries = showMetas;
+      _simklAll = allMetas;
+      _simklProgress
+        ..clear()
+        ..addAll(progress);
+      _simklEpisode
+        ..clear()
+        ..addAll(episode);
+      _simklByImdb
+        ..clear()
+        ..addAll(byImdb);
+    });
+    _maybeAutoFocusBoard();
+    if (refreshBound) unawaited(_refreshBoundSources());
+  }
+
+  /// Open a Simkl Continue Watching title as a detail page. For a series, scroll
+  /// the episodes panel to the paused episode (the same path the Calendar uses);
+  /// resume itself is handled by the detail's three-way resume when Simkl is
+  /// connected. No `isTraktSource` flag — this is a plain, source-neutral open.
+  void _openSimklCwItem(StremioMeta item) {
+    final cw = _simklByImdb[_imdbOf(item)];
+    _openItem(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      initialSeason: (cw != null && !cw.isMovie) ? cw.season : null,
+      initialEpisode: (cw != null && !cw.isMovie) ? cw.episode : null,
+    );
+  }
+
+  /// Resume a Simkl Continue Watching title directly (quick-play): builds a
+  /// selection carrying the paused season/episode + Simkl progress percent and
+  /// plays it, mirroring the Trakt quick-play.
+  Future<void> _playSimklCwItem(StremioMeta item) async {
+    final cw = _simklByImdb[_imdbOf(item)];
+    if (cw == null) {
+      // Not in the CW map (a See-All grid title that fell out of the list) —
+      // play it like a plain catalog title; three-way resume still applies.
+      await _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
+      return;
+    }
+    _playSelection(SimklContinueWatchingService.instance.selectionForItem(cw));
+  }
+
+  /// Desktop "See All" for the Simkl Continue Watching rows — reuses the generic
+  /// Continue Watching grid, seeded with the paused-order list + progress.
+  void _openSimklCwSeeAll([String initialCategory = 'all']) {
+    _pushCwSeeAll(
+      title: 'Simkl Continue Watching',
+      initialCategory: initialCategory,
+      items: _simklAll,
+      progressOf: (m) => _simklProgress[m.imdbId],
+      onOpen: _openSimklCwItem,
+      onQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
+      onReload: () async {
+        await _loadSimklContinueWatching(refreshBound: false);
+        await _afterSeeAllReturn();
+        return List<StremioMeta>.of(_simklAll);
+      },
+    );
   }
 
   /// Swap the displayed sections (homepage or search results): rebuild the
@@ -2872,10 +3180,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _discSourceNode.hasFocus) {
       return true;
     }
+    if (anyOf(_listsNodes)) return true;
     if (anyOf(_cwMovieNodes) ||
         anyOf(_cwSeriesNodes) ||
         anyOf(_traktMovieNodes) ||
         anyOf(_traktSeriesNodes) ||
+        anyOf(_simklMovieNodes) ||
+        anyOf(_simklSeriesNodes) ||
         anyOf(_tvFavNodes) ||
         anyOf(_stvFavNodes) ||
         anyOf(_iptvFavNodes) ||
@@ -3003,6 +3314,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _rowNodes.isNotEmpty &&
           _rowNodes.first.isNotEmpty) {
         _rowNodes.first.first.requestFocus();
+      } else if (_listsRailVisible && _listsNodes.isNotEmpty) {
+        // Catalog found nothing but MDBList lists did — land on the rail so the
+        // remote never bounces back to the field with results on screen.
+        _listsNodes.first.requestFocus();
       } else {
         _searchFocusNode.requestFocus();
       }
@@ -3041,11 +3356,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
   }
 
-  /// Focus the Catalog/Keyword toggle, landing on the segment for the current
-  /// mode so its highlight lines up with where the remote cursor sits.
+  /// Focus the Catalog/Keyword/Lists toggle, landing on the segment for the
+  /// current mode so its highlight lines up with where the remote cursor sits.
   void _focusModeToggle() {
-    (_mode == _Mode.keyword ? _modeKeywordNode : _modeCatalogNode)
-        .requestFocus();
+    (switch (_mode) {
+      _Mode.catalog => _modeCatalogNode,
+      _Mode.keyword => _modeKeywordNode,
+    }).requestFocus();
   }
 
   /// Return focus to the search field with the caret at the end of the text, so
@@ -3167,6 +3484,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Off-TV / blank search prompt the hero isn't rendered, so don't track focus
     // or fire the per-item backdrop-enrichment /meta fetch behind it.
     if (!_heroActive) return;
+    // A catalog/CW card just took focus (possibly straight from the IPTV
+    // favourites row, which has no row in between) — drop any live IPTV feed
+    // so the boxed video region falls back to this item's own trailer.
+    _clearHeroLiveIptv();
     if (_heroItem.value?.id == item.id) {
       // Back on the current hero (a vertical move within the column, or an
       // A→B→A jiggle inside the swap debounce): drop any pending swap to a
@@ -3335,6 +3656,86 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
+  }
+
+  /// DPAD focus rested on an IPTV favourite card — retune the boxed hero video
+  /// region to that channel's live stream. A plain M3U/Xtream favourite's URL
+  /// is already playable; a Stremio-addon favourite resolves candidates first
+  /// (same async ladder [IptvResultsView] uses for its own inline preview),
+  /// guarded by [_heroLiveReq] so a fast DPAD move past it can't land a stale
+  /// resolve on top of whatever channel focus has since moved to.
+  void _setHeroLiveIptv(IptvChannel channel) {
+    if (!_heroTrailerActive) return;
+    if (_heroLiveChannel.value?.url == channel.url) return;
+    _heroLiveChannel.value = channel;
+    if (!_heroLiveTakeover.value) _heroLiveTakeover.value = true;
+    _heroLiveCandidates = null;
+    final req = ++_heroLiveReq;
+    // A live feed pre-empts whatever catalog trailer is mid-flight/playing —
+    // instant teardown, same as any other hero change.
+    _clearHeroTrailer();
+    _heroLiveUrl.value = null;
+    // The shell's glass-stage backdrop and sidebar tint are ALSO the stale
+    // catalog title's art (published by [_publishAmbientArt]/
+    // [_publishHeroTintToShell], neither of which this focus path runs) —
+    // blank them too rather than leaving that art behind everything,
+    // including the sidebar, while an unrelated channel plays.
+    MainPageBridge.tvAmbientArt.value = null;
+    MainPageBridge.tvHeroTint.value = null;
+    if (!StremioIptvService.isStremioChannelUrl(channel.url)) {
+      _heroLiveUrl.value = channel.url;
+      return;
+    }
+    StremioIptvService.instance.resolveCandidates(channel.url).then((found) {
+      if (!mounted || req != _heroLiveReq || found.isEmpty) return;
+      _heroLiveCandidates = [for (final c in found) c.url];
+      _heroLiveUrl.value = _heroLiveCandidates!.first;
+    });
+  }
+
+  /// DPAD focus left the IPTV favourites row (another favourites row, or a
+  /// catalog/CW card) — drop the live feed so the boxed region falls back to
+  /// whatever catalog trailer [_heroItem] owns.
+  void _clearHeroLiveIptv() {
+    _heroLiveReq++;
+    final wasLive = _heroLiveChannel.value != null;
+    if (wasLive) _heroLiveChannel.value = null;
+    if (_heroLiveTakeover.value) _heroLiveTakeover.value = false;
+    _heroLiveCandidates = null;
+    if (_heroLiveUrl.value != null) _heroLiveUrl.value = null;
+    // Restore the shell's glass-stage backdrop/tint for whatever catalog
+    // title the hero already holds. Needed even when DPAD focus returns to
+    // the SAME card it was on before IPTV took over: _setHero's "back on the
+    // current hero" branch doesn't re-run _publishAmbientArt/
+    // _publishHeroTintToShell (no item change to react to), so without this
+    // the shell would stay on the blank/neutral state _setHeroLiveIptv left
+    // it in.
+    if (wasLive && _heroTrailerActive) {
+      _publishAmbientArt(_heroItem.value, _heroEnriched.value);
+      MainPageBridge.tvHeroTint.value = _heroTint.value;
+    }
+  }
+
+  /// The boxed hero region's live IPTV feed genuinely failed (refused to
+  /// open, errored, or stalled past the first-frame timeout) — step down its
+  /// candidate ladder, mirroring the IPTV page's own inline preview
+  /// (IptvResultsView._onPreviewPlaybackFailed). No-op for a plain M3U/Xtream
+  /// favourite (single URL, no ladder) or once every candidate is exhausted.
+  void _onHeroLivePlaybackFailed() {
+    final candidates = _heroLiveCandidates;
+    final current = _heroLiveUrl.value;
+    if (candidates == null || current == null) return;
+    final next = candidates.indexOf(current) + 1;
+    if (next <= 0 || next >= candidates.length) {
+      // Every candidate is dead: forget the cached list so a later attempt
+      // re-resolves fresh links instead of replaying the same dead ones for
+      // the rest of the 5-minute cache window.
+      final channel = _heroLiveChannel.value;
+      if (channel != null) StremioIptvService.instance.invalidate(channel.url);
+      _heroLiveUrl.value = null;
+      return;
+    }
+    _heroLiveUrl.value = candidates[next];
   }
 
   /// Mirror the takeover arc onto the app-shell notifier (sidebar rail hide).
@@ -3544,6 +3945,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _restoreHome();
     } else {
       _runCatalogSearch(q);
+      // In parallel with the catalog search: MDBList lists matching the query
+      // surface as a card rail at the top of the results board (best-effort —
+      // silently absent when MDBList isn't connected or nothing matches).
+      _runListsSearch(q);
     }
   }
 
@@ -3551,14 +3956,121 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _catalogDebounce?.cancel();
     _searchController.clear();
     _disposeKwNodes();
+    _disposeListsNodes();
     setState(() {
       _kwQuery = '';
       _kwAll = [];
       _kwResults = [];
       _kwCache = {};
       _kwError = null;
+      _listsToken++; // cancel an in-flight lists search
+      _listsQuery = '';
+      _listsResults = const [];
     });
     _restoreHome();
+  }
+
+  void _disposeListsNodes() {
+    for (final n in _listsNodes) {
+      n.dispose();
+    }
+    _listsNodes.clear();
+  }
+
+  /// One focus node per result row, rebuilt to match the current result set.
+  void _ensureListsNodes() {
+    while (_listsNodes.length < _listsResults.length) {
+      _listsNodes.add(FocusNode(debugLabel: 'lists_row_${_listsNodes.length}'));
+    }
+    while (_listsNodes.length > _listsResults.length) {
+      _listsNodes.removeLast().dispose();
+    }
+  }
+
+  /// Search MDBList's public lists in parallel with a Catalog search; the
+  /// results render as a card rail atop the board (see [_buildListsRailRow]).
+  /// Best-effort: [_listsToken] discards a stale response after a newer submit
+  /// or a clear, and any not-connected / failed / empty case just clears the
+  /// rail (it renders only when [_listsResults] is non-empty). Does NOT steal
+  /// focus — the catalog search drives where the remote lands.
+  Future<void> _runListsSearch(String query) async {
+    // MDBList is hidden for the alpha — never populate the lists rail, even for
+    // an already-connected device. See [kMdblistEnabled].
+    if (!kMdblistEnabled) return;
+    final q = query.trim();
+    final token = ++_listsToken;
+    _listsQuery = q;
+    if (q.isEmpty) {
+      _disposeListsNodes();
+      setState(() => _listsResults = const []);
+      return;
+    }
+    final connected = await MdblistService.instance.isAuthenticated();
+    if (!mounted || token != _listsToken) return;
+    if (!connected) {
+      _disposeListsNodes();
+      setState(() => _listsResults = const []);
+      return;
+    }
+    final results = await MdblistListSource.instance.searchLists(q);
+    if (!mounted || token != _listsToken) return;
+    setState(() {
+      _listsResults = results;
+      _ensureListsNodes();
+    });
+  }
+
+  /// Hand the picked list to the Discover tab, which opens it focused (with
+  /// the ♥ like toggle). Mirrors the pendingCatalogDetailOpen handoff.
+  void _openListsResult(MdblistListChoice choice) {
+    // Debounce: a fast double OK/tap must not stack two pushed screens (TV) or
+    // double-fire the tab handoff. A route push + Back takes far longer than
+    // this, so re-opening the same card after returning still works.
+    final now = DateTime.now();
+    if (_lastListOpenAt != null &&
+        now.difference(_lastListOpenAt!) < const Duration(milliseconds: 600)) {
+      return;
+    }
+    _lastListOpenAt = now;
+    AnalyticsService.trackInBackground('mdblist_list_search_open', {
+      'liked': choice.liked,
+    });
+    // TV: switching to the Discover tab rebuilds this Search screen fresh on
+    // return (main.dart keys tab content by index), losing the results, scroll,
+    // and focused card. Instead PUSH the list's items over the Search board —
+    // the screen stays mounted underneath, so Back returns to exactly this
+    // state, and we re-focus the tapped rail card so the DPAD cursor lands back
+    // on it (its focus handler scrolls it into view). Mobile/laptop keep the
+    // Discover-tab landing (with its Source switcher).
+    if (widget.isTelevision) {
+      _openMdblistListItems(
+        context,
+        choice,
+        onReturn: () {
+          if (!mounted) return;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            // Re-find by id at return time, so a rail that changed while it was
+            // covered still focuses the card that now holds this list.
+            final i = _listsResults.indexWhere((l) => l.id == choice.id);
+            if (i >= 0 && i < _listsNodes.length) {
+              _listsNodes[i].requestFocus();
+            }
+          });
+        },
+      );
+      return;
+    }
+    MainPageBridge.pendingMdblistListOpen = {
+      'id': choice.id,
+      'name': choice.name,
+      'ownerName': choice.ownerName,
+      'itemCount': choice.itemCount,
+      'liked': choice.liked,
+      'likes': choice.likes,
+    };
+    // Discover tab — main.dart `case 18`.
+    MainPageBridge.switchTab?.call(18);
   }
 
   /// Seed the keyword filter set from the user's saved defaults (Settings →
@@ -4673,6 +5185,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (query != _kwQuery) _runKeyword(query);
     } else {
       if (query != _catalogQuery) _runCatalogSearch(query);
+      if (query != _listsQuery) _runListsSearch(query);
     }
   }
 
@@ -4752,6 +5265,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // status loads, and the only strip the legacy CatalogItemDetailScreen uses.
     final options = buildMenuOptions(null);
 
+    // Simkl's own strip — built and rendered entirely separately from Trakt's
+    // above (see the Simkl integration plan: parallel, not merged). Gated on
+    // connection state the same way the Trakt strip is (isTraktAuthenticated
+    // above) — buildSimklMenuOptions itself returns empty when disconnected.
+    List<SimklMenuOption> buildSimklOptions(SimklTitleStatus? status) =>
+        buildSimklMenuOptions(
+          isSeries: item.type == 'series',
+          isSimklAuthenticated: _isSimklAuthenticated && imdb != null,
+          // Offer "Remove from Continue Watching" for a paused entry (movie or
+          // series) — it has a session to delete. Not for "up next" entries
+          // (progress null, no session; they leave via a status change). For a
+          // series the remove also moves it to On Hold so it doesn't re-surface
+          // as an up-next card (see handleSimklMenuAction).
+          inContinueWatching:
+              imdb != null && (_simklByImdb[imdb]?.progress != null),
+          status: status,
+        );
+    final simklOptions = buildSimklOptions(null);
+
     // Experimental: series route to the merged detail+episodes page. Movies and
     // the flag-off path fall through to the existing CatalogItemDetailScreen.
     if ((item.type == 'series' || item.type == 'movie') && _mergedSeriesPage) {
@@ -4811,6 +5343,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   inCw: inCw,
                   imdb: imdb,
                 ),
+                simklMenuOptions: simklOptions,
+                simklMenuBuilder: buildSimklOptions,
+                // Live Simkl status (current watchlist status + rating) —
+                // only when connected and the title has an IMDb id.
+                simklStatusLoader: (_isSimklAuthenticated && imdb != null)
+                    ? () => SimklService.instance.fetchTitleStatus(imdb)
+                    : null,
+                onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
                 recommendationsLoader: imdb != null
                     ? () => _stremio.getRecommendations(
                         imdbId: imdb,
@@ -4829,6 +5369,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             _refreshBoundSources();
             _loadContinueWatching();
             _refreshTraktAuthState();
+            _refreshSimklAuthState();
+            _refreshMdblistAuthState();
             if (returnToTabOnClose != null) {
               MainPageBridge.switchTab?.call(returnToTabOnClose);
             }
@@ -4869,6 +5411,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 inCw: inCw,
                 imdb: imdb,
               ),
+              simklMenuOptions: simklOptions,
+              onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
               // "More Like This" rail + sparse-item meta backfill, matching the
               // catalog detail flow.
               recommendationsLoader: imdb != null
@@ -4891,6 +5435,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _refreshBoundSources();
           _loadContinueWatching();
           _refreshTraktAuthState();
+          _refreshSimklAuthState();
+          _refreshMdblistAuthState();
           if (returnToTabOnClose != null) {
             MainPageBridge.switchTab?.call(returnToTabOnClose);
           }
@@ -4938,6 +5484,29 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         (action == TraktItemMenuAction.markWatched ||
             action == TraktItemMenuAction.markUnwatched)) {
       _loadTraktContinueWatching(refreshBound: false);
+    }
+  }
+
+  /// Dispatch a detail-screen Simkl quick action — mirrors
+  /// [_handleDetailQuickAction], simpler since Simkl's menu has no app
+  /// actions (Select Source etc.) or Continue-Watching removal to special-case.
+  Future<void> _handleDetailSimklQuickAction(
+    StremioMeta item,
+    SimklItemMenuAction action,
+  ) async {
+    await handleSimklMenuAction(context, item, action);
+    // Any status change can add/remove a title from the Simkl CW rows: On Hold
+    // and remove/completed/dropped take it OFF, while Watching makes a series
+    // newly eligible as an "up next" card. So reload the rows on every one that
+    // shifts CW membership. Skipped on the dedicated Search tab (no rows there).
+    if (mounted &&
+        !widget.searchMode &&
+        (action == SimklItemMenuAction.removeFromContinueWatching ||
+            action == SimklItemMenuAction.moveToCompleted ||
+            action == SimklItemMenuAction.moveToDropped ||
+            action == SimklItemMenuAction.moveToOnHold ||
+            action == SimklItemMenuAction.moveToWatching)) {
+      _loadSimklContinueWatching(refreshBound: false);
     }
   }
 
@@ -5555,10 +6124,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Fires for Trakt-sourced titles and for the merged Resume's authenticated
     // series (preferTraktResume). Cached CW item → selectionForItem (carries a
     // movie's Trakt % and a series' next-episode). Otherwise a live playback
-    // lookup, series-only: a movie's Trakt resume is a percent the local player
-    // path can't honour, so movies without a cached CW item fall through to the
-    // local byte-offset resolution below (matching the label, which also skips
-    // the general Trakt lookup for movies — see [_traktResumeFor]).
+    // lookup, series-only HERE; movies without a cached CW item are handled by
+    // the movie branch below (which pulls their tracker % directly), so they
+    // still resume cross-device — the player now honours a movie's percent (it
+    // reconciles trakt%/simkl%/local), which it didn't when this block was
+    // written.
     // `_isTraktAuthenticated || isTraktSource`: a Trakt-sourced item always
     // resolves via Trakt (matching the pre-change `if (isTraktSource)` — which
     // never checked the auth flag), so a still-settling `_isTraktAuthenticated`
@@ -5597,10 +6167,78 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
     }
 
+    // Simkl fallback — only reached when the Trakt resolution above produced
+    // nothing, matching the label's priority order (_resolveResumeInfo:
+    // Trakt → Simkl → local). Same preferTraktResume scope as the Trakt step:
+    // the detail Resume flow honours tracker positions; Home/row quick-play
+    // keeps its local split untouched.
+    if (_isSimklAuthenticated && preferTraktResume && item.type == 'series') {
+      final simkl = await _simklResumeFor(item);
+      if (!mounted) return;
+      if (simkl != null) {
+        _playSelection(
+          AdvancedSearchSelection(
+            imdbId: item.effectiveImdbId ?? item.id,
+            isSeries: true,
+            title: item.name,
+            year: item.year,
+            season: simkl.season,
+            episode: simkl.episode,
+            contentType: item.type,
+            posterUrl: item.poster,
+            traktSource: isTraktSource,
+            simklProgressPercent: simkl.progress,
+            simklSource: true,
+          ),
+        );
+        return;
+      }
+    }
+
     if (item.type != 'series') {
+      // Cross-device movie resume: on the detail-page Play/Resume flow
+      // (preferTraktResume, or a tracker-sourced open), pull the movie's paused
+      // tracker position and carry it on the selection. The player's resume
+      // reconciliation then seeks the furthest of trakt%/simkl%/local — so a
+      // movie paused on another device resumes here even when opened from a
+      // plain catalog result (previously movies started at 00:00). Row
+      // quick-play (no preferTraktResume) keeps its local-only resume.
+      double? traktPct;
+      double? simklPct;
+      if (preferTraktResume || isTraktSource) {
+        // Concurrent and individually time-boxed: the Play press must never
+        // stall behind a degraded tracker API (sequential awaits here could
+        // previously block playback for the full HTTP timeouts). On timeout we
+        // launch with local-only resume — the reconciliation in the player
+        // degrades gracefully to the local position.
+        final lookups = await Future.wait<double?>([
+          (_isTraktAuthenticated || isTraktSource)
+              ? _traktMoviePercent(item).timeout(
+                  const Duration(seconds: 4),
+                  onTimeout: () => null,
+                )
+              : Future<double?>.value(null),
+          _isSimklAuthenticated
+              ? _simklMoviePercent(item).timeout(
+                  const Duration(seconds: 4),
+                  onTimeout: () => null,
+                )
+              : Future<double?>.value(null),
+        ]);
+        if (!mounted) return;
+        traktPct = lookups[0];
+        simklPct = lookups[1];
+      }
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
-      _playSelection(_movieSelection(item, isTraktSource: isTraktSource));
+      _playSelection(
+        _movieSelection(
+          item,
+          isTraktSource: isTraktSource,
+          traktProgressPercent: traktPct,
+          simklProgressPercent: simklPct,
+        ),
+      );
       return;
     }
 
@@ -5630,6 +6268,23 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
       season ??= byTitle?['season'] as int?;
       episode ??= byTitle?['episode'] as int?;
+    }
+    // No local history — last resort: Simkl's next-to-watch, mirroring the
+    // label (_resolveResumeInfo) so the two agree. Only on the detail Resume
+    // flow, and TIME-BOXED (4s) like the movie branch so a slow Simkl API never
+    // freezes the Play press — on timeout it falls through to S01E01.
+    if ((season == null || episode == null) &&
+        _isSimklAuthenticated &&
+        preferTraktResume) {
+      final next = await _simklNextToWatchFor(item).timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => null,
+      );
+      if (!mounted) return;
+      if (next != null) {
+        season = next.season;
+        episode = next.episode;
+      }
     }
     season ??= 1;
     episode ??= 1;
@@ -5691,11 +6346,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (sel == null) return null;
       return (started: true, season: sel.season, episode: sel.episode);
     }
-    // General (live) fallback only for SERIES. A movie's Trakt resume is a
-    // percent the local player path can't honour, and _onCatalogPlay only
-    // replays a cached CW movie's position (via selectionForItem) — so claiming
-    // a Trakt resume for an uncached movie would make the label promise a
-    // "Resume" that Play starts from 00:00. Uncached movies → null → local.
+    // General (live) fallback only for SERIES here. An uncached movie returns
+    // null from THIS helper on purpose — its cross-device resume is resolved by
+    // the dedicated movie branch of _resolveResumeInfo/_onCatalogPlay (via
+    // _traktMoviePercent), which the player can now honour. So "null" means
+    // "not handled here", not "no Trakt resume for movies".
     if (item.type != 'series') return null;
     // resolveSelection treats an empty itemId as "the first CW item", which would
     // match an unrelated title — so bail when we have no usable id.
@@ -5713,6 +6368,45 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
     if (sel == null) return null;
     return (started: true, season: sel.season, episode: sel.episode);
+  }
+
+  /// Simkl's resume position for [item] — SERIES ONLY, from the show's most
+  /// recently paused Simkl playback session. Consulted after Trakt returns
+  /// nothing and before local history (episode pick is priority-ordered
+  /// Trakt → Simkl → local). Shared by the detail-button label
+  /// ([_resolveResumeInfo]) and the actual Play ([_onCatalogPlay]) so the two
+  /// never disagree — same lock-step contract as [_traktResumeFor]. Movies
+  /// are excluded for the same reason as Trakt's uncached-movie rule: the
+  /// movie play path resumes from the local byte offset and can't honour a
+  /// tracker percent, so a Simkl-first label would over-promise.
+  Future<({int season, int episode, double? progress})?> _simklResumeFor(
+    StremioMeta item,
+  ) async {
+    if (item.type != 'series') return null;
+    final id = item.effectiveImdbId ?? item.id;
+    // Simkl lookups are IMDb-keyed — a non-IMDb catalog id can't match.
+    if (id.isEmpty || !id.startsWith('tt')) return null;
+    // Only a paused mid-episode session (resume where you left off) — this runs
+    // at Simkl's slot in the priority order, ABOVE local, so a cross-device
+    // pause wins. The weaker next-to-watch fallback is applied separately, AFTER
+    // local (see _simklNextToWatchFor), so it never pre-empts a further-ahead
+    // local position.
+    return SimklService.instance.fetchShowPlaybackSelection(id);
+  }
+
+  /// Simkl's next unwatched episode (server-computed `next_to_watch`) for a
+  /// series, or null. This is the WEAKEST resume signal — a computed "next"
+  /// rather than a real position — so callers apply it only when neither a
+  /// tracker session NOR local history resolved an episode (e.g. a fresh login
+  /// on a new device): it turns the default S01E01 into "resume at the next
+  /// unwatched episode", matching the Continue Watching up-next card.
+  Future<({int season, int episode})?> _simklNextToWatchFor(
+    StremioMeta item,
+  ) async {
+    if (item.type != 'series') return null;
+    final id = item.effectiveImdbId ?? item.id;
+    if (id.isEmpty || !id.startsWith('tt')) return null;
+    return SimklService.instance.fetchNextToWatch(id);
   }
 
   Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
@@ -5742,11 +6436,35 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (resume != null) return resume;
     }
 
-    // Movie: started == a saved playback position exists. No S/E tag.
+    // Simkl fallback — only when Trakt had nothing (priority-ordered pick;
+    // see _simklResumeFor). Same series-only scope, mirrored in
+    // _onCatalogPlay so label and Play stay in lock-step.
+    if (_isSimklAuthenticated && item.type == 'series') {
+      final simkl = await _simklResumeFor(item);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (simkl != null) {
+        return (started: true, season: simkl.season, episode: simkl.episode);
+      }
+    }
+
+    // Movie: "started" if a local position OR a cross-device tracker position
+    // exists — so the button reads "Resume" for a movie paused on another
+    // device, matching what Play now seeks to (kept in lock-step with the
+    // movie branch of _onCatalogPlay).
     if (item.type != 'series') {
       final playId = item.imdbId ?? item.effectiveImdbId ?? item.id;
       final st = await StorageService.getVideoPlaybackStateByImdbId(playId);
-      return (started: st != null, season: null, episode: null);
+      if (!mounted) return (started: false, season: null, episode: null);
+      var started = st != null;
+      if (!started && (_isTraktAuthenticated || isTraktSource)) {
+        started = (await _traktMoviePercent(item)) != null;
+        if (!mounted) return (started: false, season: null, episode: null);
+      }
+      if (!started && _isSimklAuthenticated) {
+        started = (await _simklMoviePercent(item)) != null;
+        if (!mounted) return (started: false, season: null, episode: null);
+      }
+      return (started: started, season: null, episode: null);
     }
 
     // Series: last-played episode (by imdbId, then title). Nothing found ⇒ not
@@ -5766,10 +6484,31 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       season ??= byTitle?['season'] as int?;
       episode ??= byTitle?['episode'] as int?;
     }
-    final started = season != null && episode != null;
+    var started = season != null && episode != null;
+    // No local history at all — last resort: Simkl's next-to-watch (the next
+    // unwatched episode), so a series watched up to E3 on another device (fresh
+    // login here) reads "Resume · S1E4" instead of defaulting to S01E01. Kept
+    // AFTER local so a further-ahead local position always wins. Same 4s cap and
+    // fall-through-to-default as the Play path (_onCatalogPlay) so the label and
+    // Play resolve the SAME episode — an un-capped label here would render S1E4
+    // while the capped Play timed out to S01E01, the exact mismatch this fixes.
+    if (!started && _isSimklAuthenticated) {
+      final next = await _simklNextToWatchFor(item).timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => null,
+      );
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (next != null) {
+        season = next.season;
+        episode = next.episode;
+        started = true;
+      }
+    }
     season ??= 1;
     episode ??= 1;
     // Finished the last episode ⇒ the button plays the NEXT one, so show it.
+    // (Only when local resolved a finished episode — the next-to-watch fallback
+    // above already returns the next unwatched one.)
     if (lastFinished) {
       final next = await NextEpisodeService.findNextEpisode(
         playId,
@@ -5800,6 +6539,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   AdvancedSearchSelection _movieSelection(
     StremioMeta item, {
     bool isTraktSource = false,
+    // Cross-device resume percents for a movie (0-100), when a tracker has a
+    // paused position. Null = no tracker position → the player resumes from
+    // the local byte offset as before.
+    double? traktProgressPercent,
+    double? simklProgressPercent,
   }) => AdvancedSearchSelection(
     // Keep the raw catalog id when there's no `tt…` id — for IPTV/TV channels
     // AND tmdb/kitsu-only movies — so playback/Sources resolve the addon's own
@@ -5817,7 +6561,63 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // movies leave this false so scrobble follows the "Sync Catalog Items"
     // setting.
     traktSource: isTraktSource,
+    traktProgressPercent: traktProgressPercent,
+    simklProgressPercent: simklProgressPercent,
   );
+
+  /// Trakt's paused position (0-100) for a movie, or null when it has none.
+  /// Reuses the existing Continue Watching resolver (which fetches
+  /// `/sync/playback/movies` and returns a selection carrying the percent) —
+  /// no new Trakt service code. Trakt is IMDb-keyed, so a non-`tt` id can't
+  /// match.
+  /// Short-TTL memo for [_traktMoviePercent]: the Resume label
+  /// (_resolveResumeInfo) and the Play press (_onCatalogPlay) both need the
+  /// percent seconds apart, and resolveSelection has no cache of its own — so
+  /// without this every detail open cost two identical /sync/playback/movies
+  /// fetches and Play blocked on the second. TTL matches SimklService's own
+  /// 30s playback cache (which already gives the Simkl helper this behavior).
+  final Map<String, (double?, DateTime)> _traktMoviePctMemo = {};
+
+  Future<double?> _traktMoviePercent(StremioMeta item) async {
+    final id = item.effectiveImdbId ?? item.id;
+    if (id.isEmpty || !id.startsWith('tt')) return null;
+    final memo = _traktMoviePctMemo[id];
+    if (memo != null &&
+        DateTime.now().difference(memo.$2) < const Duration(seconds: 30)) {
+      return memo.$1;
+    }
+    final sel = await TraktContinueWatchingService.instance.resolveSelection(
+      traktContentType: TraktContinueWatchingService.moviesContentType,
+      itemId: id,
+    );
+    final pct = _resumableMoviePercent(sel?.traktProgressPercent);
+    _traktMoviePctMemo[id] = (pct, DateTime.now());
+    return pct;
+  }
+
+  /// Simkl's paused position (0-100) for a movie, or null when it has none.
+  /// Mirror of [_traktMoviePercent]; Simkl lookups are IMDb-keyed too.
+  Future<double?> _simklMoviePercent(StremioMeta item) async {
+    final id = item.effectiveImdbId ?? item.id;
+    if (id.isEmpty || !id.startsWith('tt')) return null;
+    return _resumableMoviePercent(
+      await SimklService.instance.fetchMoviePlaybackProgress(id),
+    );
+  }
+
+  /// A movie tracker percent, narrowed to what the player will actually
+  /// forward-seek, or null. The player's resume window is bounded on BOTH ends
+  /// (video_player_screen.dart): it seeks only `loMs < traktMs < hiMs`, where
+  /// hiMs = 90% of duration and loMs = the 2s minimum position. A percent
+  /// outside that band makes the detail button read "Resume" while Play starts
+  /// from 00:00 — a label↔Play mismatch. We only have the percent here (no
+  /// duration), so the lower guard is a conservative 1%, which maps above 2s for
+  /// any real-length movie (1% of even a 4-min clip is >2s). Keep both helpers
+  /// on this filter so the label promises only a Resume that Play honours.
+  double? _resumableMoviePercent(double? pct) {
+    if (pct == null || pct < 1 || pct >= 90) return null;
+    return pct;
+  }
 
   void _openEpisodes(
     StremioMeta item,
@@ -5936,6 +6736,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Trakt-row plays scrobble to Trakt instead of saving a duplicate local
     // Continue Watching entry (mirrors Home passing selection.traktSource).
     traktScrobble: sel.traktSource,
+    simklProgressPercent: sel.simklProgressPercent,
+    simklScrobble: sel.simklSource,
   );
 
   /// Catalog auto-best play — the service picks the provider, shows the real
@@ -6103,9 +6905,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       isTelevision: tv,
       fullWidth: narrow,
       onChanged: _switchMode,
-      // Keyboard/DPAD wiring (both desktop + TV): the two segments are
-      // focusable; up/left leave back to the search field, down drops into the
-      // content, select switches mode.
+      // Keyboard/DPAD wiring (both desktop + TV): the segments are focusable;
+      // up/left leave back to the search field, down drops into the content,
+      // select switches mode.
       catalogNode: _modeCatalogNode,
       keywordNode: _modeKeywordNode,
       onLeaveToField: _focusSearchFieldAtEnd,
@@ -6124,12 +6926,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
     // Wide/TV: a centered pill search (Stremio-style) with the mode toggle
     // pinned to the right. A left spacer matching the toggle keeps the search
-    // truly centered.
+    // truly centered (sized for the three-segment Catalog/Keyword/Lists bar).
     return Padding(
       padding: EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
       child: Row(
         children: [
-          const SizedBox(width: 172),
+          const SizedBox(width: 252),
           Expanded(
             child: Center(
               child: ConstrainedBox(
@@ -6211,9 +7013,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurface, fontSize: tv ? 16 : 15),
             decoration: InputDecoration(
-              hintText: _mode == _Mode.catalog
-                  ? 'Search or paste link'
-                  : 'Search torrents by keyword',
+              hintText: switch (_mode) {
+                _Mode.catalog => 'Search or paste link',
+                _Mode.keyword => 'Search torrents by keyword',
+              },
               hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.32)),
               suffixIcon: hasText
                   ? IconButton(
@@ -6280,8 +7083,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_mode == _Mode.keyword) return _buildKeyword();
     // Full-screen spinner only until the FIRST result row streams in — after
     // that the board renders and late rows append beneath it (a slim progress
-    // strip in _buildBoard signals the search is still running).
-    if (_catalogSearching && _sections.isEmpty) {
+    // strip in _buildBoard signals the search is still running). If the MDBList
+    // lists rail already resolved (it's usually faster than the catalog fan-out),
+    // skip the spinner and render the board so the rail shows immediately.
+    if (_catalogSearching && _sections.isEmpty && !_listsRailVisible) {
       return const Center(child: CircularProgressIndicator());
     }
     // Dedicated Search tab: blank prompt until there's a query (no hero/board).
@@ -6289,6 +7094,188 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return _buildSearchPrompt();
     }
     return _buildBoard();
+  }
+
+  /// Whether the MDBList "Lists" card rail should show: a catalog search is
+  /// active AND lists matched. The rail is a leading board row and, because the
+  /// Continue Watching / favourites leading rows are all hidden during a search
+  /// (same `_catalogQuery.isEmpty` gate), it's the ONLY leading row on screen.
+  bool get _listsRailVisible =>
+      _catalogQuery.isNotEmpty && _listsResults.isNotEmpty;
+
+  /// Focus a card in the lists rail, clamping the column (same contract as
+  /// [_focusCwRow]/[_focusFavRowAt]). False when the rail has no cards.
+  bool _focusListsRailAt(int column) {
+    if (_listsNodes.isEmpty) return false;
+    _requestRowFocus(_listsNodes, column.clamp(0, _listsNodes.length - 1));
+    return true;
+  }
+
+  /// Open the full grid of every list that matched the current search. The rail
+  /// already holds the complete `/lists/search` result set, so this hands that
+  /// list straight to the See-All screen (no refetch, no paging).
+  ///
+  /// Unlike the rail tap (which jumps to the Discover tab), opening a list from
+  /// this grid PUSHES the list's items on top of the grid, so Back retraces
+  /// list items → grid → search results — letting the user browse several
+  /// lists in a row.
+  void _openListsSeeAll() {
+    final query = _listsQuery;
+    final results = List<MdblistListChoice>.of(_listsResults);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (gridCtx) => MdblistListsSeeAllScreen(
+          query: query,
+          lists: results,
+          isTelevision: widget.isTelevision,
+          // Push onto the grid's navigator so Back returns here.
+          onOpen: (list) => _openMdblistListItems(gridCtx, list),
+        ),
+      ),
+    );
+  }
+
+  /// Push an MDBList list's items as a standalone screen (non-embedded
+  /// [MdblistSeeAllScreen]) above [pushCtx]'s route. Reuses the exact item-open
+  /// and quick-play handlers the Discover tab wires for MDBList items, so a
+  /// title opens / quick-plays identically — just with a Back that returns to
+  /// whatever was under the route (the lists grid, or the Search board on TV)
+  /// instead of a tab switch. [onReturn] runs after the route pops.
+  void _openMdblistListItems(
+    BuildContext pushCtx,
+    MdblistListChoice list, {
+    VoidCallback? onReturn,
+  }) {
+    Navigator.of(pushCtx)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => MdblistSeeAllScreen(
+              initialList: list,
+              isTelevision: widget.isTelevision,
+              isBound: _isBound,
+              onOpen: (item) =>
+                  _openItem(item, _addonForContinue(item.sourceAddon?.id)),
+              onQuickPlay: _pikpakOnly
+                  ? null
+                  : (item) => _onCatalogPlay(
+                      item,
+                      _addonForContinue(item.sourceAddon?.id),
+                    ),
+            ),
+          ),
+        )
+        .then((_) {
+          _afterSeeAllReturn();
+          onReturn?.call();
+        });
+  }
+
+  /// The "MDBList Lists" card rail shown atop the results board. Same 2:3 card
+  /// footprint as the poster rows; each card is a gradient tile (list glyph +
+  /// centred name + items/likes footer, no artwork). Select opens the list's
+  /// items — pushed over the board on TV (Back returns here), or in the
+  /// Discover tab on mobile/laptop. DPAD: up → search field, down → first
+  /// catalog row, left off card 0 → sidebar (TV).
+  Widget _buildListsRailRow() {
+    final posterW = _railPosterW(context);
+    final posterH = posterW * 3 / 2;
+    final rowH = posterH + 14;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _railHeader(
+          title: 'MDBList Lists',
+          tag: 'LISTS',
+          // Mobile/laptop get a "See All" link (auto-hidden on TV, where the
+          // rail is DPAD-scrollable) → full grid of every matched list.
+          onSeeAll: _openListsSeeAll,
+        ),
+        SizedBox(
+          height: rowH,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.hardEdge,
+            cacheExtent: 400,
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            itemCount: _listsResults.length,
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 11),
+              child: SizedBox(
+                width: posterW,
+                height: posterH,
+                child: _buildListRailCard(_listsResults[index], index),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One gradient list-card in the lists rail (see [_buildListsRailRow]).
+  Widget _buildListRailCard(MdblistListChoice list, int index) {
+    final tv = widget.isTelevision;
+    final node = index < _listsNodes.length ? _listsNodes[index] : null;
+    return Focus(
+      focusNode: node,
+      onKeyEvent: (n, event) {
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        final key = event.logicalKey;
+        if (isActivateKey(key)) {
+          _openListsResult(list);
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          if (index > 0) {
+            _listsNodes[index - 1].requestFocus();
+          } else if (tv) {
+            MainPageBridge.focusTvSidebar?.call();
+          }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowRight) {
+          if (index < _listsNodes.length - 1) {
+            _listsNodes[index + 1].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowUp) {
+          _leaveBoardTop();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowDown) {
+          // Into the first catalog row, deferred until one loads if the catalog
+          // search is still in flight.
+          if (!_focusRow(0, 0)) _deferDownMove(column: 0);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(
+        builder: (context) {
+          final focused = Focus.of(context).hasFocus;
+          if (focused) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (node != null && node.hasFocus && context.mounted) {
+                Scrollable.ensureVisible(
+                  context,
+                  alignment: 0.5,
+                  alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+                  duration: const Duration(milliseconds: 150),
+                );
+              }
+            });
+          }
+          return MdblistListCard(
+            list: list,
+            focused: focused,
+            onTap: () => _openListsResult(list),
+          );
+        },
+      ),
+    );
   }
 
   /// Empty state for the dedicated Search tab before the user types.
@@ -7476,6 +8463,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     await Future.wait([
       _loadContinueWatching(),
       _loadTraktContinueWatching(refreshBound: false),
+      // Populates _simklAll/_simklProgress for the Simkl source's Continue
+      // Watching list (folded into that source, like Trakt's).
+      _loadSimklContinueWatching(refreshBound: false),
     ]);
     if (mounted) await _refreshBoundSources();
   }
@@ -7720,6 +8710,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       options: [
         const StremioDropdownOption(_discCw, 'Continue Watching'),
         const StremioDropdownOption(_discTrakt, 'Trakt'),
+        const StremioDropdownOption(_discSimkl, 'Simkl'),
+        // MDBList is hidden for the alpha (kMdblistEnabled) AND only when
+        // connected — kept if it's somehow already the active source so the
+        // dropdown's value always has a matching option.
+        if (kMdblistEnabled &&
+            (_isMdblistAuthenticated || _discSource == _discMdblist))
+          const StremioDropdownOption(_discMdblist, 'MDBList'),
         for (final a in _discAddons)
           StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
       ],
@@ -7750,6 +8747,49 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         cwProgress: _traktProgress,
         onOpen: _openTraktItem,
         onQuickPlay: _pikpakOnly ? null : _playTraktItem,
+        onItemFocused: _onDiscFocused,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+        embedded: true,
+        leading: source,
+        leadingNode: _discSourceNode,
+      );
+    }
+
+    if (_discSource == _discSimkl) {
+      return SimklSeeAllScreen(
+        key: const ValueKey('disc_simkl'),
+        // CW is folded in as the leading "List" option (like the Trakt source).
+        // Plain open/play for the browse lists; the CW-aware handlers (resume at
+        // the paused/up-next episode) apply ONLY while the CW list is showing.
+        cwItems: _simklAll,
+        cwProgress: _simklProgress,
+        onOpen: _openSimklItem,
+        onQuickPlay: _pikpakOnly ? null : _playSimklItem,
+        cwOnOpen: _openSimklCwItem,
+        cwOnQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
+        onItemFocused: _onDiscFocused,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+        embedded: true,
+        leading: source,
+        leadingNode: _discSourceNode,
+      );
+    }
+
+    if (_discSource == _discMdblist) {
+      // MDBList items are plain catalog titles (StremioMeta w/ imdb id), so they
+      // open and quick-play through the same generic catalog paths as an addon
+      // catalog item — no MDBList-specific handlers needed.
+      return MdblistSeeAllScreen(
+        key: const ValueKey('disc_mdblist'),
+        initialList: _discMdblistList,
+        onOpen: (item) =>
+            _openItem(item, _addonForContinue(item.sourceAddon?.id)),
+        onQuickPlay: _pikpakOnly
+            ? null
+            : (item) =>
+                  _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id)),
         onItemFocused: _onDiscFocused,
         isBound: _isBound,
         isTelevision: widget.isTelevision,
@@ -7827,7 +8867,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // reserved — the skeletons below are the board's content until the fetch
     // settles, and showing "No catalogs yet" first would flip to rows with the
     // exact reflow the reservation exists to prevent.
-    if (_sections.isEmpty && !showCw && !_anyFavVisible && !_traktReserving) {
+    if (_sections.isEmpty &&
+        !showCw &&
+        !_anyFavVisible &&
+        !_traktReserving &&
+        !_listsRailVisible) {
       if (_catalogQuery.isNotEmpty) {
         return _message(
           Icons.search_off_rounded,
@@ -7962,6 +9006,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               trailerShowing: _heroTrailerActive
                                   ? _heroTrailerShowing
                                   : null,
+                              // An IPTV favourite took the boxed region — this
+                              // item's colour field/identity text describe
+                              // something that isn't playing anymore, so hide
+                              // them (see [_HeroSpotlight.liveTakeover]).
+                              liveTakeover: _heroTrailerActive
+                                  ? _heroLiveTakeover
+                                  : null,
                             );
                           },
                         );
@@ -7994,7 +9045,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         final skelCount = _traktSkeletonRowCount;
                         final favKinds = _favRowKinds;
                         final favCount = favKinds.length;
-                        final leadingCount = cwCount + skelCount + favCount;
+                        // The MDBList "Lists" rail, when a search matched lists.
+                        // It renders ONLY during a search, where CW/skeleton/fav
+                        // rows are all hidden — so it's the sole leading row and
+                        // its `- listsCount` offsets below are no-ops whenever
+                        // those other leading rows are present.
+                        final listsCount = _listsRailVisible ? 1 : 0;
+                        final leadingCount =
+                            listsCount + cwCount + skelCount + favCount;
                         // Footer spinner tracks the actual fetch, not just "more remain":
                         // `_boardCursor` advances synchronously so the final in-flight batch
                         // still shows it, and an idle board with more rows doesn't spin.
@@ -8014,17 +9072,22 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               (showFooter ? 1 : 0),
                           itemBuilder: (context, i) {
                             Widget row;
-                            if (i < cwCount) {
+                            if (i < listsCount) {
+                              row = _buildListsRailRow();
+                            } else if (i < listsCount + cwCount) {
                               row = _buildContinueWatchingRow(
-                                cwRows[i],
-                                i,
+                                cwRows[i - listsCount],
+                                i - listsCount,
                                 cwCount,
                                 favCount,
                               );
-                            } else if (i < cwCount + skelCount) {
-                              row = _buildTraktSkeletonRow(i - cwCount);
+                            } else if (i < listsCount + cwCount + skelCount) {
+                              row = _buildTraktSkeletonRow(
+                                i - listsCount - cwCount,
+                              );
                             } else if (i < leadingCount) {
-                              final favIndex = i - cwCount - skelCount;
+                              final favIndex =
+                                  i - listsCount - cwCount - skelCount;
                               row = _buildFavRow(
                                 favKinds[favIndex],
                                 favIndex,
@@ -8076,6 +9139,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   loading: _heroTrailerLoading,
                   onPlayingChanged: _onHeroTrailerPlaying,
                   takeover: _heroTrailerTakeover,
+                ),
+              ),
+            // A focused IPTV favourite's live feed, painted into the SAME
+            // region — above the catalog trailer layer so it simply wins
+            // whenever a channel has focus (shrinks to nothing otherwise,
+            // letting the catalog trailer show through).
+            if (_heroTrailerActive)
+              Positioned.fill(
+                child: _HeroLiveLayer(
+                  channel: _heroLiveChannel,
+                  streamUrl: _heroLiveUrl,
+                  heroHeight: heroH,
+                  volume: _heroTrailerVolume,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  onPlaybackFailed: _onHeroLivePlaybackFailed,
                 ),
               ),
             // While the film owns the board, only the showcased title's
@@ -8683,11 +9761,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 // col-0 DPAD-left drops to the sidebar (handled in _BoardCell
                 // when onLeftEdge is null).
                 VoidCallback up(int col) => rowIndex == 0
-                    ? (_anyFavVisible
-                          ? () => _focusFavRowAt(_favRowCount - 1, col)
-                          : (_cwVisible
-                                ? () => _focusCwRow(_cwRows.length - 1, col)
-                                : () => _leaveBoardTop()))
+                    ? (_listsRailVisible
+                          ? () => _focusListsRailAt(col)
+                          : (_anyFavVisible
+                                ? () => _focusFavRowAt(_favRowCount - 1, col)
+                                : (_cwVisible
+                                      ? () =>
+                                            _focusCwRow(_cwRows.length - 1, col)
+                                      : () => _leaveBoardTop())))
                     : () => _focusRow(rowIndex - 1, col);
                 // Down past the last loaded row kicks the next batch load
                 // (inside _focusRow) and defers the move until it lands.
@@ -9006,6 +10087,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             isTelevision: tv,
             focusNode: _tvFavNodes[col],
             onOpen: () => _playChannel(channel),
+            onFocused: _clearHeroLiveIptv,
           ),
         );
       },
@@ -9044,6 +10126,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             isTelevision: tv,
             focusNode: _stvFavNodes[col],
             onOpen: () => _playStremioTvChannel(channel),
+            onFocused: _clearHeroLiveIptv,
           ),
         );
       },
@@ -9078,6 +10161,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             isTelevision: tv,
             focusNode: _iptvFavNodes[col],
             onOpen: () => _playIptvChannel(channel),
+            // DPAD focus retunes the Home hero's boxed video region to this
+            // channel's live stream — same HeroTrailerBackdrop(live: true)
+            // mechanism the IPTV page's own inline preview uses.
+            onFocused: () => _setHeroLiveIptv(channel),
           ),
         );
       },
@@ -9110,6 +10197,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             isTelevision: tv,
             focusNode: _playlistFavNodes[col],
             onOpen: () => _onPlaylistItemTap(item),
+            onFocused: _clearHeroLiveIptv,
           ),
         );
       },
@@ -9197,6 +10285,15 @@ class _HeroSpotlight extends StatefulWidget {
   /// while hidden (no point re-rasterising an invisible layer every frame).
   final ValueListenable<bool>? trailerShowing;
 
+  /// Host-driven "an IPTV favourite has taken the boxed video region" signal
+  /// (see [_HeroLiveLayer]). [item]/[background]/[tint] all belong to the
+  /// previously-focused CATALOG title — once an unrelated live channel is
+  /// playing in the region, this spotlight's colour field and identity block
+  /// (title/meta/plot, all about that stale catalog title) fade out rather
+  /// than sit there describing something that isn't playing. Null outside
+  /// Home (no IPTV favourites row to trigger it).
+  final ValueListenable<bool>? liveTakeover;
+
   const _HeroSpotlight({
     required this.item,
     required this.background,
@@ -9211,6 +10308,7 @@ class _HeroSpotlight extends StatefulWidget {
     this.tint,
     this.trailerLoading,
     this.trailerShowing,
+    this.liveTakeover,
   });
 
   @override
@@ -9357,6 +10455,27 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     );
   }
 
+  /// An IPTV favourite has taken the boxed video region ([liveTakeover]) —
+  /// unlike the catalog trailer, that video has NOTHING to do with [item], so
+  /// its colour field / identity text must actually disappear rather than
+  /// stay put (the invariant [_maybeFadeForTrailer]/[_fadeMetaForTrailer] rely
+  /// on — "the text is still about what's playing" — doesn't hold here).
+  /// No-op when the surface never runs IPTV favourites.
+  Widget _fadeForLiveTakeover(Widget child) {
+    final live = widget.liveTakeover;
+    if (live == null) return child;
+    return ValueListenableBuilder<bool>(
+      valueListenable: live,
+      builder: (context, on, kid) => AnimatedOpacity(
+        opacity: on ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 340),
+        curve: Curves.easeOut,
+        child: kid,
+      ),
+      child: child,
+    );
+  }
+
   /// The hero's colour STAGE (boxed mode): a diagonal wash in the focused
   /// title's extracted tint plus a soft glow leaning toward the art region —
   /// the left half of the Concept-5 hero. Always on (this IS the rest-state
@@ -9495,7 +10614,8 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           // Behind everything: the hero's always-on colour stage (boxed mode)
           // — the canvas the title text sits on, and the surface the region's
           // feathers melt into.
-          if (widget.boxedTrailer) _heroMoodField(scheme),
+          if (widget.boxedTrailer)
+            _fadeForLiveTakeover(_heroMoodField(scheme)),
           if (bg.isNotEmpty && artRegion != null)
             // Region-anchored key art: cover-crop + the same eased feathers
             // the trailer uses, so still art and live video dissolve into the
@@ -9698,10 +10818,12 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               ),
             ),
           // The whole identity block — badge, title, meta, plot — fades out once
-          // the trailer covers the hero, so a full-bleed trailer plays clean.
+          // the trailer covers the hero, so a full-bleed trailer plays clean
+          // (and, separately, once an IPTV favourite takes the region — see
+          // [_fadeForLiveTakeover]).
           // RepaintBoundary: text + logo raster stays cached when siblings
           // (pill, veils, fields) repaint, and vice versa.
-          _maybeFadeForTrailer(
+          _fadeForLiveTakeover(_maybeFadeForTrailer(
             RepaintBoundary(
             child: Align(
               alignment: Alignment.bottomLeft,
@@ -9798,6 +10920,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               ),
             ),
             ),
+          ),
           // "Trailer loading" pill — top-right, above the scrims so it reads
           // against any backdrop. Purely informational (never focusable), and
           // rendered only while the host is actually fetching/starting a
@@ -10257,6 +11380,326 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
     );
   }
 
+}
+
+/// The boxed hero video region's IPTV-favourite variant: plays a focused
+/// favourite channel's live stream in the SAME right-anchored region
+/// [_HeroTrailerLayer] uses for catalog trailers, via
+/// [HeroTrailerBackdrop]'s `live: true` mode — the exact mechanism the IPTV
+/// page's own inline channel preview uses
+/// (IptvResultsView._buildPreviewStage). Painted as a sibling ABOVE
+/// [_HeroTrailerLayer] in the host's Stack and shrinks to nothing when no
+/// IPTV favourite has focus, so the catalog trailer shows through unchanged;
+/// the two are mutually exclusive in practice because
+/// [_SearchScreenState._setHeroLiveIptv] tears the catalog trailer down the
+/// moment a live feed starts.
+///
+/// While the stream resolves/buffers, [_HeroSpotlight]'s idle key art (the
+/// previously-focused catalog title's Cinemeta poster) still sits BENEATH
+/// this layer — so as soon as [channel] is non-null this paints an opaque
+/// floor of the channel's OWN art ([_HeroLiveFloor]) rather than leaving that
+/// gap for the stale poster to show through.
+class _HeroLiveLayer extends StatefulWidget {
+  final ValueListenable<IptvChannel?> channel;
+  final ValueListenable<String?> streamUrl;
+  final double heroHeight;
+  final double volume;
+  final ValueChanged<bool>? onPlayingChanged;
+  final VoidCallback? onPlaybackFailed;
+
+  const _HeroLiveLayer({
+    required this.channel,
+    required this.streamUrl,
+    required this.heroHeight,
+    required this.volume,
+    this.onPlayingChanged,
+    this.onPlaybackFailed,
+  });
+
+  @override
+  State<_HeroLiveLayer> createState() => _HeroLiveLayerState();
+}
+
+class _HeroLiveLayerState extends State<_HeroLiveLayer> {
+  /// Pins the live backdrop's element so its engine/texture survive rebuilds;
+  /// replaced per URL (channel switch, or a candidate-ladder step-down) so
+  /// each stream still gets a fresh engine.
+  GlobalKey _backdropKey = GlobalKey();
+  String? _backdropUrl;
+  IptvChannel? _channel;
+  String? _url;
+  bool _playing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _channel = widget.channel.value;
+    _url = widget.streamUrl.value;
+    widget.channel.addListener(_onChannelChanged);
+    widget.streamUrl.addListener(_onUrlChanged);
+  }
+
+  @override
+  void didUpdateWidget(_HeroLiveLayer old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.channel, widget.channel)) {
+      old.channel.removeListener(_onChannelChanged);
+      widget.channel.addListener(_onChannelChanged);
+      _channel = widget.channel.value;
+    }
+    if (!identical(old.streamUrl, widget.streamUrl)) {
+      old.streamUrl.removeListener(_onUrlChanged);
+      widget.streamUrl.addListener(_onUrlChanged);
+      _url = widget.streamUrl.value;
+      _playing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.channel.removeListener(_onChannelChanged);
+    widget.streamUrl.removeListener(_onUrlChanged);
+    super.dispose();
+  }
+
+  void _onChannelChanged() {
+    if (!mounted) return;
+    setState(() => _channel = widget.channel.value);
+  }
+
+  void _onUrlChanged() {
+    if (!mounted) return;
+    setState(() {
+      _url = widget.streamUrl.value;
+      _playing = false;
+    });
+  }
+
+  void _onPlaying(bool playing) {
+    widget.onPlayingChanged?.call(playing);
+    if (_playing != playing && mounted) setState(() => _playing = playing);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final channel = _channel;
+    if (channel == null) return const SizedBox.shrink();
+    final url = _url;
+    if (url != null && url != _backdropUrl) {
+      _backdropUrl = url;
+      _backdropKey = GlobalKey();
+    }
+    return IgnorePointer(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final boardH = constraints.maxHeight;
+          final boardW = constraints.maxWidth;
+          if (!boardH.isFinite ||
+              boardH <= 0 ||
+              !boardW.isFinite ||
+              boardW <= 0) {
+            return const SizedBox.shrink();
+          }
+          final heroH = widget.heroHeight.clamp(0.0, boardH);
+          final region = _heroTrailerRegionRect(boardW, heroH);
+          if (region == null) return const SizedBox.shrink();
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fromRect(
+                rect: region,
+                child: _buildRegion(channel, url),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Same clip/feather/brightness-lift treatment as
+  /// [_HeroTrailerLayerState._buildRegion], plus the channel-art floor and a
+  /// LIVE/TUNING status chip in place of the trailer's TRAILER/AMBIENT pills.
+  /// Unlike the catalog trailer (whose feathers only appear once playing —
+  /// its OWN idle art beneath already carries them), the melt here is
+  /// unconditional: the floor is opaque from the first frame this builds, so
+  /// there's always something to feather.
+  Widget _buildRegion(IptvChannel channel, String? url) {
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Opaque floor: the channel's own art, so the previously-focused
+          // catalog title's poster never shows through the resolve/buffer
+          // gap. Crossfades out once real frames land.
+          AnimatedOpacity(
+            opacity: _playing ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 340),
+            curve: Curves.easeOut,
+            child: _HeroLiveFloor(channel: channel),
+          ),
+          if (url != null)
+            RepaintBoundary(
+              child: HeroTrailerBackdrop(
+                key: _backdropKey,
+                imageUrl: null,
+                videoUrl: url,
+                enabled: true,
+                live: true,
+                imageBlurSigma: 0,
+                videoBlurSigma: 0,
+                startDelay: const Duration(milliseconds: 300),
+                ambientVolume: widget.volume,
+                onPlayingChanged: _onPlaying,
+                onPlaybackFailed: widget.onPlaybackFailed,
+                // Only a Stremio-addon favourite has a ladder to fall back
+                // on — bound its wait so a dead candidate doesn't stall
+                // forever. A plain M3U/Xtream favourite has just the one
+                // URL, so give it an unbounded wait instead of abandoning an
+                // otherwise-valid but slow-to-buffer stream (matches
+                // IptvResultsView._buildPreviewStage's own timeout choice).
+                firstFrameTimeout:
+                    StremioIptvService.isStremioChannelUrl(channel.url)
+                    ? const Duration(seconds: 12)
+                    : null,
+              ),
+            ),
+          IgnorePointer(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const ColoredBox(color: _heroTrailerBrightnessLift),
+                _heroEdgeFeather(
+                  Alignment.centerLeft,
+                  Alignment.centerRight,
+                  const Color(0xFF0D0B1A),
+                  _heroTrailerVideoFeatherFrac,
+                ),
+                _heroEdgeFeather(
+                  Alignment.topCenter,
+                  Alignment.bottomCenter,
+                  const Color(0xFF0D0B1A),
+                  0.10,
+                ),
+                _heroEdgeFeather(
+                  Alignment.bottomCenter,
+                  Alignment.topCenter,
+                  const Color(0xFF0D0B1A),
+                  0.20,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 16,
+            right: 22,
+            child: _HeroLiveChip(playing: _playing),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The IPTV favourite's own art, filling the boxed region while its stream
+/// resolves/buffers (and behind it, briefly, while frames settle) — the
+/// channel's logo over the same purple gradient + live-tv glyph fallback
+/// [_ArtPoster] uses for its card, so the region reads as "this channel is
+/// tuning in" rather than an unrelated leftover poster.
+class _HeroLiveFloor extends StatelessWidget {
+  final IptvChannel channel;
+
+  const _HeroLiveFloor({required this.channel});
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = channel.logoUrl;
+    final hasLogo = logo != null && logo.isNotEmpty;
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF2A1D5C),
+            Color(0xFF1A1440),
+            Color(0xFF0D0B1A),
+          ],
+          stops: [0.0, 0.55, 1.0],
+        ),
+      ),
+      child: Center(
+        child: hasLogo
+            ? Padding(
+                padding: const EdgeInsets.all(56),
+                child: CachedNetworkImage(
+                  imageUrl: logo,
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => const _HeroLiveGlyph(),
+                ),
+              )
+            : const _HeroLiveGlyph(),
+      ),
+    );
+  }
+}
+
+class _HeroLiveGlyph extends StatelessWidget {
+  const _HeroLiveGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      Icons.live_tv_rounded,
+      size: 64,
+      color: kStremioAccent.withValues(alpha: 0.85),
+    );
+  }
+}
+
+/// Small "LIVE"/"TUNING" status pill for the boxed hero region while an IPTV
+/// favourite plays there — same glass-capsule language as
+/// [_HeroTrailerLoadingPill]/[_HeroAmbientChip], with a red dot (matching
+/// [_ArtPoster]'s own LIVE badge) instead of the trailer pills' amber one.
+class _HeroLiveChip extends StatelessWidget {
+  final bool playing;
+
+  const _HeroLiveChip({required this.playing});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xCC0D0B1A),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: _kCwProgressRed,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            playing ? 'LIVE' : 'TUNING',
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The hero's title, IMAGE-FIRST: the studio title-treatment art when a
@@ -11393,6 +12836,14 @@ class _ArtPoster extends StatefulWidget {
   final FocusNode focusNode;
   final VoidCallback onOpen;
 
+  /// Fired when this card gains DPAD focus (TV only — see [_ArtPosterState]'s
+  /// `onFocusChange`). Only the IPTV favourites row uses this today, to retune
+  /// the Home hero's boxed video region to the focused channel's live stream;
+  /// the other favourites rows pass a clearing callback so that live feed
+  /// doesn't linger when focus moves off IPTV without passing through a
+  /// catalog/CW card first.
+  final VoidCallback? onFocused;
+
   const _ArtPoster({
     required this.imageUrl,
     required this.title,
@@ -11403,6 +12854,7 @@ class _ArtPoster extends StatefulWidget {
     this.badge,
     this.live = false,
     this.progress,
+    this.onFocused,
   });
 
   @override
@@ -11608,6 +13060,7 @@ class _ArtPosterState extends State<_ArtPoster> {
         setState(() => _focused = f);
         if (!f) _keyDown = false;
         if (f) {
+          widget.onFocused?.call();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             Scrollable.ensureVisible(
@@ -11684,7 +13137,7 @@ class _ModeToggle extends StatelessWidget {
   final bool fullWidth;
   final ValueChanged<_Mode> onChanged;
 
-  /// TV-only DPAD focus nodes for the two segments (null off-TV, where the
+  /// TV-only DPAD focus nodes for the segments (null off-TV, where the
   /// InkWell handles pointer taps and normal Tab traversal instead).
   final FocusNode? catalogNode;
   final FocusNode? keywordNode;
@@ -11723,15 +13176,21 @@ class _ModeToggle extends StatelessWidget {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
-      if (value == _Mode.keyword) {
-        catalogNode?.requestFocus();
-      } else {
-        onLeaveToField?.call();
+      switch (value) {
+        case _Mode.keyword:
+          catalogNode?.requestFocus();
+        case _Mode.catalog:
+          onLeaveToField?.call();
       }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
-      if (value == _Mode.catalog) keywordNode?.requestFocus();
+      switch (value) {
+        case _Mode.catalog:
+          keywordNode?.requestFocus();
+        case _Mode.keyword:
+          break; // rightmost — nothing beyond
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -11763,7 +13222,10 @@ class _ModeToggle extends StatelessWidget {
       child: Row(
         mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
         children: fullWidth
-            ? [Expanded(child: catalog), Expanded(child: keyword)]
+            ? [
+                Expanded(child: catalog),
+                Expanded(child: keyword),
+              ]
             : [catalog, keyword],
       ),
     );
@@ -11776,7 +13238,10 @@ class _ModeToggle extends StatelessWidget {
     IconData icon,
   ) {
     final on = mode == value;
-    final node = value == _Mode.catalog ? catalogNode : keywordNode;
+    final node = switch (value) {
+      _Mode.catalog => catalogNode,
+      _Mode.keyword => keywordNode,
+    };
 
     Widget content(bool focused) => AnimatedContainer(
       duration: const Duration(milliseconds: 150),

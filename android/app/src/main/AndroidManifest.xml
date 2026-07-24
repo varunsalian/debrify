@@ -33,6 +33,13 @@
         android:largeHeap="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:banner="@drawable/banner_debrify">
+        <!-- Force the Skia renderer instead of Impeller/Vulkan. Some Android TV
+             SoCs (e.g. MediaTek/Amlogic in certain TCL sets) advertise Vulkan 1.1
+             but ship broken drivers, causing a hard crash on launch. Skia is the
+             stable path across our TV-first device range; iOS is unaffected. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <service
             android:name="background.downloader.DownloadWorkerService"
             android:exported="false"

@@ -15,6 +15,8 @@ import '../utils/tv_keys.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import 'episode_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
+import '../services/simkl/simkl_service.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
 import 'home/home_theme.dart';
 
 /// The episode drill-down engine + UI, extracted out of `EpisodesScreen` so it
@@ -128,6 +130,7 @@ class EpisodesPanel extends StatefulWidget {
 class EpisodesPanelState extends State<EpisodesPanel> {
   final StremioService _stremioService = StremioService.instance;
   final TraktService _traktService = TraktService.instance;
+  final SimklService _simklService = SimklService.instance;
 
   // Episode drill-down state
   int _episodeModeGeneration = 0;
@@ -153,6 +156,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
   /// watched/unwatched, rate) is only offered when this is true.
   bool _isTraktAuthenticated = false;
+
+  /// Whether a Simkl account is connected — mirrors [_isTraktAuthenticated],
+  /// gating the separate Simkl episode menu rows.
+  bool _isSimklAuthenticated = false;
 
   final List<FocusNode> _episodeFocusNodes = [];
   final ScrollController _episodeScrollController = ScrollController();
@@ -181,6 +188,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           _handleEpisodeSeasonDropdownKeyEvent;
     }
     _resolveTraktAuth();
+    _resolveSimklAuth();
     _enterEpisodeMode(
       widget.show,
       initialSeason: widget.initialSeason,
@@ -241,6 +249,32 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       debugPrint('EpisodesPanel: Trakt episode progress fetch failed: $e');
     }
 
+    // Overlay Simkl state — a third source, same merge rules as Trakt's
+    // (watched wins outright, partials only raise). Skipped entirely when
+    // Simkl isn't connected so disconnected users pay zero extra calls.
+    if (_isSimklAuthenticated) {
+      try {
+        final watched = await _simklService.fetchWatchedShowEpisodes(imdbId);
+        if (!mounted || generation != _episodeModeGeneration) return;
+        final playback =
+            await _simklService.fetchEpisodePlaybackProgress(imdbId);
+        if (!mounted || generation != _episodeModeGeneration) return;
+
+        for (final key in watched) {
+          merged[key] = 100.0;
+        }
+        for (final entry in playback.entries) {
+          final existing = merged[entry.key] ?? 0;
+          if (existing >= 100.0) continue;
+          if (entry.value > 5.0 && entry.value > existing) {
+            merged[entry.key] = entry.value;
+          }
+        }
+      } catch (e) {
+        debugPrint('EpisodesPanel: Simkl episode progress fetch failed: $e');
+      }
+    }
+
     if (mounted && generation == _episodeModeGeneration) {
       setState(() => _episodeWatchProgress = merged);
     }
@@ -260,6 +294,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final authed = await _traktService.isAuthenticated();
     if (mounted && authed != _isTraktAuthenticated) {
       setState(() => _isTraktAuthenticated = authed);
+    }
+  }
+
+  /// Resolve whether a Simkl account is connected — mirrors [_resolveTraktAuth].
+  Future<void> _resolveSimklAuth() async {
+    final authed = await _simklService.isAuthenticated();
+    if (mounted && authed != _isSimklAuthenticated) {
+      setState(() => _isSimklAuthenticated = authed);
     }
   }
 
@@ -304,6 +346,77 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (rating == null) return;
         actionLabel = 'Rated $rating/10';
         success = await _traktService.rateEpisode(
+          showImdbId,
+          episode.season,
+          episode.number,
+          rating,
+        );
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Handle the episode long-press menu against Simkl — mirrors
+  /// [_onEpisodeMenuAction], including the immediate local tick/bar update on
+  /// a successful watched-state change (a later refresh re-merges the truth
+  /// from all three sources).
+  Future<void> _onEpisodeSimklMenuAction(
+    TraktEpisode episode,
+    SimklEpisodeMenuAction action,
+  ) async {
+    final show = _selectedShow;
+    if (show == null) return;
+    final showImdbId = show.effectiveImdbId ?? show.id;
+    final key = '${episode.season}-${episode.number}';
+    bool success = false;
+    String actionLabel = '';
+
+    switch (action) {
+      case SimklEpisodeMenuAction.markWatched:
+        actionLabel = 'Marked as Watched on Simkl';
+        success = await _simklService.markEpisodeWatched(
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
+        if (success) {
+          // Finishing this episode also clears its paused session, so the show
+          // stops lingering in Continue Watching at this episode (and can
+          // surface as "up next" for the following one). Best-effort.
+          await _simklService.deletePlaybackForEpisode(
+            showImdbId,
+            episode.season,
+            episode.number,
+          );
+          if (mounted) {
+            setState(() => _episodeWatchProgress[key] = 100.0);
+          }
+        }
+      case SimklEpisodeMenuAction.markUnwatched:
+        actionLabel = 'Marked as Unwatched on Simkl';
+        success = await _simklService.markEpisodeUnwatched(
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
+        if (success && mounted) {
+          setState(() => _episodeWatchProgress.remove(key));
+        }
+      case SimklEpisodeMenuAction.rate:
+        if (!mounted) return;
+        final rating = await showSimklRatingDialog(context);
+        if (rating == null) return;
+        actionLabel = 'Rated $rating/10 on Simkl';
+        success = await _simklService.rateEpisode(
           showImdbId,
           episode.season,
           episode.number,
@@ -1418,6 +1531,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       context: context,
       backgroundColor: const Color(0xFF141019),
       showDragHandle: true,
+      // With both Trakt and Simkl connected the menu is 7 tiles — taller than
+      // the default sheet cap (9/16 of screen height) on portrait phones, and
+      // on TV the clipped rows stayed DPAD-focusable while invisible. Let the
+      // sheet grow and scroll instead (same pattern as the merged-screen
+      // quick-actions sheets).
+      isScrollControlled: true,
       builder: (sheetCtx) {
         Widget tile(IconData icon, String label, VoidCallback onTap,
             {Color? color, bool autofocus = false}) {
@@ -1436,45 +1555,74 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           );
         }
 
+        final tiles = <Widget>[
+          // Autofocus Play on TV so the sheet opens with a live target.
+          tile(Icons.play_arrow_rounded, 'Play',
+              () => _onEpisodeQuickPlay(episode),
+              autofocus: widget.isTelevision),
+          tile(Icons.layers_rounded, 'Sources',
+              () => _onEpisodeTap(episode)),
+          if (_isTraktAuthenticated) ...[
+            if (!watched)
+              tile(Icons.check_circle_rounded, 'Mark as Watched',
+                  () => _onEpisodeMenuAction(
+                      episode, TraktEpisodeMenuAction.markWatched)),
+            if (watched)
+              tile(Icons.visibility_off_rounded, 'Mark as Unwatched',
+                  () => _onEpisodeMenuAction(
+                      episode, TraktEpisodeMenuAction.markUnwatched)),
+            tile(Icons.star_rounded, 'Rate on Trakt',
+                () => _onEpisodeMenuAction(
+                    episode, TraktEpisodeMenuAction.rate)),
+          ],
+          // Simkl's own rows — separate from Trakt's above, not merged.
+          // No live per-episode Simkl watched state is tracked, so both
+          // Mark Watched and Mark Unwatched are always offered.
+          if (_isSimklAuthenticated) ...[
+            tile(Icons.check_circle_rounded, 'Mark as Watched (Simkl)',
+                () => _onEpisodeSimklMenuAction(
+                    episode, SimklEpisodeMenuAction.markWatched)),
+            tile(Icons.visibility_off_rounded, 'Mark as Unwatched (Simkl)',
+                () => _onEpisodeSimklMenuAction(
+                    episode, SimklEpisodeMenuAction.markUnwatched)),
+            tile(Icons.star_rounded, 'Rate on Simkl',
+                () => _onEpisodeSimklMenuAction(
+                    episode, SimklEpisodeMenuAction.rate)),
+          ],
+        ];
+
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'S${episode.season} · E${episode.number}  ${episode.title}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w600,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetCtx).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'S${episode.season} · E${episode.number}  ${episode.title}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-              // Autofocus Play on TV so the sheet opens with a live target.
-              tile(Icons.play_arrow_rounded, 'Play',
-                  () => _onEpisodeQuickPlay(episode),
-                  autofocus: widget.isTelevision),
-              tile(Icons.layers_rounded, 'Sources',
-                  () => _onEpisodeTap(episode)),
-              if (_isTraktAuthenticated) ...[
-                if (!watched)
-                  tile(Icons.check_circle_rounded, 'Mark as Watched',
-                      () => _onEpisodeMenuAction(
-                          episode, TraktEpisodeMenuAction.markWatched)),
-                if (watched)
-                  tile(Icons.visibility_off_rounded, 'Mark as Unwatched',
-                      () => _onEpisodeMenuAction(
-                          episode, TraktEpisodeMenuAction.markUnwatched)),
-                tile(Icons.star_rounded, 'Rate on Trakt',
-                    () => _onEpisodeMenuAction(
-                        episode, TraktEpisodeMenuAction.rate)),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.only(bottom: 8),
+                    children: tiles,
+                  ),
+                ),
               ],
-            ],
+            ),
           ),
         );
       },

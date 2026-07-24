@@ -281,6 +281,16 @@ class StorageService {
   static const String _traktUsernameKey = 'trakt_username';
   static const String _traktTokenExpiryKey = 'trakt_token_expiry';
 
+  // Simkl settings. No refresh-token/expiry keys — PIN-issued Simkl tokens
+  // don't expire (see SimklService).
+  static const String _simklAccessTokenKey = 'simkl_access_token';
+  static const String _simklUsernameKey = 'simkl_username';
+
+  // MDBList settings. Auth is a single API key (from mdblist.com/preferences),
+  // so there's no token/expiry — just the key and a cached display username.
+  static const String _mdblistApiKeyKey = 'mdblist_api_key';
+  static const String _mdblistUsernameKey = 'mdblist_username';
+
   // Remote Control Settings
   static const String _remoteControlEnabledKey = 'remote_control_enabled';
   static const String _remoteIntroShownKey = 'remote_intro_shown';
@@ -628,6 +638,84 @@ class StorageService {
   static Future<void> deleteAllDebridApiKey() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_allDebridApiKey);
+  }
+
+  // MDBList API key + cached username helpers
+  static Future<String?> getMdblistApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_mdblistApiKeyKey);
+  }
+
+  static Future<void> saveMdblistApiKey(String apiKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_mdblistApiKeyKey, apiKey);
+  }
+
+  static Future<String?> getMdblistUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_mdblistUsernameKey);
+  }
+
+  static Future<void> setMdblistUsername(String? username) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (username == null || username.isEmpty) {
+      await prefs.remove(_mdblistUsernameKey);
+    } else {
+      await prefs.setString(_mdblistUsernameKey, username);
+    }
+  }
+
+  /// Clears all stored MDBList auth (key + cached username).
+  static Future<void> clearMdblistAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_mdblistApiKeyKey);
+    await prefs.remove(_mdblistUsernameKey);
+    await prefs.remove(_mdblistSavedClonesKey);
+  }
+
+  // Maps a source MDBList list id -> the id of the static list we CLONED it
+  // into on the user's account (the "Save" action). Lets the Save button know a
+  // list is already saved and which clone to delete on un-save. JSON object of
+  // {"<sourceId>": clonedId}.
+  static const String _mdblistSavedClonesKey = 'mdblist_saved_clones';
+
+  static Future<Map<int, int>> getMdblistSavedClones() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_mdblistSavedClonesKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final out = <int, int>{};
+      decoded.forEach((k, v) {
+        final sid = int.tryParse(k.toString());
+        final cid = v is int ? v : (v is num ? v.toInt() : null);
+        if (sid != null && cid != null) out[sid] = cid;
+      });
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> setMdblistSavedClone(int sourceId, int clonedId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final map = await getMdblistSavedClones();
+    map[sourceId] = clonedId;
+    await prefs.setString(
+      _mdblistSavedClonesKey,
+      jsonEncode(map.map((k, v) => MapEntry(k.toString(), v))),
+    );
+  }
+
+  static Future<void> removeMdblistSavedClone(int sourceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final map = await getMdblistSavedClones();
+    map.remove(sourceId);
+    await prefs.setString(
+      _mdblistSavedClonesKey,
+      jsonEncode(map.map((k, v) => MapEntry(k.toString(), v))),
+    );
   }
 
   static Future<bool> getAllDebridIntegrationEnabled() async {
@@ -3435,6 +3523,42 @@ class StorageService {
     await prefs.remove(_traktRefreshTokenKey);
     await prefs.remove(_traktUsernameKey);
     await prefs.remove(_traktTokenExpiryKey);
+  }
+
+  static Future<void> setSimklSyncCatalogItems(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('simkl_sync_catalog_items', value);
+  }
+
+  static Future<bool> getSimklSyncCatalogItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('simkl_sync_catalog_items') ?? false;
+  }
+
+  static Future<String?> getSimklAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_simklAccessTokenKey);
+  }
+
+  static Future<void> setSimklAccessToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_simklAccessTokenKey, token);
+  }
+
+  static Future<String?> getSimklUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_simklUsernameKey);
+  }
+
+  static Future<void> setSimklUsername(String username) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_simklUsernameKey, username);
+  }
+
+  static Future<void> clearSimklAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_simklAccessTokenKey);
+    await prefs.remove(_simklUsernameKey);
   }
 
   static Future<List<String>> getRedditRecentSubreddits() async {

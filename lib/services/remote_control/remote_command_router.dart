@@ -257,6 +257,9 @@ class RemoteCommandRouter {
       case ConfigCommand.trakt:
         await _handleTraktConfig(data);
         break;
+      case ConfigCommand.simkl:
+        await _handleSimklConfig(data);
+        break;
       case ConfigCommand.searchEngines:
         await _handleSearchEnginesConfig(data);
         break;
@@ -441,6 +444,38 @@ class RemoteCommandRouter {
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to configure Trakt: $e');
       _showSnackBar('Trakt: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle Simkl session config - copies the access token and username from
+  /// the sender so the TV ends up logged in to the same account. Simpler than
+  /// Trakt's: Simkl's PIN-issued tokens have no refresh token/expiry to carry.
+  Future<void> _handleSimklConfig(String jsonData) async {
+    try {
+      debugPrint('RemoteCommandRouter: Configuring Simkl session...');
+
+      final data = jsonDecode(jsonData) as Map<String, dynamic>;
+      final accessToken = data['access_token'] as String?;
+      final username = data['username'] as String?;
+
+      if (accessToken == null || accessToken.isEmpty) {
+        _showSnackBar('Simkl: Invalid session data', isError: true);
+        return;
+      }
+
+      await StorageService.setSimklAccessToken(accessToken);
+      if (username != null && username.isNotEmpty) {
+        await StorageService.setSimklUsername(username);
+      }
+      // Match interactive connect: a freshly imported Simkl session starts
+      // with catalog scrobbling on.
+      await StorageService.setSimklSyncCatalogItems(true);
+
+      debugPrint('RemoteCommandRouter: Simkl session configured successfully');
+      _showSnackBar('Simkl connected successfully');
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure Simkl: $e');
+      _showSnackBar('Simkl: Configuration failed', isError: true);
     }
   }
 

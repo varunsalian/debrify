@@ -23,6 +23,8 @@ import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
+import '../services/simkl/simkl_service.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
@@ -79,6 +81,15 @@ class MergedDetailScreen extends StatefulWidget {
   /// right toggles. Null (disconnected / no IMDb id) keeps the add-only menu.
   final Future<TraktTitleStatus?> Function()? traktStatusLoader;
 
+  /// Simkl equivalents — render as their own independent quick-actions
+  /// button/sheet/status chips next to Trakt's, not merged (both trackers
+  /// run in parallel; see the Simkl integration plan).
+  final List<SimklMenuOption> simklMenuOptions;
+  final List<SimklMenuOption> Function(SimklTitleStatus? status)?
+  simklMenuBuilder;
+  final Future<void> Function(SimklItemMenuAction action)? onSimklAction;
+  final Future<SimklTitleStatus?> Function()? simklStatusLoader;
+
   /// "More Like This" rail + sparse-item meta backfill (same loaders the detail
   /// screen receives).
   final Future<List<StremioMeta>> Function()? recommendationsLoader;
@@ -115,6 +126,10 @@ class MergedDetailScreen extends StatefulWidget {
     this.traktMenuBuilder,
     this.onTraktAction,
     this.traktStatusLoader,
+    this.simklMenuOptions = const [],
+    this.simklMenuBuilder,
+    this.onSimklAction,
+    this.simklStatusLoader,
     this.recommendationsLoader,
     this.onRecommendationTap,
     this.metaEnricher,
@@ -243,6 +258,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   List<TraktMenuOption> get _menuOptions =>
       widget.traktMenuBuilder?.call(_traktStatus) ?? widget.traktMenuOptions;
 
+  /// The user's live Simkl relationship to this title. Null until
+  /// [simklStatusLoader] resolves — mirrors [_traktStatus] one-for-one.
+  SimklTitleStatus? _simklStatus;
+
+  /// The Simkl quick-actions strip to render: rebuilt against [_simklStatus]
+  /// when a builder was supplied, else the static list passed in.
+  List<SimklMenuOption> get _menuOptionsSimkl =>
+      widget.simklMenuBuilder?.call(_simklStatus) ?? widget.simklMenuOptions;
+
   @override
   void initState() {
     super.initState();
@@ -257,6 +281,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       _loadAccent();
       _loadResumeInfo();
       _loadTraktStatus();
+      _loadSimklStatus();
     });
   }
 
@@ -275,6 +300,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // Watched state (and thus the resume label / badges) may have changed while
     // away — re-read the Trakt status too.
     _loadTraktStatus();
+    _loadSimklStatus();
     // And the episode list's ticks/progress: episode quick-play now plays on
     // top of this screen (like Resume), so the list is still alive when the
     // player pops back and must reflect the session that just ended.
@@ -291,6 +317,18 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       final status = await loader();
       if (!mounted || status == null) return;
       setState(() => _traktStatus = status);
+    } catch (_) {}
+  }
+
+  /// Resolve the user's Simkl relationship to this title — mirrors
+  /// [_loadTraktStatus] exactly.
+  Future<void> _loadSimklStatus() async {
+    final loader = widget.simklStatusLoader;
+    if (loader == null) return;
+    try {
+      final status = await loader();
+      if (!mounted || status == null) return;
+      setState(() => _simklStatus = status);
     } catch (_) {}
   }
 
@@ -966,6 +1004,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
               child: chips,
             ),
           ],
+          if (_buildSimklStatusChips() case final simklChips?) ...[
+            SizedBox(height: t ? 8 : 10),
+            _StaggerReveal(
+              key: const ValueKey('rev-simkl-status'),
+              delayMs: 145,
+              enabled: animate,
+              child: simklChips,
+            ),
+          ],
           if (genres.isNotEmpty) ...[
             SizedBox(height: t ? 8 : 10),
             _StaggerReveal(
@@ -1102,6 +1149,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
               child: chips,
             ),
           ],
+          if (_buildSimklStatusChips() case final simklChips?) ...[
+            const SizedBox(height: 10),
+            _StaggerReveal(
+              key: const ValueKey('rev-h-simkl-status'),
+              delayMs: 145,
+              enabled: animate,
+              child: simklChips,
+            ),
+          ],
           if (genres.isNotEmpty) ...[
             const SizedBox(height: 10),
             _StaggerReveal(
@@ -1220,6 +1276,46 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     ];
     if (chips.isEmpty) return null;
     return Wrap(spacing: 7, runSpacing: 7, children: chips);
+  }
+
+  /// Small state badge from the live Simkl status (current watchlist status
+  /// + rating). Mirrors [_buildTraktStatusChips].
+  Widget? _buildSimklStatusChips() {
+    final s = _simklStatus;
+    if (s == null) return null;
+    final chips = <Widget>[
+      if (s.currentStatus != null)
+        _statusChip(
+          Icons.bookmark_rounded,
+          _simklStatusLabel(s.currentStatus!),
+          const Color(0xFF22D3EE),
+        ),
+      if (s.rating != null)
+        _statusChip(
+          Icons.star_rounded,
+          '${s.rating}/10',
+          const Color(0xFF22D3EE),
+        ),
+    ];
+    if (chips.isEmpty) return null;
+    return Wrap(spacing: 7, runSpacing: 7, children: chips);
+  }
+
+  static String _simklStatusLabel(String status) {
+    switch (status) {
+      case 'plantowatch':
+        return 'Plan to Watch';
+      case 'watching':
+        return 'Watching';
+      case 'hold':
+        return 'On Hold';
+      case 'completed':
+        return 'Completed';
+      case 'dropped':
+        return 'Dropped';
+      default:
+        return status;
+    }
   }
 
   Widget _statusChip(IconData icon, String label, Color color) => Container(
@@ -1375,6 +1471,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             tooltip: 'More options',
             onTap: _showQuickActionsMenu,
           ),
+        // Simkl's own "More" — a separate button/sheet, not merged with
+        // Trakt's, so nothing here touches the button above.
+        if (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null)
+          _RoundIconButton(
+            icon: Icons.movie_filter_rounded,
+            tooltip: 'Simkl options',
+            onTap: _showSimklQuickActionsMenu,
+          ),
       ],
     );
   }
@@ -1430,6 +1534,36 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
   }
 
+  /// Human-readable description of each Simkl quick action, shown in its
+  /// own More menu — mirrors [_descriptionFor].
+  static String _descriptionForSimkl(SimklItemMenuAction a) {
+    switch (a) {
+      case SimklItemMenuAction.moveToPlanToWatch:
+        return 'Move this to your Simkl "Plan to Watch" list — a personal '
+            'watch queue synced across every device signed into your account.';
+      case SimklItemMenuAction.moveToWatching:
+        return 'Mark this as currently watching on Simkl, without changing '
+            'any episode watched state.';
+      case SimklItemMenuAction.moveToOnHold:
+        return 'Pause this on Simkl — keeps it out of Plan to Watch and '
+            'Watching until you\'re ready to pick it back up.';
+      case SimklItemMenuAction.moveToCompleted:
+        return 'Mark this completed on Simkl and sync that history across '
+            'all your devices.';
+      case SimklItemMenuAction.moveToDropped:
+        return 'Mark this dropped on Simkl so it stops showing up as '
+            'something you\'re meaning to finish.';
+      case SimklItemMenuAction.removeFromContinueWatching:
+        return 'Take this off your Simkl Continue Watching rows. A movie just '
+            'clears its paused position; a series is moved to On Hold so its '
+            'next episode doesn\'t re-surface as an "up next" card.';
+      case SimklItemMenuAction.rate:
+        return 'Give this a 1–10 rating on Simkl.';
+      case SimklItemMenuAction.removeRating:
+        return 'Remove the rating you previously gave this on Simkl.';
+    }
+  }
+
   void _showQuickActionsMenu() {
     final options = _menuOptions;
     if (options.isEmpty || widget.onTraktAction == null) return;
@@ -1450,6 +1584,30 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           // collection / watched / rating) — refresh so the menu and badges
           // reflect it on the next open.
           if (mounted) _loadTraktStatus();
+        },
+      ),
+    );
+  }
+
+  /// Simkl's own quick-actions sheet — mirrors [_showQuickActionsMenu].
+  void _showSimklQuickActionsMenu() {
+    final options = _menuOptionsSimkl;
+    if (options.isEmpty || widget.onSimklAction == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF141019),
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetCtx) => _SimklQuickActionsMenu(
+        title: _item.name,
+        options: options,
+        isTelevision: widget.isTelevision,
+        onSelected: (action) async {
+          Navigator.of(sheetCtx).pop();
+          await widget.onSimklAction?.call(action);
+          // The action likely changed the title's Simkl watchlist status or
+          // rating — refresh so the menu and badges reflect it on next open.
+          if (mounted) _loadSimklStatus();
         },
       ),
     );
@@ -2639,6 +2797,127 @@ class _QuickActionsMenu extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       _MergedDetailScreenState._descriptionFor(o.action),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Simkl's own quick-actions sheet — duplicated from [_QuickActionsMenu]
+/// rather than genericized, same reasoning as [_SimklQuickActions] on the
+/// catalog detail screen: no shared type between the two trackers.
+class _SimklQuickActionsMenu extends StatelessWidget {
+  final String title;
+  final List<SimklMenuOption> options;
+  final bool isTelevision;
+  final void Function(SimklItemMenuAction action) onSelected;
+
+  const _SimklQuickActionsMenu({
+    required this.title,
+    required this.options,
+    required this.isTelevision,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Simkl Actions',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 8),
+                itemCount: options.length,
+                itemBuilder: (context, i) => _item(options[i], i),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _item(SimklMenuOption o, int index) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        autofocus: isTelevision && index == 0,
+        focusColor: Colors.white.withValues(alpha: 0.12),
+        onTap: () => onSelected(o.action),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 13, 18, 13),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(o.icon, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      o.label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _MergedDetailScreenState._descriptionForSimkl(o.action),
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.5),
                         fontSize: 13,

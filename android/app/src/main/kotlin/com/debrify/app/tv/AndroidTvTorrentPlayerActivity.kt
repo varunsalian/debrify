@@ -5500,7 +5500,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             tv.text = "Sample subtitle preview"
             tv.setTextColor(SubtitleSettings.getCurrentColor(ctx).color)
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, SubtitleSettings.getFontSizeSp(ctx))
-            tv.typeface = SubtitleFontManager.getTypeface(ctx)
+            tv.typeface = SubtitleSettings.getEffectiveTypeface(ctx)
             tv.setBackgroundColor(SubtitleSettings.getCurrentBg(ctx).color)
             if (SubtitleSettings.getStyleIndex(ctx) != 0) {  // 0 = "None" edge
                 val edge = SubtitleSettings.getCurrentOutlineColor(ctx).color ?: Color.BLACK
@@ -5661,6 +5661,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }),
             mrow("Font", value = SubtitleFontManager.getCurrentFontLabel(ctx), adjustable = true, onAdjust = { d ->
                 if (d > 0) SubtitleFontManager.cycleFontUp(ctx) else SubtitleFontManager.cycleFontDown(ctx); applySubtitleSettings()
+            }),
+            mrow("Bold", value = if (SubtitleSettings.getBold(ctx)) "On" else "Off", adjustable = true, onAdjust = { _ ->
+                SubtitleSettings.setBold(ctx, !SubtitleSettings.getBold(ctx)); applySubtitleSettings()
             }),
             mrow("Reset all to defaults", accent = true, onOk = {
                 SubtitleSettings.resetToDefaults(ctx); SubtitleFontManager.resetToDefault(ctx); applySubtitleSettings()
