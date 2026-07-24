@@ -10,6 +10,12 @@ import 'simkl_service.dart';
 /// (Plan to Watch / Watching / On Hold / Completed / Dropped) plus Ratings,
 /// and a smaller, differently-shaped set of public discovery endpoints.
 enum SimklSeeAllList {
+  /// The user's Continue Watching (paused + up-next). Unlike every other list,
+  /// this is NOT fetched via [SimklListSource] — the host hands it in already
+  /// loaded (from SimklContinueWatchingService), so [loadList] returns empty for
+  /// it. Leads the enum so it's the first "List" dropdown option, mirroring
+  /// TraktSeeAllScreen.
+  continueWatching,
   planToWatch,
   watching,
   onHold,
@@ -24,6 +30,8 @@ enum SimklSeeAllList {
 extension SimklSeeAllListX on SimklSeeAllList {
   String get label {
     switch (this) {
+      case SimklSeeAllList.continueWatching:
+        return 'Continue Watching';
       case SimklSeeAllList.planToWatch:
         return 'Plan to Watch';
       case SimklSeeAllList.watching:
@@ -89,6 +97,10 @@ class SimklListSource {
     SimklSeeAllList list,
   ) async {
     switch (list) {
+      case SimklSeeAllList.continueWatching:
+        // Continue Watching is host-provided (see the enum doc), never fetched
+        // here — return empty so callers that reach this by mistake no-op.
+        return (items: const <StremioMeta>[], failed: false);
       case SimklSeeAllList.planToWatch:
       case SimklSeeAllList.watching:
       case SimklSeeAllList.onHold:

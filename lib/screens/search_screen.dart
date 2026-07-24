@@ -2497,15 +2497,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _onCatalogPlay(item, _addonForContinue(_cwAddonId[item.imdbId]));
   }
 
-  /// Open a Simkl-sourced title (Discover's Simkl list browsing) as a plain
-  /// catalog detail page — no Trakt-style `isTraktSource`/resume-preference
-  /// flags, since Simkl has no scrobble/resume logic built yet (list
-  /// browsing only, see the Simkl integration plan).
+  /// Open a plain Simkl-list title (Discover's Simkl Trending/watchlist lists) —
+  /// a normal catalog detail, no resume. The CW list uses [_openSimklCwItem]
+  /// instead, so a title browsed fresh here never opens mid-episode.
   void _openSimklItem(StremioMeta item) {
     _openItem(item, _addonForContinue(item.sourceAddon?.id));
   }
 
-  /// Quick-play a Simkl-sourced title like any other catalog item.
+  /// Quick-play a plain Simkl-list title like any other catalog item (no
+  /// resume). The CW list uses [_playSimklCwItem].
   void _playSimklItem(StremioMeta item) {
     _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
   }
@@ -8387,6 +8387,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     await Future.wait([
       _loadContinueWatching(),
       _loadTraktContinueWatching(refreshBound: false),
+      // Populates _simklAll/_simklProgress for the Simkl source's Continue
+      // Watching list (folded into that source, like Trakt's).
+      _loadSimklContinueWatching(refreshBound: false),
     ]);
     if (mounted) await _refreshBoundSources();
   }
@@ -8675,8 +8678,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_discSource == _discSimkl) {
       return SimklSeeAllScreen(
         key: const ValueKey('disc_simkl'),
+        // CW is folded in as the leading "List" option (like the Trakt source).
+        // Plain open/play for the browse lists; the CW-aware handlers (resume at
+        // the paused/up-next episode) apply ONLY while the CW list is showing.
+        cwItems: _simklAll,
+        cwProgress: _simklProgress,
         onOpen: _openSimklItem,
         onQuickPlay: _pikpakOnly ? null : _playSimklItem,
+        cwOnOpen: _openSimklCwItem,
+        cwOnQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
         onItemFocused: _onDiscFocused,
         isBound: _isBound,
         isTelevision: widget.isTelevision,

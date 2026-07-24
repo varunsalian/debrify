@@ -19,21 +19,40 @@ import '../../widgets/see_all/stremio_dropdown.dart';
 /// order.
 enum _Sort { natural, az, za, imdbDesc, imdbAsc }
 
-/// Full-screen "See All" for the Simkl source. Opens on Trending (public, no
-/// auth wall, always populated) and lets the user switch — via the "List"
-/// dropdown — to any of the five watchlist states (Plan to Watch / Watching /
-/// On Hold / Completed / Dropped), Ratings, or the other two discovery lists
-/// (Top Rated, New & Upcoming).
+/// Full-screen "See All" for the Simkl source. Opens on Continue Watching when
+/// the host provides some (else Trending — public, no auth wall, always
+/// populated) and lets the user switch — via the "List" dropdown — to Continue
+/// Watching, any of the five watchlist states (Plan to Watch / Watching / On
+/// Hold / Completed / Dropped), Ratings, or the two discovery lists (Top Rated,
+/// New & Upcoming).
 ///
-/// Deliberately simpler than [TraktSeeAllScreen]: no Continue Watching (Simkl
-/// has no playback data yet — that's the scrobble step, not this one) and no
-/// custom/liked-list group dropdown (Simkl's Custom Lists aren't exposed via
-/// API yet). Every list is fetched via [SimklListSource], then filtered by
-/// category/sort in memory — same shape as Trakt's screen otherwise, so it
-/// slots into the Discover tab's dispatch the same way.
+/// Continue Watching mirrors [TraktSeeAllScreen]: the host hands its items in
+/// already-loaded ([cwItems]/[cwProgress]) rather than fetching via
+/// [SimklListSource], and only that list shows progress bars. Still simpler than
+/// Trakt in one way: no custom/liked-list group dropdown (Simkl's Custom Lists
+/// aren't exposed via API yet). Every non-CW list is fetched via
+/// [SimklListSource], then filtered by category/sort in memory.
 class SimklSeeAllScreen extends StatefulWidget {
+  /// Open / quick-play for a NON-CW list (Trending, watchlist states, …) — a
+  /// plain catalog open/play, no resume.
   final void Function(StremioMeta item) onOpen;
   final void Function(StremioMeta item)? onQuickPlay;
+
+  /// The user's Continue Watching titles (paused + up-next), already loaded by
+  /// the host — the [SimklSeeAllList.continueWatching] list renders these
+  /// directly (no fetch). Empty when the host has none / isn't connected, in
+  /// which case the screen opens on Trending instead. Progress bars for these
+  /// come from [cwProgress] (imdbId → 0..1); other lists show no progress.
+  final List<StremioMeta> cwItems;
+  final Map<String, double> cwProgress;
+
+  /// Open / quick-play used ONLY while the Continue Watching list is showing —
+  /// these resume at the paused / up-next episode. Kept separate from [onOpen]/
+  /// [onQuickPlay] so a title that's browsed from another list (Trending, etc.)
+  /// but also happens to be in CW opens fresh, not mid-episode. Fall back to the
+  /// plain handlers when not provided.
+  final void Function(StremioMeta item)? cwOnOpen;
+  final void Function(StremioMeta item)? cwOnQuickPlay;
 
   /// Fires when a grid tile gains focus — drives the Discover detail rail.
   final void Function(StremioMeta item)? onItemFocused;
@@ -51,6 +70,10 @@ class SimklSeeAllScreen extends StatefulWidget {
     super.key,
     required this.onOpen,
     this.onQuickPlay,
+    this.cwItems = const [],
+    this.cwProgress = const {},
+    this.cwOnOpen,
+    this.cwOnQuickPlay,
     this.onItemFocused,
     this.isBound,
     this.isTelevision = false,
@@ -66,7 +89,21 @@ class SimklSeeAllScreen extends StatefulWidget {
 class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   final GlobalKey<SeeAllPosterGridState> _gridKey = GlobalKey();
 
-  SimklSeeAllList _list = SimklSeeAllList.trending;
+  late SimklSeeAllList _list;
+
+  /// True while [_list] is still the initState auto-pick (not user-chosen) — so
+  /// a CW list that loads AFTER we fell back to Trending can promote itself.
+  bool _autoList = true;
+
+  bool get _isCw => _list == SimklSeeAllList.continueWatching;
+
+  /// Grid handlers: the CW list resumes (cwOnOpen/cwOnQuickPlay); every other
+  /// list opens/plays plainly, so a title browsed fresh from Trending etc. never
+  /// resumes just because it also sits in Continue Watching.
+  void Function(StremioMeta) get _open =>
+      _isCw ? (widget.cwOnOpen ?? widget.onOpen) : widget.onOpen;
+  void Function(StremioMeta)? get _quickPlay =>
+      _isCw ? (widget.cwOnQuickPlay ?? widget.onQuickPlay) : widget.onQuickPlay;
 
   List<StremioMeta> _items = const [];
   List<StremioMeta> _visible = const [];
@@ -105,7 +142,38 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   void initState() {
     super.initState();
     AnalyticsService.screenView('simkl_see_all');
+    // Land on Continue Watching when the host handed us some (the natural
+    // "continue" context); otherwise Trending (public, always populated).
+    _list = widget.cwItems.isNotEmpty
+        ? SimklSeeAllList.continueWatching
+        : SimklSeeAllList.trending;
     _fetchList(_list);
+  }
+
+  @override
+  void didUpdateWidget(SimklSeeAllScreen old) {
+    super.didUpdateWidget(old);
+    if (identical(widget.cwItems, old.cwItems)) return;
+    // No setState needed — didUpdateWidget is followed by build (matches
+    // TraktSeeAllScreen).
+    if (_isCw) {
+      // A background CW refresh (progress moved, a title finished) — re-mirror.
+      _items = widget.cwItems;
+      _recompute();
+    } else if (_autoList &&
+        old.cwItems.isEmpty &&
+        widget.cwItems.isNotEmpty) {
+      // We auto-fell-back to Trending because CW hadn't loaded yet; it just
+      // arrived and the user hasn't picked a list — promote to Continue
+      // Watching (the intended landing). Bump the token so a Trending fetch
+      // that's still in flight can't overwrite this promoted CW grid.
+      _fetchToken++;
+      _list = SimklSeeAllList.continueWatching;
+      _loading = false;
+      _error = false;
+      _items = widget.cwItems;
+      _recompute();
+    }
   }
 
   @override
@@ -168,9 +236,10 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   }
 
   /// Quick-play a random title from the filtered view — the whole list is in
-  /// memory (no paging), so a plain in-list pick is uniform.
+  /// memory (no paging), so a plain in-list pick is uniform. Uses the list-aware
+  /// handler so a random CW pick resumes.
   void _playRandom() {
-    final play = widget.onQuickPlay;
+    final play = _quickPlay;
     if (play == null || _visible.isEmpty) return;
     AnalyticsService.trackInBackground(
         'discover_random_play', {'source': 'simkl'});
@@ -182,6 +251,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   void _onPrimary(SimklSeeAllList list) {
     if (list == _list) return;
     setState(() {
+      _autoList = false; // user chose this list — stop auto-promoting to CW
       _list = list;
       _category = 'all';
       _sort = _Sort.natural;
@@ -189,8 +259,28 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
     _fetchList(list);
   }
 
+  /// Progress bar value (0..1) for a tile — only for Continue Watching titles
+  /// (other lists show no progress). Up-next entries have no [cwProgress] entry,
+  /// so they correctly render without a bar.
+  double? _progressOf(StremioMeta m) =>
+      _isCw ? widget.cwProgress[m.imdbId] : null;
+
   Future<void> _fetchList(SimklSeeAllList list) async {
+    // Bump the token FIRST so any in-flight network fetch is invalidated —
+    // including when switching TO Continue Watching (else its late response
+    // would overwrite the CW grid).
     final token = ++_fetchToken;
+    // Continue Watching is host-provided — no network fetch, just mirror it.
+    if (list == SimklSeeAllList.continueWatching) {
+      setState(() {
+        _loading = false;
+        _error = false;
+        _items = widget.cwItems;
+        _recompute();
+      });
+      if (widget.isTelevision && _visible.isEmpty) _listNode.requestFocus();
+      return;
+    }
     setState(() {
       _loading = true;
       _error = false;
@@ -386,9 +476,10 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       isTelevision: widget.isTelevision,
       loadingMore: false,
       exhausted: true, // finite, in-memory list — no paging
-      onOpen: widget.onOpen,
-      onQuickPlay: widget.onQuickPlay,
+      onOpen: _open,
+      onQuickPlay: _quickPlay,
       onItemFocused: widget.onItemFocused,
+      progressOf: _progressOf,
       showTypeBadge: !_quiet,
       showRatingBadge: !_quiet,
       isBound: widget.isBound,
@@ -402,6 +493,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   String _emptyMessage() {
     if (_error) return "Couldn't load ${_list.label} from Simkl";
     if (_items.isEmpty) {
+      if (_isCw) return 'Nothing to continue yet';
       if (_list.isPublic) return 'No ${_list.label} titles right now';
       return 'Nothing in your ${_list.label}';
     }
