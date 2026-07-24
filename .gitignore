@@ -44,6 +44,5 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Release automation — local tooling, never commit
+# Release automation secrets/tooling — never commit
 .release/
-.claude/commands/release.md
