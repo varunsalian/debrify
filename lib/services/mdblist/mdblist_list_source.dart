@@ -77,10 +77,6 @@ class MdblistListSource {
   Future<List<MdblistListChoice>> loadTopLists() async =>
       _mapChoices(await MdblistService.instance.fetchTopLists());
 
-  /// The public lists the user has liked on MDBList. Same shape as the others.
-  Future<List<MdblistListChoice>> loadLikedLists() async =>
-      _mapChoices(await MdblistService.instance.fetchLikedLists());
-
   /// Searches MDBList's public lists by name. Same shape as the others.
   Future<List<MdblistListChoice>> searchLists(String query) async =>
       _mapChoices(await MdblistService.instance.searchLists(query));

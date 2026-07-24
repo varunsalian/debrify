@@ -24,12 +24,11 @@ enum _Sort { natural, az, za }
 
 /// Full-screen / embedded "See All" for the MDBList source.
 ///
-/// A "Category" dropdown switches between the user's OWN lists ('mine'), the
-/// lists they've LIKED on MDBList ('liked'), and MDBList's top/public lists
-/// ('top'); a second "List" dropdown then picks a specific list within that
-/// category. Each list's movies + shows are merged into one grid. Own lists
-/// load on entry; the other categories load lazily the first time the user
-/// switches to them, then are cached.
+/// A "Category" dropdown switches between the user's OWN lists ('mine') and
+/// MDBList's top/public lists ('top'); a second "List" dropdown then picks a
+/// specific list within that category. Each list's movies + shows are merged
+/// into one grid. Own lists load on entry; Top loads lazily the first time the
+/// user switches to it, then is cached.
 ///
 /// There is intentionally no movie/show toggle (deferred) and no list search
 /// (a later step). Mirrors [TraktSeeAllScreen]'s structure but simpler: no
@@ -77,16 +76,13 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   bool _connected = false;
 
-  // Category: 'mine' (the user's own lists), 'liked' (lists they liked on
-  // MDBList), 'top' (public/top lists), or 'found' (a single list handed off
-  // from the Search tab — only present when [widget.initialList] is set).
-  // Each fetched category's lists are loaded once and cached (flags below);
-  // 'found' is in-memory from the start.
+  // Category: 'mine' (the user's own lists), 'top' (public/top lists), or
+  // 'found' (a single list handed off from the Search tab — only present when
+  // [widget.initialList] is set). Each fetched category's lists are loaded once
+  // and cached (flags below); 'found' is in-memory from the start.
   String _category = 'mine';
   List<MdblistListChoice> _myLists = const [];
   bool _myLoaded = false;
-  List<MdblistListChoice> _likedLists = const [];
-  bool _likedLoaded = false;
   List<MdblistListChoice> _topLists = const [];
   bool _topLoaded = false;
   List<MdblistListChoice> _foundLists = const [];
@@ -132,8 +128,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   List<MdblistListChoice> get _categoryLists => _category == 'top'
       ? _topLists
-      : _category == 'liked'
-      ? _likedLists
       : _category == 'found'
       ? _foundLists
       : _myLists;
@@ -200,8 +194,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   Future<void> _loadCategory(String cat) async {
     final alreadyLoaded = cat == 'top'
         ? _topLoaded
-        : cat == 'liked'
-        ? _likedLoaded
         : cat == 'found'
         // The found list is in-memory from the handoff — never fetched here.
         ? true
@@ -222,8 +214,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (!alreadyLoaded) {
       final lists = cat == 'top'
           ? await MdblistListSource.instance.loadTopLists()
-          : cat == 'liked'
-          ? await MdblistListSource.instance.loadLikedLists()
           : await MdblistListSource.instance.loadUserLists();
       if (!mounted || _category != cat) return;
       setState(() {
@@ -234,9 +224,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
         if (cat == 'top') {
           _topLists = lists;
           _topLoaded = lists.isNotEmpty;
-        } else if (cat == 'liked') {
-          _likedLists = lists;
-          _likedLoaded = lists.isNotEmpty;
         } else {
           _myLists = lists;
           _myLoaded = lists.isNotEmpty;
@@ -539,7 +526,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
                 focusNode: _categoryNode,
                 options: [
                   const StremioDropdownOption('mine', 'My Lists'),
-                  const StremioDropdownOption('liked', 'Liked Lists'),
                   const StremioDropdownOption('top', 'Top Lists'),
                   // Only exists while a search-handoff list is held.
                   if (_foundLists.isNotEmpty)
@@ -691,7 +677,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (_error) return "Couldn't load \"${_selected?.label ?? ''}\" from MDBList";
     if (_selected == null) {
       if (_category == 'top') return 'No top lists available right now';
-      if (_category == 'liked') return "You haven't liked any lists yet";
       return 'You have no MDBList lists yet';
     }
     // The list has items but the Show filter hid them all.

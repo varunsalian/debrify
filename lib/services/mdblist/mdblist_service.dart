@@ -53,8 +53,6 @@ class MdblistService {
   DateTime? _userListsAt;
   List<Map<String, dynamic>>? _topListsCache;
   DateTime? _topListsAt;
-  List<Map<String, dynamic>>? _likedListsCache;
-  DateTime? _likedListsAt;
   final Map<int, ({Map<String, dynamic> data, DateTime at})> _itemsCache = {};
 
   bool _fresh(DateTime? at) =>
@@ -65,8 +63,6 @@ class MdblistService {
     _userListsAt = null;
     _topListsCache = null;
     _topListsAt = null;
-    _likedListsCache = null;
-    _likedListsAt = null;
     _itemsCache.clear();
   }
 
@@ -169,37 +165,6 @@ class MdblistService {
         ];
         _topListsCache = lists;
         _topListsAt = DateTime.now();
-        return lists;
-      }
-    } catch (_) {
-      // Fall through to empty.
-    }
-    return const [];
-  }
-
-  /// Fetches the user's liked lists (raw JSON maps from `GET /lists/user/liked`
-  /// — a plain array, same shape as the other list endpoints). These are public
-  /// lists the user has liked on MDBList (carry `user_name`). Returns `[]` when
-  /// not connected or on any failure.
-  Future<List<Map<String, dynamic>>> fetchLikedLists() async {
-    if (_likedListsCache != null && _fresh(_likedListsAt)) {
-      return _likedListsCache!;
-    }
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return const [];
-    try {
-      final res = await http
-          .get(Uri.parse('$_base/lists/user/liked?apikey=$key'))
-          .timeout(const Duration(seconds: 20));
-      if (res.statusCode != 200) return const [];
-      final decoded = jsonDecode(res.body);
-      if (decoded is List) {
-        final lists = [
-          for (final e in decoded)
-            if (e is Map<String, dynamic>) e,
-        ];
-        _likedListsCache = lists;
-        _likedListsAt = DateTime.now();
         return lists;
       }
     } catch (_) {
