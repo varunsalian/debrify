@@ -373,7 +373,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// static Play/Resume label until the resume state resolves.
   String get _primaryLabel {
     if (!_resumeLoaded) return _isMovie ? 'Play' : 'Resume';
-    if (!_resumeStarted) return _isMovie ? 'Play' : 'Start Watching';
+    if (!_resumeStarted) {
+      // A movie already finished on Simkl (status `completed`) has no resume
+      // session; its Play un-marks it watched so the rewatch re-enters
+      // Continue Watching — surface that intent as "Rewatch".
+      if (_isMovie && _simklStatus?.currentStatus == 'completed') {
+        return 'Rewatch';
+      }
+      return _isMovie ? 'Play' : 'Start Watching';
+    }
     if (_isMovie || _resumeSeason == null || _resumeEpisode == null) {
       return 'Resume';
     }

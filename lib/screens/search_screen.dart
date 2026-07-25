@@ -5442,6 +5442,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               ),
               simklMenuOptions: simklOptions,
               onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+              // Live Simkl status — relabels Play → "Rewatch" for a completed
+              // movie (matches the merged detail page's simklStatusLoader).
+              simklStatusLoader: (_isSimklAuthenticated && imdb != null)
+                  ? () => SimklService.instance.fetchTitleStatus(imdb)
+                  : null,
               // "More Like This" rail + sparse-item meta backfill, matching the
               // catalog detail flow.
               recommendationsLoader: imdb != null
@@ -6257,6 +6262,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         if (!mounted) return;
         traktPct = lookups[0];
         simklPct = lookups[1];
+      }
+      // Rewatch (Simkl): a movie already marked `completed` on Simkl has no
+      // resume session, and Simkl won't create one on replay — so it can never
+      // re-enter Continue Watching. On the detail Play/Resume flow (the
+      // "Rewatch" button surface, preferTraktResume), un-mark it watched first
+      // so the upcoming catalog scrobble creates a fresh resume session; the
+      // ≥80% stop re-marks it completed when the rewatch finishes. Gated on the
+      // sync setting + auth so we never un-complete a movie that won't actually
+      // be re-tracked. Row quick-play (no preferTraktResume) is left untouched.
+      if (preferTraktResume && _isSimklAuthenticated) {
+        // Same id resolution the detail screen's status loader uses (_imdbOf),
+        // so the "Rewatch" label and this flip never disagree on the title.
+        final imdb = _imdbOf(item);
+        if (imdb != null &&
+            await StorageService.getSimklSyncCatalogItems()) {
+          // Time-boxed like the tracker-percent lookups above: a degraded Simkl
+          // API must never stall the Play press. On timeout we just skip the
+          // flip — worst case the rewatch doesn't surface in Continue Watching,
+          // exactly today's behaviour.
+          final status = await SimklService.instance
+              .fetchTitleStatus(imdb)
+              .timeout(const Duration(seconds: 4), onTimeout: () => null);
+          if (!mounted) return;
+          if (status?.currentStatus == 'completed') {
+            await SimklService.instance
+                .markUnwatched(imdb, 'movie')
+                .timeout(const Duration(seconds: 4), onTimeout: () => false);
+            if (!mounted) return;
+          }
+        }
       }
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
