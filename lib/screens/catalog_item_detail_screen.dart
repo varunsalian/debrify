@@ -7,6 +7,7 @@ import '../services/analytics_service.dart';
 import '../services/app_route_observer.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
+import '../services/main_page_bridge.dart';
 import '../services/series_source_service.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
@@ -144,6 +145,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   void initState() {
     super.initState();
     AnalyticsService.screenView('catalog_detail');
+    MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1100),
@@ -205,11 +207,23 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (route is PageRoute) appRouteObserver.subscribe(this, route);
   }
 
-  /// The player pushes on top of this detail screen, so it pops BACK here when
-  /// playback ends. Re-read the binding then: a movie auto-binds on play, and
-  /// the Sources screen (also pushed above) can bind/unbind too.
+  /// The IN-APP player pushes on top of this detail screen, so it pops BACK
+  /// here when playback ends. Re-read the binding then: a movie auto-binds on
+  /// play, and the Sources screen (also pushed above) can bind/unbind too.
   @override
   void didPopNext() {
+    _refreshBoundState();
+    _loadResumeInfo();
+  }
+
+  /// Native-TV / DeoVR / external playback runs in its own ACTIVITY and pushes
+  /// no Flutter route, so [didPopNext] never fires for it and the resume label
+  /// would stay stale. Mirrors the merged detail page — see
+  /// [MainPageBridge.notifyPlaybackReturned] for why this signal exists, and
+  /// why it's gated on this being the current route.
+  void _onPlaybackReturned() {
+    if (!mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
     _refreshBoundState();
     _loadResumeInfo();
   }
@@ -345,6 +359,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
+    MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl.dispose();
     _playFocus.dispose();
     _browseFocus.dispose();

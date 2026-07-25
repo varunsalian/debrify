@@ -790,10 +790,15 @@ class VideoPlayerLauncher {
     // Check default player mode
     final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
 
+    // Every external-activity launch below arms the playback-return signal
+    // (content only): control comes straight back to Flutter without a route
+    // ever being pushed, so RouteAware can't tell those screens when playback
+    // actually ended. See [_notifyOnReturnFromExternalActivity].
     if (!args.disableExternalPlayer && defaultPlayerMode == 'external') {
       final launched = await _launchWithExternalPlayer(context, args);
       if (launched) {
         handoffWhenCovered();
+        if (!isTrailer) _notifyOnReturnFromExternalActivity();
         MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
@@ -804,6 +809,7 @@ class VideoPlayerLauncher {
       final launched = await _launchWithDeoVR(context, args);
       if (launched) {
         handoffWhenCovered();
+        if (!isTrailer) _notifyOnReturnFromExternalActivity();
         MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
@@ -819,6 +825,7 @@ class VideoPlayerLauncher {
       );
       if (launched) {
         handoffWhenCovered();
+        if (!isTrailer) _notifyOnReturnFromExternalActivity();
         MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
@@ -1360,6 +1367,59 @@ class VideoPlayerLauncher {
     observer = _AppCoverObserver(onCovered: finish);
     binding.addObserver(observer);
     fallback = Timer(const Duration(seconds: 4), finish);
+  }
+
+  /// How long to wait for the launched activity to actually cover the app
+  /// before giving up on ever seeing it return (see
+  /// [_notifyOnReturnFromExternalActivity]).
+  static const Duration _externalReturnArmTimeout = Duration(seconds: 30);
+
+  /// Arms the one-shot "the player activity gave the screen back" signal.
+  ///
+  /// [_runWhenCoveredByExternalActivity] answers *"the player took over"*;
+  /// this answers *"the player finished"* — the moment watch progress is final
+  /// and every resume label / episode tick / Continue Watching row on screen is
+  /// stale. External-activity launches push no Flutter route, so this is the
+  /// only signal those screens can hang a refresh off (see
+  /// [MainPageBridge.notifyPlaybackReturned]).
+  ///
+  /// Only fires on a cover→resume PAIR, so a launch that silently died (app
+  /// never left the foreground) can't be mistaken for a finished playback. If
+  /// the cover never comes within [_externalReturnArmTimeout] the observer is
+  /// dropped, so it can't leak or fire on some unrelated later resume.
+  static _AppReturnObserver? _armedReturnObserver;
+
+  static void _notifyOnReturnFromExternalActivity() {
+    // Already armed — a launch issued while the player activity still owns the
+    // screen (Debrify TV moving to the next channel, a playlist advancing)
+    // must not stack a second observer: they'd both fire on the one resume and
+    // every listener would refresh twice.
+    if (_armedReturnObserver != null) return;
+
+    final binding = WidgetsBinding.instance;
+    var done = false;
+    late final _AppReturnObserver observer;
+    void finish({required bool notify}) {
+      if (done) return;
+      done = true;
+      binding.removeObserver(observer);
+      if (identical(_armedReturnObserver, observer)) {
+        _armedReturnObserver = null;
+      }
+      if (notify) MainPageBridge.notifyPlaybackReturned();
+    }
+
+    observer = _AppReturnObserver(onReturned: () => finish(notify: true));
+    // Launch prep can await across the activity transition, so the player may
+    // ALREADY be covering us by the time we arm. Seed from the live state —
+    // otherwise the only lifecycle event left is the resume, which an unseeded
+    // observer would discard as "never covered" and the refresh would be lost.
+    observer.wasCovered = binding.lifecycleState != AppLifecycleState.resumed;
+    _armedReturnObserver = observer;
+    binding.addObserver(observer);
+    Timer(_externalReturnArmTimeout, () {
+      if (!observer.wasCovered) finish(notify: false);
+    });
   }
 
   static String _analyticsProviderLabel(VideoPlayerLaunchArgs args) {
@@ -3873,5 +3933,27 @@ class _AppCoverObserver with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) onCovered();
+  }
+}
+
+/// Fires [onReturned] on the first resume AFTER the app was covered — i.e. the
+/// launched activity finished and handed the screen back. The cover→resume
+/// pairing is the point: a resume without a preceding cover means the launch
+/// never happened, not that playback ended. One-shot; the caller removes it.
+class _AppReturnObserver with WidgetsBindingObserver {
+  _AppReturnObserver({required this.onReturned});
+  final VoidCallback onReturned;
+
+  /// Whether the launched activity ever actually took the foreground — read by
+  /// the arm timeout to tell "still launching" from "launch died".
+  bool wasCovered = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      wasCovered = true;
+      return;
+    }
+    if (wasCovered) onReturned();
   }
 }

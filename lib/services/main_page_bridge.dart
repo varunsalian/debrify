@@ -254,6 +254,40 @@ class MainPageBridge {
     }
   }
 
+  static final Set<VoidCallback> _playbackReturnListeners = {};
+
+  /// The missing counterpart to [notifyExternalPlayerLaunched]: fired when the
+  /// app comes back to the foreground *after* content playback ran in a
+  /// SEPARATE ACTIVITY (Android TV native player, DeoVR, external app).
+  ///
+  /// Those launches never push a Flutter route, so the `RouteAware.didPopNext`
+  /// hook that every detail page / board / See-All grid uses to re-read watch
+  /// progress simply never fires for them — the resume label, episode ticks and
+  /// Continue Watching rows would sit stale until the screen was rebuilt. This
+  /// is the signal that says "playback is over, re-read your state".
+  ///
+  /// Deliberately NOT fired for the in-app player (its route pop already drives
+  /// didPopNext — firing here too would double every refresh) and not for
+  /// trailers (they change no watch state).
+  ///
+  /// Listeners should gate on their route being current: the top screen owns
+  /// the refresh, and anything buried under it re-reads on its own didPopNext
+  /// when the covering route pops.
+  static void addPlaybackReturnListener(VoidCallback listener) {
+    _playbackReturnListeners.add(listener);
+  }
+
+  static void removePlaybackReturnListener(VoidCallback listener) {
+    _playbackReturnListeners.remove(listener);
+  }
+
+  static void notifyPlaybackReturned() {
+    // Copy so a listener removing itself mid-iteration can't break the loop.
+    for (final listener in List.of(_playbackReturnListeners)) {
+      listener();
+    }
+  }
+
   static void notifyAutoLaunchFailed([String? reason]) {
     debugPrint('MainPageBridge: Auto-launch failed: $reason');
     hideAutoLaunchOverlay?.call();

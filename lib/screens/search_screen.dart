@@ -519,6 +519,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// and dispose the focus nodes / state the newer run just installed.
   int _cwLoadToken = 0;
 
+  /// Set when a real content player launches (any path — in-app route, native
+  /// TV activity, external app; never trailers), consumed by
+  /// [_refreshAfterPlayback].
+  ///
+  /// This is what keeps the post-playback refresh from becoming a tax on plain
+  /// browsing: a Trakt row reload is ~2+N API calls and Simkl another, and
+  /// [_refreshAfterPlayback] runs on EVERY detail-page close — so without this
+  /// latch, opening a title and pressing Back would hit both tracker APIs. Only
+  /// a session that actually played something can have moved a tracker's
+  /// position. Tracker rows changed by menu actions (mark watched, remove from
+  /// Continue Watching) are refreshed by those handlers directly.
+  bool _playedSinceRefresh = false;
+
   // TRAKT Continue Watching rows ("Trakt Movies" / "Trakt Shows"), fetched live
   // from the Trakt account (no local store). Shown after the local rows when
   // connected + non-empty. Network-loaded once on init / integration change and
@@ -1019,6 +1032,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _discTrailerShowing.addListener(_onDiscShowingChanged);
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
+    // Playback that ran in a separate ACTIVITY (Android TV native player,
+    // DeoVR, external app) pushes no Flutter route, so nothing on the board
+    // ever learns it ended — the Continue Watching rows would keep showing the
+    // episode the user just finished. This is that missing signal.
+    MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
+    // Unconditional (the _heroTrailerActive block below registers its own
+    // trailer-suppression listener; this one is just the latch that tells the
+    // post-playback refresh whether anything was actually played).
+    MainPageBridge.addPlayerLaunchListener(_markPlaybackStarted);
     // Home board only: live-refresh when the Home Rows manager changes which
     // rows are hidden (on non-TV, Settings is a pushed route so the board isn't
     // rebuilt on return; on TV a tab switch already reloads it fresh).
@@ -1248,6 +1270,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Safe no-op in the variants that never registered it.
     FocusManager.instance.removeListener(_onGlobalFocusChange);
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
+    MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
+    MainPageBridge.removePlayerLaunchListener(_markPlaybackStarted);
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
     MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     if (_heroTrailerActive) {
@@ -2927,9 +2951,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       progressOf: (m) => _simklProgress[m.imdbId],
       onOpen: _openSimklCwItem,
       onQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
+      // One uniform pass instead of an explicit Simkl fetch followed by
+      // _afterSeeAllReturn: `trackers: true` because this grid renders Simkl's
+      // own list and must refetch whether or not anything was played here, and
+      // folding it in stops the two from fetching Simkl twice after a playback.
       onReload: () async {
-        await _loadSimklContinueWatching(refreshBound: false);
-        await _afterSeeAllReturn();
+        await _refreshAfterPlayback(trackers: true);
         return List<StremioMeta>.of(_simklAll);
       },
     );
@@ -5365,9 +5392,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               ),
             ),
           )
+          // Playback (or a bind/unbind) may have happened inside the detail
+          // flow — _refreshAfterPlayback covers the tracker rows too, and
+          // sequences the bound-source pass after the CW reloads.
           .then((_) {
-            _refreshBoundSources();
-            _loadContinueWatching();
+            unawaited(_refreshAfterPlayback());
             _refreshTraktAuthState();
             _refreshSimklAuthState();
             _refreshMdblistAuthState();
@@ -5430,10 +5459,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           ),
         )
         // A bind/unbind may have happened inside the detail flow; playback may
-        // also have changed Continue Watching progress.
+        // also have changed Continue Watching progress (local AND tracker rows
+        // — see _refreshAfterPlayback).
         .then((_) {
-          _refreshBoundSources();
-          _loadContinueWatching();
+          unawaited(_refreshAfterPlayback());
           _refreshTraktAuthState();
           _refreshSimklAuthState();
           _refreshMdblistAuthState();
@@ -6744,18 +6773,44 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// cinematic overlay, searches, and plays (with source list + content
   /// metadata so the in-player Sources switcher + Continue Watching work).
   Future<void> _playSelection(AdvancedSearchSelection sel) async {
-    await TorrentPlaybackService.playFromSelection(
-      context,
-      imdbId: sel.imdbId,
-      isMovie: !sel.isSeries,
-      season: sel.season,
-      episode: sel.episode,
-      meta: _metaFor(sel),
-    );
-    // Old-screen parity: a movie auto-binds its source on play, so refresh the
-    // board's bound badges once playback returns (harmless no-op for series and
-    // non-IMDb titles, which don't auto-bind).
-    if (mounted) await _refreshBoundSources();
+    // Row quick-play skips the detail page, so there's no detail route whose
+    // pop can drive the post-playback refresh — this method has to do it. WHEN
+    // it can depends on the player: the in-app route only completes the await
+    // below once it pops (playback over, progress final), while an external
+    // activity returns control immediately, still mid-launch. Latch which one
+    // took the stream so a native/external launch doesn't fire a pointless
+    // tracker refetch while the player is still opening — its real refresh
+    // arrives via _onPlaybackReturned.
+    var external = false;
+    void onExternal() => external = true;
+    MainPageBridge.addExternalPlayerLaunchListener(onExternal);
+    try {
+      await TorrentPlaybackService.playFromSelection(
+        context,
+        imdbId: sel.imdbId,
+        isMovie: !sel.isSeries,
+        season: sel.season,
+        episode: sel.episode,
+        meta: _metaFor(sel),
+      );
+    } finally {
+      MainPageBridge.removeExternalPlayerLaunchListener(onExternal);
+    }
+    if (!mounted) return;
+    // The full refresh only when the in-app player has genuinely finished AND
+    // the board is what's on screen. An external launch is still opening, and a
+    // detail page / See-All on top owns the refresh through its own route
+    // callback — the latch keeps that deferred pass aware playback happened, so
+    // skipping here loses nothing and avoids refreshing an invisible board.
+    final boardOnTop = ModalRoute.of(context)?.isCurrent ?? false;
+    if (external || !boardOnTop) {
+      // Old-screen parity: a movie auto-binds its source on play, so refresh
+      // the board's bound badges (harmless no-op for series and non-IMDb
+      // titles, which don't auto-bind).
+      await _refreshBoundSources();
+      return;
+    }
+    await _refreshAfterPlayback();
   }
 
   /// Manual sources list in-tab — the screen searches itself (own loading) and
@@ -6775,8 +6830,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             ),
           ),
         )
-        // A long-press pin/unpin may have happened in the sources list.
-        .then((_) => _refreshBoundSources());
+        // A long-press pin/unpin may have happened in the sources list — and a
+        // tap PLAYS, so the board's Continue Watching can be stale too (the
+        // player sits above this screen, so nothing else refreshes for it).
+        .then((_) => _refreshAfterPlayback());
   }
 
   void _snack(String message) {
@@ -9556,22 +9613,63 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         .then((_) => _afterSeeAllReturn());
   }
 
-  /// Refresh state that a See-All screen may have changed (Continue Watching
-  /// progress/removal, bound sources) when it pops back to the board. Reload
-  /// first, THEN refresh bound sources — _refreshBoundSources scans the CW lists
-  /// that _loadContinueWatching replaces, so running them concurrently would
-  /// count against the pre-reload item set.
-  Future<void> _afterSeeAllReturn() async {
-    // Fire-and-forget from route .then/onReturn callbacks, so guard against a
-    // transient storage error becoming an unhandled async exception (a stale
-    // refresh is recoverable; a crash-log isn't warranted).
+  /// A real content player launched — see [_playedSinceRefresh].
+  void _markPlaybackStarted() => _playedSinceRefresh = true;
+
+  /// Re-read everything a finished playback (or a detail/See-All visit) can
+  /// change: local Continue Watching, then — when something actually played —
+  /// the Trakt and Simkl rows, then the bound-source badges.
+  ///
+  /// The tracker rows matter because they're SEPARATE rows ([_cwRows]):
+  /// reloading only the local list left a tracker user staring at the episode
+  /// they'd just finished. They're gated on [_playedSinceRefresh] (or an
+  /// explicit [trackers]) so plain browsing doesn't hit two APIs per Back press.
+  ///
+  /// Bound sources go LAST: _refreshBoundSources scans the CW lists the loaders
+  /// replace, so running them concurrently would count the pre-reload set.
+  ///
+  /// Fire-and-forget from route callbacks and the playback-return listener, so
+  /// a transient storage/network error must not become an unhandled async
+  /// exception (a stale row is recoverable; a crash-log isn't warranted).
+  Future<void> _refreshAfterPlayback({bool trackers = false}) async {
+    // Consume the latch up front: a second refresh racing this one must not
+    // repeat the tracker fetches this one is already doing.
+    final withTrackers = trackers || _playedSinceRefresh;
+    _playedSinceRefresh = false;
     try {
       await _loadContinueWatching();
+      if (!mounted) return;
+      // The dedicated Search tab never renders the tracker rows (mirrors the
+      // guard in _onIntegrationsChanged) — don't spend the calls there.
+      if (withTrackers && !widget.searchMode) {
+        await Future.wait([
+          _loadTraktContinueWatching(refreshBound: false),
+          _loadSimklContinueWatching(refreshBound: false),
+        ]);
+        if (!mounted) return;
+      }
       await _refreshBoundSources();
     } catch (e) {
-      debugPrint('SearchScreen: See-All return refresh failed: $e');
+      debugPrint('SearchScreen: post-playback refresh failed: $e');
     }
   }
+
+  /// Playback ran in a separate ACTIVITY and the app just came back (see
+  /// [MainPageBridge.notifyPlaybackReturned]). Only refresh when the board is
+  /// the top route: with a detail page or See-All open on top, THAT screen owns
+  /// the refresh and the board re-reads through the covering route's `.then`
+  /// when it pops — so this can't double up with it. The latch survives until
+  /// then, so the deferred refresh still knows playback happened.
+  void _onPlaybackReturned() {
+    if (!mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    unawaited(_refreshAfterPlayback());
+  }
+
+  /// Refresh state that a See-All screen may have changed (Continue Watching
+  /// progress/removal, bound sources) when it pops back to the board — plus the
+  /// tracker rows when the user played something from the grid.
+  Future<void> _afterSeeAllReturn() => _refreshAfterPlayback();
 
   /// Shared push for the Continue Watching "See All" grid (local + Trakt). The
   /// two sources differ only in title/items/callbacks/onReload and what to
@@ -9637,10 +9735,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   ///
   /// The Continue Watching grid keeps its snapshot (no per-return reload): a
   /// Trakt refresh is ~2+N API calls, so the board's rows refresh once when the
-  /// screen pops. [_loadTraktContinueWatching] runs first (no bound pass), then
-  /// [_afterSeeAllReturn] reloads local CW and runs the single bound-source
-  /// refresh against both now-fresh lists (it swallows its own errors, so the
-  /// bound refresh still happens even if the Trakt fetch fails).
+  /// screen pops — `trackers: true` because that's true whether or not anything
+  /// was played here. One pass reloads local CW + both trackers and then runs
+  /// the single bound-source refresh against the now-fresh lists (it swallows
+  /// its own errors, so the bound refresh still happens if a fetch fails).
   void _openTraktSeeAll([String initialCategory = 'all']) {
     Navigator.of(context)
         .push(
@@ -9661,10 +9759,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             ),
           ),
         )
-        .then((_) async {
-          await _loadTraktContinueWatching(refreshBound: false);
-          await _afterSeeAllReturn();
-        });
+        .then((_) => _refreshAfterPlayback(trackers: true));
   }
 
   /// Shared header for a board rail: a plain "Popular · Movies"-style title

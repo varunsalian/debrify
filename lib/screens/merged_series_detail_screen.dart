@@ -14,6 +14,7 @@ import '../services/app_route_observer.dart';
 import '../services/debrify_image_cache.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
+import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/youtube_service.dart';
@@ -271,6 +272,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   void initState() {
     super.initState();
     AnalyticsService.screenView('series_detail');
+    MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadEnrichedMeta();
@@ -292,10 +294,27 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     if (route is PageRoute) appRouteObserver.subscribe(this, route);
   }
 
-  /// Playback (Resume, or an inline episode) pushes the player on top of this
+  /// The IN-APP player (and the Sources screen) pushes a route on top of this
   /// screen, so it pops BACK here when playback ends — refresh the label then.
   @override
-  void didPopNext() {
+  void didPopNext() => _refreshAfterPlayback();
+
+  /// The other half of the same story: the Android TV native player, DeoVR and
+  /// external players run in their own ACTIVITY and never push a Flutter route,
+  /// so [didPopNext] can never fire for them — without this the resume label and
+  /// episode ticks stayed frozen at their pre-playback values until the page was
+  /// re-opened. [MainPageBridge.notifyPlaybackReturned] is that missing signal.
+  ///
+  /// Gated on being the current route: when this page sits buried under another
+  /// detail route (series A → recommended series B), the top one owns the
+  /// refresh and this one re-reads on its own [didPopNext] once that route pops.
+  void _onPlaybackReturned() {
+    if (!mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    _refreshAfterPlayback();
+  }
+
+  void _refreshAfterPlayback() {
     _loadResumeInfo();
     // Watched state (and thus the resume label / badges) may have changed while
     // away — re-read the Trakt status too.
@@ -303,7 +322,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     _loadSimklStatus();
     // And the episode list's ticks/progress: episode quick-play now plays on
     // top of this screen (like Resume), so the list is still alive when the
-    // player pops back and must reflect the session that just ended.
+    // player returns and must reflect the session that just ended.
     _episodesPanelKey.currentState?.refreshWatchProgress();
   }
 
@@ -377,6 +396,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
+    MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _infoScroll.dispose();
     _leftEntryFocusNode.dispose();
     _infoPaneScope.dispose();

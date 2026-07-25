@@ -115,6 +115,7 @@ class _ContinueWatchingSeeAllScreenState
   void initState() {
     super.initState();
     AnalyticsService.screenView('continue_watching_see_all');
+    MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     _items = widget.items;
     _category = widget.initialCategory;
     _recompute();
@@ -176,10 +177,22 @@ class _ContinueWatchingSeeAllScreenState
     }
   }
 
-  // A detail or player route pushed from a grid tile just popped back onto us —
-  // re-fetch so finished titles drop out and progress/order stay fresh.
+  // A detail or in-app player route pushed from a grid tile just popped back
+  // onto us — re-fetch so finished titles drop out and progress/order stay
+  // fresh.
   @override
   void didPopNext() => _refresh();
+
+  // Native-TV / DeoVR / external playback pushes no Flutter route, so
+  // [didPopNext] can't fire for it — a title watched to the end would stay in
+  // the grid at its old progress. See [MainPageBridge.notifyPlaybackReturned].
+  // Gated on being current so a grid buried under a detail route leaves the
+  // refresh to that route (this one re-reads via didPopNext when it pops).
+  void _onPlaybackReturned() {
+    if (!mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    _refresh();
+  }
 
   Future<void> _refresh() async {
     final reload = widget.onReload;
@@ -198,6 +211,7 @@ class _ContinueWatchingSeeAllScreenState
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
+    MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _backNode.dispose();
     _catNode.dispose();
     _sortNode.dispose();
