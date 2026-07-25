@@ -159,6 +159,8 @@ class StorageService {
   static const String _playerDefaultAspectIndexTvKey =
       'player_default_aspect_index_tv';
   static const String _playerNightModeIndexKey = 'player_night_mode_index';
+  static const String _playerSystemAudioEffectsKey =
+      'player_system_audio_effects';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
   static const String _playerDefaultAudioLanguageKey =
@@ -4908,6 +4910,21 @@ class StorageService {
   static Future<void> setPlayerNightModeIndex(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_playerNightModeIndexKey, index);
+  }
+
+  /// Whether to route playback through Android's effects-capable audio output
+  /// and announce the session to system equalizer apps (Wavelet, OEM effects).
+  /// Android only. Default: false — off changes nothing about how audio is
+  /// output today, since enabling it switches the phone player's audio backend.
+  static Future<bool> getPlayerSystemAudioEffects() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_playerSystemAudioEffectsKey) ?? false;
+  }
+
+  /// Set whether system audio effect apps may process our playback.
+  static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
   }
 
   /// Get default subtitle language code

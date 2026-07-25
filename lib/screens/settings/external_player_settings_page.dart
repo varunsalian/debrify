@@ -78,6 +78,7 @@ class _ExternalPlayerSettingsPageState
   bool _isAndroidTv = false;
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
   int _nightModeIndex = 0; // Off
+  bool _systemAudioEffects = false; // Android only, opt-in
   String?
   _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
   String?
@@ -99,6 +100,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _aspectFocusNode = FocusNode();
   final FocusNode _defaultAudioLangFocusNode = FocusNode();
   final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
+  final FocusNode _systemAudioEffectsFocusNode = FocusNode();
   final FocusNode _subtitleSizeFocusNode = FocusNode();
   final FocusNode _subtitleStyleFocusNode = FocusNode();
   final FocusNode _subtitleColorFocusNode = FocusNode();
@@ -108,6 +110,7 @@ class _ExternalPlayerSettingsPageState
   bool _aspectFocused = false;
   bool _defaultAudioLangFocused = false;
   bool _defaultSubtitleLangFocused = false;
+  bool _systemAudioEffectsFocused = false;
   bool _subtitleSizeFocused = false;
   bool _subtitleStyleFocused = false;
   bool _subtitleColorFocused = false;
@@ -197,6 +200,12 @@ class _ExternalPlayerSettingsPageState
         _defaultSubtitleLangFocused = _defaultSubtitleLangFocusNode.hasFocus;
       });
     });
+    _systemAudioEffectsFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _systemAudioEffectsFocused = _systemAudioEffectsFocusNode.hasFocus;
+      });
+    });
     _subtitleSizeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -254,6 +263,7 @@ class _ExternalPlayerSettingsPageState
     _aspectFocusNode.dispose();
     _defaultAudioLangFocusNode.dispose();
     _defaultSubtitleLangFocusNode.dispose();
+    _systemAudioEffectsFocusNode.dispose();
     _subtitleSizeFocusNode.dispose();
     _subtitleStyleFocusNode.dispose();
     _subtitleColorFocusNode.dispose();
@@ -356,6 +366,8 @@ class _ExternalPlayerSettingsPageState
           ? await StorageService.getPlayerDefaultAspectIndexTv()
           : await StorageService.getPlayerDefaultAspectIndex();
       final nightModeIndex = await StorageService.getPlayerNightModeIndex();
+      final systemAudioEffects =
+          await StorageService.getPlayerSystemAudioEffects();
       final defaultSubtitleLanguage =
           await StorageService.getDefaultSubtitleLanguage();
       final defaultAudioLanguage =
@@ -397,6 +409,7 @@ class _ExternalPlayerSettingsPageState
         _isAndroidTv = isAndroidTv;
         _defaultAspectIndex = defaultAspectIndex;
         _nightModeIndex = nightModeIndex;
+        _systemAudioEffects = systemAudioEffects;
         _defaultSubtitleLanguage = defaultSubtitleLanguage;
         _defaultAudioLanguage = defaultAudioLanguage;
         _subtitleSizeIndex = subtitleSettings.sizeIndex;
@@ -845,6 +858,11 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setNightModeIndex(int index) async {
     setState(() => _nightModeIndex = index);
     await StorageService.setPlayerNightModeIndex(index);
+  }
+
+  Future<void> _setSystemAudioEffects(bool enabled) async {
+    setState(() => _systemAudioEffects = enabled);
+    await StorageService.setPlayerSystemAudioEffects(enabled);
   }
 
   Future<void> _setDefaultSubtitleLanguage(String? languageCode) async {
@@ -1914,6 +1932,25 @@ class _ExternalPlayerSettingsPageState
                             focusNode: _defaultSubtitleLangFocusNode,
                             isFocused: _defaultSubtitleLangFocused,
                           ),
+
+                          // System audio effects (Android only). Off by
+                          // default because enabling it switches the audio
+                          // output backend — see _attachAudioEffectSession in
+                          // the player screen.
+                          if (Platform.isAndroid) ...[
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Allow system audio effects',
+                              subtitle:
+                                  'Let equalizer apps (Wavelet, Dolby, etc.) process playback. '
+                                  'Changes the audio output — restart playback to apply.',
+                              value: _systemAudioEffects,
+                              onChanged: _setSystemAudioEffects,
+                              focusNode: _systemAudioEffectsFocusNode,
+                              isFocused: _systemAudioEffectsFocused,
+                            ),
+                          ],
                         ],
                       ),
                     ),

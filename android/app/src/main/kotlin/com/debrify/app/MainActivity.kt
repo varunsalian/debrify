@@ -335,6 +335,11 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         tvTrailerPlayer?.releaseAll()
         tvTrailerPlayer = null
+        // Safety net for the phone player: the Dart screen closes its own
+        // session in dispose(), but an activity torn down without that (task
+        // swipe, recreation) would otherwise leave effect apps attached to a
+        // session that no longer plays. No-op if nothing is open.
+        com.debrify.app.audio.AudioEffectSession.closeCurrent(this)
         if (pipReceiverRegistered) {
             try {
                 unregisterReceiver(pipActionReceiver)
@@ -486,6 +491,9 @@ class MainActivity : FlutterActivity() {
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
+		// Lets system audio-effect apps (Wavelet, OEM equalizers) attach to the
+		// phone player's audio session — see AudioEffectSession.
+		com.debrify.app.audio.AudioEffectSession.register(flutterEngine, this)
 		MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
 			when (call.method) {
 				"startMediaStoreDownload" -> {

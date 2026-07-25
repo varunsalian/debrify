@@ -190,6 +190,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var playbackSpeedIndex = 2  // 1.0x
     private var nightModeIndex = 0  // Off by default
     private var loudnessEnhancer: LoudnessEnhancer? = null
+
+    /** Opt-in (Settings → Player Settings): announce our audio session so system
+     *  effect apps (Wavelet, OEM equalizers) can attach. Off by default. */
+    private var systemAudioEffectsEnabled = false
     private var playlistMode: PlaylistMode = PlaylistMode.NONE
     private var playlistAdapter: PlaylistOverlayAdapter? = null
     private var seriesPlaylistAdapter: PlaylistAdapter? = null
@@ -485,6 +489,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     if (loudnessEnhancer == null && nightModeIndex > 0) {
                         initializeLoudnessEnhancer()
                     }
+                    // Announce the audio session to system effect apps. Mirrors
+                    // the night-mode handling above: the session id only exists
+                    // once the audio renderer is live, and onAudioSessionIdChanged
+                    // doesn't re-fire when a seamless transition reuses the
+                    // same AudioTrack.
+                    syncAudioEffectSession()
                 }
                 Player.STATE_BUFFERING -> {
                     if (hasEverBeenReady) {
@@ -584,6 +594,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
+            // Let system effect apps follow the new session (no-op if unchanged).
+            syncAudioEffectSession(audioSessionId)
             // Reinitialize night mode effect when audio session changes
             if (nightModeIndex > 0 && audioSessionId != 0) {
                 releaseLoudnessEnhancer()
@@ -6495,6 +6507,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * Announce ExoPlayer's current audio session to system audio-effect apps
+     * (Wavelet, OEM equalizers) so they can attach, the same way they do for
+     * other video apps. Idempotent — AudioEffectSession ignores a re-announce
+     * of the session already open and closes the previous one otherwise.
+     */
+    private fun syncAudioEffectSession(sessionId: Int? = null) {
+        if (!systemAudioEffectsEnabled) return
+        // Prefer the id the callback handed us over re-reading the player,
+        // which may not have published the new one yet.
+        val audioSessionId = sessionId ?: player?.audioSessionId ?: return
+        if (audioSessionId == 0) return  // Renderer not live yet
+        com.debrify.app.audio.AudioEffectSession.open(this, audioSessionId)
+    }
+
     // Night mode (dynamic range compression)
     private fun initializeLoudnessEnhancer() {
         try {
@@ -6540,7 +6567,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             nightModeIndex = prefs.getLong("flutter.player_night_mode_index", 0L).toInt()
                 .coerceIn(0, nightModeGains.lastIndex)
 
-            android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex")
+            // Announce our audio session to system effect apps (default: off)
+            systemAudioEffectsEnabled = prefs.getBoolean("flutter.player_system_audio_effects", false)
+
+            android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled")
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Error loading player defaults", e)
             // Keep default values
@@ -7571,6 +7601,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Release night mode audio effect
         releaseLoudnessEnhancer()
+
+        // Tell system effect apps to detach — an unmatched OPEN leaves them
+        // processing dead audio and degrades other apps' equalizers.
+        com.debrify.app.audio.AudioEffectSession.closeCurrent(this)
 
         // Clear player and listeners
         player?.let {
