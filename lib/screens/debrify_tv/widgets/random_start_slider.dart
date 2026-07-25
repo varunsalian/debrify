@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 // Constants for random start percentage limits
 const int randomStartPercentMin = 10;
 const int randomStartPercentMax = 90;
+const int _randomStartPercentStep = 5;
 
 int clampRandomStartPercent(int? value, {int defaultValue = 20}) {
   final candidate = value ?? defaultValue;
@@ -16,10 +16,14 @@ int clampRandomStartPercent(int? value, {int defaultValue = 20}) {
   return candidate;
 }
 
-/// A slider widget for adjusting the random start percentage.
+/// Picker for the random start percentage (10–90% in steps of 5).
 ///
-/// Supports Android TV focus navigation with D-pad controls.
-class RandomStartSlider extends StatefulWidget {
+/// A discrete [DropdownButtonFormField] rather than a slider: a slider traps
+/// D-pad focus (left/right stepping fights the surrounding grid), so the remote
+/// could never move past it. The dropdown just takes focus and opens on select.
+/// [isAndroidTv] is kept for call-site compatibility but no longer branches the
+/// UI — the dropdown is D-pad friendly everywhere.
+class RandomStartSlider extends StatelessWidget {
   final int value;
   final ValueChanged<int> onChanged;
   final ValueChanged<int>? onChangeEnd;
@@ -34,57 +38,6 @@ class RandomStartSlider extends StatefulWidget {
   });
 
   @override
-  State<RandomStartSlider> createState() => _RandomStartSliderState();
-}
-
-class _RandomStartSliderState extends State<RandomStartSlider> {
-  FocusNode? _focusNode;
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.isAndroidTv) {
-      _focusNode = FocusNode(
-        debugLabel: 'RandomStartSlider',
-        onKeyEvent: _handleKeyEvent,
-      );
-      _focusNode!.addListener(_handleFocusChange);
-    }
-  }
-
-  void _handleFocusChange() {
-    if (mounted) {
-      setState(() {
-        _isFocused = _focusNode?.hasFocus ?? false;
-      });
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant RandomStartSlider oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isAndroidTv && _focusNode == null) {
-      _focusNode = FocusNode(
-        debugLabel: 'RandomStartSlider',
-        onKeyEvent: _handleKeyEvent,
-      );
-      _focusNode!.addListener(_handleFocusChange);
-    } else if (!widget.isAndroidTv && _focusNode != null) {
-      _focusNode!.removeListener(_handleFocusChange);
-      _focusNode!.dispose();
-      _focusNode = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    _focusNode?.removeListener(_handleFocusChange);
-    _focusNode?.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textStyle = theme.textTheme.bodyMedium?.copyWith(
@@ -94,89 +47,76 @@ class _RandomStartSliderState extends State<RandomStartSlider> {
     final helperStyle = theme.textTheme.bodySmall?.copyWith(
       color: Colors.white60,
     );
-    final divisions = (randomStartPercentMax - randomStartPercentMin) ~/ 5;
 
-    Widget sliderColumn = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Random start within first ${widget.value}%', style: textStyle),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackShape: const RoundedRectSliderTrackShape(),
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
-          ),
-          child: Slider(
-            value: widget.value.toDouble(),
-            focusNode: widget.isAndroidTv ? _focusNode : null,
-            min: randomStartPercentMin.toDouble(),
-            max: randomStartPercentMax.toDouble(),
-            divisions: divisions == 0 ? null : divisions,
-            label: '${widget.value}%',
-            onChanged: (raw) {
-              final next = clampRandomStartPercent(raw.round());
-              widget.onChanged(next);
-            },
-            onChangeEnd: widget.onChangeEnd == null
-                ? null
-                : (raw) => widget.onChangeEnd!(
-                    clampRandomStartPercent(raw.round()),
-                  ),
-          ),
-        ),
-        Text(
-          'Videos will jump to a random moment inside the first ${widget.value}% of playback.',
-          style: helperStyle,
-        ),
-      ],
+    final current = clampRandomStartPercent(value);
+    // The 5-step grid, plus the current value if a legacy save ever landed
+    // off-grid — so `value:` is always present in `items` (else Dropdown throws).
+    final base = <int>[
+      for (int v = randomStartPercentMin;
+          v <= randomStartPercentMax;
+          v += _randomStartPercentStep)
+        v,
+    ];
+    final options = base.contains(current) ? base : ([...base, current]..sort());
+
+    OutlineInputBorder border(Color color, double width) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: color, width: width),
     );
 
-    // Wrap in focus indicator container for TV
-    if (widget.isAndroidTv) {
-      return AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _isFocused ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _isFocused ? Colors.white : Colors.white12,
-            width: _isFocused ? 2 : 1,
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Random start within first $current%', style: textStyle),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<int>(
+            value: current,
+            isExpanded: true,
+            dropdownColor: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(12),
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.white60),
+            style: textStyle,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: const Color(0xFF2A2A2A),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              // Visible accent border on focus so the remote's position is
+              // obvious — the whole reason for the slider→dropdown swap.
+              enabledBorder: border(Colors.white12, 1),
+              focusedBorder: border(Colors.white, 2),
+              border: border(Colors.white12, 1),
+            ),
+            items: [
+              for (final v in options)
+                DropdownMenuItem<int>(value: v, child: Text('$v%')),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              final next = clampRandomStartPercent(v);
+              onChanged(next);
+              // A dropdown pick is a single discrete commit — fire the persist
+              // callback too (the slider only persisted on change-end).
+              onChangeEnd?.call(next);
+            },
           ),
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        child: sliderColumn,
-      );
-    }
-
-    return sliderColumn;
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (node.context != null) {
-        FocusScope.of(node.context!).nextFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (node.context != null) {
-        FocusScope.of(node.context!).previousFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
+          const SizedBox(height: 8),
+          Text(
+            'Videos will jump to a random moment inside the first $current% of playback.',
+            style: helperStyle,
+          ),
+        ],
+      ),
+    );
   }
 }
