@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:collection/collection.dart';
 
 import '../models/torrent.dart';
+import '../models/torrent_filter_state.dart';
 import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
 import '../models/torbox_torrent.dart';
@@ -45,6 +46,7 @@ import '../services/main_page_bridge.dart';
 import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
 import '../utils/rd_blocked_filter.dart';
+import '../utils/debrify_tv_filters.dart';
 import '../utils/series_parser.dart';
 import '../utils/tv_keys.dart';
 import 'video_player_screen.dart';
@@ -220,6 +222,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _quickAvoidNsfw = true;
   bool _rdSkipBlockedTorrents = true;
   String _quickProvider = _providerRealDebrid;
+
+  // Debrify TV playback filters. Shared by channels and quick play (one
+  // Debrify TV feed preference, unlike provider/NSFW which are per-scope).
+  // Quality narrows torrents by release name; size narrows FILES once a
+  // provider has returned them. See DebrifyTvFilters for why they split.
+  DebrifyTvFilters _tvFilters = const DebrifyTvFilters.empty();
+  // Rate-limits the "filter relaxed" snackbar to once per playback session.
+  bool _qualityFallbackNotified = false;
+  // Real-Debrid only: consecutive links rejected purely on size, and the
+  // resulting session-wide relaxation. See _rdLinkPassesSizeRules.
+  static const int _rdSizeRejectionLimit = 12;
+  int _rdSizeRejections = 0;
+  bool _sizeFilterRelaxed = false;
 
   bool _rdAvailable = false;
   bool _torboxAvailable = false;
@@ -556,6 +571,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // hideBackButton is hardcoded to false - no longer loading from storage
     final avoidNsfw = await _settingsManager.getGlobalAvoidNsfw(true);
     final rdSkipBlocked = await StorageService.getRdSkipBlockedTorrents();
+    final tvFilters = await DebrifyTvFilters.load();
     final storedProvider = await StorageService.getDebrifyTvProvider();
     final hasStoredProvider = await StorageService.hasDebrifyTvProvider();
     final rdIntegrationEnabled =
@@ -669,6 +685,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _quickAvoidNsfw = avoidNsfw;
         _rdSkipBlockedTorrents = rdSkipBlocked;
         _quickProvider = defaultProvider;
+        _tvFilters = tvFilters;
 
         // Update search settings
         _tvEngineStates
@@ -1422,11 +1439,113 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return filtered;
   }
 
+  /// Narrows a channel's cached torrents to the user's quality filter.
+  /// Applied at cache READ time (not warm time) so changing the filter takes
+  /// effect immediately instead of forcing a full channel rebuild the way the
+  /// NSFW toggle does. Returns the input untouched when the filter is off, and
+  /// falls back to the unfiltered pool (with a snackbar) when a channel has
+  /// nothing at the requested quality — a filtered channel that plays nothing
+  /// reads as broken, so it degrades instead of failing.
+  List<CachedTorrent> _applyQualityFilterToCached(List<CachedTorrent> all) {
+    if (!_tvFilters.hasQuality || all.isEmpty) return all;
+    final matched = all
+        .where((cached) => _tvFilters.qualityMatchesName(cached.name))
+        .toList();
+    if (matched.isEmpty) {
+      debugPrint(
+        'DebrifyTV: Quality filter matched 0/${all.length} cached torrents — '
+        'falling back to unfiltered.',
+      );
+      _notifyQualityFallback();
+      return all;
+    }
+    if (matched.length != all.length) {
+      debugPrint(
+        'DebrifyTV: Quality filter on cached: ${all.length} → ${matched.length} torrents',
+      );
+    }
+    return matched;
+  }
+
+  /// Quick-play twin of [_applyQualityFilterToCached], for the live search
+  /// results each provider accumulates.
+  ///
+  /// [allowFallback] must stay false while a search is still streaming in.
+  /// Quick play rebuilds this list on every engine that reports, and the RD
+  /// flow launches the player from the first rebuild that yields something
+  /// playable — so falling back on a partial result set would start playing an
+  /// off-filter source just because the fastest engine happened to return
+  /// none. Strict here means the queue simply stays empty until a matching
+  /// result arrives. Pass true only once the result set is final, where an
+  /// empty match genuinely means "this search has nothing".
+  List<Torrent> _applyQualityFilterToTorrents(
+    List<Torrent> torrents, {
+    bool allowFallback = false,
+  }) {
+    if (!_tvFilters.hasQuality || torrents.isEmpty) return torrents;
+    final matched = torrents
+        .where((t) => _tvFilters.qualityMatchesName(t.name))
+        .toList();
+    if (matched.isEmpty && allowFallback) {
+      _notifyQualityFallback();
+      return torrents;
+    }
+    return matched;
+  }
+
+  /// Tells the user once per playback session that the quality filter was
+  /// relaxed. Rate-limited because the quick-play queue is rebuilt per engine
+  /// and channel switches re-enter the same path.
+  void _notifyQualityFallback() {
+    if (_qualityFallbackNotified) return;
+    _qualityFallbackNotified = true;
+    _showSnack(
+      'No ${_tvFilters.summary()} sources found — playing anything available.',
+      color: Colors.orange,
+    );
+  }
+
+  /// Whether an unrestricted Real-Debrid link may be played, per the size
+  /// rules. RD is the one provider that hands back a flat list of links with
+  /// no per-file metadata, so a file's size is only knowable AFTER
+  /// unrestricting it — hence the check here rather than up front like the
+  /// others. Links whose size RD doesn't report are accepted.
+  ///
+  /// Because RD can't pre-filter, a strict size choice could otherwise walk
+  /// the entire queue rejecting everything. After
+  /// [_rdSizeRejectionLimit] consecutive size-only rejections the size filter
+  /// is relaxed for the rest of the session (with a snackbar) — the same
+  /// degrade-don't-fail contract the other providers get per torrent.
+  bool _rdLinkPassesSizeRules(Map<String, dynamic> unrestrict) {
+    final bytes = (unrestrict['filesize'] as num?)?.toInt() ?? 0;
+    if (bytes <= 0) return true; // RD didn't report a size — don't guess.
+    // Trailer/sample guard, matching Torbox/Premiumize/PikPak/AllDebrid.
+    if (bytes < _torboxMinVideoSizeBytes) return false;
+    if (_sizeFilterRelaxed || !_tvFilters.hasSize) return true;
+    if (_tvFilters.sizeMatchesBytes(bytes)) {
+      _rdSizeRejections = 0;
+      return true;
+    }
+    _rdSizeRejections++;
+    if (_rdSizeRejections >= _rdSizeRejectionLimit) {
+      _sizeFilterRelaxed = true;
+      _showSnack(
+        'Few ${_tvFilters.summary()} files here — playing other sizes too.',
+        color: Colors.orange,
+      );
+      return true;
+    }
+    return false;
+  }
+
   List<CachedTorrent> _selectTorrentsForPlayback(
     DebrifyTvChannelCacheEntry entry,
     List<String> normalizedKeywords,
   ) {
-    final all = entry.torrents;
+    // Filter BEFORE the per-keyword/threshold narrowing below, so the
+    // selection draws from the full matching pool rather than from a
+    // pre-narrowed sample that the filter then guts.
+    final all = _applyQualityFilterToCached(entry.torrents);
     if (all.length <= _playbackTorrentThreshold) {
       final list = List<CachedTorrent>.from(all);
       list.shuffle(Random());
@@ -1484,6 +1603,94 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (provider == _providerPremiumize) return 'Premiumize';
     if (provider == _providerAllDebrid) return 'AllDebrid';
     return 'Real Debrid';
+  }
+
+  /// Quality + size pickers for Debrify TV playback. One shared setting for
+  /// both channels and quick play, so the same feed rules apply wherever you
+  /// start watching. Nothing selected in a row = that facet is off.
+  Widget _tvFilterChips({StateSetter? dialogSetState}) {
+    void applyFilters(DebrifyTvFilters next) {
+      setState(() => _tvFilters = next);
+      dialogSetState?.call(() {});
+    }
+
+    void toggleQuality(QualityTier quality) {
+      final next = Set<QualityTier>.from(_tvFilters.qualities);
+      if (!next.remove(quality)) next.add(quality);
+      applyFilters(
+        DebrifyTvFilters(qualities: next, sizes: _tvFilters.sizes),
+      );
+      unawaited(
+        StorageService.setDebrifyTvFilterQualities(
+          next.map((e) => e.name).toList(),
+        ),
+      );
+    }
+
+    void toggleSize(SizeBucket bucket) {
+      final next = Set<SizeBucket>.from(_tvFilters.sizes);
+      if (!next.remove(bucket)) next.add(bucket);
+      applyFilters(
+        DebrifyTvFilters(qualities: _tvFilters.qualities, sizes: next),
+      );
+      unawaited(
+        StorageService.setDebrifyTvFilterSizes(
+          next.map((e) => e.name).toList(),
+        ),
+      );
+    }
+
+    final labelStyle = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: Colors.white60);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Playback filters',
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Applies to channels and quick play. If nothing matches, Debrify TV '
+          'plays what it can rather than showing an empty channel.',
+          style: labelStyle,
+        ),
+        const SizedBox(height: 10),
+        Text('Quality', style: labelStyle),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final quality in QualityTier.values)
+              FilterChip(
+                label: Text(DebrifyTvFilters.qualityLabel(quality)),
+                selected: _tvFilters.qualities.contains(quality),
+                onSelected: _isBusy ? null : (_) => toggleQuality(quality),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('File size (per episode/movie)', style: labelStyle),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final bucket in SizeBucket.values)
+              FilterChip(
+                label: Text(DebrifyTvFilters.sizeLabel(bucket)),
+                selected: _tvFilters.sizes.contains(bucket),
+                onSelected: _isBusy ? null : (_) => toggleSize(bucket),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _providerChoiceChips(
@@ -3636,6 +3843,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<void> _watchChannel(DebrifyTvChannel channel) async {
     debugPrint('🎬 [WATCH] Starting for channel: ${channel.name}');
+    _qualityFallbackNotified = false;
+    _rdSizeRejections = 0;
+    _sizeFilterRelaxed = false;
 
     final keywords = await _getChannelKeywords(channel.id);
     if (keywords.isEmpty) {
@@ -3778,6 +3988,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     await _stopPrefetch();
     _prefetchStopRequested = false;
     _watchCancelled = false;
+    _qualityFallbackNotified = false;
+    _rdSizeRejections = 0;
+    _sizeFilterRelaxed = false;
     _originalMaxCap = null;
     void _log(String m) {
       final copy = List<String>.from(_progress.value)..add(m);
@@ -4155,6 +4368,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               if (_watchCancelled) {
                 return null;
               }
+              if (!_rdLinkPassesSizeRules(unrestrict)) continue;
               final elapsed = DateTime.now().difference(started).inSeconds;
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
@@ -4212,19 +4426,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               }
 
               newLinks.shuffle(Random());
-              final selectedLink = newLinks.removeAt(0);
-              _seenRestrictedLinks.add(selectedLink);
-              _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+              // Walk THIS torrent's own links until one is playable, rather
+              // than re-queuing the torrent after a single reject — that would
+              // cost another add+info round trip per sibling file (see the
+              // cached-channel flow for the same reasoning).
+              while (newLinks.isNotEmpty && !_watchCancelled) {
+                final selectedLink = newLinks.removeAt(0);
+                _seenRestrictedLinks.add(selectedLink);
+                _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
 
-              final unrestrict = await DebridService.unrestrictLink(
-                apiKeyEarly,
-                selectedLink,
-              );
-              if (_watchCancelled) {
-                return null;
-              }
-              final videoUrl = unrestrict['download'] as String?;
-              if (videoUrl != null && videoUrl.isNotEmpty) {
+                final unrestrict = await DebridService.unrestrictLink(
+                  apiKeyEarly,
+                  selectedLink,
+                );
+                if (_watchCancelled) {
+                  return null;
+                }
+                if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+                final videoUrl = unrestrict['download'] as String?;
+                if (videoUrl == null || videoUrl.isEmpty) continue;
+
                 debugPrint(
                   'DebrifyTV: Success. Got unrestricted URL in ${elapsed}s',
                 );
@@ -4333,7 +4554,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             if (_watchCancelled) {
               break;
             }
-            final combined = dedupByInfohash.values.toList();
+            final combined = _applyQualityFilterToTorrents(
+              dedupByInfohash.values.toList(),
+            );
             combined.shuffle(Random());
             _queue
               ..clear()
@@ -4470,6 +4693,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
       // Final queue snapshot (if we didn't launch early)
       if (!_launchedPlayer) {
+        // The per-batch rebuilds above filter strictly, so an empty queue here
+        // means nothing in the whole search matched the quality filter. This
+        // is the point where that's genuinely known — degrade to unfiltered
+        // rather than reporting "no results" for a search that found plenty.
+        if (_queue.isEmpty &&
+            _tvFilters.hasQuality &&
+            dedupByInfohash.isNotEmpty &&
+            !_watchCancelled) {
+          _notifyQualityFallback();
+          final fallback = dedupByInfohash.values.toList()..shuffle(Random());
+          _queue
+            ..clear()
+            ..addAll(fallback);
+        }
         debugPrint('DebrifyTV: Queue prepared. size=${_queue.length}');
         _lastQueueSize = _queue.length;
         _lastSearchAt = DateTime.now();
@@ -4577,6 +4814,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           try {
             final started = DateTime.now();
             final unrestrict = await DebridService.unrestrictLink(apiKey, link);
+            if (!_rdLinkPassesSizeRules(unrestrict)) continue;
             final elapsed = DateTime.now().difference(started).inSeconds;
             final videoUrl = unrestrict['download'] as String?;
             if (videoUrl != null && videoUrl.isNotEmpty) {
@@ -4887,7 +5125,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
         }
         if (added > 0) {
-          final combined = dedup.values.toList();
+          final combined = _applyQualityFilterToTorrents(
+            dedup.values.toList(),
+          );
           combined.shuffle(Random());
           _queue
             ..clear()
@@ -4902,7 +5142,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
       }
 
-      final combinedList = dedup.values.toList();
+      final combinedList = _applyQualityFilterToTorrents(
+        dedup.values.toList(),
+        // Search is complete here — an empty match means this search really
+        // has nothing at the requested quality, so degrade rather than fail.
+        allowFallback: true,
+      );
       if (combinedList.isEmpty) {
         _closeProgressDialog();
         if (mounted) {
@@ -5250,7 +5495,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
         }
         if (added > 0) {
-          final combined = dedup.values.toList();
+          final combined = _applyQualityFilterToTorrents(
+            dedup.values.toList(),
+          );
           combined.shuffle(Random());
           _queue
             ..clear()
@@ -5265,7 +5512,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
       }
 
-      final combinedList = dedup.values.toList();
+      final combinedList = _applyQualityFilterToTorrents(
+        dedup.values.toList(),
+        // Search is complete here — an empty match means this search really
+        // has nothing at the requested quality, so degrade rather than fail.
+        allowFallback: true,
+      );
       if (combinedList.isEmpty) {
         _closeProgressDialog();
         if (mounted) {
@@ -5542,6 +5794,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           try {
             final started = DateTime.now();
             final unrestrict = await DebridService.unrestrictLink(apiKey, link);
+            if (!_rdLinkPassesSizeRules(unrestrict)) continue;
             final elapsed = DateTime.now().difference(started).inSeconds;
             final videoUrl = unrestrict['download'] as String?;
             if (videoUrl != null && videoUrl.isNotEmpty) {
@@ -5590,16 +5843,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             }
 
             newLinks.shuffle(Random());
-            final selectedLink = newLinks.removeAt(0);
-            _seenRestrictedLinks.add(selectedLink);
-            _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+            // Walk THIS torrent's own links until one is playable. Bailing
+            // after a single reject and re-queuing the torrent would pay
+            // another add+info round trip just to reach a sibling file, so a
+            // pack full of samples could burn one RD add per sample and play
+            // nothing. Unrestrict calls are the cheap half — spend those.
+            while (newLinks.isNotEmpty) {
+              final selectedLink = newLinks.removeAt(0);
+              _seenRestrictedLinks.add(selectedLink);
+              _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
 
-            final unrestrict = await DebridService.unrestrictLink(
-              apiKey,
-              selectedLink,
-            );
-            final videoUrl = unrestrict['download'] as String?;
-            if (videoUrl != null && videoUrl.isNotEmpty) {
+              final unrestrict = await DebridService.unrestrictLink(
+                apiKey,
+                selectedLink,
+              );
+              if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+              final videoUrl = unrestrict['download'] as String?;
+              if (videoUrl == null || videoUrl.isEmpty) continue;
+
               debugPrint(
                 'DebrifyTV: Cached success: unrestricted in ${elapsed}s',
               );
@@ -6156,6 +6417,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     _seenRestrictedLinks.clear();
     _seenLinkWithTorrentId.clear();
+    // New channel, new filter verdict — let it warn again if this one has
+    // nothing at the requested quality/size.
+    _qualityFallbackNotified = false;
+    _rdSizeRejections = 0;
+    _sizeFilterRelaxed = false;
     debugPrint('DebrifyTV: Cleared prefetch state');
 
     final keywords = await _getChannelKeywords(targetChannel.id);
@@ -6296,32 +6562,44 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             newLinks = List<String>.from(rdLinks);
           }
           newLinks.shuffle(Random());
-          final String selectedLink = newLinks.first;
-          _seenRestrictedLinks.add(selectedLink);
-          if (torrentId.isNotEmpty) {
-            _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+          // Exhaust THIS candidate's links before moving on. Advancing to the
+          // next candidate costs a whole add+info round trip, so a sample as
+          // the first pick must not throw away a torrent that has a real
+          // episode sitting right behind it.
+          String? videoUrl;
+          for (final selectedLink in newLinks) {
+            _seenRestrictedLinks.add(selectedLink);
+            if (torrentId.isNotEmpty) {
+              _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+            }
+
+            Map<String, dynamic> unrestrict;
+            try {
+              unrestrict = await DebridService.unrestrictLink(
+                apiKey,
+                selectedLink,
+              );
+            } catch (error) {
+              debugPrint(
+                'DebrifyTV: Real-Debrid unrestrict failed for candidate ${candidate.infohash}: $error',
+              );
+              continue;
+            }
+
+            if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+
+            final String? resolved = unrestrict['download'] as String?;
+            if (resolved == null || resolved.isEmpty) {
+              debugPrint(
+                'DebrifyTV: Real-Debrid unrestrict returned empty URL for candidate ${candidate.infohash}',
+              );
+              continue;
+            }
+            videoUrl = resolved;
+            break;
           }
 
-          Map<String, dynamic> unrestrict;
-          try {
-            unrestrict = await DebridService.unrestrictLink(
-              apiKey,
-              selectedLink,
-            );
-          } catch (error) {
-            debugPrint(
-              'DebrifyTV: Real-Debrid unrestrict failed for candidate ${candidate.infohash}: $error',
-            );
-            continue;
-          }
-
-          final String? videoUrl = unrestrict['download'] as String?;
-          if (videoUrl == null || videoUrl.isEmpty) {
-            debugPrint(
-              'DebrifyTV: Real-Debrid unrestrict returned empty URL for candidate ${candidate.infohash}',
-            );
-            continue;
-          }
+          if (videoUrl == null) continue;
 
           String title = candidate.name;
           final uri = Uri.tryParse(videoUrl);
@@ -8483,6 +8761,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ),
             ],
             const SizedBox(height: 16),
+            // Kept LAST (above Reset) on purpose: these are ~14 focusable
+            // chips, and placing them higher would push every existing switch
+            // that many extra D-pad presses away on TV.
+            _tvFilterChips(dialogSetState: dialogSetState),
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -8517,8 +8800,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _hideBackButton = false; // Hardcoded to false
                       _provider = defaultProvider;
                     }
+                    // Playback filters are shared by both scopes, so reset
+                    // them from either one.
+                    _tvFilters = const DebrifyTvFilters.empty();
                   });
                   dialogSetState?.call(() {});
+
+                  await StorageService.setDebrifyTvFilterQualities(const []);
+                  await StorageService.setDebrifyTvFilterSizes(const []);
 
                   if (!isQuickScope) {
                     await StorageService.saveDebrifyTvStartRandom(true);
@@ -9357,13 +9646,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return null;
     }
 
-    // Filter unseen files
-    final unseenFiles = allVideoFiles.where((file) {
-      final fileId = file['id'] as String?;
-      if (fileId == null || fileId.isEmpty) return false;
-      final trackingKey = '$infohash|$fileId';
-      return !_seenLinkWithTorrentId.contains(trackingKey);
-    }).toList();
+    // Filter unseen files. PikPak reports a per-file `size`, so the same
+    // per-FILE size rules the other providers use apply here — including the
+    // 50MB floor that keeps trailers and samples out of the rotation.
+    List<dynamic> filterUnseen({required bool applySizeFilter}) {
+      return allVideoFiles.where((file) {
+        final fileId = file['id'] as String?;
+        if (fileId == null || fileId.isEmpty) return false;
+        final trackingKey = '$infohash|$fileId';
+        if (_seenLinkWithTorrentId.contains(trackingKey)) return false;
+        final size = (file['size'] as num?)?.toInt() ?? 0;
+        if (size > 0 && size < _torboxMinVideoSizeBytes) return false;
+        if (applySizeFilter && !_tvFilters.sizeMatchesBytes(size)) return false;
+        return true;
+      }).toList();
+    }
+
+    var unseenFiles = filterUnseen(applySizeFilter: true);
+    if (unseenFiles.isEmpty && _tvFilters.hasSize) {
+      // Nothing in this torrent matched — take it unfiltered rather than
+      // discarding the torrent (see the Torbox builder).
+      log('⚠️ PikPak: no file matched the size filter — using unfiltered');
+      unseenFiles = filterUnseen(applySizeFilter: false);
+    }
 
     if (unseenFiles.isEmpty) {
       log('⚠️ PikPak torrent has no unseen files ${candidate.name}');
@@ -9510,14 +9815,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   List<PremiumizePlayableEntry> _buildPremiumizePlayableEntries(
     List<PremiumizeFile> files,
-    String fallbackTitle,
-  ) {
+    String fallbackTitle, {
+    bool applySizeFilter = true,
+  }) {
     final seriesCandidates = <PremiumizePlayableEntry>[];
     final otherCandidates = <PremiumizePlayableEntry>[];
 
     for (final file in files) {
       if (!_premiumizeFileLooksLikeVideo(file)) continue;
       if (file.size < _torboxMinVideoSizeBytes) continue;
+      // Per-FILE size filter (see the Torbox builder for the rationale).
+      if (applySizeFilter && !_tvFilters.sizeMatchesBytes(file.size)) continue;
 
       final displayName =
           file.fileName.isNotEmpty ? file.fileName : fallbackTitle;
@@ -9551,6 +9859,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       ...otherCandidates,
     ];
     entries.shuffle(Random());
+    if (entries.isEmpty && applySizeFilter && _tvFilters.hasSize) {
+      debugPrint(
+        'DebrifyTV/Premiumize: no file matched the size filter in '
+        '"$fallbackTitle" — using it unfiltered.',
+      );
+      return _buildPremiumizePlayableEntries(
+        files,
+        fallbackTitle,
+        applySizeFilter: false,
+      );
+    }
     return entries;
   }
 
@@ -9852,7 +10171,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
       }
 
-      final combinedList = dedup.values.toList();
+      final combinedList = _applyQualityFilterToTorrents(
+        dedup.values.toList(),
+        // Search is complete here — an empty match means this search really
+        // has nothing at the requested quality, so degrade rather than fail.
+        allowFallback: true,
+      );
       if (combinedList.isEmpty) {
         _closeProgressDialog();
         if (mounted) {
@@ -10129,7 +10453,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
       }
 
-      final combinedList = dedup.values.toList();
+      final combinedList = _applyQualityFilterToTorrents(
+        dedup.values.toList(),
+        // Search is complete here — an empty match means this search really
+        // has nothing at the requested quality, so degrade rather than fail.
+        allowFallback: true,
+      );
       if (combinedList.isEmpty) {
         _closeProgressDialog();
         if (mounted) {
@@ -10312,8 +10641,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   List<TorboxPlayableEntry> _buildTorboxPlayableEntries(
     TorboxTorrent torrent,
-    String fallbackTitle,
-  ) {
+    String fallbackTitle, {
+    bool applySizeFilter = true,
+  }) {
     final entries = <TorboxPlayableEntry>[];
     final seriesCandidates = <TorboxPlayableEntry>[];
     final otherCandidates = <TorboxPlayableEntry>[];
@@ -10321,6 +10651,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     for (final file in torrent.files) {
       if (!_torboxFileLooksLikeVideo(file)) continue;
       if (file.size < _torboxMinVideoSizeBytes) continue;
+      // Per-FILE size filter: a pack's files are individual episodes, so this
+      // compares against the number the user actually meant.
+      if (applySizeFilter && !_tvFilters.sizeMatchesBytes(file.size)) continue;
 
       final displayName = _torboxDisplayName(file);
       final info = SeriesParser.parseFilenameConservative(displayName);
@@ -10352,6 +10685,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       ..addAll(seriesCandidates)
       ..addAll(otherCandidates);
     entries.shuffle(Random());
+    // Nothing in THIS torrent matched the size filter — take it unfiltered
+    // rather than discarding the torrent, so a strict filter narrows what
+    // plays instead of walking the whole queue and playing nothing.
+    if (entries.isEmpty && applySizeFilter && _tvFilters.hasSize) {
+      debugPrint(
+        'DebrifyTV/Torbox: no file matched the size filter in '
+        '"$fallbackTitle" — using it unfiltered.',
+      );
+      return _buildTorboxPlayableEntries(
+        torrent,
+        fallbackTitle,
+        applySizeFilter: false,
+      );
+    }
     return entries;
   }
 
@@ -10602,11 +10949,37 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
       return null;
     }
-    final freshLinks = result.files
-        .where((f) => FileUtils.isVideoFile(f.fileName))
-        .map((f) => f.link)
-        .where((link) => link.isNotEmpty && !_seenRestrictedLinks.contains(link))
-        .toList();
+    // AllDebrid returns a real per-file byte count, so the per-FILE size rules
+    // apply before the files are reduced to bare links (after that reduction
+    // the size is gone). The 50MB floor keeps trailers/samples out, matching
+    // Torbox and Premiumize.
+    List<String> collectLinks({required bool applySizeFilter}) {
+      return result.files
+          .where((f) {
+            if (!FileUtils.isVideoFile(f.fileName)) return false;
+            if (f.size > 0 && f.size < _torboxMinVideoSizeBytes) return false;
+            if (applySizeFilter && !_tvFilters.sizeMatchesBytes(f.size)) {
+              return false;
+            }
+            return true;
+          })
+          .map((f) => f.link)
+          .where(
+            (link) => link.isNotEmpty && !_seenRestrictedLinks.contains(link),
+          )
+          .toList();
+    }
+
+    var freshLinks = collectLinks(applySizeFilter: true);
+    if (freshLinks.isEmpty && _tvFilters.hasSize) {
+      // Nothing matched in this torrent — take it unfiltered rather than
+      // discarding the torrent (see the Torbox builder).
+      debugPrint(
+        'DebrifyTV/AD: no file matched the size filter in "${result.name}" — '
+        'using it unfiltered.',
+      );
+      freshLinks = collectLinks(applySizeFilter: false);
+    }
     if (freshLinks.isEmpty) return null;
     for (final link in freshLinks) {
       _seenRestrictedLinks.add(link);

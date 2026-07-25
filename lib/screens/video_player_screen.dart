@@ -13,6 +13,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
+import '../services/audio_effect_session_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
@@ -243,6 +244,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // user backs out before that (or init throws first), dispose() must not
   // touch the unassigned late field (LateInitializationError during pop).
   bool _playerCreated = false;
+
+  /// Audio session announced to system effect apps (Android only). Non-null
+  /// only while an OPEN broadcast is outstanding — see
+  /// [_attachAudioEffectSession] / [_releaseAudioEffectSession].
+  int? _audioEffectSessionId;
   late mkv.VideoController _videoController;
   final math.Random _random = math.Random();
   SeriesPlaylist? _cachedSeriesPlaylist;
@@ -1088,6 +1094,61 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// Put Android audio on an effects-capable output and announce the session,
+  /// so system effect apps (Wavelet, OEM equalizers, hearing-accessibility
+  /// tools) can process our playback like they do for other video apps.
+  ///
+  /// Two separate things block that by default:
+  ///
+  ///  1. media_kit pins Android to `ao=opensles`, and mpv's OpenSL ES output
+  ///     never sets SL_ANDROID_KEY_PERFORMANCE_MODE — so Android applies its
+  ///     default low-latency path, which is documented to carry *no* hardware
+  ///     or software effects. Nothing can attach to our audio at all, which is
+  ///     why even a global/"legacy mode" equalizer has no effect on us.
+  ///     `audiotrack` is an ordinary AudioTrack and is effects-capable; the
+  ///     `opensles` fallback keeps today's behaviour on any device where
+  ///     AudioTrack fails to initialise, so audio can't be lost outright.
+  ///  2. Effect apps attach to a session id learned from the standard OPEN
+  ///     broadcast. mpv generates an id internally and tells nobody, so we pin
+  ///     our own via `audiotrack-session-id` and announce that.
+  ///
+  /// Fails soft at every step: effects are a nice-to-have, playback is not.
+  /// Opt-in (Settings → Player Settings): switching the audio backend is a real
+  /// change to how every device outputs sound, so off must leave playback byte
+  /// for byte as it was.
+  Future<void> _attachAudioEffectSession() async {
+    if (!Platform.isAndroid) return;
+    // Everything below is inside the catch: _initializePlayer() runs
+    // unawaited, so anything that escapes here would abort the rest of init
+    // and leave a black screen — including for users who have this turned off,
+    // since the settings read itself happens either way.
+    try {
+      final platform = _player.platform;
+      if (platform is! mk.NativePlayer) return;
+      if (!await StorageService.getPlayerSystemAudioEffects()) return;
+      await platform.setProperty('ao', 'audiotrack,opensles');
+      final sessionId = await AudioEffectSessionService.generateSessionId();
+      // No id available: still worth keeping the effects-capable output, since
+      // effect apps that detect sessions on their own can then attach.
+      if (sessionId == null) return;
+      await platform.setProperty('audiotrack-session-id', '$sessionId');
+      await AudioEffectSessionService.open(sessionId);
+      _audioEffectSessionId = sessionId;
+    } catch (e) {
+      debugPrint('VideoPlayer: audio effect session setup failed: $e');
+    }
+  }
+
+  /// Release the announced audio session. Unpaired OPENs leave effect apps
+  /// attached to dead audio and degrade *other* apps' equalizers, so this must
+  /// run on every exit from the player.
+  void _releaseAudioEffectSession() {
+    final sessionId = _audioEffectSessionId;
+    if (sessionId == null) return;
+    _audioEffectSessionId = null;
+    AudioEffectSessionService.close(sessionId);
+  }
+
   Future<void> _initializePlayer() async {
     // Load default player settings
     await _loadPlayerDefaults();
@@ -1256,6 +1317,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
     _playerCreated = true;
     _videoController = mkv.VideoController(_player);
+
+    // Must happen before the first open() — mpv reads both audio options when
+    // it creates the audio output, which is on first playback.
+    await _attachAudioEffectSession();
 
     _currentStreamUrl = initialUrl.isNotEmpty ? initialUrl : null;
 
@@ -4821,6 +4886,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _bufferingSub?.cancel();
     _bufferingDebounceTimer?.cancel();
     _showBufferingIndicator.dispose();
+    _releaseAudioEffectSession();
     if (_playerCreated) _player.dispose();
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();

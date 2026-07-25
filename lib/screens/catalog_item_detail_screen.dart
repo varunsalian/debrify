@@ -7,12 +7,14 @@ import '../services/analytics_service.dart';
 import '../services/app_route_observer.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
+import '../services/main_page_bridge.dart';
 import '../services/series_source_service.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
+import '../services/simkl/simkl_service.dart';
 import '../utils/tv_keys.dart';
 
 /// Cinematic detail screen for a catalog item.
@@ -50,6 +52,13 @@ class CatalogItemDetailScreen extends StatefulWidget {
   final List<SimklMenuOption> simklMenuOptions;
   final void Function(SimklItemMenuAction action)? onSimklAction;
 
+  /// Loads the item's live Simkl watchlist status. Used only to relabel the
+  /// primary button "Rewatch" (instead of "Play") for a movie already marked
+  /// `completed` — a completed movie has no Simkl resume session, so the play
+  /// path un-marks it watched first so the rewatch re-enters Continue Watching.
+  /// Null (disconnected / no IMDb id) keeps the plain "Play" label.
+  final Future<SimklTitleStatus?> Function()? simklStatusLoader;
+
   /// Lazily loads "Watch Next" recommendations for [item]. When null (no
   /// recommendation-capable addon, or this host doesn't support it) the
   /// rail is omitted entirely. Resolves to an empty list to omit it too.
@@ -78,6 +87,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
     this.onTraktAction,
     this.simklMenuOptions = const [],
     this.onSimklAction,
+    this.simklStatusLoader,
     this.recommendationsLoader,
     this.onRecommendationTap,
     this.metaEnricher,
@@ -140,10 +150,21 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   int? _resumeSeason;
   int? _resumeEpisode;
 
+  /// Live Simkl status (drives the "Rewatch" relabel). Null until
+  /// [simklStatusLoader] resolves — the button keeps "Play" until then.
+  SimklTitleStatus? _simklStatus;
+
+  /// A movie the user has already finished on Simkl (status `completed`). Its
+  /// Play button reads "Rewatch" and the play path un-marks it watched so the
+  /// rewatch re-enters Continue Watching.
+  bool get _isCompletedMovie =>
+      _item.type != 'series' && _simklStatus?.currentStatus == 'completed';
+
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('catalog_detail');
+    MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1100),
@@ -165,7 +186,20 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _loadParentsGuide();
       _loadImdbEnrichment();
       _loadResumeInfo();
+      _loadSimklStatus();
     });
+  }
+
+  Future<void> _loadSimklStatus() async {
+    final loader = widget.simklStatusLoader;
+    if (loader == null) return;
+    try {
+      final status = await loader();
+      if (!mounted || status == null) return;
+      setState(() => _simklStatus = status);
+    } catch (_) {
+      // Non-critical — leave the plain "Play" label.
+    }
   }
 
   Future<void> _loadResumeInfo() async {
@@ -191,7 +225,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   String get _primaryLabel {
     final isMovie = _item.type != 'series';
     if (!_resumeLoaded) return 'Play';
-    if (!_resumeStarted) return isMovie ? 'Play' : 'Start Watching';
+    if (!_resumeStarted) {
+      if (_isCompletedMovie) return 'Rewatch';
+      return isMovie ? 'Play' : 'Start Watching';
+    }
     if (isMovie || _resumeSeason == null || _resumeEpisode == null) {
       return 'Resume';
     }
@@ -205,11 +242,23 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (route is PageRoute) appRouteObserver.subscribe(this, route);
   }
 
-  /// The player pushes on top of this detail screen, so it pops BACK here when
-  /// playback ends. Re-read the binding then: a movie auto-binds on play, and
-  /// the Sources screen (also pushed above) can bind/unbind too.
+  /// The IN-APP player pushes on top of this detail screen, so it pops BACK
+  /// here when playback ends. Re-read the binding then: a movie auto-binds on
+  /// play, and the Sources screen (also pushed above) can bind/unbind too.
   @override
   void didPopNext() {
+    _refreshBoundState();
+    _loadResumeInfo();
+  }
+
+  /// Native-TV / DeoVR / external playback runs in its own ACTIVITY and pushes
+  /// no Flutter route, so [didPopNext] never fires for it and the resume label
+  /// would stay stale. Mirrors the merged detail page — see
+  /// [MainPageBridge.notifyPlaybackReturned] for why this signal exists, and
+  /// why it's gated on this being the current route.
+  void _onPlaybackReturned() {
+    if (!mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
     _refreshBoundState();
     _loadResumeInfo();
   }
@@ -345,6 +394,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
+    MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl.dispose();
     _playFocus.dispose();
     _browseFocus.dispose();

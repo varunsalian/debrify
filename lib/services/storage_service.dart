@@ -64,6 +64,13 @@ class StorageService {
   static const String _debrifyTvRandomStartPercentKey =
       'debrify_tv_random_start_percent';
   static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
+  // Debrify TV playback filters. Quality is matched on the torrent NAME
+  // (applied when a channel's cache is read); size is matched on the real
+  // per-FILE byte count after the debrid provider returns its file list —
+  // per-file sizes are per-episode, so packs need no series/movie detection.
+  static const String _debrifyTvFilterQualitiesKey =
+      'debrify_tv_filter_qualities';
+  static const String _debrifyTvFilterSizesKey = 'debrify_tv_filter_sizes';
 
   // Home page default keys
   static const String _homeDefaultSourceTypeKey = 'home_default_source_type';
@@ -152,6 +159,8 @@ class StorageService {
   static const String _playerDefaultAspectIndexTvKey =
       'player_default_aspect_index_tv';
   static const String _playerNightModeIndexKey = 'player_night_mode_index';
+  static const String _playerSystemAudioEffectsKey =
+      'player_system_audio_effects';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
   static const String _playerDefaultAudioLanguageKey =
@@ -2437,6 +2446,9 @@ class StorageService {
     await prefs.remove(_debrifyTvHideBackButtonKey);
     await prefs.remove(_debrifyTvAvoidNsfwKey);
     await prefs.remove(_debrifyTvRandomStartPercentKey);
+    // Playback filters
+    await prefs.remove(_debrifyTvFilterQualitiesKey);
+    await prefs.remove(_debrifyTvFilterSizesKey);
     for (final key
         in prefs
             .getKeys()
@@ -4429,6 +4441,35 @@ class StorageService {
     await prefs.setString(_defaultFilterSizesKey, jsonEncode(sizes));
   }
 
+  // Debrify TV Filter Settings — scoped to Debrify TV only, deliberately
+  // separate from the Search tab's default filters above so tuning a channel
+  // feed never changes search behaviour (and vice versa).
+  static Future<List<String>> getDebrifyTvFilterQualities() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_debrifyTvFilterQualitiesKey);
+    if (json == null) return [];
+    return List<String>.from(jsonDecode(json));
+  }
+
+  static Future<void> setDebrifyTvFilterQualities(
+    List<String> qualities,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_debrifyTvFilterQualitiesKey, jsonEncode(qualities));
+  }
+
+  static Future<List<String>> getDebrifyTvFilterSizes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_debrifyTvFilterSizesKey);
+    if (json == null) return [];
+    return List<String>.from(jsonDecode(json));
+  }
+
+  static Future<void> setDebrifyTvFilterSizes(List<String> sizes) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_debrifyTvFilterSizesKey, jsonEncode(sizes));
+  }
+
   // Default Torrent Provider methods
   // Returns: 'none' (ask every time), 'torbox', 'debrid', or 'pikpak'
   static Future<String> getDefaultTorrentProvider() async {
@@ -4869,6 +4910,21 @@ class StorageService {
   static Future<void> setPlayerNightModeIndex(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_playerNightModeIndexKey, index);
+  }
+
+  /// Whether to route playback through Android's effects-capable audio output
+  /// and announce the session to system equalizer apps (Wavelet, OEM effects).
+  /// Android only. Default: false — off changes nothing about how audio is
+  /// output today, since enabling it switches the phone player's audio backend.
+  static Future<bool> getPlayerSystemAudioEffects() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_playerSystemAudioEffectsKey) ?? false;
+  }
+
+  /// Set whether system audio effect apps may process our playback.
+  static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
   }
 
   /// Get default subtitle language code
