@@ -33,10 +33,13 @@ class M3uParser {
       );
     }
 
-    // Check for M3U header (optional but common)
+    // Check for M3U header (optional but common). It may declare the
+    // playlist's XMLTV guide via url-tvg= / x-tvg-url=.
     int startIndex = 0;
+    String? epgUrl;
     if (lines.first.startsWith('#EXTM3U')) {
       startIndex = 1;
+      epgUrl = _parseHeaderEpgUrl(lines.first);
     }
 
     String? currentName;
@@ -114,7 +117,25 @@ class M3uParser {
     return IptvParseResult(
       channels: channels,
       categories: sortedCategories,
+      epgUrl: epgUrl,
     );
+  }
+
+  /// XMLTV guide URL from the `#EXTM3U` header: `url-tvg="…"` (also seen as
+  /// `x-tvg-url=`, quoted or bare). The value may be a comma-separated list;
+  /// only the first entry is used.
+  static String? _parseHeaderEpgUrl(String header) {
+    final match = RegExp(
+      '''(?:url-tvg|x-tvg-url)=(?:"([^"]*)"|'([^']*)'|(\\S+))''',
+      caseSensitive: false,
+    ).firstMatch(header);
+    if (match == null) return null;
+    final value =
+        (match.group(1) ?? match.group(2) ?? match.group(3) ?? '').trim();
+    if (value.isEmpty) return null;
+    final first = value.split(',').first.trim();
+    if (!first.startsWith('http')) return null;
+    return first;
   }
 
   // ── Per-channel HTTP headers ────────────────────────────────────────────

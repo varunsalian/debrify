@@ -8,6 +8,7 @@ import 'package:flutter/material.dart' show debugPrint;
 
 import '../utils/movie_parser.dart';
 import 'analytics_service.dart';
+import 'iptv_epg_service.dart';
 import 'movie_metadata_service.dart';
 import 'stremio_iptv_service.dart';
 import 'stremio_service.dart';
@@ -506,6 +507,43 @@ class AndroidTvPlayerBridge {
               code: 'iptv_stream_resolve_failed',
               message: e.toString(),
             );
+          }
+        case 'requestIptvEpg':
+          // Native IPTV player wants guide data for a channel. Stateless like
+          // requestIptvStreamUrls: credentials are recovered from the channel
+          // URL itself and the EPG service holds the caches, so nothing needs
+          // registering per session. Answers {now, next, schedule?}; empty map
+          // when the channel has no guide data.
+          final epgArgs = call.arguments;
+          String? epgChannelUrl;
+          var includeSchedule = false;
+          if (epgArgs is Map) {
+            final raw = epgArgs['channelUrl'];
+            if (raw is String) epgChannelUrl = raw;
+            includeSchedule = epgArgs['includeSchedule'] == true;
+          }
+          if (epgChannelUrl == null ||
+              !IptvEpgService.isEpgCapableUrl(epgChannelUrl)) {
+            return <String, dynamic>{};
+          }
+          try {
+            final nowNext = await IptvEpgService.instance.nowNext(
+              epgChannelUrl,
+            );
+            return <String, dynamic>{
+              if (nowNext.now != null) 'now': nowNext.now!.toBridgeMap(),
+              if (nowNext.next != null) 'next': nowNext.next!.toBridgeMap(),
+              if (includeSchedule)
+                'schedule': [
+                  for (final p in await IptvEpgService.instance.schedule(
+                    epgChannelUrl,
+                  ))
+                    p.toBridgeMap(),
+                ],
+            };
+          } catch (e) {
+            debugPrint('AndroidTvPlayerBridge: requestIptvEpg failed: $e');
+            return <String, dynamic>{};
           }
         case 'reportIptvStreamResult':
           // Feedback from the native serial ladder: cache the URL that

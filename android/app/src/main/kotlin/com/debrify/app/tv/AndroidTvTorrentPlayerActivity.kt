@@ -213,6 +213,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvGuideCountText: TextView? = null
     private var iptvGuideCurrentName: TextView? = null
     private var iptvGuideCurrentGroup: TextView? = null
+    private var iptvGuideCurrentEpg: TextView? = null
+    private var iptvScheduleDialog: AlertDialog? = null
     private var iptvGuideNowPlaying: View? = null
     private var iptvGuideNowLogo: android.widget.ImageView? = null
     private var iptvGuideNowLetter: TextView? = null
@@ -3638,6 +3640,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             return true
                         }
                     }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        // RIGHT on a channel row: its programme schedule —
+                        // the same grammar as the IPTV page's guide list.
+                        if (isFocusInIptvChannelList() && event.repeatCount == 0) {
+                            focusedIptvGuideEntry()?.let { entry ->
+                                if (entry.isLive) showIptvScheduleDialog(entry)
+                            }
+                            return true
+                        }
+                    }
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         // Long-press up in channel list: jump to search bar
                         if (isFocusInIptvChannelList() && event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
@@ -4916,6 +4928,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvGuideCountText = findViewById(R.id.iptv_guide_count)
         iptvGuideCurrentName = findViewById(R.id.iptv_guide_current_name)
         iptvGuideCurrentGroup = findViewById(R.id.iptv_guide_current_group)
+        iptvGuideCurrentEpg = findViewById(R.id.iptv_guide_current_epg)
         iptvGuideNowPlaying = findViewById(R.id.iptv_guide_now_playing)
         iptvGuideNowLogo = findViewById(R.id.iptv_guide_now_logo)
         iptvGuideNowLetter = findViewById(R.id.iptv_guide_now_letter)
@@ -4946,7 +4959,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             onItemClick = { entry ->
                 hideIptvGuide()
                 switchToIptvChannel(entry)
-            }
+            },
+            onEpgNeeded = { entry -> ensureIptvChannelEpg(entry) },
         )
         guideList.adapter = iptvChannelAdapter
 
@@ -5001,6 +5015,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hideIptvGuide() {
         iptvGuideVisible = false
+        iptvScheduleDialog?.dismiss()
+        iptvScheduleDialog = null
         iptvGuideOverlay?.animate()?.cancel() // cancel any pending show animation
         iptvGuideOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
             iptvGuideOverlay?.visibility = View.GONE
@@ -5010,6 +5026,245 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun toggleIptvGuide() {
         if (iptvGuideVisible) hideIptvGuide() else showIptvGuide()
+    }
+
+    // ── IPTV EPG ─────────────────────────────────────────────────────────
+    // Guide data comes from Flutter over the bridge (the Dart EPG service
+    // recovers Xtream credentials from the channel URL and owns all caching),
+    // so the native side only ever asks and paints.
+
+    /** Fetch now/next for [entry] unless it's already fresh or in flight. */
+    private fun ensureIptvChannelEpg(entry: IptvChannelEntry) {
+        if (!entry.isLive || entry.epgLoading) return
+        val stale = entry.epgLoaded && entry.epgNowStopMs > 0 &&
+            entry.epgNowStopMs < System.currentTimeMillis()
+        if (entry.epgLoaded && !stale) return
+        if (!entry.url.startsWith("http")) return // stremio-tv:// keys etc.
+
+        entry.epgLoading = true
+        requestIptvEpg(entry.url, includeSchedule = false) { result ->
+            entry.epgLoading = false
+            entry.epgLoaded = true
+            val now = result?.get("now") as? Map<*, *>
+            entry.epgNowTitle =
+                (now?.get("title") as? String)?.takeIf { it.isNotBlank() }
+            entry.epgNowStartMs = (now?.get("startMs") as? Number)?.toLong() ?: 0L
+            entry.epgNowStopMs = (now?.get("stopMs") as? Number)?.toLong() ?: 0L
+            val next = result?.get("next") as? Map<*, *>
+            entry.epgNextTitle =
+                (next?.get("title") as? String)?.takeIf { it.isNotBlank() }
+            entry.epgNextStartMs =
+                (next?.get("startMs") as? Number)?.toLong() ?: 0L
+            if (entry.epgNowTitle == null) {
+                // Nothing airing per this answer — a guide still downloading
+                // on the Flutter side, a transient fetch failure, or a gap
+                // until the next programme. Without a retry deadline the
+                // stale rule (`stopMs > 0 && stopMs < now`) never re-arms
+                // and the entry stays blank all session. Reuse stopMs as
+                // "re-ask at": when the next programme starts, or in 5
+                // minutes. Dart's caches rate-limit the repeat asks.
+                val retryAt = System.currentTimeMillis() + 5 * 60 * 1000L
+                val nextStart = entry.epgNextStartMs
+                entry.epgNowStopMs =
+                    if (nextStart > 0 && nextStart < retryAt) nextStart else retryAt
+            }
+            iptvChannelAdapter?.notifyEpgFor(entry)
+            if (entry.isCurrent) updateIptvGuideEpgHeader()
+        }
+    }
+
+    /** Paint the playing channel's now/next line in the guide header. */
+    private fun updateIptvGuideEpgHeader() {
+        val epgView = iptvGuideCurrentEpg ?: return
+        val entry = iptvChannels.getOrNull(currentIptvIndex)
+        val nowTitle = entry?.epgNowTitle
+        if (entry == null || nowTitle == null) {
+            epgView.visibility = View.GONE
+            return
+        }
+        val text = StringBuilder("Now: $nowTitle")
+        entry.epgNextTitle?.let { text.append("   ›   Next: $it") }
+        epgView.text = text
+        epgView.visibility = View.VISIBLE
+    }
+
+    /** The guide-list entry that currently holds DPAD focus, if any. */
+    private fun focusedIptvGuideEntry(): IptvChannelEntry? {
+        val list = iptvGuideList ?: return null
+        val focused = list.focusedChild ?: return null
+        val holder = list.getChildViewHolder(focused) ?: return null
+        val position = holder.bindingAdapterPosition
+        if (position == RecyclerView.NO_POSITION) return null
+        return iptvChannelAdapter?.entryAt(position)
+    }
+
+    private fun formatEpgTime(ms: Long): String =
+        android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(ms))
+
+    /**
+     * RIGHT on a guide row: the channel's day schedule as a focusable dialog
+     * (BACK dismisses it back to the guide). Built from the bridge's
+     * schedule payload; a channel without guide data gets a quiet toast.
+     */
+    private fun showIptvScheduleDialog(entry: IptvChannelEntry) {
+        requestIptvEpg(entry.url, includeSchedule = true) { result ->
+            if (isFinishing || isDestroyed || !iptvGuideVisible) return@requestIptvEpg
+            val schedule = (result?.get("schedule") as? List<*>)
+                ?.mapNotNull { it as? Map<*, *> }
+                ?.mapNotNull { item ->
+                    val title = (item["title"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val startMs = (item["startMs"] as? Number)?.toLong()
+                        ?: return@mapNotNull null
+                    val stopMs = (item["stopMs"] as? Number)?.toLong()
+                        ?: return@mapNotNull null
+                    Triple(title, startMs, stopMs)
+                } ?: emptyList()
+            if (schedule.isEmpty()) {
+                Toast.makeText(
+                    this,
+                    "No guide data for ${entry.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@requestIptvEpg
+            }
+
+            val nowMs = System.currentTimeMillis()
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(8), dp(20), dp(16))
+            }
+            var nowRow: View? = null
+            var lastDay = -1
+            val calendar = java.util.Calendar.getInstance()
+            for ((title, startMs, stopMs) in schedule) {
+                calendar.timeInMillis = startMs
+                val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+                if (day != lastDay) {
+                    lastDay = day
+                    val dayText = android.text.format.DateUtils.getRelativeTimeSpanString(
+                        startMs, nowMs, android.text.format.DateUtils.DAY_IN_MILLIS,
+                        android.text.format.DateUtils.FORMAT_SHOW_WEEKDAY
+                    ).toString().uppercase()
+                    container.addView(TextView(this).apply {
+                        text = dayText
+                        setTextColor(Color.argb(102, 255, 255, 255))
+                        textSize = 10f
+                        letterSpacing = 0.1f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setPadding(0, dp(12), 0, dp(4))
+                    })
+                }
+                val isAiring = startMs <= nowMs && nowMs < stopMs
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(dp(8), dp(7), dp(8), dp(7))
+                    if (isAiring) setBackgroundColor(Color.argb(20, 0, 229, 255))
+                }
+                row.addView(TextView(this).apply {
+                    text = formatEpgTime(startMs)
+                    setTextColor(
+                        if (isAiring) Color.parseColor("#00E5FF")
+                        else Color.argb(if (stopMs < nowMs) 77 else 128, 255, 255, 255)
+                    )
+                    textSize = 12f
+                    layoutParams = LinearLayout.LayoutParams(dp(78), ViewGroup.LayoutParams.WRAP_CONTENT)
+                })
+                row.addView(TextView(this).apply {
+                    text = title
+                    setTextColor(
+                        Color.argb(
+                            if (stopMs < nowMs) 97 else if (isAiring) 255 else 217,
+                            255, 255, 255
+                        )
+                    )
+                    textSize = 12.5f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    if (isAiring) typeface = Typeface.DEFAULT_BOLD
+                    layoutParams = LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                    )
+                })
+                container.addView(row)
+                if (isAiring) nowRow = row
+            }
+
+            val scroll = android.widget.ScrollView(this).apply {
+                isFocusable = true
+                isFocusableInTouchMode = true
+                addView(container)
+            }
+
+            iptvScheduleDialog?.dismiss()
+            iptvScheduleDialog = AlertDialog.Builder(this)
+                .setTitle(entry.name)
+                .setView(scroll)
+                .create()
+                .also { dialog ->
+                    dialog.window?.setBackgroundDrawable(
+                        ColorDrawable(Color.parseColor("#EE10101A"))
+                    )
+                    dialog.show()
+                    dialog.window?.setLayout(dp(420), dp(440))
+                    // Land the scroll on what's airing now.
+                    nowRow?.let { row ->
+                        scroll.post { scroll.scrollTo(0, (row.top - dp(120)).coerceAtLeast(0)) }
+                    }
+                    scroll.requestFocus()
+                }
+        }
+    }
+
+    /**
+     * Ask Flutter for a channel's guide data. Always answers asynchronously
+     * on the main thread — the failure paths are posted on purpose, because
+     * the callback runs notifyItemChanged and a synchronous invocation from
+     * onBindViewHolder would fire it while RecyclerView is computing layout
+     * (IllegalStateException). MethodChannel results are async already.
+     */
+    private fun requestIptvEpg(
+        channelUrl: String,
+        includeSchedule: Boolean,
+        callback: (Map<*, *>?) -> Unit,
+    ) {
+        val failAsync = {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                callback(null)
+            }
+        }
+        try {
+            val args = hashMapOf<String, Any?>(
+                "channelUrl" to channelUrl,
+                "includeSchedule" to includeSchedule,
+            )
+            val channel = MainActivity.getAndroidTvPlayerChannel()
+            if (channel == null) {
+                failAsync()
+                return
+            }
+            channel.invokeMethod(
+                "requestIptvEpg",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        callback(result as? Map<*, *>)
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        android.util.Log.e("AndroidTvPlayer", "requestIptvEpg error: $errorCode - $errorMessage")
+                        callback(null)
+                    }
+
+                    override fun notImplemented() {
+                        callback(null)
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "requestIptvEpg exception: ${e.message}", e)
+            failAsync()
+        }
     }
 
     private fun updateIptvGuideCurrentName() {
@@ -5025,6 +5280,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } else {
                 iptvGuideCurrentGroup?.visibility = View.GONE
             }
+
+            // EPG now/next for the playing channel
+            updateIptvGuideEpgHeader()
+            ensureIptvChannelEpg(ch)
 
             // Now playing logo
             val firstLetter = if (ch.name.isNotEmpty()) ch.name[0].uppercase() else "?"
@@ -7655,6 +7914,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             seekFeedbackManager.destroy()
         }
 
+        // The IPTV schedule dialog's window must not outlive the activity —
+        // finish() paths that bypass hideIptvGuide (stream-failure ladder,
+        // remote stop) would otherwise leak it.
+        iptvScheduleDialog?.dismiss()
+        iptvScheduleDialog = null
+
         // Cancel PikPak retry operations
         cancelPikPakRetry()
         pikPakRetryHandler.removeCallbacksAndMessages(null)
@@ -9464,17 +9729,33 @@ private data class IptvChannelEntry(
     // half-watched movie and back returns to the right spot rather than to
     // the position it held at launch. Always 0 for live channels.
     var resumePositionMs: Long = 0L,
+    // EPG (Xtream panels), fetched lazily over the bridge as rows bind.
+    // Instances are shared between the master list and the adapter's filtered
+    // copy, so a fetch landing updates both. epgLoaded means "asked once" —
+    // a stale answer (now-programme ended) re-arms the fetch on next bind.
+    var epgNowTitle: String? = null,
+    var epgNowStartMs: Long = 0L,
+    var epgNowStopMs: Long = 0L,
+    var epgNextTitle: String? = null,
+    var epgNextStartMs: Long = 0L,
+    var epgLoaded: Boolean = false,
+    var epgLoading: Boolean = false,
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private class IptvChannelAdapter(
     private var channels: MutableList<IptvChannelEntry>,
     private val onItemClick: (IptvChannelEntry) -> Unit,
+    // Fired from bind for live rows without (fresh) EPG — the activity
+    // fetches over the bridge and answers with notifyEpgFor. Bind-driven, so
+    // only rows that actually come on screen ever cost a request.
+    private val onEpgNeeded: ((IptvChannelEntry) -> Unit)? = null,
 ) : RecyclerView.Adapter<IptvChannelAdapter.ViewHolder>() {
 
     companion object {
         private val ACCENT = Color.parseColor("#00E5FF")
         private val ACCENT_DIM = Color.parseColor("#CC00E5FF")
+        const val PAYLOAD_EPG = "epg"
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -9483,6 +9764,7 @@ private class IptvChannelAdapter(
         val letter: TextView = view.findViewById(R.id.iptv_channel_letter)
         val name: TextView = view.findViewById(R.id.iptv_channel_name)
         val group: TextView = view.findViewById(R.id.iptv_channel_group)
+        val epg: TextView = view.findViewById(R.id.iptv_channel_epg)
         val liveBadge: View = view.findViewById(R.id.iptv_channel_live_badge)
         val nowBadge: TextView = view.findViewById(R.id.iptv_channel_now_badge)
     }
@@ -9491,6 +9773,15 @@ private class IptvChannelAdapter(
         val view = android.view.LayoutInflater.from(parent.context)
             .inflate(R.layout.item_iptv_channel, parent, false)
         return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isNotEmpty() && payloads[0] == PAYLOAD_EPG) {
+            // Partial bind — refresh the EPG line only, preserving focus/scale.
+            bindEpgLine(holder, channels[position])
+            return
+        }
+        super.onBindViewHolder(holder, position, payloads)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -9520,6 +9811,15 @@ private class IptvChannelAdapter(
             holder.group.visibility = View.VISIBLE
         } else {
             holder.group.visibility = View.GONE
+        }
+
+        // EPG line — bind what we have; ask for what we don't. "Stale" means
+        // the programme we knew about has ended, so the next bind re-asks.
+        bindEpgLine(holder, entry)
+        if (entry.isLive && !entry.epgLoading) {
+            val stale = entry.epgLoaded && entry.epgNowStopMs > 0 &&
+                entry.epgNowStopMs < System.currentTimeMillis()
+            if (!entry.epgLoaded || stale) onEpgNeeded?.invoke(entry)
         }
 
         // Badges — show NOW for current, LIVE for non-current live
@@ -9584,6 +9884,24 @@ private class IptvChannelAdapter(
     }
 
     override fun getItemCount(): Int = channels.size
+
+    private fun bindEpgLine(holder: ViewHolder, entry: IptvChannelEntry) {
+        val title = entry.epgNowTitle
+        if (title != null) {
+            holder.epg.text = "Now: $title"
+            holder.epg.visibility = View.VISIBLE
+        } else {
+            holder.epg.visibility = View.GONE
+        }
+    }
+
+    /** A bridge EPG fetch landed for [entry] — repaint its row if visible. */
+    fun notifyEpgFor(entry: IptvChannelEntry) {
+        val position = channels.indexOfFirst { it === entry }
+        if (position >= 0) notifyItemChanged(position, PAYLOAD_EPG)
+    }
+
+    fun entryAt(position: Int): IptvChannelEntry? = channels.getOrNull(position)
 
     fun updateChannels(filtered: List<IptvChannelEntry>) {
         channels.clear()

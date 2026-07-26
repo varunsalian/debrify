@@ -23,9 +23,11 @@ import '../home/home_theme.dart';
 import '../see_all/see_all_filter_bar.dart';
 import '../see_all/see_all_theme.dart';
 import '../see_all/stremio_dropdown.dart';
+import '../../services/iptv_epg_service.dart';
 import 'iptv_filters.dart';
 import 'iptv_channel_row.dart';
 import 'iptv_empty_state.dart';
+import 'iptv_epg_panel.dart';
 
 /// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)"
 /// — pulled out of the rail's big title into its sub-line (the channel rows do
@@ -184,6 +186,36 @@ class IptvResultsViewState extends State<IptvResultsView>
   );
 
   String _lastSearchQuery = '';
+
+  /// Channel whose programme schedule is open. On TV it swaps the two-pane
+  /// layout's right side (guide list) for the schedule while the preview
+  /// keeps playing; phone/desktop use a bottom sheet and never set this.
+  IptvChannel? _scheduleChannel;
+
+  /// The schedule action for a row, or null when the channel can't have
+  /// guide data (no RIGHT-key handling, no calendar icon).
+  VoidCallback? _scheduleActionFor(IptvChannel channel) {
+    if (!IptvEpgService.isEpgCapable(channel)) return null;
+    if (widget.isTelevision) return () => _openSchedulePane(channel);
+    return () => showIptvScheduleSheet(context, channel);
+  }
+
+  void _openSchedulePane(IptvChannel channel) {
+    setState(() => _scheduleChannel = channel);
+  }
+
+  void _closeSchedulePane() {
+    final channel = _scheduleChannel;
+    if (channel == null) return;
+    setState(() => _scheduleChannel = null);
+    // Hand focus back to the row that opened the schedule. Post-frame: the
+    // grid (and the cached node's row) only exists again after this build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final node = _cardFocusNodes[channel];
+      if (node != null && node.canRequestFocus) node.requestFocus();
+    });
+  }
 
   @override
   void initState() {
@@ -400,6 +432,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       _selectedCategory = null;
       // Positions belong to the outgoing playlist's URLs.
       _progressByUrl = {};
+      // An open schedule belongs to the outgoing playlist too.
+      _scheduleChannel = null;
     });
 
     // Dispose old focus nodes
@@ -450,6 +484,10 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (!mounted || ticket != _loadTicket) return;
 
     if (result.hasError) {
+      // The context lifecycle follows leaving the playlist, not load
+      // success: a failed switch must still drop the previous playlist's
+      // guide index (memory + wrong capability answers for its URLs).
+      IptvEpgService.instance.clearM3uEpgContext();
       setState(() {
         _isLoading = false;
         _isLoadingMore = false;
@@ -493,6 +531,43 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
 
     _applyFilters();
+    _updateEpgContext(playlist, result, ticket);
+  }
+
+  /// Activate (or clear) XMLTV guide data for the loaded playlist. Fire and
+  /// forget: the list renders immediately, and rows re-render with their
+  /// schedule affordances if/when the guide lands. Xtream playlists skip
+  /// this entirely — their EPG rides on per-stream endpoints.
+  void _updateEpgContext(
+    IptvPlaylist playlist,
+    IptvParseResult result,
+    int ticket,
+  ) {
+    final service = IptvEpgService.instance;
+    final isPlainM3u = !playlist.isFavorites &&
+        !playlist.isContinueWatching &&
+        !playlist.isStremioAddon &&
+        !playlist.isXtreamCodes;
+    if (!isPlainM3u) {
+      service.clearM3uEpgContext();
+      return;
+    }
+    // A user-configured guide URL beats the playlist header's url-tvg.
+    final manual = playlist.epgUrl?.trim();
+    final epgUrl =
+        (manual != null && manual.isNotEmpty) ? manual : result.epgUrl;
+    service
+        .setM3uEpgContext(
+          playlistKey: playlist.id,
+          epgUrl: epgUrl,
+          channels: result.channels,
+        )
+        .then((hasData) {
+      // Capability changed: rebuild the rows so EPG-covered channels gain
+      // the RIGHT-key/calendar affordance. The rail card refreshes itself
+      // via the service's contextVersion listener.
+      if (hasData && mounted && ticket == _loadTicket) setState(() {});
+    });
   }
 
   /// A page of Stremio channels landed while the catalog walk is still
@@ -959,19 +1034,42 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   Widget _buildTvTwoPane(BoxConstraints c) {
     final railW = (c.maxWidth * 0.40).clamp(320.0, 470.0);
+    final scheduleChannel = _scheduleChannel;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(width: railW, child: _buildPreviewRail()),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // An open schedule covers the guide column in place — the preview
+          // rail keeps playing, and BACK restores the list exactly as it
+          // was. Offstage (not a swap) keeps the grid, its scroll offset and
+          // its focus nodes alive, so closing can hand focus straight back
+          // to the originating row; ExcludeFocus keeps DPAD from wandering
+          // into the hidden rows meanwhile.
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 14, 24, 4),
-                child: _buildQuietFilters(),
+              Offstage(
+                offstage: scheduleChannel != null,
+                child: ExcludeFocus(
+                  excluding: scheduleChannel != null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 14, 24, 4),
+                        child: _buildQuietFilters(),
+                      ),
+                      Expanded(child: _buildContent(tvPane: true)),
+                    ],
+                  ),
+                ),
               ),
-              Expanded(child: _buildContent(tvPane: true)),
+              if (scheduleChannel != null)
+                IptvSchedulePane(
+                  channel: scheduleChannel,
+                  onClose: _closeSchedulePane,
+                ),
             ],
           ),
         ),
@@ -1166,7 +1264,9 @@ class IptvResultsViewState extends State<IptvResultsView>
               _buildPreviewStage(ch, epoch),
               const SizedBox(height: 16),
               Expanded(child: _IptvRailInfo(channel: ch)),
-              const _IptvRailHints(),
+              _IptvRailHints(
+                showGuide: ch != null && IptvEpgService.isEpgCapable(ch),
+              ),
             ],
           ),
         ),
@@ -1400,48 +1500,71 @@ class IptvResultsViewState extends State<IptvResultsView>
     // TV two-pane's guide column (which is roughly phone-width anyway).
     final w = MediaQuery.of(context).size.width;
     final hPadding = tvPane ? 10.0 : (w >= 900 ? 28.0 : 12.0);
+    final maxCrossAxisExtent = tvPane ? 720.0 : 440.0;
+    const crossAxisSpacing = 12.0;
+    final padRight = tvPane ? 24.0 : hPadding;
 
-    final grid = TvFocusScrollWrapper(
-      child: FocusTraversalGroup(
-        child: GridView.builder(
-          controller: _scrollController,
-          padding: EdgeInsets.fromLTRB(hPadding, 8, tvPane ? 24 : hPadding, 24),
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
+    final grid = LayoutBuilder(
+      builder: (context, constraints) {
+        // The delegate's own column math, replicated so rows can know
+        // whether they sit on the grid's right edge (those get the
+        // RIGHT-opens-schedule key; the rest keep plain traversal).
+        final crossExtent =
+            (constraints.maxWidth - hPadding - padRight).clamp(1.0, double.infinity);
+        final columns = (crossExtent / (maxCrossAxisExtent + crossAxisSpacing))
+            .ceil()
+            .clamp(1, 100);
+        final itemCount = _filteredChannels.length;
+
+        return TvFocusScrollWrapper(
+          child: FocusTraversalGroup(
+            child: GridView.builder(
+              controller: _scrollController,
+              padding: EdgeInsets.fromLTRB(hPadding, 8, padRight, 24),
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: maxCrossAxisExtent,
+                // A grid has one tile height for every row, so the taller
+                // poster rows are all-or-nothing per view. On-demand lists are
+                // homogeneous in practice (the type dropdown splits live from
+                // movies, and both virtual shelves are single-kind).
+                mainAxisExtent:
+                    _showsPosterRows ? kIptvPosterRowExtent : kIptvRowExtent,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: crossAxisSpacing,
+              ),
+              itemCount: itemCount,
+              itemBuilder: (context, index) {
+                final channel = _filteredChannels[index];
+                // Right edge = last column, or the final item of a partial
+                // last row (nothing exists to its right either way).
+                final rightEdge = index % columns == columns - 1 ||
+                    index == itemCount - 1;
+                return IptvChannelRow(
+                  // ObjectKey, not ValueKey(url): duplicate URLs are legal in a
+                  // playlist, and sibling rows must never share a key (or the
+                  // focus node cached behind it — see _cardFocusNodes).
+                  key: ObjectKey(channel),
+                  channel: channel,
+                  isTelevision: widget.isTelevision,
+                  onTap: () => _playChannel(channel),
+                  focusNode: _focusNodeFor(channel),
+                  isFavorited: _favoriteUrls.contains(channel.url),
+                  onFavoriteToggle: (isFavorited) =>
+                      _toggleFavorite(channel, isFavorited),
+                  onFocused: tvPane ? () => _onChannelFocused(channel) : null,
+                  onSchedule: _scheduleActionFor(channel),
+                  scheduleOnRightKey: rightEdge,
+                  progress: _progressByUrl[channel.url],
+                  poster: _showsPosterRows,
+                );
+              },
+            ),
           ),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: tvPane ? 720 : 440,
-            // A grid has one tile height for every row, so the taller
-            // poster rows are all-or-nothing per view. On-demand lists are
-            // homogeneous in practice (the type dropdown splits live from
-            // movies, and both virtual shelves are single-kind).
-            mainAxisExtent:
-                _showsPosterRows ? kIptvPosterRowExtent : kIptvRowExtent,
-            mainAxisSpacing: 4,
-            crossAxisSpacing: 12,
-          ),
-          itemCount: _filteredChannels.length,
-          itemBuilder: (context, index) {
-            final channel = _filteredChannels[index];
-            return IptvChannelRow(
-              // ObjectKey, not ValueKey(url): duplicate URLs are legal in a
-              // playlist, and sibling rows must never share a key (or the
-              // focus node cached behind it — see _cardFocusNodes).
-              key: ObjectKey(channel),
-              channel: channel,
-              isTelevision: widget.isTelevision,
-              onTap: () => _playChannel(channel),
-              focusNode: _focusNodeFor(channel),
-              isFavorited: _favoriteUrls.contains(channel.url),
-              onFavoriteToggle: (isFavorited) =>
-                  _toggleFavorite(channel, isFavorited),
-              onFocused: tvPane ? () => _onChannelFocused(channel) : null,
-              progress: _progressByUrl[channel.url],
-              poster: _showsPosterRows,
-            );
-          },
-        ),
-      ),
+        );
+      },
     );
     if (!_isLoadingMore) return grid;
 
@@ -1933,14 +2056,20 @@ class _IptvRailInfo extends StatelessWidget {
             ),
           ],
         ),
+        // What's on: now/next for the focused channel. Renders nothing for
+        // channels without guide data, so the rail is unchanged for those.
+        const SizedBox(height: 14),
+        Flexible(child: IptvRailEpgCard(channel: ch)),
       ],
     );
   }
 }
 
-/// Bottom-of-rail key hints: OK to watch fullscreen, hold OK to favourite.
+/// Bottom-of-rail key hints: OK to watch fullscreen, hold OK to favourite,
+/// and — when the focused channel has guide data — RIGHT for its schedule.
 class _IptvRailHints extends StatelessWidget {
-  const _IptvRailHints();
+  final bool showGuide;
+  const _IptvRailHints({this.showGuide = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1953,6 +2082,12 @@ class _IptvRailHints extends StatelessWidget {
         const _KeyCap('HOLD OK'),
         const SizedBox(width: 6),
         _hint('Favorite'),
+        if (showGuide) ...[
+          const SizedBox(width: 16),
+          const _KeyCap('▶'),
+          const SizedBox(width: 6),
+          _hint('Guide'),
+        ],
       ],
     );
   }

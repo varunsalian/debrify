@@ -23,6 +23,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     with SingleTickerProviderStateMixin {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
+  final TextEditingController _epgUrlController = TextEditingController();
   final FocusNode _backButtonFocusNode = FocusNode(
     debugLabel: 'iptv-back-button',
   );
@@ -30,6 +31,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     debugLabel: 'iptv-name-input',
   );
   final FocusNode _urlInputFocusNode = FocusNode(debugLabel: 'iptv-url-input');
+  final FocusNode _epgUrlInputFocusNode =
+      FocusNode(debugLabel: 'iptv-epg-url-input');
   final FocusNode _addButtonFocusNode = FocusNode(
     debugLabel: 'iptv-add-button',
   );
@@ -126,9 +129,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _tabController.dispose();
     _nameController.dispose();
     _urlController.dispose();
+    _epgUrlController.dispose();
     _backButtonFocusNode.dispose();
     _nameInputFocusNode.dispose();
     _urlInputFocusNode.dispose();
+    _epgUrlInputFocusNode.dispose();
     _addButtonFocusNode.dispose();
     _importFileButtonFocusNode.dispose();
     _xcServerController.dispose();
@@ -236,10 +241,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
 
     // Create new playlist
+    final epgUrl = _epgUrlController.text.trim();
     final playlist = IptvPlaylist(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       url: url,
+      epgUrl: epgUrl.isEmpty ? null : epgUrl,
       addedAt: DateTime.now(),
     );
 
@@ -250,6 +257,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _playlists = newPlaylists;
       _nameController.clear();
       _urlController.clear();
+      _epgUrlController.clear();
       _isAdding = false;
     });
     _ensureFocusNodes();
@@ -660,6 +668,24 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             labelText: 'Playlist URL',
             hintText: 'https://example.com/playlist.m3u',
             prefixIcon: const Icon(Icons.link),
+            textInputAction: TextInputAction.next,
+            onSubmitted: (_) => _focusAndReveal(_epgUrlInputFocusNode),
+            onUpArrow: () => _focusAndReveal(_nameInputFocusNode),
+            onDownArrow: () => _focusAndReveal(_epgUrlInputFocusNode),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // EPG URL input (optional). Playlists that declare url-tvg in their
+        // own header don't need it; this overrides when both exist.
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(4),
+          child: TvTextField(
+            controller: _epgUrlController,
+            focusNode: _epgUrlInputFocusNode,
+            labelText: 'EPG URL (XMLTV, optional)',
+            hintText: 'https://example.com/guide.xml.gz',
+            prefixIcon: const Icon(Icons.calendar_view_day_outlined),
             textInputAction: TextInputAction.done,
             onSubmitted: (_) {
               // IME "done" unfocuses the field — park DPAD on the button so
@@ -667,7 +693,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               _addButtonFocusNode.requestFocus();
               _addPlaylist();
             },
-            onUpArrow: () => _focusAndReveal(_nameInputFocusNode),
+            onUpArrow: () => _focusAndReveal(_urlInputFocusNode),
             onDownArrow: () => _focusAndReveal(_addButtonFocusNode),
           ),
         ),
@@ -675,7 +701,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
         // Add button
         FocusTraversalOrder(
-          order: const NumericFocusOrder(4),
+          // 4.5: after the EPG field, before the playlist tiles at 5.0 + i.
+          order: const NumericFocusOrder(4.5),
           child: Align(
             alignment: Alignment.centerRight,
             child: _TvFocusableButton(
@@ -683,7 +710,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               icon: _isAdding ? Icons.hourglass_empty : Icons.add,
               label: _isAdding ? 'Adding...' : 'Add Playlist',
               onPressed: _isAdding ? () {} : _addPlaylist,
-              onUpArrow: () => _focusAndReveal(_urlInputFocusNode),
+              onUpArrow: () => _focusAndReveal(_epgUrlInputFocusNode),
               onDownArrow:
                   _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
                   ? () => _focusAndReveal(_playlistFocusNodes[0])

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../services/iptv_epg_service.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/iptv_playlist.dart';
@@ -643,22 +645,10 @@ class _ChannelTile extends StatelessWidget {
                       letterSpacing: -0.2,
                     ),
                   ),
-                  if (channel.group != null && channel.group!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        channel.group!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isFocused
-                              ? Colors.white.withOpacity(0.4)
-                              : Colors.white.withOpacity(0.22),
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: _TileSubLine(channel: channel, isFocused: isFocused),
+                  ),
                 ],
               ),
             ),
@@ -805,6 +795,102 @@ class _ChannelTile extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// The tile's sub-line: the airing programme ("Now: …") when the channel has
+/// guide data, the category group otherwise. Each tile fetches for itself —
+/// ListView.builder only builds visible tiles, so this is naturally
+/// viewport-scoped, and the small delay keeps a fast DPAD scroll through a
+/// big list from firing a request per passing row (the EPG service coalesces
+/// and caches the rest).
+class _TileSubLine extends StatefulWidget {
+  final IptvChannel channel;
+  final bool isFocused;
+  const _TileSubLine({required this.channel, required this.isFocused});
+
+  @override
+  State<_TileSubLine> createState() => _TileSubLineState();
+}
+
+class _TileSubLineState extends State<_TileSubLine> {
+  EpgProgramme? _now;
+  Timer? _fetchDelay;
+
+  @override
+  void initState() {
+    super.initState();
+    // XMLTV guides can land after the sheet's tiles were built (the first
+    // download takes minutes) — same race the page's rail card handles.
+    IptvEpgService.instance.contextVersion.addListener(_onEpgContextChanged);
+    _sync();
+  }
+
+  void _onEpgContextChanged() {
+    if (!mounted) return;
+    _fetchDelay?.cancel();
+    setState(_sync);
+  }
+
+  @override
+  void didUpdateWidget(_TileSubLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The list recycles this element for a different channel (scrolling,
+    // filtering) — never let the old channel's programme linger. A build
+    // follows didUpdateWidget, so plain assignment inside _sync suffices.
+    if (oldWidget.channel.url != widget.channel.url) {
+      _fetchDelay?.cancel();
+      _sync();
+    }
+  }
+
+  /// Assigns [_now] from cache (or schedules the fetch). Callers that are
+  /// not already followed by a build must wrap this in setState.
+  void _sync() {
+    _now = null;
+    if (!IptvEpgService.isEpgCapable(widget.channel)) return;
+    final cached = IptvEpgService.instance.peekNowNext(widget.channel.url);
+    if (cached != null) {
+      _now = cached.now;
+      return;
+    }
+    final url = widget.channel.url;
+    _fetchDelay = Timer(const Duration(milliseconds: 350), () async {
+      final result = await IptvEpgService.instance.nowNext(url);
+      if (mounted && url == widget.channel.url) {
+        setState(() => _now = result.now);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    IptvEpgService.instance.contextVersion
+        .removeListener(_onEpgContextChanged);
+    _fetchDelay?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = _now;
+    final group = widget.channel.group;
+    if (now == null && (group == null || group.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    return Text(
+      now != null ? 'Now:  ${now.title}' : group!,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: now != null
+            ? const Color(0xFF00E5FF)
+                .withValues(alpha: widget.isFocused ? 0.75 : 0.5)
+            : Colors.white.withValues(alpha: widget.isFocused ? 0.4 : 0.22),
+        fontSize: 10.5,
+        fontWeight: now != null ? FontWeight.w500 : FontWeight.w400,
+      ),
     );
   }
 }

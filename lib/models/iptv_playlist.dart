@@ -19,6 +19,11 @@ class IptvPlaylist {
   final String? serverUrl;  // Xtream Codes server URL
   final String? username;   // Xtream Codes username
   final String? password;   // Xtream Codes password
+
+  /// User-supplied XMLTV guide URL for M3U playlists. Overrides whatever the
+  /// playlist's own `#EXTM3U url-tvg=` header declares (most declare none).
+  final String? epgUrl;
+
   final DateTime addedAt;
 
   const IptvPlaylist({
@@ -29,6 +34,7 @@ class IptvPlaylist {
     this.serverUrl,
     this.username,
     this.password,
+    this.epgUrl,
     required this.addedAt,
   });
 
@@ -60,6 +66,7 @@ class IptvPlaylist {
     if (serverUrl != null) 'serverUrl': serverUrl,
     if (username != null) 'username': username,
     if (password != null) 'password': password,
+    if (epgUrl != null) 'epgUrl': epgUrl,
     'addedAt': addedAt.toIso8601String(),
   };
 
@@ -71,6 +78,7 @@ class IptvPlaylist {
     serverUrl: json['serverUrl'] as String?,
     username: json['username'] as String?,
     password: json['password'] as String?,
+    epgUrl: json['epgUrl'] as String?,
     addedAt: DateTime.parse(json['addedAt'] as String),
   );
 
@@ -167,11 +175,17 @@ class IptvParseResult {
   /// unavailable, so channels are shown ungrouped).
   final String? warning;
 
+  /// XMLTV guide URL the playlist's own `#EXTM3U url-tvg=` / `x-tvg-url=`
+  /// header declared, if any. A user-configured [IptvPlaylist.epgUrl] wins
+  /// over this.
+  final String? epgUrl;
+
   const IptvParseResult({
     required this.channels,
     required this.categories,
     this.error,
     this.warning,
+    this.epgUrl,
   });
 
   bool get hasError => error != null;

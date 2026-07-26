@@ -167,6 +167,19 @@
                         android:ellipsize="end"
                         android:visibility="gone"
                         tools:text="Sports" />
+
+                    <!-- EPG now/next for the playing channel -->
+                    <TextView
+                        android:id="@+id/iptv_guide_current_epg"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:textColor="#B300E5FF"
+                        android:textSize="10sp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:visibility="gone"
+                        tools:text="Now: NBA Finals  ›  Next: SportsCenter" />
                 </LinearLayout>
 
                 <TextView

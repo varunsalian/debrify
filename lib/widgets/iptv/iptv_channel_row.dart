@@ -35,6 +35,20 @@ class IptvChannelRow extends StatefulWidget {
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
 
+  /// Opens this channel's programme schedule. TV fires it on RIGHT (the only
+  /// key a row has left: OK plays, hold-OK favourites, LEFT is the sidebar's);
+  /// touch/desktop get a small trailing calendar affordance instead. Null for
+  /// channels without guide data — the key and the icon simply don't exist.
+  final VoidCallback? onSchedule;
+
+  /// Whether RIGHT triggers [onSchedule] on this row. Set by the list for
+  /// rows on the grid's right edge only — the list knows the column count;
+  /// the row doesn't. Rows with a genuine right-hand neighbour keep plain
+  /// directional traversal (probing with focusInDirection instead was tried
+  /// and jumps diagonally out of partial last rows). Touch/desktop ignore
+  /// this — the calendar icon carries the action there.
+  final bool scheduleOnRightKey;
+
   /// Saved playback position as a 0-1 fraction, or null when this item has
   /// none. Drawn as a bar across the foot of the poster.
   final double? progress;
@@ -54,6 +68,8 @@ class IptvChannelRow extends StatefulWidget {
     this.isFavorited = false,
     this.onFavoriteToggle,
     this.onFocused,
+    this.onSchedule,
+    this.scheduleOnRightKey = false,
     this.progress,
     this.poster = false,
   });
@@ -225,6 +241,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
               ],
             ),
           ),
+          _buildScheduleTrailing(),
           _buildFavTrailing(),
         ],
       ),
@@ -251,6 +268,17 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         }
       },
       onKeyEvent: (node, event) {
+        // RIGHT opens the schedule on right-edge rows (the list decides
+        // which those are — see [scheduleOnRightKey]). Key-down only;
+        // repeats are swallowed so holding RIGHT can't re-open it.
+        if (widget.isTelevision &&
+            widget.scheduleOnRightKey &&
+            widget.onSchedule != null &&
+            event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (event is KeyDownEvent) widget.onSchedule!();
+          return KeyEventResult.handled;
+        }
+
         final isSelect = isActivateKey(event.logicalKey) ||
             event.logicalKey == LogicalKeyboardKey.space;
         if (!isSelect) return KeyEventResult.ignored;
@@ -289,6 +317,32 @@ class _IptvChannelRowState extends State<IptvChannelRow>
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: row,
+        ),
+      ),
+    );
+  }
+
+  /// Trailing schedule affordance for touch/desktop (TV opens the schedule
+  /// with RIGHT instead — no icon there). Follows the favourite heart's
+  /// visibility rules: always present on touch, hover-revealed on desktop.
+  Widget _buildScheduleTrailing() {
+    if (widget.onSchedule == null || widget.isTelevision) {
+      return const SizedBox.shrink();
+    }
+    final show = _active || _isTouchMobile;
+    if (!show) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: IconButton(
+        onPressed: widget.onSchedule,
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+        tooltip: 'TV guide',
+        icon: Icon(
+          Icons.calendar_view_day_rounded,
+          size: 18,
+          color: Colors.white.withValues(alpha: 0.55),
         ),
       ),
     );
