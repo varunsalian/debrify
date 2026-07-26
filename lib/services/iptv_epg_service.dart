@@ -132,6 +132,11 @@ class IptvEpgService {
       if (id == null || id.isEmpty) continue;
       urlToId[channel.url] = id;
       ids.add(id);
+      // iptv-org-style playlists suffix a feed onto the id (BBCOne.uk@SD)
+      // while guides typically publish the bare id (BBCOne.uk). Admit both
+      // forms into the parser's filter; lookup tries exact first.
+      final bare = stripFeedSuffix(id);
+      if (bare != id) ids.add(bare);
     }
     if (ids.isEmpty) return false;
 
@@ -170,14 +175,29 @@ class IptvEpgService {
   }
 
   /// The active XMLTV programme list for a channel URL, or null when the
-  /// channel isn't covered by the loaded guide.
+  /// channel isn't covered by the loaded guide. Exact tvg-id match wins;
+  /// the feed-suffix-stripped form is only a fallback, so a guide that
+  /// really does publish per-feed ids can never be shadowed by the bare one.
   List<EpgProgramme>? _xmltvProgrammesFor(String channelUrl) {
     final index = _xmltvIndex;
     if (index == null) return null;
     final tvgId = _m3uUrlToTvgId[channelUrl];
     if (tvgId == null) return null;
-    final programmes = index[tvgId];
+    var programmes = index[tvgId];
+    if (programmes == null || programmes.isEmpty) {
+      final bare = stripFeedSuffix(tvgId);
+      if (bare != tvgId) programmes = index[bare];
+    }
     return (programmes == null || programmes.isEmpty) ? null : programmes;
+  }
+
+  /// `BBCOne.uk@SD` → `BBCOne.uk`. iptv-org playlists append the feed
+  /// (`@SD`/`@HD`/…) to the channel id; guide files usually don't. Ids
+  /// without an `@` (or with a leading one) pass through unchanged.
+  @visibleForTesting
+  static String stripFeedSuffix(String tvgId) {
+    final at = tvgId.indexOf('@');
+    return at > 0 ? tvgId.substring(0, at) : tvgId;
   }
 
   // ── Capability + lookups ──────────────────────────────────────────────────
