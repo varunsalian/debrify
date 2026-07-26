@@ -558,19 +558,46 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     // A user-configured guide URL beats the playlist header's url-tvg.
     final manual = playlist.epgUrl?.trim();
-    final epgUrl =
-        (manual != null && manual.isNotEmpty) ? manual : result.epgUrl;
+    final hasManualUrl = manual != null && manual.isNotEmpty;
+    final epgUrl = hasManualUrl ? manual : result.epgUrl;
     service
         .setM3uEpgContext(
           playlistKey: playlist.id,
           epgUrl: epgUrl,
           channels: result.channels,
         )
-        .then((hasData) {
-      // Capability changed: rebuild the rows so EPG-covered channels gain
-      // the RIGHT-key/calendar affordance. The rail card refreshes itself
-      // via the service's contextVersion listener.
-      if (hasData && mounted && ticket == _loadTicket) setState(() {});
+        .then((status) {
+      if (!mounted || ticket != _loadTicket) return;
+      // Failure hints only for a guide the user configured themselves.
+      // Header-derived url-tvg URLs are routinely dead in wild playlists —
+      // those users never asked for EPG and got silent no-guide before;
+      // nagging them on every load would be a regression.
+      void hint(String message) {
+        if (!hasManualUrl) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
+
+      switch (status) {
+        case M3uEpgStatus.matched:
+          // Capability changed: rebuild the rows so EPG-covered channels
+          // gain the RIGHT-key/calendar affordance. The rail card refreshes
+          // itself via the service's contextVersion listener.
+          setState(() {});
+        // The guide failing is otherwise invisible — rows just never grow
+        // their affordances — and "EPG doesn't work" reports can't tell
+        // the flavors apart. Say which one happened.
+        case M3uEpgStatus.noMatch:
+          hint('TV guide loaded, but none of its channels matched this '
+              'playlist (the ids and names don\'t line up).');
+        case M3uEpgStatus.noProgrammes:
+          hint('TV guide matched this playlist, but it has no programme '
+              'data for the current period.');
+        case M3uEpgStatus.failed:
+          hint('Couldn\'t load the TV guide — check the EPG URL.');
+        case M3uEpgStatus.inactive:
+          break;
+      }
     });
   }
 

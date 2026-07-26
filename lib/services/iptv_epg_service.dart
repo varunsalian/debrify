@@ -61,6 +61,27 @@ class EpgNowNext {
   bool get isEmpty => now == null && next == null;
 }
 
+/// Outcome of activating a playlist's XMLTV guide. The page uses this to
+/// explain the silent-failure cases ("guide loaded, nothing matched") that
+/// non-technical users otherwise report as "EPG doesn't work".
+enum M3uEpgStatus {
+  /// No guide URL, nothing to match, or superseded by a newer load.
+  inactive,
+
+  /// Guide active: at least one channel got programmes.
+  matched,
+
+  /// Guide downloaded and parsed, but not one channel matched by id or name.
+  noMatch,
+
+  /// Channels DID pair up (by id or name), but no programmes survived the
+  /// time window — the guide is stale/empty, not mismatched.
+  noProgrammes,
+
+  /// Download/parse failed and no snapshot could stand in.
+  failed,
+}
+
 /// Xtream credentials recovered from a live-stream URL.
 class _XtreamRef {
   final String server;
@@ -111,6 +132,14 @@ class IptvEpgService {
   // (a few MB after filtering); lookups compute now/next fresh on every ask,
   // which is what lets the rail roll programmes with no re-fetch at all.
   Map<String, String> _m3uUrlToTvgId = const {};
+
+  /// Name-fallback candidates per channel URL, normalized, in Kodi's pass
+  /// order: tvg-name first, then the channel's display name.
+  Map<String, List<String>> _m3uUrlToNames = const {};
+
+  /// Normalized name → XMLTV channel id, resolved by the parser against the
+  /// guide's `<display-name>`s.
+  Map<String, String> _xmltvNameToId = const {};
   Map<String, List<EpgProgramme>>? _xmltvIndex;
 
   /// Guards the claim-then-await in [setM3uEpgContext]. A playlist-key
@@ -126,44 +155,76 @@ class IptvEpgService {
 
   /// Activate XMLTV guide data for a just-loaded M3U playlist. Downloads (or
   /// reads the disk snapshot of) the guide at [epgUrl], filtered to the
-  /// playlist's tvg-ids. Returns true when any channel got programmes — the
-  /// caller re-renders its rows then, since capability changed.
-  Future<bool> setM3uEpgContext({
+  /// playlist's tvg-ids AND its channel names — the Kodi-style fallback so
+  /// playlists and guides from different providers still pair up. Returns
+  /// [M3uEpgStatus.matched] when any channel got programmes — the caller
+  /// re-renders its rows then, since capability changed — and the failure
+  /// flavors otherwise so the page can say WHY there's no guide.
+  Future<M3uEpgStatus> setM3uEpgContext({
     required String playlistKey,
     required String? epgUrl,
     required List<IptvChannel> channels,
   }) async {
     clearM3uEpgContext();
     final url = epgUrl?.trim();
-    if (url == null || url.isEmpty) return false;
+    if (url == null || url.isEmpty) return M3uEpgStatus.inactive;
 
     final urlToId = <String, String>{};
     final ids = <String>{};
+    final urlToNames = <String, List<String>>{};
+    final wantedNames = <String>{};
     for (final channel in channels) {
       if (!channel.isLive) continue;
       final id = channel.tvgId?.trim();
-      if (id == null || id.isEmpty) continue;
-      urlToId[channel.url] = id;
-      ids.add(id);
-      // iptv-org-style playlists suffix a feed onto the id (BBCOne.uk@SD)
-      // while guides typically publish the bare id (BBCOne.uk). Admit both
-      // forms into the parser's filter; lookup tries exact first.
-      final bare = stripFeedSuffix(id);
-      if (bare != id) ids.add(bare);
+      if (id != null && id.isNotEmpty) {
+        urlToId[channel.url] = id;
+        ids.add(id);
+        // iptv-org-style playlists suffix a feed onto the id (BBCOne.uk@SD)
+        // while guides typically publish the bare id (BBCOne.uk). Admit both
+        // forms into the parser's filter; lookup tries exact first.
+        final bare = stripFeedSuffix(id);
+        if (bare != id) ids.add(bare);
+      }
+      // Name candidates for every channel — ids stay authoritative, names
+      // only ever fill gaps (no tvg-id, or ids the guide doesn't use).
+      final candidates = <String>[];
+      for (final raw in [channel.tvgName, channel.name]) {
+        final norm = XmltvEpgSource.normalizeChannelName(raw ?? '');
+        if (norm.isNotEmpty && !candidates.contains(norm)) {
+          candidates.add(norm);
+        }
+      }
+      if (candidates.isNotEmpty) {
+        urlToNames[channel.url] = candidates;
+        wantedNames.addAll(candidates);
+      }
     }
-    if (ids.isEmpty) return false;
+    if (ids.isEmpty && wantedNames.isEmpty) return M3uEpgStatus.inactive;
 
     // Claim the context before the (potentially long) load so any newer
     // claim — a playlist switch OR a reload of this same playlist — wins
     // and this result gets dropped.
     final generation = ++_m3uContextGeneration;
-    final raw = await XmltvEpgSource.load(epgUrl: url, tvgIds: ids);
-    if (generation != _m3uContextGeneration) return false;
-    if (raw == null || raw.isEmpty) return false;
+    final guide = await XmltvEpgSource.load(
+      epgUrl: url,
+      tvgIds: ids,
+      channelNames: wantedNames,
+    );
+    if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
+    if (guide == null) return M3uEpgStatus.failed;
+    if (guide.byId.isEmpty) {
+      // Blame accurately: if <channel> elements did pair with the playlist,
+      // the problem is the guide's programme data, not the ids/names.
+      return guide.sawWantedChannel
+          ? M3uEpgStatus.noProgrammes
+          : M3uEpgStatus.noMatch;
+    }
 
     _m3uUrlToTvgId = urlToId;
+    _m3uUrlToNames = urlToNames;
+    _xmltvNameToId = guide.nameToId;
     _xmltvIndex = {
-      for (final entry in raw.entries)
+      for (final entry in guide.byId.entries)
         entry.key: [
           for (final row in entry.value)
             EpgProgramme(
@@ -175,7 +236,7 @@ class IptvEpgService {
         ],
     };
     contextVersion.value++;
-    return true;
+    return M3uEpgStatus.matched;
   }
 
   /// Drop the active XMLTV context (playlist switched away).
@@ -183,23 +244,36 @@ class IptvEpgService {
     final hadIndex = _xmltvIndex != null;
     _m3uContextGeneration++;
     _m3uUrlToTvgId = const {};
+    _m3uUrlToNames = const {};
+    _xmltvNameToId = const {};
     _xmltvIndex = null;
     if (hadIndex) contextVersion.value++;
   }
 
   /// The active XMLTV programme list for a channel URL, or null when the
-  /// channel isn't covered by the loaded guide. Exact tvg-id match wins;
-  /// the feed-suffix-stripped form is only a fallback, so a guide that
-  /// really does publish per-feed ids can never be shadowed by the bare one.
+  /// channel isn't covered by the loaded guide. Kodi's pass order: exact
+  /// tvg-id first (a guide that really does publish per-feed ids can never
+  /// be shadowed), then the feed-suffix-stripped id, then the normalized
+  /// tvg-name, then the normalized channel name.
   List<EpgProgramme>? _xmltvProgrammesFor(String channelUrl) {
     final index = _xmltvIndex;
     if (index == null) return null;
+    List<EpgProgramme>? programmes;
     final tvgId = _m3uUrlToTvgId[channelUrl];
-    if (tvgId == null) return null;
-    var programmes = index[tvgId];
+    if (tvgId != null) {
+      programmes = index[tvgId];
+      if (programmes == null || programmes.isEmpty) {
+        final bare = stripFeedSuffix(tvgId);
+        if (bare != tvgId) programmes = index[bare];
+      }
+    }
     if (programmes == null || programmes.isEmpty) {
-      final bare = stripFeedSuffix(tvgId);
-      if (bare != tvgId) programmes = index[bare];
+      for (final name in _m3uUrlToNames[channelUrl] ?? const <String>[]) {
+        final id = _xmltvNameToId[name];
+        if (id == null) continue;
+        programmes = index[id];
+        if (programmes != null && programmes.isNotEmpty) break;
+      }
     }
     return (programmes == null || programmes.isEmpty) ? null : programmes;
   }
