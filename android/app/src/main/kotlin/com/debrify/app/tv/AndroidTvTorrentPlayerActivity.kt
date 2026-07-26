@@ -4869,8 +4869,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     url = ch.optString("url"),
                     logoUrl = ch.optString("logoUrl").takeIf { it.isNotEmpty() },
                     group = ch.optString("group").takeIf { it.isNotEmpty() },
-                    isLive = ch.optInt("duration", -1).let { it == -1 || !ch.has("duration") },
+                    // Mirrors IptvChannel.isLive on the Dart side: an explicit
+                    // content type wins, and only M3U channels (which carry
+                    // none) fall back to the duration heuristic. The old
+                    // duration-only read called every Xtream movie live —
+                    // they serialize no duration at all — which both badged
+                    // them LIVE in the guide and, now, would skip their
+                    // resume reporting.
+                    isLive = when (ch.optString("contentType")) {
+                        "live" -> true
+                        "vod" -> false
+                        else -> ch.optInt("duration", -1) == -1
+                    },
                     isCurrent = false,
+                    resumePositionMs = ch.optLong("resumePositionMs", 0L),
                 )
             )
         }
@@ -5055,6 +5067,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun switchToIptvChannel(entry: IptvChannelEntry) {
         android.util.Log.d("AndroidTvPlayer", "switchToIptvChannel: ${entry.name} (index=${entry.index})")
+        // Bank the outgoing channel's position BEFORE currentIptvIndex moves,
+        // or zapping back to a half-watched movie would rewind it to wherever
+        // it stood when the player was launched.
+        checkpointCurrentIptvPosition()
         // A channel zap orphans any pending source-switch watcher (see playItem)
         dropStaleSourceSwitchFeedback()
 
@@ -5083,6 +5099,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         progressHandler.postDelayed({ hideNextOverlay() }, 1500)
 
         updateIptvGuideCurrentName()
+    }
+
+    /**
+     * Store the playing on-demand item's live position on its own entry, so a
+     * later zap back to it resumes from there.
+     *
+     * Mirrors the Flutter-side window: a barely-started or effectively
+     * finished item banks 0 and replays from the beginning, rather than
+     * stranding the viewer a second from the credits.
+     */
+    private fun checkpointCurrentIptvPosition() {
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
+        if (entry.isLive) return
+
+        val duration = player?.duration ?: 0L
+        val position = player?.currentPosition ?: 0L
+        if (duration <= 0L || position <= 0L) return
+
+        val fraction = position.toDouble() / duration.toDouble()
+        entry.resumePositionMs = if (fraction in 0.02..0.95) position else 0L
     }
 
     private fun playIptvChannel(index: Int) {
@@ -5121,12 +5157,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setMediaMetadata(metadata)
             .build()
 
+        // Resume on-demand items where they were left off. Passing the start
+        // position to setMediaItem rather than seeking after prepare avoids
+        // briefly rendering frame 0. Live channels always take the plain form:
+        // a start position on a live stream would drop it off the live edge.
+        val startAt = if (entry.isLive) 0L else entry.resumePositionMs
         player?.apply {
-            setMediaItem(mediaItem)
+            if (startAt > 0L) {
+                setMediaItem(mediaItem, startAt)
+            } else {
+                setMediaItem(mediaItem)
+            }
             prepare()
             playWhenReady = true
             play()
         }
+
+        // IPTV mode never goes through playMediaDirect, so nothing else starts
+        // the progress ticker here — without this the Flutter side is told
+        // nothing about on-demand playback and can't save a resume position.
+        restartProgressUpdates()
     }
 
     /**
@@ -6617,6 +6667,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun sendProgress(completed: Boolean) {
+        // IPTV mode builds no payload (initIptvMode returns before it is
+        // parsed), so it reports against the current channel instead.
+        if (isIptvMode) {
+            sendIptvProgress(completed)
+            return
+        }
         val model = payload ?: return
         val item = model.items[currentIndex]
         // Use the largest stable duration seen — ExoPlayer can briefly report a
@@ -6651,6 +6707,40 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "url" to item.url,
             "isPlaying" to (player?.isPlaying ?: false),
             "isBuffering" to (player?.playbackState == Player.STATE_BUFFERING)
+        )
+
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackProgress", map)
+    }
+
+    /**
+     * Report position for the IPTV channel currently playing, so Flutter can
+     * save a resume point for on-demand items (movies) and draw progress on
+     * their rows.
+     *
+     * Live channels are skipped: ExoPlayer reports TIME_UNSET for them, and a
+     * position into a live stream means nothing. That check doubles as the
+     * live/VOD filter — the Flutter side stores whatever it receives.
+     */
+    private fun sendIptvProgress(completed: Boolean) {
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
+        if (entry.isLive) return
+
+        val duration = player?.duration ?: 0L
+        if (duration <= 0L) return
+        val position = if (completed) duration else player?.currentPosition ?: 0L
+        if (position <= 0L) return
+
+        val map = hashMapOf<String, Any?>(
+            "mode" to "iptv",
+            "itemIndex" to currentIptvIndex,
+            "url" to entry.url,
+            "title" to entry.name,
+            "positionMs" to position.toInt().coerceAtLeast(0),
+            "durationMs" to duration.toInt().coerceAtLeast(0),
+            "speed" to playbackSpeeds[playbackSpeedIndex].toDouble(),
+            "aspect" to resizeModeLabels[resizeModeIndex].lowercase(),
+            "completed" to completed,
+            "isPlaying" to (player?.isPlaying ?: false),
         )
 
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackProgress", map)
@@ -9369,6 +9459,11 @@ private data class IptvChannelEntry(
     val group: String?,
     val isLive: Boolean,
     var isCurrent: Boolean,
+    // Where playback of this on-demand item should start. Seeded from the
+    // Flutter payload and kept current in-session, so zapping away from a
+    // half-watched movie and back returns to the right spot rather than to
+    // the position it held at launch. Always 0 for live channels.
+    var resumePositionMs: Long = 0L,
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)

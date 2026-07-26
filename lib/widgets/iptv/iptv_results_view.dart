@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import '../../models/iptv_playlist.dart';
 import '../browse/brand_accent.dart';
@@ -100,6 +101,42 @@ class IptvResultsViewState extends State<IptvResultsView>
     addedAt: DateTime.fromMillisecondsSinceEpoch(0),
   );
 
+  /// Virtual "Continue watching" playlist — never persisted; backed by the
+  /// watch-history store joined with the positions both players save. Sits
+  /// beside Favorites so a half-watched movie is reachable without having
+  /// had the foresight to star it first.
+  static final IptvPlaylist _continuePlaylist = IptvPlaylist(
+    id: 'iptv-continue',
+    name: 'Continue watching',
+    url: 'continue://',
+    addedAt: DateTime.fromMillisecondsSinceEpoch(0),
+  );
+
+  /// Resume fraction (0-1) per channel URL for the loaded list — drives the
+  /// bar across each poster. Only on-demand items ever have an entry.
+  Map<String, double> _progressByUrl = {};
+
+  /// Whether the current view shows on-demand items, which are drawn as 2:3
+  /// posters in taller rows. Derived from the selected view rather than by
+  /// scanning the channels: the grid needs one answer for every tile, and
+  /// scanning tens of thousands of rows per build to get it isn't free.
+  ///
+  /// M3U playlists keep the logo layout even for their VOD entries — their
+  /// content type is a duration heuristic, so a mixed playlist has no single
+  /// honest answer here.
+  bool get _showsPosterRows {
+    final playlist = _selectedPlaylist;
+    if (playlist == null) return false;
+    if (playlist.isContinueWatching) return true;
+    if (playlist.isXtreamCodes) return _selectedContentType == 'vod';
+    return false;
+  }
+
+  /// Playlist each Continue-watching row came from (url → id). Replaying from
+  /// that shelf must keep the item tied to its real provider, so deleting the
+  /// provider still sweeps it — the same reason [_favoritePlaylistIds] exists.
+  Map<String, String> _continuePlaylistIds = {};
+
   // Focus nodes for DPAD
   final FocusNode _playlistFilterFocusNode = FocusNode(debugLabel: 'iptv-playlist-filter');
   final FocusNode _categoryFilterFocusNode = FocusNode(debugLabel: 'iptv-category-filter');
@@ -181,6 +218,20 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
+  /// The real playlist a channel belongs to. Inside a virtual shelf the
+  /// selected playlist is not a provider at all, so writing its id into the
+  /// favorites/history stores would break the sweep that runs when a provider
+  /// is deleted (nothing would match 'iptv-favorites' or 'iptv-continue') and
+  /// strand entries pointing at URLs that no longer authenticate.
+  String? _originPlaylistIdFor(IptvChannel channel) {
+    final playlist = _selectedPlaylist;
+    if (playlist?.isFavorites ?? false) return _favoritePlaylistIds[channel.url];
+    if (playlist?.isContinueWatching ?? false) {
+      return _continuePlaylistIds[channel.url];
+    }
+    return playlist?.id;
+  }
+
   Future<void> _toggleFavorite(IptvChannel channel, bool isFavorited) async {
     await StorageService.setIptvChannelFavorited(
       channel.url,
@@ -188,9 +239,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       channelName: channel.name,
       logoUrl: channel.logoUrl,
       group: channel.group,
-      playlistId: (_selectedPlaylist?.isFavorites ?? false)
-          ? _favoritePlaylistIds[channel.url]
-          : _selectedPlaylist?.id,
+      playlistId: _originPlaylistIdFor(channel),
       // Favorites are replayed from stored metadata, never re-parsed from the
       // playlist — so the channel's own headers have to travel with it.
       httpHeaders: channel.httpHeaders,
@@ -240,8 +289,16 @@ class IptvResultsViewState extends State<IptvResultsView>
     // empty state can still do its job.
     final hasFavorites =
         (await StorageService.getIptvFavoriteChannelUrls()).isNotEmpty;
+    // "Continue watching" earns its slot only while something is actually
+    // half-watched — an empty shelf in the picker is just noise.
+    final hasContinue =
+        (await StorageService.getIptvContinueWatching()).isNotEmpty;
     if (hasFavorites || playlists.isNotEmpty) {
-      playlists = [_favoritesPlaylist, ...playlists];
+      playlists = [
+        _favoritesPlaylist,
+        if (hasContinue) _continuePlaylist,
+        ...playlists,
+      ];
     }
 
     if (!mounted) return;
@@ -252,7 +309,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     IptvPlaylist? newSelectedPlaylist;
     IptvPlaylist? firstRealPlaylist;
     for (final p in playlists) {
-      if (!p.isFavorites) {
+      // Neither virtual shelf is a "real" playlist to fall back to — both can
+      // be empty or vanish entirely between visits.
+      if (!p.isFavorites && !p.isContinueWatching) {
         firstRealPlaylist = p;
         break;
       }
@@ -339,6 +398,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       _filteredChannels = [];
       _categories = [];
       _selectedCategory = null;
+      // Positions belong to the outgoing playlist's URLs.
+      _progressByUrl = {};
     });
 
     // Dispose old focus nodes
@@ -354,6 +415,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     final IptvParseResult result;
     if (playlist.isFavorites) {
       result = await _buildFavoritesResult();
+    } else if (playlist.isContinueWatching) {
+      result = await _buildContinueResult();
     } else if (playlist.isStremioAddon) {
       final addonId = StremioIptvService.addonIdFromPlaylist(playlist);
       result = addonId == null
@@ -399,7 +462,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // Xtream /live/ URL fix) to the freshly fetched URLs, then reload so
     // the stars line up. (The Favorites view's channels ARE the store —
     // nothing to migrate against.)
-    if (!playlist.isFavorites) {
+    if (!playlist.isFavorites && !playlist.isContinueWatching) {
       await StorageService.reconcileIptvFavoriteUrls(result.channels);
     }
     await _loadFavorites();
@@ -414,6 +477,12 @@ class IptvResultsViewState extends State<IptvResultsView>
       _allChannels = result.channels;
       _categories = result.categories;
     });
+
+    // After the rows exist, not before: _loadProgress setStates too, and
+    // running it first would paint one extra frame against an empty list.
+    // The bars simply appear a frame later.
+    await _loadProgress(ticket, result.channels);
+    if (!mounted || ticket != _loadTicket) return;
 
     // Surface non-fatal degradation (e.g. categories unavailable) so missing
     // groups don't look like deleted channels.
@@ -452,6 +521,63 @@ class IptvResultsViewState extends State<IptvResultsView>
       _categories = categories;
     });
     _applyFilters();
+  }
+
+  /// Look up saved positions for the loaded list. Live channels can't have
+  /// one, so a playlist with no on-demand items skips the read entirely —
+  /// that's the overwhelmingly common case (a live-TV panel).
+  Future<void> _loadProgress(int ticket, List<IptvChannel> channels) async {
+    final onDemand = [
+      for (final channel in channels)
+        if (!channel.isLive) channel.url,
+    ];
+    if (onDemand.isEmpty) {
+      if (_progressByUrl.isNotEmpty && mounted && ticket == _loadTicket) {
+        setState(() => _progressByUrl = {});
+      }
+      return;
+    }
+
+    final progress = await StorageService.getIptvProgressForUrls(onDemand);
+    if (!mounted || ticket != _loadTicket) return;
+    setState(() => _progressByUrl = progress);
+  }
+
+  /// Build the virtual "Continue watching" playlist. Like Favorites, the rows
+  /// are replayed from metadata captured at play time rather than re-fetched,
+  /// so they survive a provider that has since renumbered or expired.
+  Future<IptvParseResult> _buildContinueResult() async {
+    final items = await StorageService.getIptvContinueWatching();
+    _continuePlaylistIds = {
+      for (final item in items)
+        item['url'] as String: (item['playlistId'] as String?) ?? '',
+    };
+    final channels = [
+      for (final item in items)
+        IptvChannel(
+          name: (item['name'] as String?)?.isNotEmpty == true
+              ? item['name'] as String
+              : 'Unknown',
+          url: item['url'] as String,
+          logoUrl: (item['logoUrl'] as String?)?.isNotEmpty == true
+              ? item['logoUrl'] as String
+              : null,
+          group: (item['group'] as String?)?.isNotEmpty == true
+              ? item['group'] as String
+              : null,
+          // Always on-demand — live channels are never recorded — so the row
+          // draws a poster and the "LIVE" dot stays off.
+          contentType: 'vod',
+          httpHeaders: StorageService.iptvFavoriteHeaders(item),
+        ),
+    ];
+    final categories = <String>{
+      for (final channel in channels)
+        if (channel.group != null) channel.group!,
+    }.toList()
+      ..sort();
+    // Already ordered most-recently-watched first; leave it alone.
+    return IptvParseResult(channels: channels, categories: categories);
   }
 
   /// Build the virtual Favorites playlist from the starred-channel store.
@@ -580,6 +706,23 @@ class IptvResultsViewState extends State<IptvResultsView>
       }
       initialUrl = candidates.first.url;
     }
+    // Remember on-demand plays so the Continue-watching shelf can rebuild the
+    // row later without re-fetching the panel. Recorded BEFORE the launch:
+    // the player process can be killed outright on TV, and a shelf entry with
+    // no saved position simply doesn't show up (the join drops it).
+    //
+    // Live channels are skipped — "62% through Sky Sports" is meaningless.
+    if (!channel.isLive) {
+      await StorageService.recordIptvWatch(
+        channel.url,
+        channelName: channel.name,
+        logoUrl: channel.logoUrl,
+        group: channel.group,
+        playlistId: _originPlaylistIdFor(channel),
+        httpHeaders: channel.httpHeaders,
+      );
+    }
+
     // The in-player guide mirrors what the user was browsing: the current
     // category/search filter, not the whole playlist. (Also what keeps the
     // launch payload small when a filter is active.)
@@ -619,6 +762,85 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (mounted && widget.isTelevision) {
       _previewRearmPending = true;
     }
+    // Off TV, push() is awaited to the pop — the position just written is
+    // already on disk, so refresh now. On TV push() can return while the
+    // native player is still starting, and rebuilding the list under a
+    // launching player is the worst possible moment for it; the parked
+    // re-arm below is the designated "we're back" hook and refreshes there.
+    if (!widget.isTelevision) {
+      await _refreshAfterPlayback();
+    }
+  }
+
+  /// Pull freshly saved positions back into the list after playback. The
+  /// Continue-watching shelf is rebuilt outright — an item can have just
+  /// entered it (first watch), moved to the front, or aged out by finishing.
+  ///
+  /// Deliberately NOT via _loadSettings: that path re-derives the landing
+  /// selection (and always lands on Favorites when any exist), which would
+  /// yank the user off whatever they were browsing every time they came back
+  /// from the player.
+  Future<void> _refreshAfterPlayback() async {
+    if (!mounted) return;
+    // Read the shelf ONCE and reuse it below. Each read decodes both the
+    // watch-history map and the (potentially large) shared resume map off the
+    // UI isolate, and this runs at the exact moment the user lands back on
+    // the list — the worst time to do it three times over.
+    final items = await StorageService.getIptvContinueWatching();
+    if (!mounted) return;
+    _refreshContinueShelfPresence(items.isNotEmpty);
+    if (!mounted) return;
+
+    // The shelf can empty out from under the user — they just finished its
+    // last item. Leaving it selected strands the picker: with no matching
+    // option the dropdown renders the FIRST option's label instead, so it
+    // would read "Favorites" above an empty shelf.
+    if (items.isEmpty && (_selectedPlaylist?.isContinueWatching ?? false)) {
+      final remaining = [
+        for (final p in _playlists)
+          if (!p.isContinueWatching) p,
+      ];
+      if (remaining.isNotEmpty) {
+        _onPlaylistChanged(remaining.first);
+        return;
+      }
+    }
+
+    if (_selectedPlaylist?.isContinueWatching ?? false) {
+      // Rebuild only when the shelf's membership actually changed — an item
+      // finished and dropped off, or a newly watched one arrived. A reload
+      // disposes every row's focus node (see _loadPlaylist), so doing it for
+      // a mere position bump would scramble DPAD focus to redraw one bar.
+      final fresh = {for (final item in items) item['url'] as String};
+      final current = {for (final channel in _allChannels) channel.url};
+      if (!setEquals(fresh, current)) {
+        await _loadPlaylist(_continuePlaylist);
+        return;
+      }
+    }
+    await _loadProgress(_loadTicket, _allChannels);
+  }
+
+  /// Add or drop the Continue-watching entry in the picker to match whether
+  /// anything is actually half-watched — so the shelf appears after the very
+  /// first movie rather than on the next visit to the page, and disappears
+  /// once the last item is finished. Selection is left untouched.
+  void _refreshContinueShelfPresence(bool hasContinue) {
+    final present = _playlists.any((p) => p.isContinueWatching);
+    if (hasContinue == present) return;
+
+    setState(() {
+      if (hasContinue) {
+        // Directly after Favorites, or first when there is no Favorites row.
+        final favoritesIndex = _playlists.indexWhere((p) => p.isFavorites);
+        _playlists = [..._playlists]..insert(favoritesIndex + 1, _continuePlaylist);
+      } else {
+        _playlists = [
+          for (final p in _playlists)
+            if (!p.isContinueWatching) p,
+        ];
+      }
+    });
   }
 
   bool _previewRearmPending = false;
@@ -628,6 +850,11 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (!_previewRearmPending || !mounted) return;
     _previewRearmPending = false;
     _previewEpoch.value++;
+    // This fires only after real playback, on both TV return paths (app
+    // resume for the native player, next row focus for the in-app fallback) —
+    // so it is also exactly when the position the player just saved should be
+    // pulled back into the bars and the shelf.
+    _refreshAfterPlayback();
   }
 
   @override
@@ -1120,23 +1347,32 @@ class IptvResultsViewState extends State<IptvResultsView>
         );
       }
       final isFavoritesView = _selectedPlaylist?.isFavorites ?? false;
+      final isContinueView = _selectedPlaylist?.isContinueWatching ?? false;
       final unfiltered = widget.searchQuery.isEmpty && _selectedCategory == null;
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              isFavoritesView && unfiltered
-                  ? Icons.star_border
-                  : Icons.live_tv_outlined,
+              !unfiltered
+                  ? Icons.live_tv_outlined
+                  : isContinueView
+                      ? Icons.history_rounded
+                      : isFavoritesView
+                          ? Icons.star_border
+                          : Icons.live_tv_outlined,
               size: 64,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
-              isFavoritesView && unfiltered
-                  ? 'No favorites yet'
-                  : 'No channels found',
+              !unfiltered
+                  ? 'No channels found'
+                  : isContinueView
+                      ? 'Nothing in progress'
+                      : isFavoritesView
+                          ? 'No favorites yet'
+                          : 'No channels found',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -1145,9 +1381,11 @@ class IptvResultsViewState extends State<IptvResultsView>
                   ? 'Try a different search term'
                   : _selectedCategory != null
                       ? 'Try a different category'
-                      : isFavoritesView
-                          ? 'Star channels in any playlist and they show up here'
-                          : 'This playlist appears to be empty',
+                      : isContinueView
+                          ? 'Movies you start but do not finish show up here'
+                          : isFavoritesView
+                              ? 'Star channels in any playlist and they show up here'
+                              : 'This playlist appears to be empty',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -1173,7 +1411,12 @@ class IptvResultsViewState extends State<IptvResultsView>
           ),
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: tvPane ? 720 : 440,
-            mainAxisExtent: 74,
+            // A grid has one tile height for every row, so the taller
+            // poster rows are all-or-nothing per view. On-demand lists are
+            // homogeneous in practice (the type dropdown splits live from
+            // movies, and both virtual shelves are single-kind).
+            mainAxisExtent:
+                _showsPosterRows ? kIptvPosterRowExtent : kIptvRowExtent,
             mainAxisSpacing: 4,
             crossAxisSpacing: 12,
           ),
@@ -1193,6 +1436,8 @@ class IptvResultsViewState extends State<IptvResultsView>
               onFavoriteToggle: (isFavorited) =>
                   _toggleFavorite(channel, isFavorited),
               onFocused: tvPane ? () => _onChannelFocused(channel) : null,
+              progress: _progressByUrl[channel.url],
+              poster: _showsPosterRows,
             );
           },
         ),

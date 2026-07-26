@@ -47,6 +47,11 @@ class IptvPlaylist {
   /// backed by the starred-channel store instead of a fetch).
   bool get isFavorites => url.startsWith('favorites://');
 
+  /// Returns true if this is the virtual "Continue watching" playlist (never
+  /// persisted — backed by the watch-history store joined with the players'
+  /// saved positions).
+  bool get isContinueWatching => url.startsWith('continue://');
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
