@@ -14,6 +14,7 @@ Usage:
 import argparse
 import json
 import os
+import datetime
 import sys
 import urllib.request
 
@@ -51,6 +52,28 @@ def fetch_channel(cid, limit):
     return msgs
 
 
+def fetch_since(cid, cutoff):
+    """Page backwards through history until messages are older than cutoff (a UTC datetime)."""
+    out, before = [], None
+    while True:
+        path = f"/channels/{cid}/messages?limit=100" + (f"&before={before}" if before else "")
+        batch = api(path)
+        if not batch:
+            break
+        stop = False
+        for m in batch:
+            ts = datetime.datetime.fromisoformat(m["timestamp"])
+            if ts < cutoff:
+                stop = True
+                break
+            out.append(m)
+        before = batch[-1]["id"]
+        if stop or len(batch) < 100:
+            break
+    out.reverse()  # oldest -> newest
+    return out
+
+
 def simplify(m):
     author = m.get("author", {})
     ref = m.get("referenced_message")
@@ -69,7 +92,8 @@ def simplify(m):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("channel", nargs="?", help="channel name (default: all watched)")
-    ap.add_argument("--limit", type=int, default=20)
+    ap.add_argument("--limit", type=int, default=20, help="messages per channel (when --days not set)")
+    ap.add_argument("--days", type=float, help="fetch everything newer than N days ago (paginates)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args()
 
@@ -81,9 +105,14 @@ def main():
     else:
         targets = channels
 
+    cutoff = None
+    if args.days:
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=args.days)
+
     out = {}
     for name, cid in targets.items():
-        out[name] = [simplify(m) for m in fetch_channel(cid, args.limit)]
+        raw = fetch_since(cid, cutoff) if cutoff else fetch_channel(cid, args.limit)
+        out[name] = [simplify(m) for m in raw]
 
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
