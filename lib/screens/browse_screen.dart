@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/browse/browse_results_focus.dart';
@@ -76,26 +75,13 @@ class _BrowseScreenState extends State<BrowseScreen> {
     AnalyticsService.screenView(
       widget.tabIndex == 14 ? 'youtube' : 'iptv',
     );
-    // Assigning the node's own handler (rather than an ancestor Focus) so it
-    // runs before the default text-editing shortcuts, which would otherwise
-    // swallow the arrow key on a single-line field.
-    _searchFocusNode.onKeyEvent = _handleSearchKey;
+    // Down-from-field is wired via BrowseSearchHeader.onDownArrow →
+    // TvTextField (a node-level handler here would be clobbered by the
+    // shell's Focus widget on attach).
     MainPageBridge.registerTvContentFocusHandler(
       widget.tabIndex,
       _focusContent,
     );
-  }
-
-  /// Down-arrow from the search field drops focus into the results/filters
-  /// (DPAD on TV, arrow key on desktop); everything else — typing, cursor
-  /// keys — passes through untouched.
-  KeyEventResult _handleSearchKey(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _focusContent();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
   }
 
   @override
@@ -154,6 +140,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
               onChanged: widget.submitOnly ? null : _onChanged,
               onSubmitted: widget.submitOnly ? _onSubmitted : null,
               onClear: _onClear,
+              onDownArrow: _focusContent,
             ),
             Expanded(
               child: widget.viewBuilder(

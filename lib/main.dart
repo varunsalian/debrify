@@ -77,6 +77,11 @@ Future<void> _capImageCache() async {
     isTv = await PlatformUtil.isAndroidTV();
   } catch (_) {}
   if (!isTv) return; // leave non-TV devices on the framework defaults
+  // Warm the Debrify-keyboard opt-out alongside the TV flag — TvTextField
+  // reads StorageService.tvKeyboardEnabledCached synchronously in build.
+  try {
+    await StorageService.getTvKeyboardEnabled();
+  } catch (_) {}
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 140;
   // 56 MB: the Home hero decodes 1080-wide backdrops (~2.6 MB each) per rest

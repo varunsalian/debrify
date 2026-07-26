@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/main_page_bridge.dart';
@@ -46,6 +47,8 @@ class SettingsTvLayout extends StatefulWidget {
   final bool checkingUpdates;
   final bool autoUpdateChecksEnabled;
   final ValueChanged<bool> onToggleAutoUpdateChecks;
+  final bool tvKeyboardEnabled;
+  final ValueChanged<bool> onToggleTvKeyboard;
   final bool showSupportDonation;
   final String supportDonationLabel;
   final String supportDonationSubtitle;
@@ -74,6 +77,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.checkingUpdates,
     required this.autoUpdateChecksEnabled,
     required this.onToggleAutoUpdateChecks,
+    required this.tvKeyboardEnabled,
+    required this.onToggleTvKeyboard,
     required this.showSupportDonation,
     required this.supportDonationLabel,
     required this.supportDonationSubtitle,
@@ -206,11 +211,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
       if (!mounted) return;
       final ctx = node.context;
       if (ctx != null && ctx.mounted) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.15,
-          duration: const Duration(milliseconds: 180),
-        );
+        tvRevealMinimal(ctx);
       }
     });
   }
@@ -453,6 +454,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.debrifyTv,
                 onTap: widget.onOpenDebrifyTvSettings,
                 focusNode: _paneNodes[0],
+              ),
+              SettingsToggleTile.spec(
+                SettingsRows.tvKeyboard,
+                value: widget.tvKeyboardEnabled,
+                onChanged: widget.onToggleTvKeyboard,
+                focusNode: _paneNodes[1],
               ),
             ],
           ),

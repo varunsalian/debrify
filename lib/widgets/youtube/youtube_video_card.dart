@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/youtube_service.dart';
@@ -34,6 +36,12 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
   bool _hovered = false;
   bool get _active => _focused || _hovered;
 
+  // Press-and-hold detection for the remote OK button (TV has no pointer
+  // long-press). A held OK fires [onDownload]; a quick tap fires [onTap].
+  Timer? _holdTimer;
+  bool _longPressFired = false;
+  static const Duration _holdDuration = Duration(milliseconds: 600);
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +51,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
 
   @override
   void dispose() {
+    _holdTimer?.cancel();
     _focusNode.removeListener(_onFocusChange);
     if (widget.focusNode == null) {
       _focusNode.dispose();
@@ -99,8 +108,27 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
         }
       },
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
-          widget.onTap();
+        if (!isActivateKey(event.logicalKey)) return KeyEventResult.ignored;
+        // Start of a press: arm the hold timer (ignore auto-repeat).
+        if (event is KeyDownEvent) {
+          _longPressFired = false;
+          _holdTimer?.cancel();
+          final onDownload = widget.onDownload;
+          if (onDownload != null) {
+            _holdTimer = Timer(_holdDuration, () {
+              _longPressFired = true;
+              onDownload();
+            });
+          }
+          return KeyEventResult.handled;
+        }
+        // Swallow repeats so a held key doesn't re-fire the tap.
+        if (event is KeyRepeatEvent) return KeyEventResult.handled;
+        // Release: a quick tap (hold hadn't fired yet) plays the video.
+        if (event is KeyUpEvent) {
+          _holdTimer?.cancel();
+          _holdTimer = null;
+          if (!_longPressFired) widget.onTap();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;

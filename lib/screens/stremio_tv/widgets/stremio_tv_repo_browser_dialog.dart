@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../utils/tv_keys.dart';
+import '../../../widgets/tv_text_field.dart';
 import '../../../services/catalog_repo_service.dart';
 import '../../../services/storage_service.dart';
 
@@ -193,14 +194,14 @@ class _StremioTvRepoBrowserDialogState
       final prev = idx > 0 ? order[idx - 1] : null;
       final next = idx < order.length - 1 ? order[idx + 1] : null;
 
+      // The URL field is a TvTextField shell now: it owns its node's key
+      // handling (its Focus widget would clobber a handler set here on attach
+      // anyway) and exposes the same exits via onUpArrow/onDownArrow.
+      if (node == _urlFocusNode) continue;
+
       node.onKeyEvent = (n, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final key = event.logicalKey;
-
-        // URL field: allow cursor movement
-        if (node == _urlFocusNode) {
-          return _handleUrlFieldKey(key, prev, next);
-        }
 
         if (key == LogicalKeyboardKey.arrowUp && prev != null) {
           prev.requestFocus();
@@ -219,30 +220,6 @@ class _StremioTvRepoBrowserDialogState
         return KeyEventResult.ignored;
       };
     }
-  }
-
-  KeyEventResult _handleUrlFieldKey(
-      LogicalKeyboardKey key, FocusNode? prev, FocusNode? next) {
-    final text = _urlController.text;
-    final sel = _urlController.selection;
-    final atStart =
-        !sel.isValid || (sel.baseOffset == 0 && sel.extentOffset == 0);
-    final atEnd = !sel.isValid ||
-        (sel.baseOffset == text.length && sel.extentOffset == text.length);
-
-    if (key == LogicalKeyboardKey.arrowUp &&
-        (text.isEmpty || atStart) &&
-        prev != null) {
-      prev.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowDown &&
-        (text.isEmpty || atEnd) &&
-        next != null) {
-      next.requestFocus();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
   }
 
   void _handleActivate(FocusNode node) {
@@ -612,9 +589,13 @@ class _StremioTvRepoBrowserDialogState
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: TvTextField(
                       controller: _urlController,
                       focusNode: _urlFocusNode,
+                      // Same exits the deleted node handler provided: Close
+                      // above, the Add button next in the DPAD order below.
+                      onUpArrow: () => _closeFocusNode.requestFocus(),
+                      onDownArrow: () => _addBtnFocusNode.requestFocus(),
                       decoration: InputDecoration(
                         hintText: 'https://github.com/user/repo',
                         border: OutlineInputBorder(

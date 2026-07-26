@@ -14,6 +14,12 @@ final RegExp _resExp = RegExp(r'\((\d{3,4}[pi])\)', caseSensitive: false);
 
 const Color _liveDot = Color(0xFF34D399); // emerald — a calm "on air" cue
 
+/// Row height for live channels (a square logo chip) and for on-demand items
+/// (a 2:3 poster). The grid needs these to size its tiles, so they live here
+/// next to the art they describe.
+const double kIptvRowExtent = 74;
+const double kIptvPosterRowExtent = 95;
+
 /// Compact guide-style list row for an IPTV channel: a small logo chip, the
 /// channel name, and a "category • resolution" sub-line. Scales far better than
 /// a logo grid for very large channel lists, and keeps the app's gold focus
@@ -29,6 +35,30 @@ class IptvChannelRow extends StatefulWidget {
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
 
+  /// Opens this channel's programme schedule. TV fires it on RIGHT (the only
+  /// key a row has left: OK plays, hold-OK favourites, LEFT is the sidebar's);
+  /// touch/desktop get a small trailing calendar affordance instead. Null for
+  /// channels without guide data — the key and the icon simply don't exist.
+  final VoidCallback? onSchedule;
+
+  /// Whether RIGHT triggers [onSchedule] on this row. Set by the list for
+  /// rows on the grid's right edge only — the list knows the column count;
+  /// the row doesn't. Rows with a genuine right-hand neighbour keep plain
+  /// directional traversal (probing with focusInDirection instead was tried
+  /// and jumps diagonally out of partial last rows). Touch/desktop ignore
+  /// this — the calendar icon carries the action there.
+  final bool scheduleOnRightKey;
+
+  /// Saved playback position as a 0-1 fraction, or null when this item has
+  /// none. Drawn as a bar across the foot of the poster.
+  final double? progress;
+
+  /// Draw 2:3 cover art instead of the square logo plate. Decided by the list
+  /// rather than per-channel on purpose: the grid gives every tile one height
+  /// ([kIptvPosterRowExtent] vs [kIptvRowExtent]), and a row that chose a
+  /// poster inside a short tile would overflow.
+  final bool poster;
+
   const IptvChannelRow({
     super.key,
     required this.channel,
@@ -38,6 +68,10 @@ class IptvChannelRow extends StatefulWidget {
     this.isFavorited = false,
     this.onFavoriteToggle,
     this.onFocused,
+    this.onSchedule,
+    this.scheduleOnRightKey = false,
+    this.progress,
+    this.poster = false,
   });
 
   @override
@@ -137,7 +171,16 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       ),
       child: Row(
         children: [
-          _LogoChip(logoUrl: ch.logoUrl, name: displayName, brand: brand),
+          _LogoChip(
+            logoUrl: ch.logoUrl,
+            name: displayName,
+            brand: brand,
+            // On-demand lists get posters: Xtream serves real cover art in
+            // `stream_icon` for VOD, and squeezing it into the live-channel
+            // logo square made it unreadable.
+            poster: widget.poster,
+            progress: widget.progress,
+          ),
           const SizedBox(width: 13),
           Expanded(
             child: Column(
@@ -198,6 +241,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
               ],
             ),
           ),
+          _buildScheduleTrailing(),
           _buildFavTrailing(),
         ],
       ),
@@ -224,6 +268,17 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         }
       },
       onKeyEvent: (node, event) {
+        // RIGHT opens the schedule on right-edge rows (the list decides
+        // which those are — see [scheduleOnRightKey]). Key-down only;
+        // repeats are swallowed so holding RIGHT can't re-open it.
+        if (widget.isTelevision &&
+            widget.scheduleOnRightKey &&
+            widget.onSchedule != null &&
+            event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (event is KeyDownEvent) widget.onSchedule!();
+          return KeyEventResult.handled;
+        }
+
         final isSelect = isActivateKey(event.logicalKey) ||
             event.logicalKey == LogicalKeyboardKey.space;
         if (!isSelect) return KeyEventResult.ignored;
@@ -262,6 +317,32 @@ class _IptvChannelRowState extends State<IptvChannelRow>
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: row,
+        ),
+      ),
+    );
+  }
+
+  /// Trailing schedule affordance for touch/desktop (TV opens the schedule
+  /// with RIGHT instead — no icon there). Follows the favourite heart's
+  /// visibility rules: always present on touch, hover-revealed on desktop.
+  Widget _buildScheduleTrailing() {
+    if (widget.onSchedule == null || widget.isTelevision) {
+      return const SizedBox.shrink();
+    }
+    final show = _active || _isTouchMobile;
+    if (!show) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: IconButton(
+        onPressed: widget.onSchedule,
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+        tooltip: 'TV guide',
+        icon: Icon(
+          Icons.calendar_view_day_rounded,
+          size: 18,
+          color: Colors.white.withValues(alpha: 0.55),
         ),
       ),
     );
@@ -378,24 +459,36 @@ class _FavHint extends StatelessWidget {
   }
 }
 
-/// Small rounded logo chip with a brand-tinted plate and a graceful fallback.
+/// Small rounded artwork chip with a brand-tinted plate and a graceful
+/// fallback. Live channels get a square logo plate (letterboxed, since station
+/// logos are wide and must not be cropped); on-demand items get a 2:3 poster
+/// filling the frame, optionally with a resume bar across its foot.
 class _LogoChip extends StatelessWidget {
   final String? logoUrl;
   final String name;
   final Color brand;
+  final bool poster;
+  final double? progress;
   const _LogoChip({
     required this.logoUrl,
     required this.name,
     required this.brand,
+    this.poster = false,
+    this.progress,
   });
+
+  static const double _logoSize = 50;
+  static const double _posterWidth = 46;
+  static const double _posterHeight = 69; // 2:3
 
   @override
   Widget build(BuildContext context) {
+    final hasArt = logoUrl != null && logoUrl!.isNotEmpty;
     return Container(
-      width: 50,
-      height: 50,
+      width: poster ? _posterWidth : _logoSize,
+      height: poster ? _posterHeight : _logoSize,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: BorderRadius.circular(poster ? 7 : 11),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -408,20 +501,34 @@ class _LogoChip extends StatelessWidget {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(7),
-        child: (logoUrl != null && logoUrl!.isNotEmpty)
-            ? CachedNetworkImage(
-                imageUrl: logoUrl!,
-                fit: BoxFit.contain,
-                // IPTV logos are often 1000px+ PNGs going into a ~36px slot —
-                // uncapped decodes janked scrolling and thrashed the TV's
-                // small image cache (re-decoding on every scroll-back).
-                memCacheHeight: 96,
-                placeholder: (_, __) => _fallback(),
-                errorWidget: (_, __, ___) => _fallback(),
-              )
-            : _fallback(),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Padding(
+            // A poster is the art — it fills its frame. A logo is a mark on a
+            // plate and needs the breathing room.
+            padding: EdgeInsets.all(poster ? 0 : 7),
+            child: hasArt
+                ? CachedNetworkImage(
+                    imageUrl: logoUrl!,
+                    fit: poster ? BoxFit.cover : BoxFit.contain,
+                    // IPTV art is often 1000px+ going into a tiny slot —
+                    // uncapped decodes janked scrolling and thrashed the TV's
+                    // small image cache (re-decoding on every scroll-back).
+                    memCacheHeight: poster ? 200 : 96,
+                    placeholder: (_, __) => _fallback(),
+                    errorWidget: (_, __, ___) => _fallback(),
+                  )
+                : _fallback(),
+          ),
+          if (poster && progress != null && progress! > 0)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _ResumeBar(progress: progress!.clamp(0.0, 1.0)),
+            ),
+        ],
       ),
     );
   }
@@ -429,9 +536,29 @@ class _LogoChip extends StatelessWidget {
   Widget _fallback() {
     return Center(
       child: Icon(
-        Icons.live_tv_rounded,
+        poster ? Icons.movie_rounded : Icons.live_tv_rounded,
         size: 22,
         color: brand.withValues(alpha: 0.85),
+      ),
+    );
+  }
+}
+
+/// How far into an on-demand item the viewer got, drawn across the foot of its
+/// poster. Sits on a scrim so it reads over bright artwork.
+class _ResumeBar extends StatelessWidget {
+  final double progress;
+  const _ResumeBar({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 4,
+      color: Colors.black.withValues(alpha: 0.55),
+      child: FractionallySizedBox(
+        alignment: Alignment.centerLeft,
+        widthFactor: progress,
+        child: Container(color: HomeTheme.focusGold),
       ),
     );
   }

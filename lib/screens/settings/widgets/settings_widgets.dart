@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -108,6 +109,11 @@ abstract final class SettingsRows {
     icon: Icons.live_tv_rounded,
     title: 'Debrify TV Settings',
     subtitle: 'Limits, channels, and playback configuration',
+  );
+  static const tvKeyboard = SettingsRowContent(
+    icon: Icons.keyboard_rounded,
+    title: 'Debrify Keyboard',
+    subtitle: 'Remote-friendly on-screen keyboard for text fields',
   );
   static const clearDownloads = SettingsRowContent(
     icon: Icons.download_rounded,
@@ -1045,9 +1051,8 @@ class _ConnectionCardState extends State<ConnectionCard> {
     target.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (target.context != null) {
-        Scrollable.ensureVisible(
+        tvRevealMinimal(
           target.context!,
-          alignment: 0.3,
           duration: const Duration(milliseconds: 200),
         );
       }

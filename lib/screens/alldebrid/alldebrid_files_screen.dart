@@ -20,6 +20,7 @@ import '../../widgets/cloud/cloud_row_skeleton.dart';
 import '../../widgets/cloud/cloud_segmented_tabs.dart';
 import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
+import '../../widgets/tv_text_field.dart';
 import '../../utils/tv_keys.dart';
 
 /// The two root views, switched via the segmented tabs under the toolbar:
@@ -1435,10 +1436,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         ),
       );
 
-  /// D-pad escape handler for a search field: arrow-up at start or arrow-down
-  /// at end (or when empty) unfocuses the field so the remote can move on;
-  /// arrow-right jumps to the clear button when present. Mirrors the RD/Torbox
-  /// downloads pages so the field isn't a D-pad trap.
+  /// D-pad escape target for a search field (used by the TvTextField arrow
+  /// callbacks below).
   void _moveFocusTo(FocusNode? target, FocusNode field) {
     // Move focus to [target] if it's mounted; otherwise just release the field
     // so the remote can traverse onward.
@@ -1449,45 +1448,6 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     }
   }
 
-  KeyEventResult _searchFieldKey(
-    KeyEvent event,
-    TextEditingController controller,
-    FocusNode fieldFocusNode, {
-    FocusNode? clearFocusNode,
-    FocusNode? upTarget,
-    FocusNode? downTarget,
-  }) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-    final textLength = controller.text.length;
-    final selection = controller.selection;
-    final isTextEmpty = textLength == 0;
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart = !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd = !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    // Up at start (or empty) → toolbar; Down at end (or empty) → results.
-    if (key == LogicalKeyboardKey.arrowUp && (isTextEmpty || isAtStart)) {
-      _moveFocusTo(upTarget, fieldFocusNode);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowDown && (isTextEmpty || isAtEnd)) {
-      _moveFocusTo(downTarget, fieldFocusNode);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowRight &&
-        clearFocusNode != null &&
-        !isTextEmpty &&
-        isAtEnd) {
-      clearFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   Widget _buildSearchBar() {
     final hasText = _searchController.text.isNotEmpty;
     return Padding(
@@ -1495,27 +1455,25 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Focus(
-              onKeyEvent: (node, event) => _searchFieldKey(
-                event,
-                _searchController,
-                _searchFocusNode,
-                clearFocusNode: hasText ? _searchClearFocusNode : null,
-                upTarget: _toolbarSearchFocusNode,
-                downTarget: _firstItemFocusNode,
-              ),
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                textInputAction: TextInputAction.search,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                onChanged: (v) => setState(() => _searchQuery = v),
-                onSubmitted: (_) => _searchFocusNode.unfocus(),
-                decoration: _searchDecoration(
-                    _selectedView == _AdView.webDownloads
-                        ? 'Search your links...'
-                        : 'Search your magnets...'),
-              ),
+            child: TvTextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              // D-pad exits (formerly a Focus/onKeyEvent wrapper): up to the
+              // toolbar, down into the results, right to the clear button.
+              onUpArrow: () =>
+                  _moveFocusTo(_toolbarSearchFocusNode, _searchFocusNode),
+              onDownArrow: () =>
+                  _moveFocusTo(_firstItemFocusNode, _searchFocusNode),
+              onRightArrow:
+                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              onChanged: (v) => setState(() => _searchQuery = v),
+              onSubmitted: (_) => _searchFocusNode.unfocus(),
+              decoration: _searchDecoration(
+                  _selectedView == _AdView.webDownloads
+                      ? 'Search your links...'
+                      : 'Search your magnets...'),
             ),
           ),
           if (hasText)
@@ -1572,24 +1530,20 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   Widget _buildFileSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Focus(
-        onKeyEvent: (node, event) =>
-            _searchFieldKey(
-          event,
-          _fileSearchController,
-          _fileSearchFocusNode,
-          upTarget: _backButtonFocusNode,
-          downTarget: _firstItemFocusNode,
-        ),
-        child: TextField(
-          controller: _fileSearchController,
-          focusNode: _fileSearchFocusNode,
-          textInputAction: TextInputAction.search,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          onChanged: (v) => setState(() => _fileSearchQuery = v),
-          onSubmitted: (_) => _fileSearchFocusNode.unfocus(),
-          decoration: _searchDecoration('Search files...'),
-        ),
+      child: TvTextField(
+        controller: _fileSearchController,
+        focusNode: _fileSearchFocusNode,
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        // D-pad exits (formerly a Focus/onKeyEvent wrapper): up to the back
+        // button, down into the results.
+        onUpArrow: () =>
+            _moveFocusTo(_backButtonFocusNode, _fileSearchFocusNode),
+        onDownArrow: () =>
+            _moveFocusTo(_firstItemFocusNode, _fileSearchFocusNode),
+        onChanged: (v) => setState(() => _fileSearchQuery = v),
+        onSubmitted: (_) => _fileSearchFocusNode.unfocus(),
+        decoration: _searchDecoration('Search files...'),
       ),
     );
   }

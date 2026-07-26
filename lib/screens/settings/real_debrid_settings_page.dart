@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/account_service.dart';
 import '../../services/analytics_service.dart';
 import '../../widgets/account_status_widget.dart';
 import '../../services/main_page_bridge.dart';
 import '../../utils/platform_util.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 class RealDebridSettingsPage extends StatefulWidget {
@@ -469,91 +469,65 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                   ),
                                   const SizedBox(height: 16),
                                   if (_isEditing) ...[
-                                    Shortcuts(
-                                      shortcuts:
-                                          const <ShortcutActivator, Intent>{
-                                            SingleActivator(
-                                              LogicalKeyboardKey.arrowDown,
-                                            ): NextFocusIntent(),
-                                            SingleActivator(
-                                              LogicalKeyboardKey.arrowUp,
-                                            ): PreviousFocusIntent(),
-                                          },
-                                      child: Actions(
-                                        actions: <Type, Action<Intent>>{
-                                          NextFocusIntent:
-                                              CallbackAction<NextFocusIntent>(
-                                                onInvoke: (intent) {
-                                                  FocusScope.of(
-                                                    context,
-                                                  ).nextFocus();
-                                                  return null;
-                                                },
-                                              ),
-                                          PreviousFocusIntent:
-                                              CallbackAction<
-                                                PreviousFocusIntent
-                                              >(
-                                                onInvoke: (intent) {
-                                                  FocusScope.of(
-                                                    context,
-                                                  ).previousFocus();
-                                                  return null;
-                                                },
-                                              ),
-                                        },
-                                        // Snap, no tween — animated focus
-                                        // decorations jank weak TV GPUs.
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              14,
-                                            ),
-                                            border: _apiKeyFocused
-                                                ? Border.all(
-                                                    color: kSettingsAccent,
-                                                    width: 1.8,
-                                                  )
-                                                : null,
-                                            boxShadow: _apiKeyFocused
-                                                ? [
-                                                    BoxShadow(
-                                                      color: kSettingsAccent
-                                                          .withValues(
-                                                            alpha: 0.25,
-                                                          ),
-                                                      blurRadius: 18,
-                                                      offset: const Offset(
-                                                        0,
-                                                        8,
+                                    // Snap, no tween — animated focus
+                                    // decorations jank weak TV GPUs.
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(
+                                          14,
+                                        ),
+                                        border: _apiKeyFocused
+                                            ? Border.all(
+                                                color: kSettingsAccent,
+                                                width: 1.8,
+                                              )
+                                            : null,
+                                        boxShadow: _apiKeyFocused
+                                            ? [
+                                                BoxShadow(
+                                                  color: kSettingsAccent
+                                                      .withValues(
+                                                        alpha: 0.25,
                                                       ),
-                                                    ),
-                                                  ]
-                                                : null,
+                                                  blurRadius: 18,
+                                                  offset: const Offset(
+                                                    0,
+                                                    8,
+                                                  ),
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: TvTextField(
+                                        controller: _apiKeyController,
+                                        // The surrounding Container draws this field's focus ring;
+                                        // skip the shell's fallback ring so they don't double up.
+                                        shellRing: false,
+                                        focusNode: _apiKeyFocusNode,
+                                        obscureText: _obscure,
+                                        onDownArrow: () => FocusScope.of(
+                                          context,
+                                        ).nextFocus(),
+                                        onUpArrow: () => FocusScope.of(
+                                          context,
+                                        ).previousFocus(),
+                                        decoration: InputDecoration(
+                                          labelText: 'Real Debrid API Key',
+                                          prefixIcon: const Icon(
+                                            Icons.security,
                                           ),
-                                          child: TextField(
-                                            controller: _apiKeyController,
-                                            focusNode: _apiKeyFocusNode,
-                                            obscureText: _obscure,
-                                            decoration: InputDecoration(
-                                              labelText: 'Real Debrid API Key',
-                                              prefixIcon: const Icon(
-                                                Icons.security,
-                                              ),
-                                              suffixIcon: IconButton(
-                                                // Default focus highlight is
-                                                // invisible on TV.
-                                                focusColor: kSettingsAccent
-                                                    .withValues(alpha: 0.4),
-                                                icon: Icon(
-                                                  _obscure
-                                                      ? Icons.visibility
-                                                      : Icons.visibility_off,
-                                                ),
-                                                onPressed: () => setState(
-                                                  () => _obscure = !_obscure,
-                                                ),
-                                              ),
+                                          suffixIcon: IconButton(
+                                            // Default focus highlight is
+                                            // invisible on TV.
+                                            focusColor: kSettingsAccent
+                                                .withValues(alpha: 0.4),
+                                            icon: Icon(
+                                              _obscure
+                                                  ? Icons.visibility
+                                                  : Icons.visibility_off,
+                                            ),
+                                            onPressed: () => setState(
+                                              () => _obscure = !_obscure,
                                             ),
                                           ),
                                         ),

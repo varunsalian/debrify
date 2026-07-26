@@ -22,6 +22,7 @@ import '../../services/stremio_service.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
+import '../../widgets/tv_text_field.dart';
 
 /// What the hub is managing: Stremio addons or torrent-engine plugins. They are
 /// different features, so they get their own top-level dropdown instead of being
@@ -533,7 +534,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       context: context,
       builder: (ctx) => _HubDialog(
         title: 'Add addon',
-        content: TextField(
+        content: TvTextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: Colors.white),
@@ -1210,40 +1211,22 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildSearchField() {
-    // A focused TextField eats the DPAD arrows for caret movement, dead-ending TV
-    // navigation. Intercept up/down (before the text-editing shortcuts run) and
-    // route them explicitly: down to the first list row, up to the search button.
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-          return KeyEventResult.ignored;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          _focusFirstRow();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          _searchBtnFocus.requestFocus();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: kSeeAllPanel,
-          borderRadius: BorderRadius.circular(11),
-          border: Border.all(color: kSeeAllLine),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(
+    // DPAD exits are routed by TvTextField itself: down to the first list row,
+    // up to the search button.
+    return Container(
+      decoration: BoxDecoration(
+        color: kSeeAllPanel,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: kSeeAllLine),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
         children: [
           Icon(Icons.search_rounded,
               size: 18, color: Colors.white.withValues(alpha: 0.5)),
           const SizedBox(width: 8),
           Expanded(
-            child: TextField(
+            child: TvTextField(
               controller: _searchController,
               focusNode: _searchFocus,
               style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -1255,6 +1238,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                 hintStyle:
                     TextStyle(color: Colors.white.withValues(alpha: 0.35)),
               ),
+              onDownArrow: _focusFirstRow,
+              onUpArrow: () => _searchBtnFocus.requestFocus(),
             ),
           ),
           GestureDetector(
@@ -1265,8 +1250,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             child: Icon(Icons.close_rounded,
                 size: 16, color: Colors.white.withValues(alpha: 0.5)),
           ),
-          ],
-        ),
+        ],
       ),
     );
   }

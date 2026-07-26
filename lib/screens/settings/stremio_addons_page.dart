@@ -10,6 +10,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../addons_screen.dart';
 import '../../utils/tv_keys.dart';
+import '../../widgets/tv_text_field.dart';
 
 /// Page for managing Stremio addons (with Scaffold wrapper)
 class StremioAddonsPage extends StatefulWidget {
@@ -715,78 +716,49 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
               ]
             : null,
       ),
-      child: Shortcuts(
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowRight):
-              _MoveToAddButtonIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowLeft): _MoveToSidebarIntent(),
-        },
-        child: Actions(
-          actions: <Type, Action<Intent>>{
-            NextFocusIntent: CallbackAction<NextFocusIntent>(
-              onInvoke: (intent) {
-                _importButtonFocusNode.requestFocus();
-                return null;
-              },
-            ),
-            PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-              onInvoke: (intent) {
-                if (AddonsScreen.focusCurrentTab != null) {
-                  AddonsScreen.focusCurrentTab!();
-                }
-                return null;
-              },
-            ),
-            _MoveToAddButtonIntent: CallbackAction<_MoveToAddButtonIntent>(
-              onInvoke: (intent) {
-                _addButtonFocusNode.requestFocus();
-                return null;
-              },
-            ),
-            _MoveToSidebarIntent: CallbackAction<_MoveToSidebarIntent>(
-              onInvoke: (intent) {
-                if (MainPageBridge.focusTvSidebar != null) {
-                  MainPageBridge.focusTvSidebar!();
-                }
-                return null;
-              },
-            ),
-          },
-          child: TextField(
-            controller: _urlController,
-            focusNode: _urlFieldFocusNode,
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'https://addon.example.com/manifest.json',
-              hintStyle: TextStyle(
-                color: Colors.white.withValues(alpha: 0.35),
-                fontSize: 13.5,
-              ),
-              border: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              prefixIcon: Icon(
-                Icons.link_rounded,
-                size: 18,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 38,
-                minHeight: 38,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 4,
-                vertical: 14,
-              ),
-            ),
-            keyboardType: TextInputType.url,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _addAddon(),
-            enabled: !_isAdding,
+      child: TvTextField(
+        controller: _urlController,
+        focusNode: _urlFieldFocusNode,
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'https://addon.example.com/manifest.json',
+          hintStyle: TextStyle(
+            color: Colors.white.withValues(alpha: 0.35),
+            fontSize: 13.5,
+          ),
+          border: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          prefixIcon: Icon(
+            Icons.link_rounded,
+            size: 18,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 38,
+            minHeight: 38,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 4,
+            vertical: 14,
           ),
         ),
+        keyboardType: TextInputType.url,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _addAddon(),
+        enabled: !_isAdding,
+        onDownArrow: () => _importButtonFocusNode.requestFocus(),
+        onUpArrow: () {
+          if (AddonsScreen.focusCurrentTab != null) {
+            AddonsScreen.focusCurrentTab!();
+          }
+        },
+        onRightArrow: () => _addButtonFocusNode.requestFocus(),
+        onLeftArrow: () {
+          if (MainPageBridge.focusTvSidebar != null) {
+            MainPageBridge.focusTvSidebar!();
+          }
+        },
       ),
     );
   }
@@ -1673,43 +1645,23 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
               ? Border.all(color: const Color(0xFFED1C24), width: 2)
               : null,
         ),
-        child: Shortcuts(
-          shortcuts: const <ShortcutActivator, Intent>{
-            SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-            SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-          },
-          child: Actions(
-            actions: <Type, Action<Intent>>{
-              NextFocusIntent: CallbackAction<NextFocusIntent>(
-                onInvoke: (intent) {
-                  _addButtonFocusNode.requestFocus();
-                  return null;
-                },
-              ),
-              PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-                onInvoke: (intent) {
-                  FocusScope.of(context).previousFocus();
-                  return null;
-                },
-              ),
-            },
-            child: TextField(
-              controller: _urlController,
-              focusNode: _urlFieldFocusNode,
-              decoration: const InputDecoration(
-                hintText: 'https://addon.example.com/manifest.json',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 14,
-                ),
-              ),
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _addAddon(),
-              enabled: !_isAdding,
+        child: TvTextField(
+          controller: _urlController,
+          focusNode: _urlFieldFocusNode,
+          decoration: const InputDecoration(
+            hintText: 'https://addon.example.com/manifest.json',
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
             ),
           ),
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _addAddon(),
+          enabled: !_isAdding,
+          onDownArrow: () => _addButtonFocusNode.requestFocus(),
+          onUpArrow: () => FocusScope.of(context).previousFocus(),
         ),
       ),
     );
@@ -2540,14 +2492,4 @@ class _GlowFocusButtonState extends State<_GlowFocusButton> {
       ),
     );
   }
-}
-
-/// Custom intent for moving focus to Add button
-class _MoveToAddButtonIntent extends Intent {
-  const _MoveToAddButtonIntent();
-}
-
-/// Custom intent for moving focus to sidebar
-class _MoveToSidebarIntent extends Intent {
-  const _MoveToSidebarIntent();
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../models/indexer_manager_config.dart';
 import '../../services/indexer_manager_service.dart';
@@ -7,6 +6,7 @@ import '../../services/storage_service.dart';
 import '../../services/torrent_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Focused IconButtons get the accent outline + lit fill — the stock
@@ -520,19 +520,25 @@ class _IndexerManagerEditorDialogState
                         },
                       ),
                       const SizedBox(height: 14),
-                      _TvFriendlyTextFormField(
+                      TvTextField(
                         controller: _nameController,
                         focusNode: _nameFocusNode,
-                        decoration: const InputDecoration(labelText: 'Name'),
+                        decoration: _engineFieldDecoration(
+                          context,
+                          const InputDecoration(labelText: 'Name'),
+                        ),
                         textInputAction: TextInputAction.next,
                       ),
                       const SizedBox(height: 14),
-                      _TvFriendlyTextFormField(
+                      TvTextField(
                         controller: _urlController,
                         focusNode: _urlFocusNode,
-                        decoration: const InputDecoration(
-                          labelText: 'Base URL',
-                          hintText: 'http://localhost:9117',
+                        decoration: _engineFieldDecoration(
+                          context,
+                          const InputDecoration(
+                            labelText: 'Base URL',
+                            hintText: 'http://localhost:9117',
+                          ),
                         ),
                         keyboardType: TextInputType.url,
                         textInputAction: TextInputAction.next,
@@ -548,10 +554,13 @@ class _IndexerManagerEditorDialogState
                         },
                       ),
                       const SizedBox(height: 14),
-                      _TvFriendlyTextFormField(
+                      TvTextField(
                         controller: _apiKeyController,
                         focusNode: _apiKeyFocusNode,
-                        decoration: const InputDecoration(labelText: 'API key'),
+                        decoration: _engineFieldDecoration(
+                          context,
+                          const InputDecoration(labelText: 'API key'),
+                        ),
                         obscureText: true,
                         textInputAction: TextInputAction.next,
                         validator: (value) {
@@ -563,23 +572,29 @@ class _IndexerManagerEditorDialogState
                       ),
                       if (_type == IndexerManagerType.jackett) ...[
                         const SizedBox(height: 14),
-                        _TvFriendlyTextFormField(
+                        TvTextField(
                           controller: _jackettIndexerController,
                           focusNode: _jackettIndexerFocusNode,
-                          decoration: const InputDecoration(
-                            labelText: 'Jackett indexer ID',
-                            hintText: 'all',
+                          decoration: _engineFieldDecoration(
+                            context,
+                            const InputDecoration(
+                              labelText: 'Jackett indexer ID',
+                              hintText: 'all',
+                            ),
                           ),
                           textInputAction: TextInputAction.next,
                         ),
                       ],
                       const SizedBox(height: 14),
-                      _TvFriendlyTextFormField(
+                      TvTextField(
                         controller: _categoriesController,
                         focusNode: _categoriesFocusNode,
-                        decoration: const InputDecoration(
-                          labelText: 'Categories',
-                          hintText: '2000,5000',
+                        decoration: _engineFieldDecoration(
+                          context,
+                          const InputDecoration(
+                            labelText: 'Categories',
+                            hintText: '2000,5000',
+                          ),
                         ),
                         keyboardType: TextInputType.number,
                         textInputAction: TextInputAction.next,
@@ -606,16 +621,19 @@ class _IndexerManagerEditorDialogState
                         },
                       ),
                       const SizedBox(height: 14),
-                      _TvFriendlyTextFormField(
+                      TvTextField(
                         controller: _timeoutController,
                         focusNode: _timeoutFocusNode,
-                        decoration: const InputDecoration(
-                          labelText: 'Timeout seconds',
-                          hintText: '20 (5–600)',
+                        decoration: _engineFieldDecoration(
+                          context,
+                          const InputDecoration(
+                            labelText: 'Timeout seconds',
+                            hintText: '20 (5–600)',
+                          ),
                         ),
                         keyboardType: TextInputType.number,
                         textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _save(),
+                        onSubmitted: (_) => _save(),
                       ),
                       const SizedBox(height: 8),
                       // Snap accent ring so DPAD focus on the switch row is
@@ -666,159 +684,41 @@ class _IndexerManagerEditorDialogState
   }
 }
 
-class _TvFriendlyTextFormField extends StatefulWidget {
-  const _TvFriendlyTextFormField({
-    required this.controller,
-    required this.focusNode,
-    required this.decoration,
-    this.keyboardType,
-    this.obscureText = false,
-    this.textInputAction,
-    this.validator,
-    this.onFieldSubmitted,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final InputDecoration decoration;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final TextInputAction? textInputAction;
-  final String? Function(String?)? validator;
-  final ValueChanged<String>? onFieldSubmitted;
-
-  @override
-  State<_TvFriendlyTextFormField> createState() =>
-      _TvFriendlyTextFormFieldState();
-}
-
-class _TvFriendlyTextFormFieldState extends State<_TvFriendlyTextFormField> {
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_handleFocusChange);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (!mounted) return;
-    setState(() => _isFocused = widget.focusNode.hasFocus);
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = widget.controller.text;
-    final selection = widget.controller.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.browserBack) {
-      final context = node.context;
-      if (context != null) {
-        FocusScope.of(context).previousFocus();
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (key == LogicalKeyboardKey.arrowUp && (isTextEmpty || isAtStart)) {
-      final context = node.context;
-      if (context != null) {
-        FocusScope.of(context).focusInDirection(TraversalDirection.up);
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (key == LogicalKeyboardKey.arrowDown && (isTextEmpty || isAtEnd)) {
-      final context = node.context;
-      if (context != null) {
-        FocusScope.of(context).focusInDirection(TraversalDirection.down);
-        return KeyEventResult.handled;
-      }
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: theme.colorScheme.outline),
-    );
-    final decoration = widget.decoration.copyWith(
-      border: widget.decoration.border ?? border,
-      enabledBorder: widget.decoration.enabledBorder ?? border,
-      focusedBorder:
-          widget.decoration.focusedBorder ??
-          border.copyWith(
-            borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
-          ),
-      errorBorder:
-          widget.decoration.errorBorder ??
-          border.copyWith(
-            borderSide: BorderSide(color: theme.colorScheme.error),
-          ),
-      focusedErrorBorder:
-          widget.decoration.focusedErrorBorder ??
-          border.copyWith(
-            borderSide: BorderSide(color: theme.colorScheme.error, width: 2),
-          ),
-      isDense: widget.decoration.isDense ?? true,
-      contentPadding:
-          widget.decoration.contentPadding ??
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    );
-
-    return Focus(
-      onKeyEvent: _handleKeyEvent,
-      skipTraversal: true,
-      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.18),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
+/// Editor-dialog field decoration: the outlined, dense look the deleted
+/// _TvFriendlyTextFormField clone applied to every field. TvTextField borrows
+/// the focusedBorder for its TV focus ring.
+InputDecoration _engineFieldDecoration(
+  BuildContext context,
+  InputDecoration decoration,
+) {
+  final theme = Theme.of(context);
+  final border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(8),
+    borderSide: BorderSide(color: theme.colorScheme.outline),
+  );
+  return decoration.copyWith(
+    border: decoration.border ?? border,
+    enabledBorder: decoration.enabledBorder ?? border,
+    focusedBorder:
+        decoration.focusedBorder ??
+        border.copyWith(
+          borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
         ),
-        child: TextFormField(
-          controller: widget.controller,
-          focusNode: widget.focusNode,
-          decoration: decoration,
-          keyboardType: widget.keyboardType,
-          obscureText: widget.obscureText,
-          textInputAction: widget.textInputAction,
-          validator: widget.validator,
-          onFieldSubmitted: widget.onFieldSubmitted,
+    errorBorder:
+        decoration.errorBorder ??
+        border.copyWith(
+          borderSide: BorderSide(color: theme.colorScheme.error),
         ),
-      ),
-    );
-  }
+    focusedErrorBorder:
+        decoration.focusedErrorBorder ??
+        border.copyWith(
+          borderSide: BorderSide(color: theme.colorScheme.error, width: 2),
+        ),
+    isDense: decoration.isDense ?? true,
+    contentPadding:
+        decoration.contentPadding ??
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+  );
 }
 
 /// Snap accent ring painted while the wrapped control (Switch etc.) holds

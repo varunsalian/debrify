@@ -35,6 +35,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -47,6 +48,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.UnrecognizedInputFormatException
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -207,12 +209,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var isIptvMode = false
     private var iptvChannels = mutableListOf<IptvChannelEntry>()
     private var currentIptvIndex = 0
+
+    // Per-channel HTTP headers for the CURRENT channel, injected into every
+    // player request by the IPTV resolver installed in setupPlayer. Written
+    // on the main thread in setIptvMediaItem, read on ExoPlayer's loader
+    // threads — hence @Volatile.
+    @Volatile
+    private var currentIptvHttpHeaders: Map<String, String> = emptyMap()
+
+    // URLs that failed extractor sniffing and play as HLS instead (bare
+    // extension-less URLs — jmp2.uk-style — infer as progressive). Session
+    // memory so zapping back starts straight in HLS with no failed attempt.
+    private val iptvHlsForcedUrls = HashSet<String>()
+    private var currentIptvStreamUrl: String? = null
     private var iptvGuideOverlay: View? = null
     private var iptvGuideList: RecyclerView? = null
     private var iptvGuideSearch: android.widget.EditText? = null
     private var iptvGuideCountText: TextView? = null
     private var iptvGuideCurrentName: TextView? = null
     private var iptvGuideCurrentGroup: TextView? = null
+    private var iptvGuideCurrentEpg: TextView? = null
+    private var iptvScheduleDialog: AlertDialog? = null
     private var iptvGuideNowPlaying: View? = null
     private var iptvGuideNowLogo: android.widget.ImageView? = null
     private var iptvGuideNowLetter: TextView? = null
@@ -564,14 +581,39 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            // Stale-delivery gate for EVERY IPTV recovery path below: a
+            // queued onPlayerError whose media item was already superseded
+            // (a zap's or the watchdog's prepare() cleared the error) reports
+            // playerError == null. Acting on one would attribute channel A's
+            // failure to channel B — e.g. force-HLS-poisoning B's URL for the
+            // whole session, or restarting A's stream under B's identity.
+            val isLiveIptvError = isIptvMode && player?.playerError != null
+
+            // IPTV: a stream that failed extractor sniffing is almost always
+            // an HLS playlist behind an extension-less URL (inferred as
+            // progressive). Retry the SAME url once with the type forced —
+            // before the Stremio ladder, so a playable-if-forced candidate
+            // isn't skipped.
+            if (isLiveIptvError && retryIptvAsHlsIfUnrecognized(error)) return
+
+            // IPTV live: falling behind the live window (long pause, hiccup
+            // on a short-window stream) is recoverable by rejoining the live
+            // edge — without this the channel just dies with an error.
+            if (isLiveIptvError &&
+                currentIptvStreamUrl != null &&
+                error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW
+            ) {
+                android.util.Log.w("AndroidTvPlayer", "Behind live window — rejoining live edge")
+                player?.seekToDefaultPosition()
+                player?.prepare()
+                player?.play()
+                return
+            }
+
             // Stremio-addon IPTV channels: a dead candidate URL is expected —
             // step down the ladder. Everything else keeps the pre-existing
             // behavior (no handler existed; playback simply stops).
-            // playerError gate: if the stall watchdog already advanced (its
-            // prepare() cleared the error), a stale queued delivery for the
-            // previous candidate arrives with playerError null — advancing
-            // again would skip the candidate the watchdog just started.
-            if (isIptvMode && player?.playerError != null && tryNextIptvStremioCandidate()) return
+            if (isLiveIptvError && tryNextIptvStremioCandidate()) return
             android.util.Log.e("AndroidTvPlayer", "Player error: ${error.errorCodeName}")
         }
 
@@ -999,12 +1041,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val renderersFactory = OffsetRenderersFactory(baseRenderersFactory)
             .also { offsetRenderersFactory = it }
 
-        // Create HTTP data source factory with redirect support for HLS/live streams
+        // Create HTTP data source factory with redirect support for HLS/live streams.
+        // The browser UA rides in defaultRequestProperties, NOT setUserAgent:
+        // media3 applies the userAgent field LAST in makeConnection, silently
+        // clobbering any per-request User-Agent — which would break IPTV
+        // channels that declare their own UA (injected via the resolver's
+        // dataSpec headers, which override defaults in the merge).
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(15000)
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .setDefaultRequestProperties(
+                mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+            )
 
         // Wrap with DefaultDataSource.Factory for local file/content URI support
         val upstreamDataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
@@ -1034,9 +1085,32 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             upstreamDataSourceFactory
         }
 
+        // IPTV: inject the CURRENT channel's declared headers into every
+        // request (playlist + segments — CDNs enforce them on both). Read per
+        // request so channel zaps just update [currentIptvHttpHeaders]; the
+        // factory-level Chrome UA still applies when a channel names no UA.
+        // (Channel UA keys are canonicalized to "User-Agent" at parse time,
+        // so the dataSpec entry deterministically replaces the default.)
+        val finalDataSourceFactory = if (isIptvMode) {
+            ResolvingDataSource.Factory(
+                dataSourceFactory,
+                object : ResolvingDataSource.Resolver {
+                    override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
+                        val headers = currentIptvHttpHeaders
+                        return if (headers.isEmpty()) dataSpec
+                        else dataSpec.withAdditionalHeaders(headers)
+                    }
+
+                    override fun resolveReportedUri(uri: Uri): Uri = uri
+                }
+            )
+        } else {
+            dataSourceFactory
+        }
+
         // Create media source factory that uses the data source
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(dataSourceFactory)
+            .setDataSourceFactory(finalDataSourceFactory)
 
         val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
@@ -3638,6 +3712,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             return true
                         }
                     }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        // RIGHT on a channel row: its programme schedule —
+                        // the same grammar as the IPTV page's guide list.
+                        if (isFocusInIptvChannelList() && event.repeatCount == 0) {
+                            focusedIptvGuideEntry()?.let { entry ->
+                                if (entry.isLive) showIptvScheduleDialog(entry)
+                            }
+                            return true
+                        }
+                    }
                     KeyEvent.KEYCODE_DPAD_UP -> {
                         // Long-press up in channel list: jump to search bar
                         if (isFocusInIptvChannelList() && event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
@@ -4869,8 +4953,40 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     url = ch.optString("url"),
                     logoUrl = ch.optString("logoUrl").takeIf { it.isNotEmpty() },
                     group = ch.optString("group").takeIf { it.isNotEmpty() },
-                    isLive = ch.optInt("duration", -1).let { it == -1 || !ch.has("duration") },
+                    // Mirrors IptvChannel.isLive on the Dart side: an explicit
+                    // content type wins, and only M3U channels (which carry
+                    // none) fall back to the duration heuristic. The old
+                    // duration-only read called every Xtream movie live —
+                    // they serialize no duration at all — which both badged
+                    // them LIVE in the guide and, now, would skip their
+                    // resume reporting.
+                    isLive = when (ch.optString("contentType")) {
+                        "live" -> true
+                        "vod" -> false
+                        else -> ch.optInt("duration", -1) == -1
+                    },
                     isCurrent = false,
+                    resumePositionMs = ch.optLong("resumePositionMs", 0L),
+                    httpHeaders = ch.optJSONObject("httpHeaders")?.let { obj ->
+                        buildMap {
+                            for (key in obj.keys()) {
+                                obj.optString(key).takeIf { it.isNotEmpty() }?.let {
+                                    // Canonicalize the UA key: the factory's
+                                    // default UA lives under "User-Agent",
+                                    // and the header merge into the request
+                                    // is a case-SENSITIVE HashMap — a
+                                    // lowercase "user-agent" from a playlist
+                                    // would produce two entries with a
+                                    // map-order-dependent winner.
+                                    val name =
+                                        if (key.equals("User-Agent", ignoreCase = true)) {
+                                            "User-Agent"
+                                        } else key
+                                    put(name, it)
+                                }
+                            }
+                        }
+                    } ?: emptyMap(),
                 )
             )
         }
@@ -4904,6 +5020,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvGuideCountText = findViewById(R.id.iptv_guide_count)
         iptvGuideCurrentName = findViewById(R.id.iptv_guide_current_name)
         iptvGuideCurrentGroup = findViewById(R.id.iptv_guide_current_group)
+        iptvGuideCurrentEpg = findViewById(R.id.iptv_guide_current_epg)
         iptvGuideNowPlaying = findViewById(R.id.iptv_guide_now_playing)
         iptvGuideNowLogo = findViewById(R.id.iptv_guide_now_logo)
         iptvGuideNowLetter = findViewById(R.id.iptv_guide_now_letter)
@@ -4934,7 +5051,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             onItemClick = { entry ->
                 hideIptvGuide()
                 switchToIptvChannel(entry)
-            }
+            },
+            onEpgNeeded = { entry -> ensureIptvChannelEpg(entry) },
         )
         guideList.adapter = iptvChannelAdapter
 
@@ -4989,6 +5107,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hideIptvGuide() {
         iptvGuideVisible = false
+        iptvScheduleDialog?.dismiss()
+        iptvScheduleDialog = null
         iptvGuideOverlay?.animate()?.cancel() // cancel any pending show animation
         iptvGuideOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
             iptvGuideOverlay?.visibility = View.GONE
@@ -4998,6 +5118,245 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun toggleIptvGuide() {
         if (iptvGuideVisible) hideIptvGuide() else showIptvGuide()
+    }
+
+    // ── IPTV EPG ─────────────────────────────────────────────────────────
+    // Guide data comes from Flutter over the bridge (the Dart EPG service
+    // recovers Xtream credentials from the channel URL and owns all caching),
+    // so the native side only ever asks and paints.
+
+    /** Fetch now/next for [entry] unless it's already fresh or in flight. */
+    private fun ensureIptvChannelEpg(entry: IptvChannelEntry) {
+        if (!entry.isLive || entry.epgLoading) return
+        val stale = entry.epgLoaded && entry.epgNowStopMs > 0 &&
+            entry.epgNowStopMs < System.currentTimeMillis()
+        if (entry.epgLoaded && !stale) return
+        if (!entry.url.startsWith("http")) return // stremio-tv:// keys etc.
+
+        entry.epgLoading = true
+        requestIptvEpg(entry.url, includeSchedule = false) { result ->
+            entry.epgLoading = false
+            entry.epgLoaded = true
+            val now = result?.get("now") as? Map<*, *>
+            entry.epgNowTitle =
+                (now?.get("title") as? String)?.takeIf { it.isNotBlank() }
+            entry.epgNowStartMs = (now?.get("startMs") as? Number)?.toLong() ?: 0L
+            entry.epgNowStopMs = (now?.get("stopMs") as? Number)?.toLong() ?: 0L
+            val next = result?.get("next") as? Map<*, *>
+            entry.epgNextTitle =
+                (next?.get("title") as? String)?.takeIf { it.isNotBlank() }
+            entry.epgNextStartMs =
+                (next?.get("startMs") as? Number)?.toLong() ?: 0L
+            if (entry.epgNowTitle == null) {
+                // Nothing airing per this answer — a guide still downloading
+                // on the Flutter side, a transient fetch failure, or a gap
+                // until the next programme. Without a retry deadline the
+                // stale rule (`stopMs > 0 && stopMs < now`) never re-arms
+                // and the entry stays blank all session. Reuse stopMs as
+                // "re-ask at": when the next programme starts, or in 5
+                // minutes. Dart's caches rate-limit the repeat asks.
+                val retryAt = System.currentTimeMillis() + 5 * 60 * 1000L
+                val nextStart = entry.epgNextStartMs
+                entry.epgNowStopMs =
+                    if (nextStart > 0 && nextStart < retryAt) nextStart else retryAt
+            }
+            iptvChannelAdapter?.notifyEpgFor(entry)
+            if (entry.isCurrent) updateIptvGuideEpgHeader()
+        }
+    }
+
+    /** Paint the playing channel's now/next line in the guide header. */
+    private fun updateIptvGuideEpgHeader() {
+        val epgView = iptvGuideCurrentEpg ?: return
+        val entry = iptvChannels.getOrNull(currentIptvIndex)
+        val nowTitle = entry?.epgNowTitle
+        if (entry == null || nowTitle == null) {
+            epgView.visibility = View.GONE
+            return
+        }
+        val text = StringBuilder("Now: $nowTitle")
+        entry.epgNextTitle?.let { text.append("   ›   Next: $it") }
+        epgView.text = text
+        epgView.visibility = View.VISIBLE
+    }
+
+    /** The guide-list entry that currently holds DPAD focus, if any. */
+    private fun focusedIptvGuideEntry(): IptvChannelEntry? {
+        val list = iptvGuideList ?: return null
+        val focused = list.focusedChild ?: return null
+        val holder = list.getChildViewHolder(focused) ?: return null
+        val position = holder.bindingAdapterPosition
+        if (position == RecyclerView.NO_POSITION) return null
+        return iptvChannelAdapter?.entryAt(position)
+    }
+
+    private fun formatEpgTime(ms: Long): String =
+        android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(ms))
+
+    /**
+     * RIGHT on a guide row: the channel's day schedule as a focusable dialog
+     * (BACK dismisses it back to the guide). Built from the bridge's
+     * schedule payload; a channel without guide data gets a quiet toast.
+     */
+    private fun showIptvScheduleDialog(entry: IptvChannelEntry) {
+        requestIptvEpg(entry.url, includeSchedule = true) { result ->
+            if (isFinishing || isDestroyed || !iptvGuideVisible) return@requestIptvEpg
+            val schedule = (result?.get("schedule") as? List<*>)
+                ?.mapNotNull { it as? Map<*, *> }
+                ?.mapNotNull { item ->
+                    val title = (item["title"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val startMs = (item["startMs"] as? Number)?.toLong()
+                        ?: return@mapNotNull null
+                    val stopMs = (item["stopMs"] as? Number)?.toLong()
+                        ?: return@mapNotNull null
+                    Triple(title, startMs, stopMs)
+                } ?: emptyList()
+            if (schedule.isEmpty()) {
+                Toast.makeText(
+                    this,
+                    "No guide data for ${entry.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@requestIptvEpg
+            }
+
+            val nowMs = System.currentTimeMillis()
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(8), dp(20), dp(16))
+            }
+            var nowRow: View? = null
+            var lastDay = -1
+            val calendar = java.util.Calendar.getInstance()
+            for ((title, startMs, stopMs) in schedule) {
+                calendar.timeInMillis = startMs
+                val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+                if (day != lastDay) {
+                    lastDay = day
+                    val dayText = android.text.format.DateUtils.getRelativeTimeSpanString(
+                        startMs, nowMs, android.text.format.DateUtils.DAY_IN_MILLIS,
+                        android.text.format.DateUtils.FORMAT_SHOW_WEEKDAY
+                    ).toString().uppercase()
+                    container.addView(TextView(this).apply {
+                        text = dayText
+                        setTextColor(Color.argb(102, 255, 255, 255))
+                        textSize = 10f
+                        letterSpacing = 0.1f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setPadding(0, dp(12), 0, dp(4))
+                    })
+                }
+                val isAiring = startMs <= nowMs && nowMs < stopMs
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(dp(8), dp(7), dp(8), dp(7))
+                    if (isAiring) setBackgroundColor(Color.argb(20, 0, 229, 255))
+                }
+                row.addView(TextView(this).apply {
+                    text = formatEpgTime(startMs)
+                    setTextColor(
+                        if (isAiring) Color.parseColor("#00E5FF")
+                        else Color.argb(if (stopMs < nowMs) 77 else 128, 255, 255, 255)
+                    )
+                    textSize = 12f
+                    layoutParams = LinearLayout.LayoutParams(dp(78), ViewGroup.LayoutParams.WRAP_CONTENT)
+                })
+                row.addView(TextView(this).apply {
+                    text = title
+                    setTextColor(
+                        Color.argb(
+                            if (stopMs < nowMs) 97 else if (isAiring) 255 else 217,
+                            255, 255, 255
+                        )
+                    )
+                    textSize = 12.5f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    if (isAiring) typeface = Typeface.DEFAULT_BOLD
+                    layoutParams = LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                    )
+                })
+                container.addView(row)
+                if (isAiring) nowRow = row
+            }
+
+            val scroll = android.widget.ScrollView(this).apply {
+                isFocusable = true
+                isFocusableInTouchMode = true
+                addView(container)
+            }
+
+            iptvScheduleDialog?.dismiss()
+            iptvScheduleDialog = AlertDialog.Builder(this)
+                .setTitle(entry.name)
+                .setView(scroll)
+                .create()
+                .also { dialog ->
+                    dialog.window?.setBackgroundDrawable(
+                        ColorDrawable(Color.parseColor("#EE10101A"))
+                    )
+                    dialog.show()
+                    dialog.window?.setLayout(dp(420), dp(440))
+                    // Land the scroll on what's airing now.
+                    nowRow?.let { row ->
+                        scroll.post { scroll.scrollTo(0, (row.top - dp(120)).coerceAtLeast(0)) }
+                    }
+                    scroll.requestFocus()
+                }
+        }
+    }
+
+    /**
+     * Ask Flutter for a channel's guide data. Always answers asynchronously
+     * on the main thread — the failure paths are posted on purpose, because
+     * the callback runs notifyItemChanged and a synchronous invocation from
+     * onBindViewHolder would fire it while RecyclerView is computing layout
+     * (IllegalStateException). MethodChannel results are async already.
+     */
+    private fun requestIptvEpg(
+        channelUrl: String,
+        includeSchedule: Boolean,
+        callback: (Map<*, *>?) -> Unit,
+    ) {
+        val failAsync = {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                callback(null)
+            }
+        }
+        try {
+            val args = hashMapOf<String, Any?>(
+                "channelUrl" to channelUrl,
+                "includeSchedule" to includeSchedule,
+            )
+            val channel = MainActivity.getAndroidTvPlayerChannel()
+            if (channel == null) {
+                failAsync()
+                return
+            }
+            channel.invokeMethod(
+                "requestIptvEpg",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        callback(result as? Map<*, *>)
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        android.util.Log.e("AndroidTvPlayer", "requestIptvEpg error: $errorCode - $errorMessage")
+                        callback(null)
+                    }
+
+                    override fun notImplemented() {
+                        callback(null)
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "requestIptvEpg exception: ${e.message}", e)
+            failAsync()
+        }
     }
 
     private fun updateIptvGuideCurrentName() {
@@ -5013,6 +5372,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } else {
                 iptvGuideCurrentGroup?.visibility = View.GONE
             }
+
+            // EPG now/next for the playing channel
+            updateIptvGuideEpgHeader()
+            ensureIptvChannelEpg(ch)
 
             // Now playing logo
             val firstLetter = if (ch.name.isNotEmpty()) ch.name[0].uppercase() else "?"
@@ -5055,6 +5418,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun switchToIptvChannel(entry: IptvChannelEntry) {
         android.util.Log.d("AndroidTvPlayer", "switchToIptvChannel: ${entry.name} (index=${entry.index})")
+        // Bank the outgoing channel's position BEFORE currentIptvIndex moves,
+        // or zapping back to a half-watched movie would rewind it to wherever
+        // it stood when the player was launched.
+        checkpointCurrentIptvPosition()
         // A channel zap orphans any pending source-switch watcher (see playItem)
         dropStaleSourceSwitchFeedback()
 
@@ -5083,6 +5450,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         progressHandler.postDelayed({ hideNextOverlay() }, 1500)
 
         updateIptvGuideCurrentName()
+    }
+
+    /**
+     * Store the playing on-demand item's live position on its own entry, so a
+     * later zap back to it resumes from there.
+     *
+     * Mirrors the Flutter-side window: a barely-started or effectively
+     * finished item banks 0 and replays from the beginning, rather than
+     * stranding the viewer a second from the credits.
+     */
+    private fun checkpointCurrentIptvPosition() {
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
+        if (entry.isLive) return
+
+        val duration = player?.duration ?: 0L
+        val position = player?.currentPosition ?: 0L
+        if (duration <= 0L || position <= 0L) return
+
+        val fraction = position.toDouble() / duration.toDouble()
+        entry.resumePositionMs = if (fraction in 0.02..0.95) position else 0L
     }
 
     private fun playIptvChannel(index: Int) {
@@ -5116,17 +5503,85 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setArtist(entry.group ?: "IPTV")
             .build()
 
+        // The channel's own headers ride every request from here on (the
+        // resolver installed in setupPlayer reads this per request). Set
+        // BEFORE the media item so the first playlist fetch already has them.
+        currentIptvHttpHeaders = entry.httpHeaders
+        currentIptvStreamUrl = streamUrl
+
         val mediaItem = MediaItem.Builder()
             .setUri(streamUrl)
             .setMediaMetadata(metadata)
+            .apply {
+                // Extension-less URLs infer as progressive and fail on HLS
+                // playlists; once a URL has proven to be HLS (via the error
+                // fallback) start it as HLS directly.
+                if (iptvHlsForcedUrls.contains(streamUrl)) {
+                    setMimeType(MimeTypes.APPLICATION_M3U8)
+                }
+            }
             .build()
 
+        // Resume on-demand items where they were left off. Passing the start
+        // position to setMediaItem rather than seeking after prepare avoids
+        // briefly rendering frame 0. Live channels always take the plain form:
+        // a start position on a live stream would drop it off the live edge.
+        val startAt = if (entry.isLive) 0L else entry.resumePositionMs
         player?.apply {
-            setMediaItem(mediaItem)
+            if (startAt > 0L) {
+                setMediaItem(mediaItem, startAt)
+            } else {
+                setMediaItem(mediaItem)
+            }
             prepare()
             playWhenReady = true
             play()
         }
+
+        // IPTV mode never goes through playMediaDirect, so nothing else starts
+        // the progress ticker here — without this the Flutter side is told
+        // nothing about on-demand playback and can't save a resume position.
+        restartProgressUpdates()
+    }
+
+    /**
+     * The extension-less-HLS fallback: when the current IPTV stream failed
+     * because no extractor recognized it (bare URLs — `jmp2.uk/stvp-…` —
+     * infer as progressive, and progressive extractors can't read an
+     * `#EXTM3U` text playlist), remember the URL as HLS and restart it once
+     * with the type forced. Returns true when a retry was started. mpv
+     * content-sniffs, which is why the same channels play on phone — this
+     * closes that gap for ExoPlayer.
+     */
+    private fun retryIptvAsHlsIfUnrecognized(error: PlaybackException): Boolean {
+        val url = currentIptvStreamUrl ?: return false
+        if (iptvHlsForcedUrls.contains(url)) return false // already tried
+        var cause: Throwable? = error
+        var unrecognized = false
+        while (cause != null) {
+            if (cause is UnrecognizedInputFormatException) {
+                unrecognized = true
+                break
+            }
+            cause = cause.cause
+        }
+        if (!unrecognized) return false
+
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
+        android.util.Log.d(
+            "AndroidTvPlayer",
+            "Unrecognized format for ${entry.name} — retrying as HLS"
+        )
+        iptvHlsForcedUrls.add(url)
+        setIptvMediaItem(entry, url)
+        // Stremio candidate: give the forced-HLS attempt a FULL stall window
+        // (arming re-cancels the one ticking since candidate start — a slow
+        // panel can eat most of that window on the failed sniff alone, and
+        // the ladder would advance past a candidate that plays when forced).
+        if (iptvStremioChannelKey != null) {
+            armIptvStremioStallWatchdog()
+        }
+        return true
     }
 
     /**
@@ -5144,6 +5599,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvStremioWinnerReported = false
         cancelIptvStremioStallWatchdog()
         clearIptvStremioSources()
+
+        // The outgoing stream's URL must not be attributable from here on: a
+        // Stremio zap stops the player and resolves async — stop() does NOT
+        // clear playerError, so a stale error delivering mid-resolve would
+        // otherwise pass the liveness gate and restart the OLD stream under
+        // the new channel's identity. setIptvMediaItem re-sets this.
+        currentIptvStreamUrl = null
 
         if (!isStremioIptvUrl(entry.url)) {
             setIptvMediaItem(entry, entry.url)
@@ -6617,6 +7079,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun sendProgress(completed: Boolean) {
+        // IPTV mode builds no payload (initIptvMode returns before it is
+        // parsed), so it reports against the current channel instead.
+        if (isIptvMode) {
+            sendIptvProgress(completed)
+            return
+        }
         val model = payload ?: return
         val item = model.items[currentIndex]
         // Use the largest stable duration seen — ExoPlayer can briefly report a
@@ -6651,6 +7119,40 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "url" to item.url,
             "isPlaying" to (player?.isPlaying ?: false),
             "isBuffering" to (player?.playbackState == Player.STATE_BUFFERING)
+        )
+
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackProgress", map)
+    }
+
+    /**
+     * Report position for the IPTV channel currently playing, so Flutter can
+     * save a resume point for on-demand items (movies) and draw progress on
+     * their rows.
+     *
+     * Live channels are skipped: ExoPlayer reports TIME_UNSET for them, and a
+     * position into a live stream means nothing. That check doubles as the
+     * live/VOD filter — the Flutter side stores whatever it receives.
+     */
+    private fun sendIptvProgress(completed: Boolean) {
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
+        if (entry.isLive) return
+
+        val duration = player?.duration ?: 0L
+        if (duration <= 0L) return
+        val position = if (completed) duration else player?.currentPosition ?: 0L
+        if (position <= 0L) return
+
+        val map = hashMapOf<String, Any?>(
+            "mode" to "iptv",
+            "itemIndex" to currentIptvIndex,
+            "url" to entry.url,
+            "title" to entry.name,
+            "positionMs" to position.toInt().coerceAtLeast(0),
+            "durationMs" to duration.toInt().coerceAtLeast(0),
+            "speed" to playbackSpeeds[playbackSpeedIndex].toDouble(),
+            "aspect" to resizeModeLabels[resizeModeIndex].lowercase(),
+            "completed" to completed,
+            "isPlaying" to (player?.isPlaying ?: false),
         )
 
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackProgress", map)
@@ -7564,6 +8066,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (::seekFeedbackManager.isInitialized) {
             seekFeedbackManager.destroy()
         }
+
+        // The IPTV schedule dialog's window must not outlive the activity —
+        // finish() paths that bypass hideIptvGuide (stream-failure ladder,
+        // remote stop) would otherwise leak it.
+        iptvScheduleDialog?.dismiss()
+        iptvScheduleDialog = null
 
         // Cancel PikPak retry operations
         cancelPikPakRetry()
@@ -9369,17 +9877,42 @@ private data class IptvChannelEntry(
     val group: String?,
     val isLive: Boolean,
     var isCurrent: Boolean,
+    // Where playback of this on-demand item should start. Seeded from the
+    // Flutter payload and kept current in-session, so zapping away from a
+    // half-watched movie and back returns to the right spot rather than to
+    // the position it held at launch. Always 0 for live channels.
+    var resumePositionMs: Long = 0L,
+    // Headers the playlist declared for this channel (#EXTVLCOPT/#EXTHTTP/
+    // pipe-suffix). Sent with every request while the channel plays — a
+    // UA/Referer-guarded channel is unplayable without them.
+    val httpHeaders: Map<String, String> = emptyMap(),
+    // EPG (Xtream panels), fetched lazily over the bridge as rows bind.
+    // Instances are shared between the master list and the adapter's filtered
+    // copy, so a fetch landing updates both. epgLoaded means "asked once" —
+    // a stale answer (now-programme ended) re-arms the fetch on next bind.
+    var epgNowTitle: String? = null,
+    var epgNowStartMs: Long = 0L,
+    var epgNowStopMs: Long = 0L,
+    var epgNextTitle: String? = null,
+    var epgNextStartMs: Long = 0L,
+    var epgLoaded: Boolean = false,
+    var epgLoading: Boolean = false,
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private class IptvChannelAdapter(
     private var channels: MutableList<IptvChannelEntry>,
     private val onItemClick: (IptvChannelEntry) -> Unit,
+    // Fired from bind for live rows without (fresh) EPG — the activity
+    // fetches over the bridge and answers with notifyEpgFor. Bind-driven, so
+    // only rows that actually come on screen ever cost a request.
+    private val onEpgNeeded: ((IptvChannelEntry) -> Unit)? = null,
 ) : RecyclerView.Adapter<IptvChannelAdapter.ViewHolder>() {
 
     companion object {
         private val ACCENT = Color.parseColor("#00E5FF")
         private val ACCENT_DIM = Color.parseColor("#CC00E5FF")
+        const val PAYLOAD_EPG = "epg"
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -9388,6 +9921,7 @@ private class IptvChannelAdapter(
         val letter: TextView = view.findViewById(R.id.iptv_channel_letter)
         val name: TextView = view.findViewById(R.id.iptv_channel_name)
         val group: TextView = view.findViewById(R.id.iptv_channel_group)
+        val epg: TextView = view.findViewById(R.id.iptv_channel_epg)
         val liveBadge: View = view.findViewById(R.id.iptv_channel_live_badge)
         val nowBadge: TextView = view.findViewById(R.id.iptv_channel_now_badge)
     }
@@ -9396,6 +9930,15 @@ private class IptvChannelAdapter(
         val view = android.view.LayoutInflater.from(parent.context)
             .inflate(R.layout.item_iptv_channel, parent, false)
         return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isNotEmpty() && payloads[0] == PAYLOAD_EPG) {
+            // Partial bind — refresh the EPG line only, preserving focus/scale.
+            bindEpgLine(holder, channels[position])
+            return
+        }
+        super.onBindViewHolder(holder, position, payloads)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -9425,6 +9968,15 @@ private class IptvChannelAdapter(
             holder.group.visibility = View.VISIBLE
         } else {
             holder.group.visibility = View.GONE
+        }
+
+        // EPG line — bind what we have; ask for what we don't. "Stale" means
+        // the programme we knew about has ended, so the next bind re-asks.
+        bindEpgLine(holder, entry)
+        if (entry.isLive && !entry.epgLoading) {
+            val stale = entry.epgLoaded && entry.epgNowStopMs > 0 &&
+                entry.epgNowStopMs < System.currentTimeMillis()
+            if (!entry.epgLoaded || stale) onEpgNeeded?.invoke(entry)
         }
 
         // Badges — show NOW for current, LIVE for non-current live
@@ -9489,6 +10041,24 @@ private class IptvChannelAdapter(
     }
 
     override fun getItemCount(): Int = channels.size
+
+    private fun bindEpgLine(holder: ViewHolder, entry: IptvChannelEntry) {
+        val title = entry.epgNowTitle
+        if (title != null) {
+            holder.epg.text = "Now: $title"
+            holder.epg.visibility = View.VISIBLE
+        } else {
+            holder.epg.visibility = View.GONE
+        }
+    }
+
+    /** A bridge EPG fetch landed for [entry] — repaint its row if visible. */
+    fun notifyEpgFor(entry: IptvChannelEntry) {
+        val position = channels.indexOfFirst { it === entry }
+        if (position >= 0) notifyItemChanged(position, PAYLOAD_EPG)
+    }
+
+    fun entryAt(position: Int): IptvChannelEntry? = channels.getOrNull(position)
 
     fun updateChannels(filtered: List<IptvChannelEntry>) {
         channels.clear()

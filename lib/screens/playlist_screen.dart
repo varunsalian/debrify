@@ -8,6 +8,7 @@ import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
 import '../widgets/adaptive_playlist_section.dart';
+import '../widgets/tv_text_field.dart';
 import 'playlist_content_view_screen.dart';
 import '../utils/tv_keys.dart';
 
@@ -59,9 +60,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Search controller listener with debounce
     _searchController.addListener(_onSearchChanged);
 
-    // Search bar DPAD key handler
-    _searchBarFocusNode.onKeyEvent = _handleSearchBarKeyEvent;
-
     // Register TV sidebar focus handler (tab index 1 = Playlist)
     _tvContentFocusHandler = () {
       // Priority: 1) First card in Favorites, 2) First card in All Items, 3) Search button
@@ -110,38 +108,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     });
   }
 
+  /// Back/Escape on the search bar: clear the text first, then collapse the
+  /// bar. Arrows are handled by the TvTextField shell itself.
   KeyEventResult _handleSearchBarKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    final text = _searchController.text;
-    final selection = _searchController.selection;
-    final isAtStart =
-        !selection.isValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _searchFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (text.isEmpty || isAtStart) {
-        MainPageBridge.focusTvSidebar?.call();
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      return KeyEventResult.handled;
-    }
-
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      if (text.isNotEmpty) {
+      if (_searchController.text.isNotEmpty) {
         _searchController.clear();
         return KeyEventResult.handled;
       }
@@ -603,55 +577,67 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             child: _showSearchField
                 ? Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _searchBarFocusNode,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Search...',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.3),
-                        ),
-                        prefixIcon: Icon(
-                          Icons.search_rounded,
-                          color: Colors.white.withValues(alpha: 0.35),
-                        ),
-                        suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                          valueListenable: _searchController,
-                          builder: (context, value, _) {
-                            if (value.text.isEmpty)
-                              return const SizedBox.shrink();
-                            return IconButton(
-                              icon: Icon(
-                                Icons.close_rounded,
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                              onPressed: () {
-                                _searchController.clear();
-                              },
-                            );
-                          },
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.07),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            width: 1,
+                    child: Focus(
+                      // Back/Escape only: clear text, then collapse the bar.
+                      // Arrow keys are handled by the TvTextField shell below.
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      onKeyEvent: _handleSearchBarKeyEvent,
+                      child: TvTextField(
+                        controller: _searchController,
+                        focusNode: _searchBarFocusNode,
+                        style: const TextStyle(color: Colors.white),
+                        onDownArrow: () => _searchFocusNode.requestFocus(),
+                        onUpArrow: () {},
+                        onLeftArrow: () =>
+                            MainPageBridge.focusTvSidebar?.call(),
+                        onRightArrow: () {},
+                        decoration: InputDecoration(
+                          hintText: 'Search...',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.3),
                           ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            color: Colors.white.withValues(alpha: 0.35),
+                          ),
+                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _searchController,
+                            builder: (context, value, _) {
+                              if (value.text.isEmpty)
+                                return const SizedBox.shrink();
+                              return IconButton(
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                ),
+                                onPressed: () {
+                                  _searchController.clear();
+                                },
+                              );
+                            },
+                          ),
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.07),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              width: 1,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
                         ),
                       ),
                     ),

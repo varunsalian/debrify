@@ -120,6 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   StreamSubscription<Map<String, dynamic>>? _updateDownloadSub;
   String? _updateDownloadTaskId;
   bool _autoUpdateChecksEnabled = true;
+  bool _tvKeyboardEnabled = true;
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
   String _supportSettingsSubtitle = 'Help fund development with a donation';
@@ -172,6 +173,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getSimklUsername(),
       StorageService.getMdblistApiKey(),
       StorageService.getMdblistUsername(),
+      StorageService.getTvKeyboardEnabled(),
     ]);
 
     if (!mounted) return;
@@ -194,6 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final simklUsername = results[15] as String?;
     final mdblistKey = results[16] as String?;
     final mdblistUsername = results[17] as String?;
+    final tvKeyboardEnabled = results[18] as bool;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -325,6 +328,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _isAndroidTv = isAndroidTv;
     _loading = false;
     _autoUpdateChecksEnabled = autoCheckEnabled;
+    _tvKeyboardEnabled = tvKeyboardEnabled;
 
     setState(() {});
 
@@ -608,6 +612,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       checkingUpdates: _checkingUpdates,
       autoUpdateChecksEnabled: _autoUpdateChecksEnabled,
       onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
+      tvKeyboardEnabled: _tvKeyboardEnabled,
+      onToggleTvKeyboard: _toggleTvKeyboard,
       showSupportDonation: _supportDonation.hasProviders,
       supportDonationLabel: _supportSettingsLabel,
       supportDonationSubtitle: _supportSettingsSubtitle,
@@ -654,6 +660,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       checkingUpdates: _checkingUpdates,
       autoUpdateChecksEnabled: _autoUpdateChecksEnabled,
       onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
+      tvKeyboardEnabled: _tvKeyboardEnabled,
+      onToggleTvKeyboard: _toggleTvKeyboard,
       showSupportDonation: _supportDonation.hasProviders,
       supportDonationLabel: _supportSettingsLabel,
       supportDonationSubtitle: _supportSettingsSubtitle,
@@ -1578,6 +1586,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.setUpdateAutoCheckEnabled(enabled);
   }
 
+  Future<void> _toggleTvKeyboard(bool enabled) async {
+    setState(() {
+      _tvKeyboardEnabled = enabled;
+    });
+    await StorageService.setTvKeyboardEnabled(enabled);
+  }
+
   Future<void> _startAndroidUpdateDownload(AppRelease release) async {
     if (kIsWeb) {
       await _openReleasesPage(release.htmlUrl);
@@ -1754,6 +1769,8 @@ class _SettingsLayout extends StatelessWidget {
   final bool checkingUpdates;
   final bool autoUpdateChecksEnabled;
   final ValueChanged<bool> onToggleAutoUpdateChecks;
+  final bool tvKeyboardEnabled;
+  final ValueChanged<bool> onToggleTvKeyboard;
   final bool showSupportDonation;
   final String supportDonationLabel;
   final String supportDonationSubtitle;
@@ -1782,6 +1799,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.checkingUpdates,
     required this.autoUpdateChecksEnabled,
     required this.onToggleAutoUpdateChecks,
+    required this.tvKeyboardEnabled,
+    required this.onToggleTvKeyboard,
     required this.showSupportDonation,
     required this.supportDonationLabel,
     required this.supportDonationSubtitle,
@@ -1860,6 +1879,11 @@ class _SettingsLayout extends StatelessWidget {
                     SettingsTile.spec(
                       SettingsRows.debrifyTv,
                       onTap: onOpenDebrifyTvSettings,
+                    ),
+                    SettingsToggleTile.spec(
+                      SettingsRows.tvKeyboard,
+                      value: tvKeyboardEnabled,
+                      onChanged: onToggleTvKeyboard,
                     ),
                   ],
                 ),

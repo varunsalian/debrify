@@ -101,6 +101,11 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// discipline, URL-change restarts — applies unchanged.
   final bool live;
 
+  /// Headers to send with every media request — the IPTV preview passes the
+  /// channel's own playback headers so a UA/Referer-guarded channel behaves
+  /// exactly as it does in the real players. Null for trailer clips.
+  final Map<String, String>? httpHeaders;
+
   const HeroTrailerBackdrop({
     super.key,
     required this.imageUrl,
@@ -118,6 +123,7 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.ambientVolume = _defaultAmbientVolume,
     this.heroTag,
     this.live = false,
+    this.httpHeaders,
   });
 
   /// See [ambientVolume]. 70% — audible but under the UI, matching the Home
@@ -462,6 +468,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         audioUrl: widget.audioUrl,
         volume: _userMuted ? 0 : widget.ambientVolume,
         loop: !widget.live,
+        httpHeaders: widget.httpHeaders,
       );
       if (_engine != engine) return;
       if (widget.foreground) _applyVolume(foreground: true);

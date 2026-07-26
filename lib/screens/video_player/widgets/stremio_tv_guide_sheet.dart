@@ -8,6 +8,7 @@ import '../../../models/torrent.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../widgets/shimmer.dart';
+import '../../../widgets/tv_text_field.dart';
 
 /// Stremio TV channel guide overlay for the Flutter video player.
 /// Right-sliding frosted glass panel with search, now-playing, and channel list.
@@ -590,7 +591,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
               ? [BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 16)]
               : [],
         ),
-        child: TextField(
+        child: TvTextField(
           controller: _searchController,
           focusNode: _searchFocusNode,
           style: const TextStyle(

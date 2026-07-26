@@ -32,6 +32,7 @@ import '../services/pikpak_api_service.dart';
 import '../services/next_episode_service.dart';
 
 import '../widgets/series_browser.dart';
+import '../widgets/tv_text_field.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -492,6 +493,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   StreamSubscription? _paramsSub;
   StreamSubscription? _completedSub;
   StreamSubscription? _bufferingSub;
+  StreamSubscription? _iptvErrorSub;
 
   // Buffering indicator
   final ValueNotifier<bool> _showBufferingIndicator = ValueNotifier(false);
@@ -1511,6 +1513,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _showBufferingIndicator.value = false;
       }
     });
+
+    // Plain IPTV channels had no error path at all: a refused or dead stream
+    // just left a black screen with a spinner, indistinguishable from "the app
+    // is broken". (The Stremio ladder reports for itself — see the probing
+    // guard in the handler.)
+    if (widget.iptvChannels != null) {
+      _iptvErrorSub = _player.stream.error.listen(_onIptvStreamError);
+    }
 
     _autosaveTimer = Timer.periodic(
       const Duration(seconds: 6),
@@ -2727,6 +2737,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// the live path instead of the movie source-switch pipeline.
   String? _iptvChannelKey;
 
+  /// Suppresses [_onIptvStreamError] for errors that aren't the tuned
+  /// channel's to own. Set for the whole of [_switchToIptvChannel] and
+  /// cleared the moment the new media is actually opened, because until then
+  /// mpv is still draining the OUTGOING channel — while [_currentIptvIndex]
+  /// already points at the new one, so a report would blame the wrong
+  /// channel. A Stremio ladder stays muted throughout: dead candidates are
+  /// normal there and it reports for itself.
+  bool _iptvErrorsMuted = false;
+
+  /// mpv reports a failed stream as several errors in a row; only the first of
+  /// a burst is worth a message. Cleared on every zap so each channel the user
+  /// tries can report once — collapsing a burst must not silence the next
+  /// channel's genuine failure.
+  DateTime? _lastIptvErrorShown;
+
+  /// A plain IPTV channel's stream failed. Say so — the alternative (and the
+  /// pre-existing behavior) is an indefinite black screen that reads as the
+  /// whole IPTV section being broken.
+  void _onIptvStreamError(String error) {
+    if (!mounted || _iptvErrorsMuted) return;
+    final channels = widget.iptvChannels;
+    if (channels == null) return;
+
+    final now = DateTime.now();
+    final last = _lastIptvErrorShown;
+    if (last != null && now.difference(last) < const Duration(seconds: 6)) {
+      return;
+    }
+    _lastIptvErrorShown = now;
+
+    final name =
+        (_currentIptvIndex >= 0 && _currentIptvIndex < channels.length)
+        ? channels[_currentIptvIndex].name
+        : 'This channel';
+    debugPrint('Player: IPTV stream error on "$name": $error');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("$name didn't play — $error"),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
   /// Surface a Stremio IPTV channel's candidate links in the existing source
   /// sheet: the candidates become direct-URL [Torrent] rows via the override
   /// the sheet already honors. Null/empty clears the sheet (plain M3U
@@ -2800,6 +2853,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final channels = widget.iptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
     final ticket = ++_iptvSwitchTicket;
+    // This switch owns the error gate now (a superseded ladder's state doesn't
+    // survive). Muted until the new media is opened below; the burst debounce
+    // resets too, so this channel can report its own failure.
+    _iptvErrorsMuted = true;
+    _lastIptvErrorShown = null;
 
     _hideIptvChannelSheet();
 
@@ -2838,21 +2896,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // The candidates double as the source sheet's rows for this channel.
       _setIptvSources(channel.url, candidates);
       var opened = false;
-      for (var i = 0; i < candidates.length; i++) {
-        if (!mounted || ticket != _iptvSwitchTicket) return;
-        final url = candidates[i].url;
-        final ok = await _tryOpenLiveStream(url);
-        // A newer switch superseded this ladder mid-probe: its success/failure
-        // belongs to the other channel's playback now — don't credit it here.
-        if (ticket != _iptvSwitchTicket) return;
-        if (ok) {
-          StremioIptvService.instance.markWinner(channel.url, url);
-          if (mounted && _currentSourceIndex != i) {
-            setState(() => _currentSourceIndex = i);
+      try {
+        for (var i = 0; i < candidates.length; i++) {
+          if (!mounted || ticket != _iptvSwitchTicket) return;
+          final url = candidates[i].url;
+          final ok = await _tryOpenLiveStream(url);
+          // A newer switch superseded this ladder mid-probe: its success or
+          // failure belongs to the other channel's playback now — don't
+          // credit it here.
+          if (ticket != _iptvSwitchTicket) return;
+          if (ok) {
+            StremioIptvService.instance.markWinner(channel.url, url);
+            if (mounted && _currentSourceIndex != i) {
+              setState(() => _currentSourceIndex = i);
+            }
+            opened = true;
+            break;
           }
-          opened = true;
-          break;
         }
+      } finally {
+        // Only this ladder's own probing is silenced; a newer switch owns the
+        // flag from here (it sets it again on entry).
+        if (ticket == _iptvSwitchTicket) _iptvErrorsMuted = false;
       }
       if (ticket != _iptvSwitchTicket) return;
       if (!opened) {
@@ -2862,10 +2927,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('Player: no playable stream for ${channel.name}');
       }
     } else {
-      // Plain M3U/Xtream channel: single link, no source sheet.
+      // Plain M3U/Xtream channel: single link, no source sheet. Headers are
+      // per-channel (the playlist declares them per entry), so they come from
+      // the channel rather than widget.httpHeaders.
       _setIptvSources(null, null);
       try {
-        await _player.open(mk.Media(channel.url), play: true);
+        final media = mk.Media(
+          channel.url,
+          httpHeaders: channel.playbackHeaders,
+        );
+        // The outgoing stream is torn down (pause above); everything mpv
+        // reports from here is this channel's, including a fast failure that
+        // lands while open() is still awaiting.
+        _iptvErrorsMuted = false;
+        await _player.open(media, play: true);
       } catch (e) {
         debugPrint('Player: IPTV channel switch failed: $e');
       }
@@ -4884,6 +4959,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _paramsSub?.cancel();
     _completedSub?.cancel();
     _bufferingSub?.cancel();
+    _iptvErrorSub?.cancel();
     _bufferingDebounceTimer?.cancel();
     _showBufferingIndicator.dispose();
     _releaseAudioEffectSession();
@@ -4960,6 +5036,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         'ResumeKey: using playlist entry id $id for index $_currentIndex',
       );
       return id;
+    }
+
+    // IPTV launches carry no playlist, so the fallback below would key every
+    // channel in the session to the URL the player was OPENED with — zap to
+    // another channel and its position would be filed under the first one's
+    // name. Key on the channel actually playing instead. (Identical to the
+    // fallback until the user zaps, so existing resume points still resolve.)
+    final iptvChannels = widget.iptvChannels;
+    if (iptvChannels != null &&
+        _currentIptvIndex >= 0 &&
+        _currentIptvIndex < iptvChannels.length) {
+      return iptvChannels[_currentIptvIndex].url;
     }
 
     // Fallback to videoUrl for single items
@@ -5233,6 +5321,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _saveResume({bool debounced = false}) async {
     if (!_isReady) {
+      return;
+    }
+
+    // An IPTV zap flips _currentIptvIndex — and therefore _resumeKey — before
+    // the incoming stream opens, while _position/_duration still describe the
+    // OUTGOING one (_isReady is never cleared for the gap). A tick landing in
+    // that window would file the old movie's position under the new channel's
+    // key, which the Continue-watching shelf would then show as real progress.
+    // Nothing is lost by skipping: the next tick saves once the switch lands.
+    if (widget.iptvChannels != null && _isTransitioning) {
       return;
     }
 
@@ -6925,7 +7023,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                        child: TextField(
+                        child: TvTextField(
                           controller: controller,
                           autofocus: initialQuery.trim().isEmpty,
                           onSubmitted: (value) =>
@@ -7083,7 +7181,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   Row(
                     children: [
                       Expanded(
-                        child: TextField(
+                        child: TvTextField(
                           controller: seasonController,
                           keyboardType: TextInputType.number,
                           style: const TextStyle(color: Colors.white),
@@ -7097,7 +7195,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: TextField(
+                        child: TvTextField(
                           controller: episodeController,
                           keyboardType: TextInputType.number,
                           style: const TextStyle(color: Colors.white),

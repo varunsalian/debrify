@@ -18,6 +18,7 @@ import '../../widgets/cloud/cloud_row_skeleton.dart';
 import '../../widgets/cloud/cloud_segmented_tabs.dart';
 import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
+import '../../widgets/tv_text_field.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../utils/tv_keys.dart';
 
@@ -1620,64 +1621,36 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Focus(
-              // D-pad navigation handler for Android TV.
-              onKeyEvent: (node, event) {
-                if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                final key = event.logicalKey;
-                final textLength = _searchController.text.length;
-                final selection = _searchController.selection;
-                final isSelectionValid =
-                    selection.isValid && selection.baseOffset >= 0;
-                final isAtStart = !isSelectionValid ||
-                    (selection.baseOffset == 0 && selection.extentOffset == 0);
-                final isAtEnd = !isSelectionValid ||
-                    (selection.baseOffset == textLength &&
-                        selection.extentOffset == textLength);
-                final isEmpty = textLength == 0;
-
-                // Up at start/empty: move focus up (to the app-bar actions),
-                // not unfocus — unfocus would make the highlight vanish.
-                if (key == LogicalKeyboardKey.arrowUp && (isEmpty || isAtStart)) {
-                  _searchFocusNode.focusInDirection(TraversalDirection.up);
-                  return KeyEventResult.handled;
-                }
-                // Down at end/empty: move focus down into the results list.
-                if (key == LogicalKeyboardKey.arrowDown && (isEmpty || isAtEnd)) {
-                  _searchFocusNode.focusInDirection(TraversalDirection.down);
-                  return KeyEventResult.handled;
-                }
-                // Right at end: move to the clear button when visible.
-                if (key == LogicalKeyboardKey.arrowRight &&
-                    hasText &&
-                    (isEmpty || isAtEnd)) {
-                  _searchClearFocusNode.requestFocus();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: _isAtRoot
-                      ? 'Search your Premiumize cloud...'
-                      : 'Search files...',
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.06),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: TvTextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              textInputAction: TextInputAction.search,
+              // D-pad exits for Android TV (formerly a Focus/onKeyEvent
+              // wrapper): up to the app-bar actions, down into the results,
+              // right to the clear button when visible.
+              onUpArrow: () =>
+                  _searchFocusNode.focusInDirection(TraversalDirection.up),
+              onDownArrow: () =>
+                  _searchFocusNode.focusInDirection(TraversalDirection.down),
+              onRightArrow:
+                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              decoration: InputDecoration(
+                hintText: _isAtRoot
+                    ? 'Search your Premiumize cloud...'
+                    : 'Search files...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
                 ),
-                style: const TextStyle(color: Colors.white),
-                onChanged: _performSearch,
-                onSubmitted: (_) => _searchFocusNode.unfocus(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
+              style: const TextStyle(color: Colors.white),
+              onChanged: _performSearch,
+              onSubmitted: (_) => _searchFocusNode.unfocus(),
             ),
           ),
           if (hasText)

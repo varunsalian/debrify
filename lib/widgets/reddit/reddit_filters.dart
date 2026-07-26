@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../services/reddit_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/tv_keys.dart';
+import '../tv_text_field.dart';
 
 /// Popular subreddits for suggestions
 const List<String> kPopularSubreddits = [
@@ -544,76 +545,6 @@ class _SubredditPickerSheetState extends State<_SubredditPickerSheet> {
     }
   }
 
-  KeyEventResult _handleInputKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    // Safety check: widget must be mounted
-    if (!mounted) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = _controller.text;
-    final selection = _controller.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-
-    // Check if selection is valid
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart = !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd = !isSelectionValid ||
-        (selection.baseOffset == textLength && selection.extentOffset == textLength);
-
-    // Back/Escape: Close sheet
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.browserBack) {
-      try {
-        Navigator.of(context).pop();
-        return KeyEventResult.handled;
-      } catch (e) {
-        debugPrint('Error closing sheet: $e');
-        return KeyEventResult.ignored;
-      }
-    }
-
-    // Arrow Up: Nothing above input, just consume to prevent default behavior
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        return KeyEventResult.handled;
-      }
-    }
-
-    // Arrow Down: Move to first list item
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (isTextEmpty || isAtEnd) {
-        if (_tileFocusNodes.isNotEmpty) {
-          try {
-            _tileFocusNodes[0].requestFocus();
-            return KeyEventResult.handled;
-          } catch (e) {
-            debugPrint('Error moving focus down: $e');
-            return KeyEventResult.ignored;
-          }
-        }
-      }
-    }
-
-    // Arrow Right: Move to go button when at end
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if (isTextEmpty || isAtEnd) {
-        try {
-          _goButtonFocusNode.requestFocus();
-          return KeyEventResult.handled;
-        } catch (e) {
-          debugPrint('Error moving focus right: $e');
-          return KeyEventResult.ignored;
-        }
-      }
-    }
-
-    return KeyEventResult.ignored;
-  }
-
   KeyEventResult _handleTileKeyEvent(FocusNode node, KeyEvent event, int index, VoidCallback onSelect) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
@@ -712,42 +643,51 @@ class _SubredditPickerSheetState extends State<_SubredditPickerSheet> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Focus(
-                              onKeyEvent: _handleInputKeyEvent,
-                              skipTraversal: true,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: _inputIsFocused
-                                      ? Border.all(color: colorScheme.primary, width: 2)
-                                      : null,
-                                  boxShadow: _inputIsFocused
-                                      ? [
-                                          BoxShadow(
-                                            color: colorScheme.primary.withOpacity(0.2),
-                                            blurRadius: 8,
-                                            spreadRadius: 1,
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                child: TextField(
-                                  controller: _controller,
-                                  focusNode: _inputFocusNode,
-                                  decoration: InputDecoration(
-                                    hintText: 'Enter subreddit name',
-                                    prefixIcon: const Icon(Icons.tag),
-                                    prefixText: 'r/',
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    filled: true,
-                                    fillColor: colorScheme.surfaceContainerHighest,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: _inputIsFocused
+                                    ? Border.all(color: colorScheme.primary, width: 2)
+                                    : null,
+                                boxShadow: _inputIsFocused
+                                    ? [
+                                        BoxShadow(
+                                          color: colorScheme.primary.withOpacity(0.2),
+                                          blurRadius: 8,
+                                          spreadRadius: 1,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: TvTextField(
+                                controller: _controller,
+                                focusNode: _inputFocusNode,
+                                // The AnimatedContainer above draws this
+                                // field's focus ring; skip the shell's.
+                                shellRing: false,
+                                decoration: InputDecoration(
+                                  hintText: 'Enter subreddit name',
+                                  prefixIcon: const Icon(Icons.tag),
+                                  prefixText: 'r/',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  textInputAction: TextInputAction.go,
-                                  onSubmitted: (_) => _submitCustomSubreddit(),
+                                  filled: true,
+                                  fillColor: colorScheme.surfaceContainerHighest,
                                 ),
+                                textInputAction: TextInputAction.go,
+                                onSubmitted: (_) => _submitCustomSubreddit(),
+                                // Nothing above the input — consume so DPAD up
+                                // doesn't fall through to default traversal.
+                                onUpArrow: () {},
+                                onDownArrow: () {
+                                  if (_tileFocusNodes.isNotEmpty) {
+                                    _tileFocusNodes[0].requestFocus();
+                                  }
+                                },
+                                onRightArrow: () =>
+                                    _goButtonFocusNode.requestFocus(),
                               ),
                             ),
                           ),

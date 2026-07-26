@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/storage_service.dart';
+import '../../../widgets/tv_text_field.dart';
 
 class StremioTvCatalogPickerResult {
   final String message;
@@ -263,81 +264,31 @@ class _StremioTvCatalogPickerDialogState
     return KeyEventResult.ignored;
   }
 
-  KeyEventResult _handleSearchFieldKey(FocusNode node, KeyEvent event) {
+  /// Back/Escape from the search field moves focus to Cancel (instead of
+  /// popping the dialog). Sits on an ancestor Focus of the TvTextField so it
+  /// runs when the shell lets the key bubble; DPAD arrow exits live on the
+  /// TvTextField itself (onUp/DownArrow).
+  KeyEventResult _handleSearchFieldBack(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
-    final text = _searchController.text;
-    final selection = _searchController.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-    final filteredIndices = _filteredCatalogIndices;
-
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       _cancelSelectionFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        _newChannelFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
-      if (isTextEmpty || isAtEnd) {
-        if (filteredIndices.isNotEmpty) {
-          _catalogFocusNodes[filteredIndices.first].requestFocus();
-        } else {
-          _cancelSelectionFocusNode.requestFocus();
-        }
-        return KeyEventResult.handled;
-      }
-    }
     return KeyEventResult.ignored;
   }
 
-  KeyEventResult _handleCreateFieldKey(FocusNode node, KeyEvent event) {
+  /// Back/Escape from the create-view name field moves focus to the Back
+  /// button (instead of popping the whole dialog). Arrow exits live on the
+  /// TvTextField itself (onUp/DownArrow).
+  KeyEventResult _handleCreateFieldBack(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
-    final text = _nameController.text;
-    final selection = _nameController.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       _createCancelFocusNode.requestFocus();
       return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        _createCancelFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
-      if (isTextEmpty || isAtEnd) {
-        _createConfirmFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
     }
     return KeyEventResult.ignored;
   }
@@ -467,12 +418,23 @@ class _StremioTvCatalogPickerDialogState
               _buildFocusedTextField(
                 focusNode: _searchFocusNode,
                 child: Focus(
-                  onKeyEvent: _handleSearchFieldKey,
-                  child: TextField(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  onKeyEvent: _handleSearchFieldBack,
+                  child: TvTextField(
                     controller: _searchController,
                     focusNode: _searchFocusNode,
                     enabled: !_saving,
                     textInputAction: TextInputAction.search,
+                    onUpArrow: () => _newChannelFocusNode.requestFocus(),
+                    onDownArrow: () {
+                      final filtered = _filteredCatalogIndices;
+                      if (filtered.isNotEmpty) {
+                        _catalogFocusNodes[filtered.first].requestFocus();
+                      } else {
+                        _cancelSelectionFocusNode.requestFocus();
+                      }
+                    },
                     onChanged: (_) => setState(() {}),
                     onSubmitted: (_) {
                       if (filteredIndices.isNotEmpty) {
@@ -633,13 +595,17 @@ class _StremioTvCatalogPickerDialogState
           _buildFocusedTextField(
             focusNode: _nameFieldFocusNode,
             child: Focus(
-              onKeyEvent: _handleCreateFieldKey,
-              child: TextField(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: _handleCreateFieldBack,
+              child: TvTextField(
                 controller: _nameController,
                 focusNode: _nameFieldFocusNode,
                 autofocus: true,
                 textInputAction: TextInputAction.done,
                 enabled: !_saving,
+                onUpArrow: () => _createCancelFocusNode.requestFocus(),
+                onDownArrow: () => _createConfirmFocusNode.requestFocus(),
                 onSubmitted: (_) {
                   if (_nameController.text.trim().isNotEmpty) {
                     _createConfirmFocusNode.requestFocus();

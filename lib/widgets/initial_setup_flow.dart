@@ -24,6 +24,7 @@ import '../services/torbox_account_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
 import 'pikpak_folder_picker_dialog.dart';
+import 'tv_text_field.dart';
 
 class InitialSetupFlow extends StatefulWidget {
   const InitialSetupFlow({super.key});
@@ -2074,14 +2075,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
           SizedBox(height: spacing1),
           FocusTraversalOrder(
             order: const NumericFocusOrder(2),
-            child: _TvFriendlyTextField(
+            child: TvTextField(
               controller: _pikpakEmailController,
               focusNode: _pikpakEmailFieldFocusNode,
               enabled: !_isProcessing,
-              labelText: '',
-              hintText: 'your@email.com',
-              prefixIcon: const Icon(Icons.email_outlined),
-              errorText: _errorMessage,
+              decoration: _setupFieldDecoration(
+                hintText: 'your@email.com',
+                prefixIcon: const Icon(Icons.email_outlined),
+                errorText: _errorMessage,
+              ),
+              style: const TextStyle(color: Colors.white),
               onSubmitted: (_) {
                 if (_isProcessing) return;
                 _pikpakPasswordFieldFocusNode.requestFocus();
@@ -2099,15 +2102,18 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
           SizedBox(height: spacing1),
           FocusTraversalOrder(
             order: const NumericFocusOrder(3),
-            child: _TvFriendlyTextField(
+            child: TvTextField(
               controller: _pikpakPasswordController,
               focusNode: _pikpakPasswordFieldFocusNode,
               enabled: !_isProcessing,
-              labelText: '',
-              hintText: 'Enter your password',
-              prefixIcon: const Icon(Icons.lock_outline),
+              decoration: _setupFieldDecoration(
+                hintText: 'Enter your password',
+                prefixIcon: const Icon(Icons.lock_outline),
+                errorText: null,
+              ),
+              style: const TextStyle(color: Colors.white),
               obscureText: true,
-              errorText: null,
+              autofillHints: const [AutofillHints.password],
               onSubmitted: (_) {
                 if (_isProcessing) return;
                 _submitCurrent();
@@ -2125,14 +2131,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
           SizedBox(height: spacing1),
           FocusTraversalOrder(
             order: const NumericFocusOrder(2),
-            child: _TvFriendlyTextField(
+            child: TvTextField(
               controller: controller,
               focusNode: _textFieldFocusNode,
               enabled: !_isProcessing,
-              labelText: '',
-              hintText: meta.hint,
-              prefixIcon: Icon(meta.icon),
-              errorText: _errorMessage,
+              decoration: _setupFieldDecoration(
+                hintText: meta.hint,
+                prefixIcon: Icon(meta.icon),
+                errorText: _errorMessage,
+              ),
+              style: const TextStyle(color: Colors.white),
               onSubmitted: (_) {
                 if (_isProcessing) return;
                 _submitCurrent();
@@ -4590,205 +4598,36 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
   }
 }
 
-/// A TV-friendly TextField that allows escaping with DPAD
-class _TvFriendlyTextField extends StatefulWidget {
-  const _TvFriendlyTextField({
-    required this.controller,
-    required this.focusNode,
-    required this.enabled,
-    required this.labelText,
-    required this.hintText,
-    required this.prefixIcon,
-    this.errorText,
-    this.onSubmitted,
-    this.obscureText = false,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool enabled;
-  final String labelText;
-  final String hintText;
-  final Widget prefixIcon;
-  final String? errorText;
-  final ValueChanged<String>? onSubmitted;
-  final bool obscureText;
-
-  @override
-  State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
-}
-
-class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_handleFocusChange);
-    // Attach key handler directly to the focus node so it fires before
-    // EditableText's internal shortcuts, and so the node stays directly
-    // reachable by focusInDirection without an extra skipTraversal wrapper.
-    widget.focusNode.onKeyEvent = _handleKeyEvent;
-  }
-
-  @override
-  void dispose() {
-    try {
-      widget.focusNode.removeListener(_handleFocusChange);
-      // Only clear the handler if we're still the owner — during
-      // AnimatedSwitcher transitions the same focus node may already be
-      // claimed by the incoming instance.
-      if (widget.focusNode.onKeyEvent == _handleKeyEvent) {
-        widget.focusNode.onKeyEvent = null;
-      }
-    } catch (e) {
-      debugPrint('_TvFriendlyTextField: Error removing listener: $e');
-    }
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (mounted) {
-      setState(() {
-        _isFocused = widget.focusNode.hasFocus;
-      });
-    }
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    // Safety check: widget must be mounted to access context
-    if (!mounted) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = widget.controller.text;
-    final selection = widget.controller.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-
-    // Check if selection is valid
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    // Allow escape from TextField with back button (escape key)
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.browserBack) {
-      final ctx = node.context;
-      if (ctx != null && mounted) {
-        try {
-          FocusScope.of(ctx).previousFocus();
-          return KeyEventResult.handled;
-        } catch (e) {
-          debugPrint('Error handling escape key: $e');
-          return KeyEventResult.ignored;
-        }
-      }
-    }
-
-    // Navigate up: always allow if text is empty or cursor at start
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        final ctx = node.context;
-        if (ctx != null && mounted) {
-          try {
-            // Use directional focus to go to element above
-            FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
-            return KeyEventResult.handled;
-          } catch (e) {
-            debugPrint('Error handling arrow up: $e');
-            return KeyEventResult.ignored;
-          }
-        }
-      }
-    }
-
-    // Navigate down: always allow if text is empty or cursor at end
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (isTextEmpty || isAtEnd) {
-        final ctx = node.context;
-        if (ctx != null && mounted) {
-          try {
-            // Use directional focus to go to element below
-            FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
-            return KeyEventResult.handled;
-          } catch (e) {
-            debugPrint('Error handling arrow down: $e');
-            return KeyEventResult.ignored;
-          }
-        }
-      }
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: _isFocused ? Border.all(color: Colors.white, width: 2) : null,
-        boxShadow: _isFocused
-            ? <BoxShadow>[
-                BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
-      ),
-      child: TextField(
-        controller: widget.controller,
-        focusNode: widget.focusNode,
-        enabled: widget.enabled,
-        obscureText: widget.obscureText,
-        showCursor: true,
-        autofocus: false,
-        autofillHints: widget.obscureText
-            ? const <String>[AutofillHints.password]
-            : null,
-        decoration: InputDecoration(
-          labelText: widget.labelText.isEmpty ? null : widget.labelText,
-          labelStyle: const TextStyle(color: Colors.white70),
-          hintText: widget.hintText,
-          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-          prefixIcon: widget.prefixIcon,
-          prefixIconColor: Colors.white70,
-          errorText: widget.errorText,
-          filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.08),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: Colors.white.withValues(alpha: 0.2),
-            ),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: Colors.white.withValues(alpha: 0.2),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white, width: 2),
-          ),
-        ),
-        style: const TextStyle(color: Colors.white),
-        onSubmitted: widget.onSubmitted,
-      ),
-    );
-  }
+/// Setup-flow field decoration: the white-on-dark filled look the deleted
+/// _TvFriendlyTextField clone gave every field. TvTextField borrows the
+/// focusedBorder for its TV focus ring.
+InputDecoration _setupFieldDecoration({
+  required String hintText,
+  required Widget prefixIcon,
+  String? errorText,
+}) {
+  return InputDecoration(
+    labelStyle: const TextStyle(color: Colors.white70),
+    hintText: hintText,
+    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+    prefixIcon: prefixIcon,
+    prefixIconColor: Colors.white70,
+    errorText: errorText,
+    filled: true,
+    fillColor: Colors.white.withValues(alpha: 0.08),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.white, width: 2),
+    ),
+  );
 }
 
 /// One step of the "Import from your phone" guide: a caption plus a miniature

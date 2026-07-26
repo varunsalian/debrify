@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/webdav_item.dart';
@@ -8,6 +9,7 @@ import '../../services/storage_service.dart';
 import '../../services/webdav_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 /// House DPAD idiom: focus the node, then scroll it into view — plain
@@ -18,11 +20,7 @@ void _focusAndReveal(FocusNode target) {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     final ctx = target.context;
     if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        alignment: 0.2,
-        duration: const Duration(milliseconds: 180),
-      );
+      tvRevealMinimal(ctx);
     }
   });
 }
@@ -254,54 +252,62 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
               children: [
                 _section(
                   children: [
-                    _TvFriendlyTextField(
+                    TvTextField(
                       controller: _nameController,
                       focusNode: _nameFocusNode,
-                      nextFocusNode: _urlFocusNode,
                       labelText: 'Server name',
                       hintText: 'Seedbox',
                       prefixIcon: const Icon(Icons.badge_rounded),
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) => _urlFocusNode.requestFocus(),
+                      onDownArrow: () => _focusAndReveal(_urlFocusNode),
                     ),
                     const SizedBox(height: 12),
-                    _TvFriendlyTextField(
+                    TvTextField(
                       controller: _urlController,
                       focusNode: _urlFocusNode,
-                      previousFocusNode: _nameFocusNode,
-                      nextFocusNode: _usernameFocusNode,
                       keyboardType: TextInputType.url,
                       labelText: 'Server URL',
                       hintText: 'https://example.com/remote.php/dav/files/me',
                       prefixIcon: const Icon(Icons.link_rounded),
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) => _usernameFocusNode.requestFocus(),
+                      onUpArrow: () => _focusAndReveal(_nameFocusNode),
+                      onDownArrow: () => _focusAndReveal(_usernameFocusNode),
                     ),
                     const SizedBox(height: 12),
-                    _TvFriendlyTextField(
+                    TvTextField(
                       controller: _usernameController,
                       focusNode: _usernameFocusNode,
-                      previousFocusNode: _urlFocusNode,
-                      nextFocusNode: _passwordFocusNode,
                       labelText: 'Username',
                       hintText: 'Optional username',
                       prefixIcon: const Icon(Icons.person_rounded),
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) => _passwordFocusNode.requestFocus(),
+                      onUpArrow: () => _focusAndReveal(_urlFocusNode),
+                      onDownArrow: () => _focusAndReveal(_passwordFocusNode),
                     ),
                     const SizedBox(height: 12),
-                    _TvFriendlyTextField(
+                    TvTextField(
                       controller: _passwordController,
                       focusNode: _passwordFocusNode,
-                      previousFocusNode: _usernameFocusNode,
-                      nextFocusNode: _saveFocusNode,
-                      rightFocusNode: _passwordVisibilityFocusNode,
                       obscureText: _obscure,
                       labelText: 'Password or app token',
                       hintText: 'Optional password',
                       prefixIcon: const Icon(Icons.key_rounded),
-                      suffix: _PasswordVisibilityButton(
+                      suffixIcon: _PasswordVisibilityButton(
                         focusNode: _passwordVisibilityFocusNode,
                         passwordFocusNode: _passwordFocusNode,
                         saveFocusNode: _saveFocusNode,
                         obscure: _obscure,
                         onToggle: () => setState(() => _obscure = !_obscure),
                       ),
+                      textInputAction: TextInputAction.next,
                       onSubmitted: (_) => _save(),
+                      onUpArrow: () => _focusAndReveal(_usernameFocusNode),
+                      onDownArrow: () => _focusAndReveal(_saveFocusNode),
+                      onRightArrow: () =>
+                          _focusAndReveal(_passwordVisibilityFocusNode),
                     ),
                     const SizedBox(height: 16),
                     CallbackShortcuts(
@@ -490,164 +496,6 @@ class _FocusRingState extends State<_FocusRing> {
           ),
         ),
         child: widget.child,
-      ),
-    );
-  }
-}
-
-class _TvFriendlyTextField extends StatefulWidget {
-  const _TvFriendlyTextField({
-    required this.controller,
-    required this.focusNode,
-    required this.labelText,
-    required this.hintText,
-    required this.prefixIcon,
-    this.previousFocusNode,
-    this.nextFocusNode,
-    this.rightFocusNode,
-    this.keyboardType,
-    this.obscureText = false,
-    this.suffix,
-    this.onSubmitted,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final FocusNode? previousFocusNode;
-  final FocusNode? nextFocusNode;
-  final FocusNode? rightFocusNode;
-  final String labelText;
-  final String hintText;
-  final Widget prefixIcon;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final Widget? suffix;
-  final ValueChanged<String>? onSubmitted;
-
-  @override
-  State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
-}
-
-class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
-  bool _focused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_handleFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TvFriendlyTextField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode.removeListener(_handleFocusChange);
-      widget.focusNode.addListener(_handleFocusChange);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (!mounted) return;
-    setState(() {
-      _focused = widget.focusNode.hasFocus;
-    });
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-    final textLength = widget.controller.text.length;
-    final selection = widget.controller.selection;
-    final isTextEmpty = textLength == 0;
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    if (key == LogicalKeyboardKey.arrowUp &&
-        (isTextEmpty || isAtStart) &&
-        widget.previousFocusNode != null) {
-      _focusAndReveal(widget.previousFocusNode!);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowDown &&
-        (isTextEmpty || isAtEnd) &&
-        widget.nextFocusNode != null) {
-      _focusAndReveal(widget.nextFocusNode!);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowRight &&
-        (isTextEmpty || isAtEnd) &&
-        widget.rightFocusNode != null) {
-      _focusAndReveal(widget.rightFocusNode!);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.browserBack) {
-      if (widget.previousFocusNode != null) {
-        _focusAndReveal(widget.previousFocusNode!);
-        return KeyEventResult.handled;
-      }
-      // No previous field: let BACK bubble up so it pops the page.
-      return KeyEventResult.ignored;
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const primary = kSettingsAccent;
-    return Focus(
-      onKeyEvent: _handleKeyEvent,
-      skipTraversal: true,
-      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: _focused ? Border.all(color: primary, width: 2) : null,
-          boxShadow: _focused
-              ? [
-                  BoxShadow(
-                    color: primary.withValues(alpha: 0.18),
-                    blurRadius: 8,
-                  ),
-                ]
-              : null,
-        ),
-        child: TextField(
-          controller: widget.controller,
-          focusNode: widget.focusNode,
-          keyboardType: widget.keyboardType,
-          obscureText: widget.obscureText,
-          textInputAction: widget.nextFocusNode == null
-              ? TextInputAction.done
-              : TextInputAction.next,
-          decoration: InputDecoration(
-            labelText: widget.labelText,
-            hintText: widget.hintText,
-            prefixIcon: widget.prefixIcon,
-            suffixIcon: widget.suffix,
-          ),
-          onSubmitted: (value) {
-            if (widget.onSubmitted != null) {
-              widget.onSubmitted!(value);
-            } else {
-              widget.nextFocusNode?.requestFocus();
-            }
-          },
-        ),
       ),
     );
   }

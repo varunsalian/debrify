@@ -12,6 +12,7 @@ import '../services/download_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/shimmer.dart';
+import '../widgets/tv_text_field.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -832,7 +833,7 @@ class _StyledField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return TvTextField(
       controller: controller,
       onChanged: onChanged,
       decoration: InputDecoration(

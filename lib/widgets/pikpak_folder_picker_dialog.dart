@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/android_native_downloader.dart';
 import '../utils/tv_keys.dart';
+import 'tv_text_field.dart';
 
 class PikPakFolderPickerDialog extends StatefulWidget {
   final String? initialFolderId;
@@ -908,23 +909,11 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
   }
 
   void _setupFocusNodes() {
-    _inputFocusNode = FocusNode(
-      debugLabel: 'folder-name-input',
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        // DPAD Down: Move to Create button
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          _createButtonFocusNode.requestFocus();
-          return KeyEventResult.handled;
-        }
-        // Enter/Select: Submit the form
-        if (isActivateKey(event.logicalKey)) {
-          _validateAndSubmit();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-    );
+    // No onKeyEvent here: TvTextField owns this node's key handling (its
+    // Focus widget would clobber a node-level handler on attach anyway) —
+    // down-to-Create is wired via onDownArrow at the field, and submit runs
+    // through the field's own OK/submit flow.
+    _inputFocusNode = FocusNode(debugLabel: 'folder-name-input');
 
     _cancelButtonFocusNode = FocusNode(
       debugLabel: 'cancel-btn',
@@ -1074,10 +1063,11 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
               const SizedBox(height: 16),
 
               // Input field
-              TextField(
+              TvTextField(
                 controller: _controller,
                 focusNode: _inputFocusNode,
                 autofocus: !widget.isTelevision,
+                onDownArrow: () => _createButtonFocusNode.requestFocus(),
                 decoration: InputDecoration(
                   labelText: 'Folder Name',
                   hintText: 'Enter folder name',

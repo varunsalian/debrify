@@ -87,6 +87,20 @@
             android:visibility="gone"
             tools:text="Sports"
             tools:visibility="visible" />
+
+        <!-- EPG now-playing line (Xtream channels with guide data) -->
+        <TextView
+            android:id="@+id/iptv_channel_epg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textColor="#8C00E5FF"
+            android:textSize="10.5sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone"
+            tools:text="Now: NBA Finals Game 4"
+            tools:visibility="visible" />
     </LinearLayout>
 
     <!-- LIVE Badge -->

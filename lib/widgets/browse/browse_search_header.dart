@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../tv_text_field.dart';
+
 /// Shared search header for the "Browse" sidebar tabs (IPTV, YouTube).
 ///
 /// Matches the styling of the Stremio TV search field. The parent owns the
@@ -17,6 +19,9 @@ class BrowseSearchHeader extends StatefulWidget {
   final ValueChanged<String>? onSubmitted;
   final VoidCallback onClear;
 
+  /// DPAD-down exit from the field (drops into the results/filters).
+  final VoidCallback? onDownArrow;
+
   const BrowseSearchHeader({
     super.key,
     required this.controller,
@@ -25,6 +30,7 @@ class BrowseSearchHeader extends StatefulWidget {
     required this.onClear,
     this.onChanged,
     this.onSubmitted,
+    this.onDownArrow,
   });
 
   @override
@@ -63,12 +69,13 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
     final hasText = widget.controller.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-      child: TextField(
+      child: TvTextField(
         controller: widget.controller,
         focusNode: widget.focusNode,
         style: const TextStyle(color: Colors.white),
         onChanged: widget.onChanged,
         onSubmitted: widget.onSubmitted,
+        onDownArrow: widget.onDownArrow,
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           hintText: widget.hintText,

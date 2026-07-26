@@ -1,5 +1,15 @@
 // IPTV Playlist and Channel models for M3U support
 
+/// User-Agent sent for IPTV playback when the playlist doesn't name one.
+///
+/// Without it mpv/ffmpeg (the in-app player) sends its default `Lavf/<version>`,
+/// which a large share of IPTV panels and CDNs block outright to stop
+/// restreaming — so every channel dies with no visible reason. Matches the
+/// Android TV player's data-source UA so a channel behaves the same on both.
+const String kIptvDefaultUserAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 /// Represents an IPTV M3U playlist
 class IptvPlaylist {
   final String id;
@@ -9,6 +19,11 @@ class IptvPlaylist {
   final String? serverUrl;  // Xtream Codes server URL
   final String? username;   // Xtream Codes username
   final String? password;   // Xtream Codes password
+
+  /// User-supplied XMLTV guide URL for M3U playlists. Overrides whatever the
+  /// playlist's own `#EXTM3U url-tvg=` header declares (most declare none).
+  final String? epgUrl;
+
   final DateTime addedAt;
 
   const IptvPlaylist({
@@ -19,6 +34,7 @@ class IptvPlaylist {
     this.serverUrl,
     this.username,
     this.password,
+    this.epgUrl,
     required this.addedAt,
   });
 
@@ -37,6 +53,11 @@ class IptvPlaylist {
   /// backed by the starred-channel store instead of a fetch).
   bool get isFavorites => url.startsWith('favorites://');
 
+  /// Returns true if this is the virtual "Continue watching" playlist (never
+  /// persisted — backed by the watch-history store joined with the players'
+  /// saved positions).
+  bool get isContinueWatching => url.startsWith('continue://');
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
@@ -45,6 +66,7 @@ class IptvPlaylist {
     if (serverUrl != null) 'serverUrl': serverUrl,
     if (username != null) 'username': username,
     if (password != null) 'password': password,
+    if (epgUrl != null) 'epgUrl': epgUrl,
     'addedAt': addedAt.toIso8601String(),
   };
 
@@ -56,6 +78,7 @@ class IptvPlaylist {
     serverUrl: json['serverUrl'] as String?,
     username: json['username'] as String?,
     password: json['password'] as String?,
+    epgUrl: json['epgUrl'] as String?,
     addedAt: DateTime.parse(json['addedAt'] as String),
   );
 
@@ -80,6 +103,12 @@ class IptvChannel {
   final String? contentType; // 'live', 'vod', or null (M3U channels)
   final Map<String, String> attributes; // Additional tvg-* attributes
 
+  /// HTTP headers this channel's playlist declared for it — via `#EXTVLCOPT:`
+  /// / `#EXTHTTP:` lines, `http-user-agent="…"` EXTINF attributes, or a
+  /// `|User-Agent=…` URL suffix. Empty for channels that declare none; see
+  /// [playbackHeaders] for what players should actually send.
+  final Map<String, String> httpHeaders;
+
   IptvChannel({
     required this.name,
     required this.url,
@@ -88,7 +117,19 @@ class IptvChannel {
     this.duration,
     this.contentType,
     this.attributes = const {},
+    this.httpHeaders = const {},
   });
+
+  /// The headers to send when playing this channel: whatever the playlist
+  /// declared, with [kIptvDefaultUserAgent] filled in when it named no UA.
+  Map<String, String> get playbackHeaders {
+    final headers = <String, String>{...httpHeaders};
+    final hasUserAgent = headers.keys.any(
+      (k) => k.toLowerCase() == 'user-agent',
+    );
+    if (!hasUserAgent) headers['User-Agent'] = kIptvDefaultUserAgent;
+    return headers;
+  }
 
   /// Lowercased "name\ngroup" haystack for search, built once per channel on
   /// first use. Searching used to call toLowerCase() on every channel's name
@@ -117,6 +158,7 @@ class IptvChannel {
     if (group != null) 'group': group,
     if (duration != null) 'duration': duration,
     if (contentType != null) 'contentType': contentType,
+    if (httpHeaders.isNotEmpty) 'httpHeaders': httpHeaders,
   };
 
   @override
@@ -133,11 +175,17 @@ class IptvParseResult {
   /// unavailable, so channels are shown ungrouped).
   final String? warning;
 
+  /// XMLTV guide URL the playlist's own `#EXTM3U url-tvg=` / `x-tvg-url=`
+  /// header declared, if any. A user-configured [IptvPlaylist.epgUrl] wins
+  /// over this.
+  final String? epgUrl;
+
   const IptvParseResult({
     required this.channels,
     required this.categories,
     this.error,
     this.warning,
+    this.epgUrl,
   });
 
   bool get hasError => error != null;

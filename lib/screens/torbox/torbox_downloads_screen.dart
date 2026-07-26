@@ -26,6 +26,7 @@ import '../../widgets/cloud/cloud_row_skeleton.dart';
 import '../../widgets/cloud/cloud_segmented_tabs.dart';
 import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
+import '../../widgets/tv_text_field.dart';
 import '../video_player_screen.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
@@ -2131,50 +2132,32 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Focus(
-                  onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent) {
-                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                        node.nextFocus();
-                        return KeyEventResult.handled;
-                      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                        node.previousFocus();
-                        return KeyEventResult.handled;
-                      }
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: TextField(
-                    controller: _webNameController,
-                    decoration: const InputDecoration(
-                      hintText: 'Custom name for the download',
-                      labelText: 'Name (optional)',
-                      border: OutlineInputBorder(),
-                    ),
+                TvTextField(
+                  controller: _webNameController,
+                  // D-pad exits (formerly a Focus/onKeyEvent wrapper).
+                  onDownArrow: () =>
+                      FocusManager.instance.primaryFocus?.nextFocus(),
+                  onUpArrow: () =>
+                      FocusManager.instance.primaryFocus?.previousFocus(),
+                  decoration: const InputDecoration(
+                    hintText: 'Custom name for the download',
+                    labelText: 'Name (optional)',
+                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
-                Focus(
-                  onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent) {
-                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                        node.nextFocus();
-                        return KeyEventResult.handled;
-                      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                        node.previousFocus();
-                        return KeyEventResult.handled;
-                      }
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: TextField(
-                    controller: _webPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Password if required',
-                      labelText: 'Password (optional)',
-                      border: OutlineInputBorder(),
-                    ),
+                TvTextField(
+                  controller: _webPasswordController,
+                  obscureText: true,
+                  // D-pad exits (formerly a Focus/onKeyEvent wrapper).
+                  onDownArrow: () =>
+                      FocusManager.instance.primaryFocus?.nextFocus(),
+                  onUpArrow: () =>
+                      FocusManager.instance.primaryFocus?.previousFocus(),
+                  decoration: const InputDecoration(
+                    hintText: 'Password if required',
+                    labelText: 'Password (optional)',
+                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -5726,65 +5709,29 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Focus(
-              // D-pad navigation handler for Android TV
-              onKeyEvent: (node, event) {
-                if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                final key = event.logicalKey;
-                final textLength = _searchController.text.length;
-                final selection = _searchController.selection;
-                final isTextEmpty = textLength == 0;
-                final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-                final isAtStart = !isSelectionValid ||
-                    (selection.baseOffset == 0 && selection.extentOffset == 0);
-                final isAtEnd = !isSelectionValid ||
-                    (selection.baseOffset == textLength && selection.extentOffset == textLength);
-
-                // Arrow Up at start/empty: exit TextField
-                if (key == LogicalKeyboardKey.arrowUp) {
-                  if (isTextEmpty || isAtStart) {
-                    _searchFocusNode.unfocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                // Arrow Down at end/empty: exit TextField to results
-                if (key == LogicalKeyboardKey.arrowDown) {
-                  if (isTextEmpty || isAtEnd) {
-                    _searchFocusNode.unfocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                // Arrow Right at end: move to clear button if visible
-                if (key == LogicalKeyboardKey.arrowRight) {
-                  if (hasText && (isTextEmpty || isAtEnd)) {
-                    _searchClearFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Search all files...',
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.06),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: TvTextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              textInputAction: TextInputAction.search,
+              // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
+              onUpArrow: () => _searchFocusNode.unfocus(),
+              onDownArrow: () => _searchFocusNode.unfocus(),
+              onRightArrow:
+                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              decoration: InputDecoration(
+                hintText: 'Search all files...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
                 ),
-                style: const TextStyle(color: Colors.white),
-                onChanged: _performSearch,
-                onSubmitted: (_) => _searchFocusNode.unfocus(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
+              style: const TextStyle(color: Colors.white),
+              onChanged: _performSearch,
+              onSubmitted: (_) => _searchFocusNode.unfocus(),
             ),
           ),
           // Clear button - separate focusable widget for D-pad navigation
@@ -6528,7 +6475,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
+            child: TvTextField(
               controller: _torrentSearchController,
               focusNode: _torrentSearchFocusNode,
               autofocus: true,

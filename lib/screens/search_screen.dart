@@ -56,6 +56,7 @@ import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
+import '../widgets/tv_text_field.dart';
 import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
@@ -2182,6 +2183,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               group: meta['group'] as String?,
               duration: -1, // live stream
               attributes: const {},
+              httpHeaders: StorageService.iptvFavoriteHeaders(meta),
             );
           }).toList()..sort(
             (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -2220,9 +2222,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _iptvFavLaunching = true;
     try {
       var videoUrl = channel.url;
-      List<IptvChannel>? iptvChannels;
-      int? iptvStartIndex;
-      if (StremioIptvService.isStremioChannelUrl(channel.url)) {
+      final isStremio = StremioIptvService.isStremioChannelUrl(channel.url);
+      if (isStremio) {
         // Explicit play intent: bypass a cached-empty resolve and explain an
         // empty answer specifically (addon unreachable vs. no streams).
         final candidates = await StremioIptvService.instance
@@ -2240,8 +2241,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           return;
         }
         videoUrl = candidates.first.url;
-        iptvChannels = [channel];
-        iptvStartIndex = 0;
       }
       VideoPlayerLauncher.push(
         context,
@@ -2250,8 +2249,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           title: channel.name,
           subtitle: channel.group ?? 'IPTV',
           viewMode: PlaylistViewMode.sorted,
-          iptvChannels: iptvChannels,
-          iptvStartIndex: iptvStartIndex,
+          // Identify the launch as IPTV for plain channels too (only the
+          // Stremio branch used to): it routes playback down the live path
+          // and lets the player report a dead stream instead of sitting on a
+          // black screen.
+          iptvChannels: [channel],
+          iptvStartIndex: 0,
+          // Playlist-declared headers (+ browser UA fallback) for the launch
+          // channel; Stremio-addon links keep the addon's own defaults.
+          httpHeaders: isStremio ? null : channel.playbackHeaders,
         ),
       );
     } finally {
@@ -7096,7 +7102,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         valueListenable: _searchController,
         builder: (context, value, _) {
           final hasText = value.text.isNotEmpty;
-          final field = TextField(
+          // TvTextField: on TV (Debrify keyboard on) this is a shell — DPAD
+          // landing draws the focus ring but never opens a keyboard; OK
+          // starts editing with the in-app DPAD keyboard. Off TV / opted out
+          // it renders the same plain TextField as before.
+          final field = TvTextField(
             controller: _searchController,
             focusNode: _searchFocusNode,
             onChanged: _onQueryChanged,
@@ -7104,6 +7114,29 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             textInputAction: TextInputAction.search,
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurface, fontSize: tv ? 16 : 15),
+            // Shell-mode LEFT: no caret exists at the shell, so left always
+            // escapes to the sidebar (the LEFT-only sidebar policy). While
+            // EDITING, left moves the keyboard highlight instead — TvTextField
+            // consumes it internally. The Shortcuts wrapper below still covers
+            // the opted-out plain-TextField path.
+            onLeftArrow: tv
+                ? () => MainPageBridge.focusTvSidebar?.call()
+                : null,
+            // Explicit up/down so BOTH keyboard modes use the curated targets
+            // (mirrors the ancestor Focus handler below, which otherwise only
+            // sees keys the field lets bubble).
+            onUpArrow: tv ? _focusModeToggle : null,
+            onDownArrow: tv
+                ? () {
+                    if (_kwSourcesButtonVisible) {
+                      _kwSourcesBtnFocus.requestFocus();
+                    } else if (_catalogSourcesButtonVisible) {
+                      _catalogSourcesBtnFocus.requestFocus();
+                    } else {
+                      _focusContent();
+                    }
+                  }
+                : null,
             decoration: InputDecoration(
               hintText: switch (_mode) {
                 _Mode.catalog => 'Search or paste link',
@@ -15232,7 +15265,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   Widget _keywordSearchField(ColorScheme scheme) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-      child: TextField(
+      child: TvTextField(
         controller: _kwCtrl,
         textInputAction: TextInputAction.search,
         onSubmitted: _submitKeyword,

@@ -39,6 +39,7 @@ import 'widgets/stremio_tv_empty_state.dart';
 import 'widgets/stremio_tv_guide_sheet.dart';
 import 'widgets/stremio_tv_local_catalogs_dialog.dart';
 import '../../utils/tv_keys.dart';
+import '../../widgets/tv_text_field.dart';
 
 /// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
 ///
@@ -143,8 +144,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
     });
 
-    // Search DPAD key handler
-    _searchFocusNode.onKeyEvent = _handleSearchKeyEvent;
+    // Search DPAD exits live on the TvTextField (onUp/Down/Left/RightArrow).
     _searchController.addListener(() {
       final q = _searchController.text.toLowerCase().trim();
       if (q != _searchQuery) {
@@ -2559,42 +2559,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       ..addAll(reorderedNodes);
   }
 
-  KeyEventResult _handleSearchKeyEvent(FocusNode node, KeyEvent event) {
+  /// Back/Escape ladder for the search bar: clear text first, then hide the
+  /// field. Sits on an ancestor Focus of the search field so it runs when the
+  /// TvTextField shell lets the key bubble.
+  KeyEventResult _handleSearchBarBack(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    final text = _searchController.text;
-    final selection = _searchController.selection;
-    final isAtStart =
-        !selection.isValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      // Focus search/settings button row
-      _searchBtnFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      // Search bar is at the top — nothing above it
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (text.isEmpty || isAtStart) {
-        MainPageBridge.focusTvSidebar?.call();
-      }
-      // Always consume — either sidebar focus or cursor movement
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      // Always consume — let TextField handle cursor movement internally
-      return KeyEventResult.handled;
-    }
 
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      if (text.isNotEmpty) {
+      if (_searchController.text.isNotEmpty) {
         _searchController.clear();
         return KeyEventResult.handled;
       }
@@ -2652,10 +2625,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         child: _showSearchField
                             ? Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
-                                child: TextField(
+                                child: Focus(
+                                  canRequestFocus: false,
+                                  skipTraversal: true,
+                                  onKeyEvent: _handleSearchBarBack,
+                                  child: TvTextField(
                                   controller: _searchController,
                                   focusNode: _searchFocusNode,
                                   style: const TextStyle(color: Colors.white),
+                                  onDownArrow: () =>
+                                      _searchBtnFocusNode.requestFocus(),
+                                  onUpArrow: () {
+                                    // Search bar is at the top — nothing above
+                                  },
+                                  onLeftArrow: () =>
+                                      MainPageBridge.focusTvSidebar?.call(),
+                                  onRightArrow: () {
+                                    // Nothing to the right — consume
+                                  },
                                   decoration: InputDecoration(
                                     hintText: 'Search channels...',
                                     hintStyle: TextStyle(
@@ -2712,6 +2699,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     ),
                                   ),
                                   textInputAction: TextInputAction.search,
+                                  ),
                                 ),
                               )
                             : const SizedBox.shrink(),

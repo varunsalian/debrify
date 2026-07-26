@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../services/analytics_service.dart';
 import '../../widgets/torbox_account_status_widget.dart';
 import '../../services/main_page_bridge.dart';
 import '../../utils/platform_util.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 class TorboxSettingsPage extends StatefulWidget {
@@ -21,12 +21,6 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   final FocusNode _addApiKeyButtonFocusNode = FocusNode();
   final FocusNode _logoutButtonFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
-  static const Map<ShortcutActivator, Intent> _dpadShortcuts =
-      <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-      };
-
   String? _savedApiKey;
   bool _isEditing = false;
   bool _obscure = true;
@@ -468,62 +462,40 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                     ),
                                     const SizedBox(height: 16),
                                     if (_isEditing) ...[
-                                      Shortcuts(
-                                        shortcuts: _dpadShortcuts,
-                                        child: Actions(
-                                          actions: <Type, Action<Intent>>{
-                                            NextFocusIntent:
-                                                CallbackAction<NextFocusIntent>(
-                                                  onInvoke: (intent) {
-                                                    FocusScope.of(
-                                                      context,
-                                                    ).nextFocus();
-                                                    return null;
-                                                  },
-                                                ),
-                                            PreviousFocusIntent:
-                                                CallbackAction<
-                                                  PreviousFocusIntent
-                                                >(
-                                                  onInvoke: (intent) {
-                                                    FocusScope.of(
-                                                      context,
-                                                    ).previousFocus();
-                                                    return null;
-                                                  },
-                                                ),
-                                          },
-                                          child: TextField(
-                                            focusNode: _apiKeyFocusNode,
-                                            controller: _apiKeyController,
-                                            obscureText: _obscure,
-                                            enabled: !_saving,
-                                            textInputAction:
-                                                TextInputAction.done,
-                                            decoration: InputDecoration(
-                                              labelText: 'Torbox API Key',
-                                              prefixIcon: const Icon(
-                                                Icons.security,
-                                              ),
-                                              suffixIcon: IconButton(
-                                                // Default focus highlight is
-                                                // invisible on TV.
-                                                focusColor: kSettingsAccent
-                                                    .withValues(alpha: 0.4),
-                                                icon: Icon(
-                                                  _obscure
-                                                      ? Icons.visibility
-                                                      : Icons.visibility_off,
-                                                ),
-                                                onPressed: () => setState(
-                                                  () => _obscure = !_obscure,
-                                                ),
-                                              ),
+                                      TvTextField(
+                                        focusNode: _apiKeyFocusNode,
+                                        controller: _apiKeyController,
+                                        obscureText: _obscure,
+                                        enabled: !_saving,
+                                        textInputAction: TextInputAction.done,
+                                        onDownArrow: () => FocusScope.of(
+                                          context,
+                                        ).nextFocus(),
+                                        onUpArrow: () => FocusScope.of(
+                                          context,
+                                        ).previousFocus(),
+                                        decoration: InputDecoration(
+                                          labelText: 'Torbox API Key',
+                                          prefixIcon: const Icon(
+                                            Icons.security,
+                                          ),
+                                          suffixIcon: IconButton(
+                                            // Default focus highlight is
+                                            // invisible on TV.
+                                            focusColor: kSettingsAccent
+                                                .withValues(alpha: 0.4),
+                                            icon: Icon(
+                                              _obscure
+                                                  ? Icons.visibility
+                                                  : Icons.visibility_off,
                                             ),
-                                            onSubmitted: (_) =>
-                                                _saving ? null : _saveKey(),
+                                            onPressed: () => setState(
+                                              () => _obscure = !_obscure,
+                                            ),
                                           ),
                                         ),
+                                        onSubmitted: (_) =>
+                                            _saving ? null : _saveKey(),
                                       ),
                                       const SizedBox(height: 12),
                                       Row(

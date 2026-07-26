@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../utils/tv_keys.dart';
+import '../../../widgets/tv_text_field.dart';
 import '../models/channel_entry.dart';
 
 /// Callback when a channel is selected from the guide
@@ -282,7 +283,7 @@ class _ChannelGuideState extends State<ChannelGuide>
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: TextField(
+      child: TvTextField(
         controller: _searchController,
         focusNode: _searchFocusNode,
         style: const TextStyle(color: Colors.white, fontSize: 14),

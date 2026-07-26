@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../services/community/community_channel_model.dart';
 import '../../../services/community/community_channels_service.dart';
 import '../../../utils/tv_keys.dart';
+import '../../../widgets/tv_text_field.dart';
 
 /// Dialog for browsing and selecting community shared channels
 class CommunityChannelsDialog extends StatefulWidget {
@@ -47,23 +48,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
   }
 
   void _setupFocusNavigation() {
-    // Setup DPAD navigation for URL input field
-    _repoUrlFocusNode.onKeyEvent = (node, event) {
-      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-      final key = event.logicalKey;
-      if (key == LogicalKeyboardKey.arrowDown) {
-        _fetchButtonFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowRight &&
-          _repoUrlController.selection.baseOffset ==
-              _repoUrlController.text.length) {
-        _fetchButtonFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    };
+    // URL input DPAD exits live on the TvTextField (onDownArrow/onRightArrow).
 
     // Setup DPAD navigation for fetch button
     _fetchButtonFocusNode.onKeyEvent = (node, event) {
@@ -730,10 +715,12 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: TvTextField(
                       controller: _repoUrlController,
                       focusNode: _repoUrlFocusNode,
                       style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                      onDownArrow: () => _fetchButtonFocusNode.requestFocus(),
+                      onRightArrow: () => _fetchButtonFocusNode.requestFocus(),
                       decoration: InputDecoration(
                         hintText: 'Repository URL',
                         errorText: _errorMessage,

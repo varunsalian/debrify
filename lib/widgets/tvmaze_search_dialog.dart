@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/tvmaze_service.dart';
 import '../utils/tv_keys.dart';
+import 'tv_text_field.dart';
 
 class TVMazeSearchDialog extends StatefulWidget {
   final String initialQuery;
@@ -130,22 +131,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
     }
   }
 
-  /// Handle DPAD key events on the search field
-  KeyEventResult _handleSearchKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_searchResults.isNotEmpty) {
-        setState(() => _selectedIndex = 0);
-        _itemFocusNodes[0].requestFocus();
-        _scrollToSelectedItem();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
+  /// Handle DPAD key events on a result list item
   /// Handle DPAD key events on result items
   KeyEventResult _handleItemKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -445,44 +431,47 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
             SizedBox(height: isCompact ? 12 : 20),
 
             // Search field
-            Focus(
-              onKeyEvent: _handleSearchKeyEvent,
-              canRequestFocus: false, // Let the TextField handle focus
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Enter show name...',
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.1),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: kPremiumBlue, width: 2),
-                  ),
-                  prefixIcon: const Icon(Icons.search, color: Colors.white54),
-                  suffixIcon: IconButton(
-                    onPressed: _isSearching ? null : _performSearch,
-                    icon: _isSearching
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: kPremiumBlue,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.arrow_forward, color: kPremiumBlue),
-                  ),
+            TvTextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Enter show name...',
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.1),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
                 ),
-                onSubmitted: (_) => _performSearch(),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: kPremiumBlue, width: 2),
+                ),
+                prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                suffixIcon: IconButton(
+                  onPressed: _isSearching ? null : _performSearch,
+                  icon: _isSearching
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: kPremiumBlue,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.arrow_forward, color: kPremiumBlue),
+                ),
               ),
+              onSubmitted: (_) => _performSearch(),
+              onDownArrow: () {
+                if (_searchResults.isNotEmpty) {
+                  setState(() => _selectedIndex = 0);
+                  _itemFocusNodes[0].requestFocus();
+                  _scrollToSelectedItem();
+                }
+              },
             ),
             SizedBox(height: isCompact ? 12 : 20),
 
