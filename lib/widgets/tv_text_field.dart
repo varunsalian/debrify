@@ -695,11 +695,24 @@ class TvTextFieldState extends State<TvTextField> {
       );
     }
 
-    return Focus(
-      focusNode: _shellNode,
-      autofocus: widget.autofocus,
-      onKeyEvent: _handleShellKey,
-      child: Shortcuts(
+    // While the Debrify keyboard is up, Back must only take the panel down.
+    // Consuming the Back KeyEvent in [_handleShellKey] is not enough on its
+    // own: Android also dispatches Back through the navigation channel
+    // (onBackPressed / OnBackInvokedCallback — the predictive-back path), which
+    // ignores key-event consumption and pops the route. That double dispatch is
+    // exactly why the screen used to leave *and* the keyboard close together.
+    // PopScope intercepts that nav-channel back so editing ends without popping.
+    return PopScope(
+      canPop: !_editing,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        _endEdit();
+      },
+      child: Focus(
+        focusNode: _shellNode,
+        autofocus: widget.autofocus,
+        onKeyEvent: _handleShellKey,
+        child: Shortcuts(
         // In the system-IME hand-off the panel is gone: leave every key to the
         // IME / stock text editing instead of routing it at a dead keyboard.
         shortcuts: _useSystemIme
@@ -724,6 +737,7 @@ class TvTextFieldState extends State<TvTextField> {
             _KbActivateIntent: _KbActivateAction(this),
           },
           child: field,
+        ),
         ),
       ),
     );
