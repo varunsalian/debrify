@@ -9,11 +9,13 @@ import android.os.Looper;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -23,6 +25,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -47,6 +50,7 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
+import androidx.media3.common.text.Cue;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
@@ -64,10 +68,6 @@ import androidx.media3.ui.SubtitleView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import android.net.Uri;
-
-import androidx.media3.common.MimeTypes;
-
 import com.debrify.app.ActivityTracker;
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
@@ -75,10 +75,14 @@ import com.debrify.app.subtitle.StremioSubtitle;
 import com.debrify.app.subtitle.StremioSubtitleService;
 import com.debrify.app.util.LanguageMapper;
 import com.debrify.app.util.OffsetRenderersFactory;
+import com.debrify.app.util.SubtitleCue;
+import com.debrify.app.util.SubtitleCueCache;
 import com.debrify.app.util.SubtitleFontManager;
 import com.debrify.app.util.SubtitleSettings;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -339,6 +343,31 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final ExecutorService subtitleExecutor = Executors.newSingleThreadExecutor();
     // Title chosen via manual "Search Movie/Show Subtitles" flow (null = auto-detected)
     @Nullable private String manualSubtitleDisplayLabel = null;
+
+    // ── External subtitle side-rendering ─────────────────────────────────────
+    // Mirrors AndroidTvTorrentPlayerActivity: an external subtitle is downloaded
+    // and parsed off-thread, then pushed to subtitleOverlay from a position
+    // ticker. The media item is never rebuilt, so switching subtitles never
+    // interrupts playback — no re-prepare, no rebuffer, no resume/seek juggling.
+    private List<SubtitleCue> externalSubtitleCues = Collections.emptyList();
+    private boolean externalSubtitleActive = false;
+    // URL of the side-rendered subtitle currently on screen; identifies it for
+    // sync-offset scoping and for the line picker.
+    @Nullable private String activeExternalSubtitleUrl = null;
+    private int externalSubtitleLoadToken = 0;  // guards against stale downloads (fast switching / content change)
+    private final Handler externalSubtitleHandler = new Handler(Looper.getMainLooper());
+    @Nullable private Runnable externalSubtitleTicker = null;
+    @Nullable private String lastExternalCueText = null;
+    // External subs that parsed to zero cues — don't re-auto-select them.
+    private final Set<String> failedSubtitleUrls = new HashSet<>();
+    // Separate from subtitleExecutor (single-threaded, used for addon catalog
+    // fetches) so picking a subtitle never queues behind an in-flight fetch.
+    private final ExecutorService subtitleCueExecutor = Executors.newCachedThreadPool();
+    @Nullable private TextView statusPill = null;
+    private final Runnable statusPillHideRunnable = this::hideStatusPill;
+    private static final long EXTERNAL_SUBTITLE_TICK_MS = 250L;
+    // Gates the ticker so a load that lands while backgrounded doesn't start it.
+    private boolean activityResumed = false;
 
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
@@ -656,6 +685,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleListener = new Player.Listener() {
                 @Override
                 public void onCues(androidx.media3.common.text.CueGroup cueGroup) {
+                    // While an external subtitle is side-rendered, the overlay is
+                    // owned by the ticker — ignore the player's (empty) cue events.
+                    if (externalSubtitleActive) return;
                     if (subtitleOverlay != null) {
                         subtitleOverlay.setCues(cueGroup.cues);
                     }
@@ -1973,24 +2005,36 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Drop every trace of the previous item's subtitles. Shared by the direct and
+     * PikPak playback paths: the PikPak path used to reset nothing, so a stale
+     * currentStremioSubtitleIndex pointed into a list belonging to the previous
+     * item — which then suppressed embedded auto-selection for the new one.
+     */
+    private void resetSubtitleState() {
+        stopExternalSubtitleRendering();
+        if (subtitleOverlay != null) {
+            subtitleOverlay.setCues(Collections.emptyList());
+        }
+        stremioSubtitles.clear();
+        currentStremioSubtitleIndex = -1;
+        embeddedSubtitleSelected = false;
+        manualSubtitleDisplayLabel = null;
+        failedSubtitleUrls.clear();
+        addonSubtitleFetchToken++;
+    }
+
     private void playMediaDirect(String url, @Nullable String title) {
         if (player == null || url == null || url.isEmpty()) {
             return;
         }
         randomApplied = false;
+
+        // Must run before maybeRecreatePlayerForBandwidth(), which can swap in a
+        // fresh player (and trackSelector) mid-call — the teardown has to hit the
+        // player the old subtitle was rendering against.
+        resetSubtitleState();
         maybeRecreatePlayerForBandwidth();
-
-        // Clear previous video's subtitles before loading new video
-        if (subtitleOverlay != null) {
-            subtitleOverlay.setCues(java.util.Collections.emptyList());
-        }
-
-        // Clear Stremio subtitle state when switching content
-        stremioSubtitles.clear();
-        currentStremioSubtitleIndex = -1;
-        embeddedSubtitleSelected = false;
-        manualSubtitleDisplayLabel = null;
-        addonSubtitleFetchToken++;
 
         MediaMetadata metadata = new MediaMetadata.Builder()
                 .setTitle(title != null ? title : "")
@@ -2140,7 +2184,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
                     stremioSubtitles.clear();
                     if (subtitles != null) {
-                        stremioSubtitles.addAll(subtitles);
+                        for (StremioSubtitle sub : subtitles) {
+                            if (isSideRenderableSubtitle(sub.getUrl())) {
+                                stremioSubtitles.add(sub);
+                            }
+                        }
                     }
                     currentStremioSubtitleIndex = -1;
                     isLoadingStremioSubtitles = false;
@@ -2175,82 +2223,290 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     /**
-     * Load an external Stremio subtitle into ExoPlayer.
-     * This rebuilds the media item with the subtitle configuration.
+     * True if this subtitle URL is a format the on-device parser can render.
+     * TTML/DFXP were handled by ExoPlayer's decoder in the old re-prepare path
+     * but SubtitleCueParser can't parse them (they'd yield zero cues and fail
+     * the load), so they're filtered out of the offered list entirely.
      */
-    @OptIn(markerClass = UnstableApi.class)
+    private boolean isSideRenderableSubtitle(String url) {
+        if (url == null) return false;
+        String path = url.split("\\?")[0].toLowerCase(Locale.US);
+        return !path.endsWith(".ttml") && !path.endsWith(".dfxp");
+    }
+
+    /**
+     * Index into stremioSubtitles of the subtitle actually on screen right now,
+     * or -1 if none is. Unlike currentStremioSubtitleIndex this can never name a
+     * pick that is still downloading.
+     */
+    private int findRenderingStremioIndex() {
+        if (!externalSubtitleActive || activeExternalSubtitleUrl == null) {
+            return -1;
+        }
+        for (int i = 0; i < stremioSubtitles.size(); i++) {
+            if (activeExternalSubtitleUrl.equals(stremioSubtitles.get(i).getUrl())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Load an external Stremio subtitle by side-rendering it: the file is
+     * downloaded + parsed off-thread and cues are fed to subtitleOverlay from
+     * a position ticker. The player source is never rebuilt, so playback is
+     * never interrupted — no re-prepare, no rebuffer, no resume/seek juggling.
+     */
     private void loadStremioSubtitle(StremioSubtitle subtitle) {
-        if (player == null || subtitle == null) {
+        // The player null check is load-bearing, not defensive: the addon
+        // catalog fetch can land after onDestroy (shutdown() doesn't interrupt
+        // a running task), and by then subtitleCueExecutor is shut down — an
+        // execute() on it would throw RejectedExecutionException on the main
+        // thread. Bail out on any torn-down state before touching the pool.
+        if (subtitle == null || player == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        final int loadToken = ++externalSubtitleLoadToken;
+        // Capture the currently-*rendering* external selection so a failed load
+        // can fall back to it instead of tearing down a working subtitle.
+        // Derived from the rendering URL rather than currentStremioSubtitleIndex:
+        // the panel assigns that index eagerly for every pick, including ones
+        // still downloading, so A(rendering)→B(downloading)→C would otherwise
+        // capture B and restore the panel to a subtitle that never appeared.
+        final int previousStremioIndex = findRenderingStremioIndex();
+        showStatusPill("Loading " + subtitle.getDisplayName() + "…");
+
+        List<SubtitleCue> cached = SubtitleCueCache.INSTANCE.get(subtitle.getUrl());
+        if (cached != null) {
+            onExternalSubtitleLoaded(subtitle, cached, previousStremioIndex);
             return;
         }
 
-        MediaItem currentItem = player.getCurrentMediaItem();
-        if (currentItem == null) {
+        subtitleCueExecutor.execute(() -> {
+            final List<SubtitleCue> parsed = SubtitleCueCache.INSTANCE.fetch(subtitle.getUrl());
+            runOnUiThread(() -> {
+                // Stale if the user picked another subtitle or content changed meanwhile
+                if (loadToken != externalSubtitleLoadToken) return;
+                onExternalSubtitleLoaded(subtitle, parsed, previousStremioIndex);
+            });
+        });
+    }
+
+    @OptIn(markerClass = UnstableApi.class)
+    private void onExternalSubtitleLoaded(StremioSubtitle subtitle,
+                                          List<SubtitleCue> cues,
+                                          int previousStremioIndex) {
+        if (cues.isEmpty()) {
+            android.util.Log.w("StremioSubs", "Failed to load/parse external subtitle: " + subtitle.getUrl());
+            failedSubtitleUrls.add(subtitle.getUrl());   // don't auto-select this broken sub again
+            showStatusPillTransient("Couldn't load " + subtitle.getDisplayName());
+            // Keep whatever was rendering before — do NOT stopExternalSubtitleRendering()
+            // here (it would wipe a working subtitle and cancel the error pill).
+            // Just restore the selection state to the previously-good subtitle.
+            currentStremioSubtitleIndex = previousStremioIndex;
+            if (!externalSubtitleActive && trackSelector != null) {
+                // Nothing external is on screen; the selecting caller already
+                // disabled embedded text tracks in anticipation. Re-enable so
+                // ExoPlayer can restore an embedded subtitle. Keyed on what is
+                // actually rendering rather than on previousStremioIndex, which
+                // is -1 both when nothing was active and when the rendering
+                // subtitle has since dropped out of stremioSubtitles.
+                trackSelector.setParameters(trackSelector.buildUponParameters()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        .build());
+            }
+            if (subtitleSettingsVisible) {
+                refreshSubtitlePanelForLoading();
+            }
             return;
         }
 
-        long currentPosition = player.getCurrentPosition();
-        boolean wasPlaying = player.isPlaying();
-
-        // Extract path without query string for MIME type detection
-        String urlPath = subtitle.getUrl().split("\\?")[0].toLowerCase(Locale.US);
-
-        // Determine MIME type based on file extension
-        String mimeType;
-        if (urlPath.contains(".srt")) {
-            mimeType = MimeTypes.APPLICATION_SUBRIP;
-        } else if (urlPath.contains(".vtt")) {
-            mimeType = MimeTypes.TEXT_VTT;
-        } else if (urlPath.contains(".ass") || urlPath.contains(".ssa")) {
-            mimeType = MimeTypes.TEXT_SSA;
-        } else if (urlPath.contains(".ttml")) {
-            mimeType = MimeTypes.APPLICATION_TTML;
-        } else {
-            mimeType = MimeTypes.TEXT_VTT; // Default to VTT for Stremio addons
+        // Disable embedded text tracks so they don't double-render under the
+        // side-loaded cues (covers the auto-select path, which doesn't go
+        // through applySelectedSubtitleTrackFromPanel).
+        if (trackSelector != null) {
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build());
         }
 
-        // Build subtitle configuration
-        MediaItem.SubtitleConfiguration subtitleConfig = new MediaItem.SubtitleConfiguration.Builder(
-                Uri.parse(subtitle.getUrl()))
-                .setMimeType(mimeType)
-                .setLanguage(subtitle.getLang())
-                .setLabel(subtitle.getDisplayName())
-                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                .build();
+        // Landing on a different subtitle than the one on screen invalidates the
+        // sync offset — it was dialed in against the outgoing one. Done here, not
+        // at pick time, so a load that fails leaves the still-rendering
+        // subtitle's offset alone. Mirrors the reset in applySubtitleTrack;
+        // together they cover every external⇄embedded and external⇄external hop.
+        if (!subtitle.getUrl().equals(activeExternalSubtitleUrl)) {
+            SubtitleSettings.resetSyncOffset();
+        }
 
-        // Rebuild media item with subtitle configuration
-        MediaItem newMediaItem = currentItem.buildUpon()
-                .setSubtitleConfigurations(Collections.singletonList(subtitleConfig))
-                .build();
+        externalSubtitleCues = cues;
+        externalSubtitleActive = true;
+        activeExternalSubtitleUrl = subtitle.getUrl();
+        lastExternalCueText = null;
+        // Clear immediately: disabling the embedded track fires onCues(empty),
+        // but that's now suppressed, and the first ticker render early-returns
+        // when no cue is active — without this a stale embedded line would
+        // freeze on screen until the next external cue.
+        if (subtitleOverlay != null) {
+            subtitleOverlay.setCues(Collections.emptyList());
+        }
+        startExternalSubtitleTicker();
+        showStatusPillTransient("✓ " + subtitle.getDisplayName());
+        android.util.Log.d("StremioSubs", "Side-rendering " + cues.size() + " cues from " + subtitle.getDisplayName());
+    }
 
-        // Set the new media item, preserving position
-        player.setMediaItem(newMediaItem, currentPosition);
-        player.prepare();
+    /** Stop side-rendering and give the overlay back to the player's onCues. */
+    @OptIn(markerClass = UnstableApi.class)
+    private void stopExternalSubtitleRendering() {
+        externalSubtitleLoadToken++;
+        if (externalSubtitleTicker != null) {
+            externalSubtitleHandler.removeCallbacks(externalSubtitleTicker);
+            externalSubtitleTicker = null;
+        }
+        if (externalSubtitleActive || !externalSubtitleCues.isEmpty()) {
+            externalSubtitleActive = false;
+            activeExternalSubtitleUrl = null;
+            externalSubtitleCues = Collections.emptyList();
+            lastExternalCueText = null;
+            if (subtitleOverlay != null) {
+                subtitleOverlay.setCues(Collections.emptyList());
+            }
+            // Re-enable the embedded text track type that onExternalSubtitleLoaded
+            // disabled — otherwise embedded-subtitle auto-selection stays dead for
+            // every subsequent item. Callers that want text off (Off selection)
+            // re-apply their own params right after this returns.
+            if (trackSelector != null) {
+                trackSelector.setParameters(trackSelector.buildUponParameters()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        .build());
+            }
+        }
+        hideStatusPill();
+    }
 
-        // Wait for player to be ready, then seek again to force subtitle sync
-        player.addListener(new Player.Listener() {
+    private void startExternalSubtitleTicker() {
+        if (externalSubtitleTicker != null) {
+            externalSubtitleHandler.removeCallbacks(externalSubtitleTicker);
+        }
+        // A subtitle load can complete while backgrounded (user picked one then
+        // pressed HOME). Don't start ticking — onResume does it, and the cue
+        // state is already stored.
+        if (!activityResumed) {
+            return;
+        }
+        Runnable ticker = new Runnable() {
             @Override
-            public void onPlaybackStateChanged(int state) {
-                if (state == Player.STATE_READY) {
-                    player.seekTo(currentPosition);
-                    player.removeListener(this);
+            public void run() {
+                if (!externalSubtitleActive) return;
+                renderExternalSubtitleCue();
+                externalSubtitleHandler.postDelayed(this, EXTERNAL_SUBTITLE_TICK_MS);
+            }
+        };
+        externalSubtitleTicker = ticker;
+        ticker.run();
+    }
+
+    private void renderExternalSubtitleCue() {
+        List<SubtitleCue> cues = externalSubtitleCues;
+        if (cues.isEmpty() || player == null || subtitleOverlay == null) return;
+        // Same convention as the sync line picker: a positive offset means the
+        // subtitle text lags the audio, so we look up cues at (position - offset).
+        long effectiveMs = player.getCurrentPosition() - SubtitleSettings.getSyncOffsetMs(this);
+
+        // Binary search for the last cue starting at or before effectiveMs,
+        // then collect all still-active overlapping cues. Cues are sorted only
+        // by start time, so a long-running cue (e.g. an anime sign/song event)
+        // can begin many entries before the current dialogue line — scan the
+        // whole prefix (cheap: a few thousand comparisons a few times a second).
+        int lo = 0;
+        int hi = cues.size() - 1;
+        int last = -1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (cues.get(mid).getStartMs() <= effectiveMs) {
+                last = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+
+        String text = null;
+        if (last >= 0) {
+            StringBuilder active = new StringBuilder();
+            for (int i = 0; i <= last; i++) {
+                SubtitleCue cue = cues.get(i);
+                if (cue.getStartMs() <= effectiveMs && effectiveMs < cue.getEndMs()) {
+                    if (active.length() > 0) active.append('\n');
+                    active.append(cue.getText());
                 }
             }
-        });
-
-        if (wasPlaying) {
-            player.play();
+            if (active.length() > 0) text = active.toString();
         }
 
-        // Enable subtitle track after loading
-        if (trackSelector != null) {
-            DefaultTrackSelector.Parameters params = trackSelector.buildUponParameters()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                    .build();
-            trackSelector.setParameters(params);
-        }
+        if (text == null ? lastExternalCueText == null : text.equals(lastExternalCueText)) return;
+        lastExternalCueText = text;
+        subtitleOverlay.setCues(text == null
+                ? Collections.emptyList()
+                : Collections.singletonList(new Cue.Builder().setText(text).build()));
+    }
 
-        showToast("Loading: " + subtitle.getDisplayName());
+    // ── Status pill ──────────────────────────────────────────────────────────
+    // Small bottom-center chip for transient progress feedback that must not
+    // touch playback: external subtitle downloads and source switches.
+
+    private TextView ensureStatusPill() {
+        if (statusPill != null) return statusPill;
+        TextView pill = new TextView(this);
+        pill.setTextSize(13f);
+        pill.setTextColor(Color.WHITE);
+        pill.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xD9101014);
+        bg.setCornerRadius(dpToPx(18));
+        bg.setStroke(dpToPx(1), 0x33FFFFFF);
+        pill.setBackground(bg);
+        int padH = dpToPx(16);
+        int padV = dpToPx(8);
+        pill.setPadding(padH, padV, padH, padV);
+        pill.setElevation(dpToPx(240));
+        pill.setVisibility(View.GONE);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        lp.bottomMargin = dpToPx(48);
+        pill.setLayoutParams(lp);
+        ((ViewGroup) findViewById(android.R.id.content)).addView(pill);
+        statusPill = pill;
+        return pill;
+    }
+
+    private void showStatusPill(String message) {
+        externalSubtitleHandler.removeCallbacks(statusPillHideRunnable);
+        TextView pill = ensureStatusPill();
+        pill.setText(message);
+        if (pill.getVisibility() != View.VISIBLE) {
+            pill.setAlpha(0f);
+            pill.setVisibility(View.VISIBLE);
+        }
+        pill.animate().cancel();
+        pill.animate().alpha(1f).setDuration(180).start();
+    }
+
+    /** Show a short confirmation/error message, then fade the pill away. */
+    private void showStatusPillTransient(String message) {
+        showStatusPill(message);
+        externalSubtitleHandler.postDelayed(statusPillHideRunnable, 1400);
+    }
+
+    private void hideStatusPill() {
+        externalSubtitleHandler.removeCallbacks(statusPillHideRunnable);
+        TextView pill = statusPill;
+        if (pill == null || pill.getVisibility() != View.VISIBLE) return;
+        pill.animate().cancel();
+        pill.animate().alpha(0f).setDuration(220).withEndAction(() -> pill.setVisibility(View.GONE)).start();
     }
 
     /**
@@ -2277,9 +2533,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         // Clear previous video's subtitles
-        if (subtitleOverlay != null) {
-            subtitleOverlay.setCues(java.util.Collections.emptyList());
-        }
+        resetSubtitleState();
 
         // Prepare and play the media ONCE before retry loop
         MediaMetadata metadata = new MediaMetadata.Builder()
@@ -2542,6 +2796,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
 
+        // An external subtitle is already chosen (auto-selected before this
+        // fired) — don't quietly select an embedded track underneath it. The
+        // index check covers the window where the pick is still downloading, so
+        // a fast addon fetch can't flash embedded subs before it lands.
+        if (externalSubtitleActive || currentStremioSubtitleIndex >= 0) {
+            return;
+        }
+
         // Get user's default subtitle language preference
         String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
 
@@ -2638,6 +2900,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Search for addon subtitle matching the preferred language
         for (int i = 0; i < stremioSubtitles.size(); i++) {
             StremioSubtitle sub = stremioSubtitles.get(i);
+            if (failedSubtitleUrls.contains(sub.getUrl())) continue;  // parsed to zero cues
             if (LanguageMapper.matchesLanguage(targetLang, sub.getLang())) {
                 android.util.Log.d("TorboxTvPlayer", "Auto-selecting addon subtitle: " + sub.getDisplayName() + " (" + sub.getLang() + ")");
                 loadStremioSubtitle(sub);
@@ -3103,6 +3366,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (trackSelector == null) {
             return;
         }
+        // Picking an embedded track (or Off) always ends side-rendering. Done
+        // first so the params built below win over the re-enable inside stop().
+        // Clearing the index matters even though the panel paths already do it:
+        // showSubtitleSelectionDialog doesn't, and a stale index would send
+        // showSyncOverlay to the line picker for a subtitle that isn't showing.
+        stopExternalSubtitleRendering();
+        currentStremioSubtitleIndex = -1;
+        // The offset was dialed in against the subtitle being replaced, so it
+        // means nothing for the new one. (The Kotlin player gets this for free
+        // from per-subtitle offset identities; here it has to be explicit.)
+        SubtitleSettings.resetSyncOffset();
+        if (offsetRenderersFactory != null) {
+            offsetRenderersFactory.setOffsetUs(0L);
+        }
         DefaultTrackSelector.Parameters.Builder builder =
                 trackSelector.buildUponParameters().clearOverridesOfType(C.TRACK_TYPE_TEXT);
         if (option == null) {
@@ -3555,6 +3832,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         // Invalidate any in-flight auto-fetch and reset subtitle state.
+        // Tear down any side-rendered subtitle before switching identity —
+        // otherwise its cues keep drawing while the panel shows nothing selected.
+        stopExternalSubtitleRendering();
         addonSubtitleFetchToken++;
         stremioSubtitles.clear();
         currentStremioSubtitleIndex = -1;
@@ -3749,9 +4029,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
         if (root == null) return;
 
-        // Use line picker for external (Stremio) subtitles
-        if (currentStremioSubtitleIndex >= 0 && currentStremioSubtitleIndex < stremioSubtitles.size()) {
-            StremioSubtitle subtitle = stremioSubtitles.get(currentStremioSubtitleIndex);
+        // Use line picker for external (Stremio) subtitles. Prefer the actually-
+        // rendering URL: the flat list can transiently lose the current sub's
+        // entry (currentStremioSubtitleIndex → -1) while it's still on screen,
+        // and we must not fall through to the embedded slider for it.
+        String externalUrl = externalSubtitleActive ? activeExternalSubtitleUrl : null;
+        if (externalUrl == null
+                && currentStremioSubtitleIndex >= 0
+                && currentStremioSubtitleIndex < stremioSubtitles.size()) {
+            externalUrl = stremioSubtitles.get(currentStremioSubtitleIndex).getUrl();
+        }
+        if (externalUrl != null) {
             if (linePickerOverlay == null) {
                 final TorboxTvPlayerActivity self = this;
                 linePickerOverlay = new SubtitleLinePickerController(
@@ -3765,7 +4053,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         }
                 );
             }
-            linePickerOverlay.show(subtitle.getUrl());
+            linePickerOverlay.show(externalUrl);
             return;
         }
 
@@ -3848,17 +4136,28 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this));
             subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this));
         }
+        // While side-rendering, the offset is applied at cue lookup instead, so
+        // the renderer must hold 0 — otherwise it keeps the external subtitle's
+        // offset and a later embedded track renders shifted by it.
+        long newOffsetUs = externalSubtitleActive
+                ? 0L
+                : SubtitleSettings.getSyncOffsetMs(this) * 1000L;
+        long oldOffsetUs = offsetRenderersFactory != null
+                ? offsetRenderersFactory.getCurrentOffsetUs() : 0L;
         if (offsetRenderersFactory != null) {
-            long newOffsetUs = SubtitleSettings.getSyncOffsetMs(this) * 1000L;
-            long oldOffsetUs = offsetRenderersFactory.getCurrentOffsetUs();
             offsetRenderersFactory.setOffsetUs(newOffsetUs);
-            if (newOffsetUs != oldOffsetUs) {
-                // Debounce: rapid offset changes (line picker tap, arrow key
-                // hold) would otherwise pile up seeks and confuse the text
-                // renderer.
-                subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable);
-                subtitleSeekHandler.postDelayed(subtitleSeekRunnable, 150);
-            }
+        }
+        if (externalSubtitleActive) {
+            // Side-rendered subtitles pick the offset up at lookup time — just
+            // force an immediate re-render, no seek needed.
+            lastExternalCueText = null;
+            renderExternalSubtitleCue();
+        } else if (offsetRenderersFactory != null && newOffsetUs != oldOffsetUs) {
+            // Debounce: rapid offset changes (line picker tap, arrow key
+            // hold) would otherwise pile up seeks and confuse the text
+            // renderer.
+            subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable);
+            subtitleSeekHandler.postDelayed(subtitleSeekRunnable, 150);
         }
     }
 
@@ -4541,6 +4840,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         super.onResume();
         ActivityTracker.INSTANCE.setCurrentActivity(this);
         startAnalyticsHeartbeat();
+        // Resume the side-rendered subtitle ticker paused in onPause. Set the
+        // gate first — startExternalSubtitleTicker() honours it.
+        activityResumed = true;
+        if (externalSubtitleActive) {
+            startExternalSubtitleTicker();
+        }
     }
 
     @Override
@@ -4553,6 +4858,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             player.pause();
         }
         stopAnalyticsHeartbeat();
+
+        // Stop waking the main thread 4x/second while the activity isn't visible;
+        // state is preserved and onResume restarts the ticker. The gate also
+        // stops a subtitle load that lands while backgrounded from restarting it.
+        activityResumed = false;
+        if (externalSubtitleTicker != null) {
+            externalSubtitleHandler.removeCallbacks(externalSubtitleTicker);
+        }
 
         // Cancel any ongoing PikPak retry operations
         cancelPikPakRetry();
@@ -4605,6 +4918,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Clean up Stremio subtitle resources
         subtitleExecutor.shutdown();
+        subtitleCueExecutor.shutdown();
+        // shutdown() doesn't interrupt an in-flight task, and its runOnUiThread
+        // callback still runs after onDestroy. Bump both tokens so neither the
+        // addon catalog fetch nor a subtitle download can touch the player /
+        // trackSelector that gets released below.
+        externalSubtitleLoadToken++;
+        addonSubtitleFetchToken++;
+        externalSubtitleHandler.removeCallbacksAndMessages(null);
+        externalSubtitleTicker = null;
+        externalSubtitleActive = false;
+        externalSubtitleCues = Collections.emptyList();
         stremioSubtitles.clear();
         stremioSubtitleService = null;
 
