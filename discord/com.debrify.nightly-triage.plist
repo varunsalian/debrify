@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.debrify.nightly-triage</string>
+    <!-- Launcher MUST live outside ~/Documents: macOS TCC blocks launchd from executing a
+         script inside Documents ("Operation not permitted"). Install copies it to App Support.
+         The script still cd's into the repo in ~/Documents and works fine from there. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/varunbsalian/Library/Application Support/debrify-triage/nightly_triage.sh</string>
+    </array>
+    <!-- 1:00am LOCAL time (launchd uses the machine's timezone). If the Mac is asleep,
+         launchd runs it once at next wake. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>1</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/varunbsalian/Library/Application Support/debrify-triage/launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/varunbsalian/Library/Application Support/debrify-triage/launchd.err</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

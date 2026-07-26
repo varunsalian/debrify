@@ -52,3 +52,4 @@ discord/.dev.vars
 discord/.deploy.env
 discord/node_modules/
 discord/.wrangler/
+discord/nightly_logs/
