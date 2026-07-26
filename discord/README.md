@@ -45,11 +45,31 @@ python3 discord_fetch.py bug-reports     # one channel
 python3 discord_fetch.py --json          # for triage tooling
 ```
 
-## Nightly automation (1am, local)
+## Nightly automation (1am, local) — ⚠️ DISABLED pending a one-time auth step
 
-Runs the whole triage unattended once a day via macOS `launchd` — locally, because the cloud can't
-hold the secrets. It fetches the last ~30h, dedupes against the tracker, auto-files genuinely-new
-tickets, and auto-sizes them (no approval gate — see `.claude/commands/triage-nightly.md`).
+Runs a fast unattended triage once a day via macOS `launchd` (locally — the cloud can't hold the
+secrets). It fetches the last ~26h, dedupes against the tracker, and auto-files genuinely-new tickets
+(no code investigation, no effort sizing — that's deferred to a manual `/estimate`; no approval gate —
+see `.claude/commands/triage-nightly.md`).
+
+**Currently disabled.** The headless run dies mid-run with `An internal error occurred (EPERM)` —
+Claude Code refreshes its OAuth token to the macOS **Keychain** during a long run, and a non-GUI
+`launchd` process is denied that write. (Ruled out: it is *not* the auto-updater and *not* the
+workload — all test runs did minutes of real work first, so auth is fine at start.)
+
+**To enable it (one-time, ~1 min):**
+```bash
+claude setup-token          # follow the browser prompt, copy the long-lived token
+mkdir -p "$HOME/Library/Application Support/debrify-triage"
+printf '%s' 'PASTE_TOKEN_HERE' > "$HOME/Library/Application Support/debrify-triage/.claude_oauth_token"
+chmod 600 "$HOME/Library/Application Support/debrify-triage/.claude_oauth_token"
+# re-enable + test:
+launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/com.debrify.nightly-triage.plist"
+launchctl enable    gui/$(id -u)/com.debrify.nightly-triage
+launchctl kickstart gui/$(id -u)/com.debrify.nightly-triage
+```
+The wrapper auto-uses that token file as `CLAUDE_CODE_OAUTH_TOKEN`, bypassing the Keychain entirely.
+Until then, just run `/triage` manually in a normal Claude Code session — that works fine.
 
 **Install / reinstall:**
 ```bash
@@ -71,6 +91,14 @@ launchctl enable    gui/$(id -u)/com.debrify.nightly-triage
 **Requires:** Mac powered on + logged in at ~1am (screen may be locked). Asleep → runs at next wake.
 `claude` auth is read from the macOS Keychain; launchd's `HOME`+`USER` env is enough for it.
 **If you edit `nightly_triage.sh`, re-copy it to App Support** (step 1) — that copy is what actually runs.
+
+**Hardening (why the wrapper looks the way it does):** the first run died after 28 min with
+`EPERM` because Claude Code ran a **self-update mid-run**, swapping its files under the live process.
+The wrapper now sets `DISABLE_AUTOUPDATER=1` (update Claude manually instead), caps the run at 15 min
+(`perl` alarm — macOS has no `timeout`), and logs the exit code. If auth/`EPERM` trouble ever recurs,
+run `claude setup-token` and save the token (chmod 600) to
+`~/Library/Application Support/debrify-triage/.claude_oauth_token` — the wrapper auto-uses it as
+`CLAUDE_CODE_OAUTH_TOKEN`, removing the Keychain dependency entirely.
 
 ## Notes
 
