@@ -6,6 +6,7 @@ import '../services/debrify_tv_cache_service.dart';
 import '../models/debrify_tv_cache.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/tv_keys.dart';
+import 'tv_text_field.dart';
 
 /// Result returned when user selects or creates a channel
 class ChannelPickerResult {
@@ -376,79 +377,57 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
             ],
           ),
           const SizedBox(height: 20),
+          // Back on the (non-editing) field hops to Cancel — returning to the
+          // list view — instead of bubbling on and popping the whole picker.
+          // While EDITING, TvTextField consumes Back itself to close the
+          // keyboard, so this only sees the shell-focused case.
           Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
             onKeyEvent: (node, event) {
               if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
               final key = event.logicalKey;
-              final text = _nameController.text;
-              final selection = _nameController.selection;
-              final textLength = text.length;
-              final isTextEmpty = textLength == 0;
-
-              // Check cursor position
-              final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-              final isAtStart = !isSelectionValid ||
-                  (selection.baseOffset == 0 && selection.extentOffset == 0);
-              final isAtEnd = !isSelectionValid ||
-                  (selection.baseOffset == textLength && selection.extentOffset == textLength);
-
-              // Escape: Exit to Cancel button
               if (key == LogicalKeyboardKey.escape ||
-                  key == LogicalKeyboardKey.goBack) {
+                  key == LogicalKeyboardKey.goBack ||
+                  key == LogicalKeyboardKey.browserBack) {
                 _cancelButtonFocusNode.requestFocus();
                 return KeyEventResult.handled;
               }
-
-              // Arrow Up: Exit to Cancel button when at start or empty
-              if (key == LogicalKeyboardKey.arrowUp) {
-                if (isTextEmpty || isAtStart) {
-                  _cancelButtonFocusNode.requestFocus();
-                  return KeyEventResult.handled;
-                }
-              }
-
-              // Arrow Down OR Enter: Move to Confirm button when at end or empty
-              if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
-                if (isTextEmpty || isAtEnd) {
-                  _confirmButtonFocusNode.requestFocus();
-                  return KeyEventResult.handled;
-                }
-              }
-
               return KeyEventResult.ignored;
             },
-            child: TextField(
-              controller: _nameController,
-              focusNode: _nameFieldFocusNode,
-              style: const TextStyle(color: Colors.white),
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) {
-                // Move focus to Confirm button when Enter is pressed
-                if (_nameController.text.trim().isNotEmpty) {
-                  _confirmButtonFocusNode.requestFocus();
-                }
-              },
-              decoration: InputDecoration(
-                labelText: 'Channel Name',
-                labelStyle: const TextStyle(color: Colors.white60),
-                hintText: 'e.g., Action Movies',
-                hintStyle: const TextStyle(color: Colors.white38),
-                filled: true,
-                fillColor: const Color(0xFF111827),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF1F2937)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF1F2937)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
-                ),
+            child: TvTextField(
+            controller: _nameController,
+            focusNode: _nameFieldFocusNode,
+            style: const TextStyle(color: Colors.white),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) {
+              // Move focus to Confirm button when Enter is pressed
+              if (_nameController.text.trim().isNotEmpty) {
+                _confirmButtonFocusNode.requestFocus();
+              }
+            },
+            decoration: InputDecoration(
+              labelText: 'Channel Name',
+              labelStyle: const TextStyle(color: Colors.white60),
+              hintText: 'e.g., Action Movies',
+              hintStyle: const TextStyle(color: Colors.white38),
+              filled: true,
+              fillColor: const Color(0xFF111827),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF1F2937)),
               ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF1F2937)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
+              ),
+            ),
+            onUpArrow: () => _cancelButtonFocusNode.requestFocus(),
+            onDownArrow: () => _confirmButtonFocusNode.requestFocus(),
             ),
           ),
           const SizedBox(height: 12),

@@ -46,6 +46,8 @@ class SettingsTvLayout extends StatefulWidget {
   final bool checkingUpdates;
   final bool autoUpdateChecksEnabled;
   final ValueChanged<bool> onToggleAutoUpdateChecks;
+  final bool tvKeyboardEnabled;
+  final ValueChanged<bool> onToggleTvKeyboard;
   final bool showSupportDonation;
   final String supportDonationLabel;
   final String supportDonationSubtitle;
@@ -74,6 +76,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.checkingUpdates,
     required this.autoUpdateChecksEnabled,
     required this.onToggleAutoUpdateChecks,
+    required this.tvKeyboardEnabled,
+    required this.onToggleTvKeyboard,
     required this.showSupportDonation,
     required this.supportDonationLabel,
     required this.supportDonationSubtitle,
@@ -453,6 +457,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.debrifyTv,
                 onTap: widget.onOpenDebrifyTvSettings,
                 focusNode: _paneNodes[0],
+              ),
+              SettingsToggleTile.spec(
+                SettingsRows.tvKeyboard,
+                value: widget.tvKeyboardEnabled,
+                onChanged: widget.onToggleTvKeyboard,
+                focusNode: _paneNodes[1],
               ),
             ],
           ),

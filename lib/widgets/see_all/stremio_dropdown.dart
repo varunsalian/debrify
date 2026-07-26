@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../utils/tv_keys.dart';
+import '../tv_text_field.dart';
 import 'see_all_theme.dart';
 
 /// One selectable option in a [StremioDropdown].
@@ -379,6 +380,7 @@ class _LazyPickerDialogState<T extends Object>
   late List<StremioDropdownOption<T>> _shown;
   late final int _initialIndex;
   String _filter = '';
+  final TextEditingController _filterController = TextEditingController();
 
   @override
   void initState() {
@@ -397,6 +399,7 @@ class _LazyPickerDialogState<T extends Object>
   @override
   void dispose() {
     _scroll.dispose();
+    _filterController.dispose();
     super.dispose();
   }
 
@@ -459,7 +462,8 @@ class _LazyPickerDialogState<T extends Object>
             if (!widget.isTelevision)
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-                child: TextField(
+                child: TvTextField(
+                  controller: _filterController,
                   autofocus: true,
                   onChanged: _onFilterChanged,
                   style: const TextStyle(color: Colors.white, fontSize: 13.5),

@@ -28,6 +28,7 @@ import '../utils/rd_folder_tree_builder.dart';
 import '../utils/torbox_folder_tree_builder.dart';
 import '../widgets/view_mode_dropdown.dart';
 import '../widgets/tvmaze_search_dialog.dart';
+import '../widgets/tv_text_field.dart';
 import '../models/webdav_item.dart';
 import 'video_player/models/playlist_entry.dart';
 import '../utils/tv_keys.dart';
@@ -1260,75 +1261,35 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Focus(
-              // D-pad navigation handler for Android TV
-              onKeyEvent: (node, event) {
-                if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                final key = event.logicalKey;
-                final textLength = _searchController.text.length;
-                final selection = _searchController.selection;
-                final isTextEmpty = textLength == 0;
-                final isSelectionValid =
-                    selection.isValid && selection.baseOffset >= 0;
-                final isAtStart =
-                    !isSelectionValid ||
-                    (selection.baseOffset == 0 && selection.extentOffset == 0);
-                final isAtEnd =
-                    !isSelectionValid ||
-                    (selection.baseOffset == textLength &&
-                        selection.extentOffset == textLength);
-
-                // Arrow Up at start/empty: exit TextField
-                if (key == LogicalKeyboardKey.arrowUp) {
-                  if (isTextEmpty || isAtStart) {
-                    _searchFocusNode.unfocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                // Arrow Down at end/empty: exit TextField to results
-                if (key == LogicalKeyboardKey.arrowDown) {
-                  if (isTextEmpty || isAtEnd) {
-                    _searchFocusNode.unfocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                // Arrow Right at end: move to clear button if visible
-                if (key == LogicalKeyboardKey.arrowRight) {
-                  if (hasText && (isTextEmpty || isAtEnd)) {
-                    _searchClearFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Search all files...',
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  filled: true,
-                  fillColor: const Color(0xFF1E293B),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+            child: TvTextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              textInputAction: TextInputAction.search,
+              // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
+              onUpArrow: () => _searchFocusNode.unfocus(),
+              onDownArrow: () => _searchFocusNode.unfocus(),
+              onRightArrow:
+                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              decoration: InputDecoration(
+                hintText: 'Search all files...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                filled: true,
+                fillColor: const Color(0xFF1E293B),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
                 ),
-                style: const TextStyle(color: Colors.white),
-                onChanged: _performSearch,
-                onSubmitted: (_) {
-                  // Unfocus TextField when user presses search/enter on TV keyboard
-                  _searchFocusNode.unfocus();
-                },
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
+              style: const TextStyle(color: Colors.white),
+              onChanged: _performSearch,
+              onSubmitted: (_) {
+                // Unfocus TextField when user presses search/enter on TV keyboard
+                _searchFocusNode.unfocus();
+              },
             ),
           ),
           // Clear button - separate focusable widget for D-pad navigation

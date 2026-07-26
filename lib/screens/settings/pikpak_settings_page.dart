@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
@@ -8,6 +7,7 @@ import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/pikpak_folder_picker_dialog.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 class PikPakSettingsPage extends StatefulWidget {
@@ -886,7 +886,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        _TvFriendlyTextField(
+                        TvTextField(
                           controller: _emailController,
                           focusNode: _emailFocusNode,
                           labelText: 'Email',
@@ -896,7 +896,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           enabled: !_isConnecting,
                         ),
                         const SizedBox(height: 16),
-                        _TvFriendlyTextField(
+                        TvTextField(
                           controller: _passwordController,
                           focusNode: _passwordFocusNode,
                           labelText: 'Password',
@@ -1054,144 +1054,6 @@ class _FocusRingState extends State<_FocusRing> {
           ),
         ),
         child: widget.child,
-      ),
-    );
-  }
-}
-
-/// A TV-friendly TextField that allows escaping with DPAD
-class _TvFriendlyTextField extends StatefulWidget {
-  const _TvFriendlyTextField({
-    required this.controller,
-    required this.focusNode,
-    required this.labelText,
-    required this.hintText,
-    required this.prefixIcon,
-    this.keyboardType,
-    this.obscureText = false,
-    this.enabled = true,
-    this.onSubmitted,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final String labelText;
-  final String hintText;
-  final Widget prefixIcon;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final bool enabled;
-  final ValueChanged<String>? onSubmitted;
-
-  @override
-  State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
-}
-
-class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_handleFocusChange);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (mounted) {
-      setState(() {
-        _isFocused = widget.focusNode.hasFocus;
-      });
-    }
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = widget.controller.text;
-    final selection = widget.controller.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-
-    // Check if selection is valid
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    // BACK is deliberately not intercepted — hopping focus here forced a
-    // second BACK press to leave the page; let it bubble so the route pops.
-
-    // Navigate up: always allow if text is empty or cursor at start
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        final ctx = node.context;
-        if (ctx != null) {
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
-          return KeyEventResult.handled;
-        }
-      }
-    }
-
-    // Navigate down: always allow if text is empty or cursor at end
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (isTextEmpty || isAtEnd) {
-        final ctx = node.context;
-        if (ctx != null) {
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
-          return KeyEventResult.handled;
-        }
-      }
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      onKeyEvent: _handleKeyEvent,
-      skipTraversal: true,
-      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: _isFocused
-              ? Border.all(color: kSettingsAccent, width: 2)
-              : null,
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: kSettingsAccent.withValues(alpha: 0.2),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        child: TextField(
-          controller: widget.controller,
-          focusNode: widget.focusNode,
-          enabled: widget.enabled,
-          obscureText: widget.obscureText,
-          keyboardType: widget.keyboardType,
-          decoration: InputDecoration(
-            labelText: widget.labelText,
-            hintText: widget.hintText,
-            prefixIcon: widget.prefixIcon,
-          ),
-          onSubmitted: widget.onSubmitted,
-        ),
       ),
     );
   }

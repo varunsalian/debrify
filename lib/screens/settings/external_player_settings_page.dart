@@ -11,6 +11,7 @@ import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 class ExternalPlayerSettingsPage extends StatefulWidget {
@@ -1045,10 +1046,34 @@ class _ExternalPlayerSettingsPageState
     ('da', 'Danish'),
     ('no', 'Norwegian'),
     ('fi', 'Finnish'),
+    ('et', 'Estonian'),
     ('hr', 'Croatian'),
     ('sr', 'Serbian'),
     ('bs', 'Bosnian'),
     ('mk', 'Macedonian'),
+    ('sl', 'Slovenian'),
+    ('cs', 'Czech'),
+    ('sk', 'Slovak'),
+    ('hu', 'Hungarian'),
+    ('ro', 'Romanian'),
+    ('bg', 'Bulgarian'),
+    ('uk', 'Ukrainian'),
+    ('el', 'Greek'),
+    ('lv', 'Latvian'),
+    ('lt', 'Lithuanian'),
+    ('he', 'Hebrew'),
+    ('fa', 'Persian'),
+    ('th', 'Thai'),
+    ('vi', 'Vietnamese'),
+    ('id', 'Indonesian'),
+    ('ms', 'Malay'),
+    ('bn', 'Bengali'),
+    ('ta', 'Tamil'),
+    ('mr', 'Marathi'),
+    ('gu', 'Gujarati'),
+    ('kn', 'Kannada'),
+    ('ml', 'Malayalam'),
+    ('pa', 'Punjabi'),
   ];
 
   int get _subtitleLanguageIndex {
@@ -2524,8 +2549,11 @@ class _ExternalPlayerSettingsPageState
                                     ]
                                   : null,
                             ),
-                            child: TextField(
+                            child: TvTextField(
                               controller: _iosSchemeController,
+                              // The surrounding Container draws this field's focus ring;
+                              // skip the shell's fallback ring so they don't double up.
+                              shellRing: false,
                               focusNode: _iosSchemeFocusNode,
                               decoration: InputDecoration(
                                 labelText: 'URL Scheme Template',
@@ -2535,7 +2563,6 @@ class _ExternalPlayerSettingsPageState
                                 errorText: _iosSchemeError,
                                 prefixIcon: const Icon(Icons.link_rounded),
                               ),
-                              maxLines: 1,
                               onChanged: (_) {
                                 if (_iosSchemeError != null) {
                                   setState(() {
@@ -2720,8 +2747,11 @@ class _ExternalPlayerSettingsPageState
                                     ]
                                   : null,
                             ),
-                            child: TextField(
+                            child: TvTextField(
                               controller: _linuxCommandController,
+                              // The surrounding Container draws this field's focus ring;
+                              // skip the shell's fallback ring so they don't double up.
+                              shellRing: false,
                               focusNode: _linuxCommandFocusNode,
                               decoration: InputDecoration(
                                 labelText: 'Command Template',
@@ -2732,7 +2762,6 @@ class _ExternalPlayerSettingsPageState
                                 errorText: _linuxCommandError,
                                 prefixIcon: const Icon(Icons.code_rounded),
                               ),
-                              maxLines: 1,
                               onChanged: (_) {
                                 if (_linuxCommandError != null) {
                                   setState(() {
@@ -2919,8 +2948,11 @@ class _ExternalPlayerSettingsPageState
                                     ]
                                   : null,
                             ),
-                            child: TextField(
+                            child: TvTextField(
                               controller: _windowsCommandController,
+                              // The surrounding Container draws this field's focus ring;
+                              // skip the shell's fallback ring so they don't double up.
+                              shellRing: false,
                               focusNode: _windowsCommandFocusNode,
                               decoration: InputDecoration(
                                 labelText: 'Command Template',
@@ -2931,7 +2963,6 @@ class _ExternalPlayerSettingsPageState
                                 errorText: _windowsCommandError,
                                 prefixIcon: const Icon(Icons.code_rounded),
                               ),
-                              maxLines: 1,
                               onChanged: (_) {
                                 if (_windowsCommandError != null) {
                                   setState(() {
@@ -3190,82 +3221,59 @@ class _ExternalPlayerSettingsPageState
                             ),
                           ),
                           const SizedBox(height: 16),
-                          Shortcuts(
-                            shortcuts: const <ShortcutActivator, Intent>{
-                              SingleActivator(LogicalKeyboardKey.arrowDown):
-                                  NextFocusIntent(),
-                              SingleActivator(LogicalKeyboardKey.arrowUp):
-                                  PreviousFocusIntent(),
-                            },
-                            child: Actions(
-                              actions: <Type, Action<Intent>>{
-                                NextFocusIntent:
-                                    CallbackAction<NextFocusIntent>(
-                                      onInvoke: (intent) {
-                                        // Directional (non-wrapping): DOWN on
-                                        // the last row must not jump back to
-                                        // the top of the page.
-                                        FocusScope.of(context).focusInDirection(
-                                          TraversalDirection.down,
-                                        );
-                                        return null;
-                                      },
-                                    ),
-                                PreviousFocusIntent:
-                                    CallbackAction<PreviousFocusIntent>(
-                                      onInvoke: (intent) {
-                                        FocusScope.of(context).focusInDirection(
-                                          TraversalDirection.up,
-                                        );
-                                        return null;
-                                      },
-                                    ),
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: _commandFocused
-                                      ? Border.all(
-                                          color: kSettingsAccent,
-                                          width: 1.8,
-                                        )
-                                      : null,
-                                  boxShadow: _commandFocused
-                                      ? [
-                                          BoxShadow(
-                                            color: kSettingsAccent.withValues(
-                                              alpha: 0.25,
-                                            ),
-                                            blurRadius: 18,
-                                            offset: const Offset(0, 8),
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                child: TextField(
-                                  controller: _commandController,
-                                  focusNode: _commandFocusNode,
-                                  decoration: InputDecoration(
-                                    labelText: 'Command',
-                                    hintText: 'vlc --fullscreen {url}',
-                                    helperText:
-                                        'Use {url} for video URL, {title} for title',
-                                    helperMaxLines: 2,
-                                    errorText: _commandError,
-                                    prefixIcon: const Icon(
-                                      Icons.terminal_rounded,
-                                    ),
-                                  ),
-                                  maxLines: 1,
-                                  onChanged: (_) {
-                                    if (_commandError != null) {
-                                      setState(() {
-                                        _commandError = null;
-                                      });
-                                    }
-                                  },
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              border: _commandFocused
+                                  ? Border.all(
+                                      color: kSettingsAccent,
+                                      width: 1.8,
+                                    )
+                                  : null,
+                              boxShadow: _commandFocused
+                                  ? [
+                                      BoxShadow(
+                                        color: kSettingsAccent.withValues(
+                                          alpha: 0.25,
+                                        ),
+                                        blurRadius: 18,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: TvTextField(
+                              controller: _commandController,
+                              // The surrounding Container draws this field's focus ring;
+                              // skip the shell's fallback ring so they don't double up.
+                              shellRing: false,
+                              focusNode: _commandFocusNode,
+                              // Directional (non-wrapping): DOWN on the last
+                              // row must not jump back to the top of the page.
+                              onDownArrow: () => FocusScope.of(
+                                context,
+                              ).focusInDirection(TraversalDirection.down),
+                              onUpArrow: () => FocusScope.of(
+                                context,
+                              ).focusInDirection(TraversalDirection.up),
+                              decoration: InputDecoration(
+                                labelText: 'Command',
+                                hintText: 'vlc --fullscreen {url}',
+                                helperText:
+                                    'Use {url} for video URL, {title} for title',
+                                helperMaxLines: 2,
+                                errorText: _commandError,
+                                prefixIcon: const Icon(
+                                  Icons.terminal_rounded,
                                 ),
                               ),
+                              onChanged: (_) {
+                                if (_commandError != null) {
+                                  setState(() {
+                                    _commandError = null;
+                                  });
+                                }
+                              },
                             ),
                           ),
                           const SizedBox(height: 16),

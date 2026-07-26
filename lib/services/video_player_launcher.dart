@@ -1936,13 +1936,30 @@ class VideoPlayerLauncher {
       }
       final categories = categorySet.toList()..sort();
 
+      // Saved positions for the on-demand items in this payload, so a movie
+      // picks up where it was left off — and so does one the user zaps to
+      // from the in-player guide. Attached alongside each channel rather than
+      // baked into IptvChannel.toJson(): a resume point is session state, not
+      // a property of the channel.
+      final resumePositions = await StorageService.getIptvResumePositions([
+        for (final c in channels)
+          if (!c.isLive) c.url,
+      ]);
+
       final payload = <String, dynamic>{
         'mode': 'iptv',
         'initialUrl': args.videoUrl,
         'title': args.title,
         'subtitle': args.subtitle ?? 'IPTV',
         'startIndex': startIndex,
-        'channels': channels.map((c) => c.toJson()).toList(),
+        'channels': [
+          for (final c in channels)
+            {
+              ...c.toJson(),
+              if ((resumePositions[c.url] ?? 0) > 0)
+                'resumePositionMs': resumePositions[c.url],
+            },
+        ],
         'categories': categories,
       };
 
@@ -1951,7 +1968,7 @@ class VideoPlayerLauncher {
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: payload,
-        onProgress: (_) async {},
+        onProgress: _handleIptvProgressUpdate,
         onFinished: () async {
           debugPrint('VideoPlayerLauncher: IPTV Android TV playback finished');
         },
@@ -1961,6 +1978,37 @@ class VideoPlayerLauncher {
     } catch (e) {
       debugPrint('VideoPlayerLauncher: IPTV Android TV launch failed: $e');
       return false;
+    }
+  }
+
+  /// Persist the native TV player's position for an on-demand IPTV item.
+  ///
+  /// Writes to the same `video_resume_v1` store, under the same key (the
+  /// stream URL), that the in-app player already uses for IPTV — so a movie
+  /// started on the phone and finished on the TV is one entry, not two.
+  ///
+  /// Live channels are ignored: the Kotlin side reports an unset duration for
+  /// them, and a resume point on a live stream is meaningless anyway.
+  static Future<void> _handleIptvProgressUpdate(
+    Map<String, dynamic> progress,
+  ) async {
+    try {
+      final url = progress['url'] as String?;
+      if (url == null || url.isEmpty) return;
+
+      final positionMs = (progress['positionMs'] as num?)?.toInt() ?? 0;
+      final durationMs = (progress['durationMs'] as num?)?.toInt() ?? 0;
+      if (durationMs <= 0 || positionMs <= 0) return;
+
+      await StorageService.upsertVideoResume(url, {
+        'positionMs': positionMs,
+        'durationMs': durationMs,
+        'speed': (progress['speed'] as num?)?.toDouble() ?? 1.0,
+        'aspect': (progress['aspect'] as String?) ?? 'contain',
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      });
+    } catch (e) {
+      debugPrint('VideoPlayerLauncher: IPTV progress save failed: $e');
     }
   }
 

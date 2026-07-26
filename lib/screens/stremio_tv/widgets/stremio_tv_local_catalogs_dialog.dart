@@ -14,6 +14,7 @@ import '../../../services/trakt/trakt_item_transformer.dart';
 import '../../../services/trakt/trakt_service.dart';
 import 'stremio_tv_repo_browser_dialog.dart';
 import '../../../utils/tv_keys.dart';
+import '../../../widgets/tv_text_field.dart';
 
 class LocalCatalogExportPayload {
   final String name;
@@ -1480,6 +1481,29 @@ class _StremioTvLocalCatalogsDialogState
 
 // ─── Import from URL dialog ─────────────────────────────────────────────────
 
+/// Back on a (non-editing) shell field hops to the dialog's Cancel button —
+/// matching the deleted per-field handlers — instead of bubbling on and
+/// popping the dialog with the user's typed input still in it. While EDITING,
+/// TvTextField consumes Back itself, so this only sees the shell-focused case.
+Widget _backHopsTo(FocusNode cancelNode, Widget child) {
+  return Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onKeyEvent: (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.escape ||
+          key == LogicalKeyboardKey.goBack ||
+          key == LogicalKeyboardKey.browserBack) {
+        cancelNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: child,
+  );
+}
+
 class _ImportUrlDialog extends StatefulWidget {
   const _ImportUrlDialog();
 
@@ -1500,8 +1524,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
   @override
   void initState() {
     super.initState();
-    _nameFocusNode.onKeyEvent = _handleNameFieldKey;
-    _urlFocusNode.onKeyEvent = _handleUrlFieldKey;
+    // Name/URL field DPAD exits live on the TvTextFields (onUp/DownArrow).
     _cancelFocusNode.onKeyEvent = _handleCancelButtonKey;
     _importFocusNode.onKeyEvent = _handleImportButtonKey;
   }
@@ -1515,78 +1538,6 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
     _urlController.dispose();
     _nameController.dispose();
     super.dispose();
-  }
-
-  KeyEventResult _handleNameFieldKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = _nameController.text;
-    final selection = _nameController.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
-      _cancelFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        _cancelFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
-      if (isTextEmpty || isAtEnd) {
-        _urlFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
-  KeyEventResult _handleUrlFieldKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = _urlController.text;
-    final selection = _urlController.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
-      _cancelFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        _nameFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
-      if (isTextEmpty || isAtEnd) {
-        _importFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
   }
 
   KeyEventResult _handleCancelButtonKey(FocusNode node, KeyEvent event) {
@@ -1704,25 +1655,34 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            controller: _nameController,
-            focusNode: _nameFocusNode,
-            decoration: InputDecoration(
-              hintText: 'Catalog name (required for Trakt lists)',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
+          _backHopsTo(
+            _cancelFocusNode,
+            TvTextField(
+              controller: _nameController,
+              focusNode: _nameFocusNode,
+              onUpArrow: () => _cancelFocusNode.requestFocus(),
+              onDownArrow: () => _urlFocusNode.requestFocus(),
+              decoration: InputDecoration(
+                hintText: 'Catalog name (required for Trakt lists)',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
+          _backHopsTo(
+            _cancelFocusNode,
+            TvTextField(
             controller: _urlController,
             focusNode: _urlFocusNode,
+            onUpArrow: () => _nameFocusNode.requestFocus(),
+            onDownArrow: () => _importFocusNode.requestFocus(),
             decoration: InputDecoration(
               hintText: 'https://example.com/catalog.json',
               border: OutlineInputBorder(
@@ -1739,6 +1699,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
             onSubmitted: (_) {
               if (!_loading) _import();
             },
+            ),
           ),
         ],
       ),
@@ -1786,7 +1747,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
   @override
   void initState() {
     super.initState();
-    _nameFocusNode.onKeyEvent = _handleNameFieldKey;
+    // Name field DPAD exits live on the TvTextField (onUp/DownArrow).
     _jsonFocusNode.onKeyEvent = _handleJsonFieldKey;
     _cancelFocusNode.onKeyEvent = _handleCancelButtonKey;
     _importFocusNode.onKeyEvent = _handleImportButtonKey;
@@ -1801,42 +1762,6 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
     _jsonController.dispose();
     _nameController.dispose();
     super.dispose();
-  }
-
-  KeyEventResult _handleNameFieldKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = _nameController.text;
-    final selection = _nameController.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
-      _cancelFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        _cancelFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
-      if (isTextEmpty || isAtEnd) {
-        _jsonFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
   }
 
   KeyEventResult _handleJsonFieldKey(FocusNode node, KeyEvent event) {
@@ -1959,18 +1884,23 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            controller: _nameController,
-            focusNode: _nameFocusNode,
-            decoration: InputDecoration(
-              hintText: 'Catalog name (required for Trakt lists)',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
+          _backHopsTo(
+            _cancelFocusNode,
+            TvTextField(
+              controller: _nameController,
+              focusNode: _nameFocusNode,
+              onUpArrow: () => _cancelFocusNode.requestFocus(),
+              onDownArrow: () => _jsonFocusNode.requestFocus(),
+              decoration: InputDecoration(
+                hintText: 'Catalog name (required for Trakt lists)',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
             ),
           ),

@@ -209,6 +209,7 @@ class StorageService {
   static const String _debrifyTvFavoriteChannelsKey =
       'debrify_tv_favorite_channels_v1';
   static const String _iptvFavoriteChannelsKey = 'iptv_favorite_channels_v1';
+  static const String _iptvWatchHistoryKey = 'iptv_watch_history_v1';
 
   // Stremio TV settings
   static const String _stremioTvRotationMinutesKey =
@@ -382,6 +383,28 @@ class StorageService {
   static Future<void> setMergedSeriesPageEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('merged_series_page_enabled', enabled);
+  }
+
+  /// Use the in-app DPAD keyboard for text fields on TV (TvTextField) instead
+  /// of the system IME, which can't be navigated with the remote on many
+  /// devices (flutter/flutter#177360 — Chromecast/Google TV, some
+  /// Philips/Samsung panels). On by default; the Settings toggle lets users on
+  /// unaffected devices opt back into the system keyboard.
+  ///
+  /// [tvKeyboardEnabledCached] mirrors the stored value for synchronous widget
+  /// builds — warmed at startup (main.dart) and kept in sync by the setter.
+  static bool tvKeyboardEnabledCached = true;
+
+  static Future<bool> getTvKeyboardEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    tvKeyboardEnabledCached = prefs.getBool('tv_keyboard_enabled') ?? true;
+    return tvKeyboardEnabledCached;
+  }
+
+  static Future<void> setTvKeyboardEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('tv_keyboard_enabled', enabled);
+    tvKeyboardEnabledCached = enabled;
   }
 
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,
@@ -3092,6 +3115,233 @@ class StorageService {
   static Future<Set<String>> getIptvFavoriteChannelUrls() async {
     final favorites = await getIptvFavoriteChannels();
     return favorites.keys.toSet();
+  }
+
+  // ── IPTV watch history (backs the virtual "Continue watching" playlist) ──
+
+  /// How many watched on-demand items to remember. A panel can list tens of
+  /// thousands of movies, and this backs a short "pick up where you left off"
+  /// shelf — not an archive.
+  static const int _iptvWatchHistoryMax = 100;
+
+  /// A watched item counts as in-progress between these fractions: below the
+  /// floor nothing meaningful was watched (a mis-click, or a few seconds of
+  /// buffering), and above the ceiling it's effectively finished.
+  static const double _iptvWatchStartedFraction = 0.02;
+  static const double _iptvWatchFinishedFraction = 0.95;
+
+  /// Remember that an on-demand IPTV item was played, capturing enough
+  /// metadata to rebuild its row without re-fetching the panel — the same
+  /// trick [setIptvChannelFavorited] uses, and necessary for the same reason:
+  /// the provider's catalog can be renumbered or gone by the time the shelf
+  /// is read.
+  ///
+  /// The playback position is deliberately NOT stored here. Both players
+  /// already write it to the shared `video_resume_v1` map keyed by stream URL,
+  /// and copying it would hand the shelf a second, staler truth to disagree
+  /// with; [getIptvContinueWatching] joins the two at read time instead.
+  static Future<void> recordIptvWatch(
+    String channelUrl, {
+    String? channelName,
+    String? logoUrl,
+    String? group,
+    String? playlistId,
+    Map<String, String>? httpHeaders,
+  }) async {
+    if (channelUrl.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+
+    Map<String, dynamic> history = {};
+    final raw = prefs.getString(_iptvWatchHistoryKey);
+    if (raw != null) {
+      try {
+        history = jsonDecode(raw) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    // Re-watching moves an item to the front rather than duplicating it.
+    history.remove(channelUrl);
+    history[channelUrl] = {
+      'name': channelName ?? '',
+      'logoUrl': logoUrl ?? '',
+      'group': group ?? '',
+      'playlistId': playlistId ?? '',
+      // Rebuilt rows never re-parse the playlist, so a stream that needs a
+      // specific UA/Referer has to carry it here — exactly as favorites do.
+      if (httpHeaders != null && httpHeaders.isNotEmpty)
+        'httpHeaders': httpHeaders,
+      'lastPlayedAt': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    if (history.length > _iptvWatchHistoryMax) {
+      final byOldest = history.entries.toList()
+        ..sort(
+          (a, b) => _iptvWatchTimestamp(a.value).compareTo(
+            _iptvWatchTimestamp(b.value),
+          ),
+        );
+      for (final entry in byOldest.take(history.length - _iptvWatchHistoryMax)) {
+        history.remove(entry.key);
+      }
+    }
+
+    await prefs.setString(_iptvWatchHistoryKey, jsonEncode(history));
+  }
+
+  static int _iptvWatchTimestamp(dynamic meta) {
+    if (meta is Map) {
+      final value = meta['lastPlayedAt'];
+      if (value is num) return value.toInt();
+    }
+    return 0;
+  }
+
+  /// All remembered on-demand IPTV items (url → metadata).
+  static Future<Map<String, Map<String, dynamic>>>
+  getIptvWatchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_iptvWatchHistoryKey);
+    if (raw == null) return {};
+
+    try {
+      final history = jsonDecode(raw) as Map<String, dynamic>;
+      return history.map(
+        (key, value) => MapEntry(
+          key,
+          value is Map<String, dynamic>
+              ? value
+              : <String, dynamic>{'name': '', 'logoUrl': '', 'group': ''},
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error reading IPTV watch history: $e');
+      return {};
+    }
+  }
+
+  /// Watched-but-unfinished IPTV items, most recent first. Joins the metadata
+  /// captured at play time with the position the players persist to
+  /// `video_resume_v1` (both keyed by stream URL), so an item only appears
+  /// once it has real progress behind it.
+  ///
+  /// Each entry is the stored metadata plus `url`, `positionMs`, `durationMs`
+  /// and `progress` (0-1).
+  static Future<List<Map<String, dynamic>>> getIptvContinueWatching() async {
+    final history = await getIptvWatchHistory();
+    if (history.isEmpty) return [];
+
+    final resumeMap = await _getVideoResumeMap();
+    final items = <Map<String, dynamic>>[];
+
+    for (final entry in history.entries) {
+      final resume = resumeMap[entry.key];
+      if (resume is! Map) continue;
+
+      final positionMs = (resume['positionMs'] as num?)?.toInt() ?? 0;
+      final durationMs = (resume['durationMs'] as num?)?.toInt() ?? 0;
+      if (durationMs <= 0) continue;
+
+      final progress = positionMs / durationMs;
+      if (progress < _iptvWatchStartedFraction ||
+          progress > _iptvWatchFinishedFraction) {
+        continue;
+      }
+
+      items.add({
+        ...entry.value,
+        'url': entry.key,
+        'positionMs': positionMs,
+        'durationMs': durationMs,
+        'progress': progress,
+        // Prefer when playback last moved; a rebuilt-metadata entry can be
+        // older than the watching it describes.
+        'sortAt': (resume['updatedAt'] as num?)?.toInt() ??
+            _iptvWatchTimestamp(entry.value),
+      });
+    }
+
+    items.sort(
+      (a, b) => (b['sortAt'] as int).compareTo(a['sortAt'] as int),
+    );
+    return items;
+  }
+
+  /// Stored position/duration for whichever of [urls] the players have
+  /// progress for. Reads the resume map once — callers are typically a list of
+  /// thousands of rows.
+  static Future<Map<String, ({int positionMs, int durationMs, double fraction})>>
+  _iptvResumeStates(Iterable<String> urls) async {
+    final wanted = urls.toSet();
+    if (wanted.isEmpty) return {};
+
+    final resumeMap = await _getVideoResumeMap();
+    final states =
+        <String, ({int positionMs, int durationMs, double fraction})>{};
+    for (final url in wanted) {
+      final resume = resumeMap[url];
+      if (resume is! Map) continue;
+      final positionMs = (resume['positionMs'] as num?)?.toInt() ?? 0;
+      final durationMs = (resume['durationMs'] as num?)?.toInt() ?? 0;
+      if (durationMs <= 0) continue;
+      states[url] = (
+        positionMs: positionMs,
+        durationMs: durationMs,
+        fraction: (positionMs / durationMs).clamp(0.0, 1.0),
+      );
+    }
+    return states;
+  }
+
+  /// Resume fractions (0-1) for whichever of [urls] have been started. No
+  /// upper bound — a finished item shows a full bar, which is the point.
+  static Future<Map<String, double>> getIptvProgressForUrls(
+    Iterable<String> urls,
+  ) async {
+    final states = await _iptvResumeStates(urls);
+    return {
+      for (final entry in states.entries)
+        if (entry.value.fraction >= _iptvWatchStartedFraction)
+          entry.key: entry.value.fraction,
+    };
+  }
+
+  /// Resume position in ms for each part-watched item among [urls], using the
+  /// same window as the shelf — so a finished item restarts from the
+  /// beginning rather than resuming a second from the end.
+  static Future<Map<String, int>> getIptvResumePositions(
+    Iterable<String> urls,
+  ) async {
+    final states = await _iptvResumeStates(urls);
+    return {
+      for (final entry in states.entries)
+        if (entry.value.fraction >= _iptvWatchStartedFraction &&
+            entry.value.fraction <= _iptvWatchFinishedFraction)
+          entry.key: entry.value.positionMs,
+    };
+  }
+
+  /// Remove all watch history that belongs to a deleted playlist — mirrors
+  /// [removeIptvFavoritesByPlaylistId] so a removed provider leaves nothing
+  /// behind pointing at URLs that no longer authenticate.
+  static Future<void> removeIptvWatchHistoryByPlaylistId(
+    String playlistId,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_iptvWatchHistoryKey);
+    if (raw == null) return;
+
+    try {
+      final history = jsonDecode(raw) as Map<String, dynamic>;
+      history.removeWhere((url, metadata) {
+        if (metadata is Map<String, dynamic>) {
+          return metadata['playlistId'] == playlistId;
+        }
+        return false;
+      });
+      await prefs.setString(_iptvWatchHistoryKey, jsonEncode(history));
+    } catch (e) {
+      debugPrint('Error removing IPTV watch history for $playlistId: $e');
+    }
   }
 
   /// Build progress map for playlist items

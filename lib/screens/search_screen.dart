@@ -56,6 +56,7 @@ import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
+import '../widgets/tv_text_field.dart';
 import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
@@ -7101,7 +7102,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         valueListenable: _searchController,
         builder: (context, value, _) {
           final hasText = value.text.isNotEmpty;
-          final field = TextField(
+          // TvTextField: on TV (Debrify keyboard on) this is a shell — DPAD
+          // landing draws the focus ring but never opens a keyboard; OK
+          // starts editing with the in-app DPAD keyboard. Off TV / opted out
+          // it renders the same plain TextField as before.
+          final field = TvTextField(
             controller: _searchController,
             focusNode: _searchFocusNode,
             onChanged: _onQueryChanged,
@@ -7109,6 +7114,29 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             textInputAction: TextInputAction.search,
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurface, fontSize: tv ? 16 : 15),
+            // Shell-mode LEFT: no caret exists at the shell, so left always
+            // escapes to the sidebar (the LEFT-only sidebar policy). While
+            // EDITING, left moves the keyboard highlight instead — TvTextField
+            // consumes it internally. The Shortcuts wrapper below still covers
+            // the opted-out plain-TextField path.
+            onLeftArrow: tv
+                ? () => MainPageBridge.focusTvSidebar?.call()
+                : null,
+            // Explicit up/down so BOTH keyboard modes use the curated targets
+            // (mirrors the ancestor Focus handler below, which otherwise only
+            // sees keys the field lets bubble).
+            onUpArrow: tv ? _focusModeToggle : null,
+            onDownArrow: tv
+                ? () {
+                    if (_kwSourcesButtonVisible) {
+                      _kwSourcesBtnFocus.requestFocus();
+                    } else if (_catalogSourcesButtonVisible) {
+                      _catalogSourcesBtnFocus.requestFocus();
+                    } else {
+                      _focusContent();
+                    }
+                  }
+                : null,
             decoration: InputDecoration(
               hintText: switch (_mode) {
                 _Mode.catalog => 'Search or paste link',
@@ -15237,7 +15265,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   Widget _keywordSearchField(ColorScheme scheme) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-      child: TextField(
+      child: TvTextField(
         controller: _kwCtrl,
         textInputAction: TextInputAction.search,
         onSubmitted: _submitKeyword,

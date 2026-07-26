@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/tv_keys.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 class RedditSettingsPage extends StatefulWidget {
@@ -253,7 +254,7 @@ class _RedditSettingsPageState extends State<RedditSettingsPage> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: _TvFriendlyTextField(
+                        child: TvTextField(
                           controller: _subredditController,
                           focusNode: _subredditInputFocusNode,
                           labelText: 'Subreddit name',
@@ -316,171 +317,6 @@ class _RedditSettingsPageState extends State<RedditSettingsPage> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A TV-friendly TextField that allows escaping with DPAD
-class _TvFriendlyTextField extends StatefulWidget {
-  const _TvFriendlyTextField({
-    required this.controller,
-    required this.focusNode,
-    required this.labelText,
-    required this.hintText,
-    required this.prefixIcon,
-    this.onSubmitted,
-    this.onRightArrow,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final String labelText;
-  final String hintText;
-  final Widget prefixIcon;
-  final ValueChanged<String>? onSubmitted;
-  final VoidCallback? onRightArrow;
-
-  @override
-  State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
-}
-
-class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_handleFocusChange);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (mounted) {
-      setState(() {
-        _isFocused = widget.focusNode.hasFocus;
-      });
-    }
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    // Safety check: widget must be mounted to access context
-    if (!mounted) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = widget.controller.text;
-    final selection = widget.controller.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-
-    // Check if selection is valid
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    // Allow escape from TextField with back button
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.browserBack) {
-      final ctx = node.context;
-      if (ctx != null && mounted) {
-        try {
-          FocusScope.of(ctx).previousFocus();
-          return KeyEventResult.handled;
-        } catch (e) {
-          debugPrint('Error handling escape key: $e');
-          return KeyEventResult.ignored;
-        }
-      }
-    }
-
-    // Navigate up: allow if text is empty or cursor at start
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (isTextEmpty || isAtStart) {
-        final ctx = node.context;
-        if (ctx != null && mounted) {
-          try {
-            FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
-            return KeyEventResult.handled;
-          } catch (e) {
-            debugPrint('Error handling arrow up: $e');
-            return KeyEventResult.ignored;
-          }
-        }
-      }
-    }
-
-    // Navigate down: allow if text is empty or cursor at end
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (isTextEmpty || isAtEnd) {
-        final ctx = node.context;
-        if (ctx != null && mounted) {
-          try {
-            FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
-            return KeyEventResult.handled;
-          } catch (e) {
-            debugPrint('Error handling arrow down: $e');
-            return KeyEventResult.ignored;
-          }
-        }
-      }
-    }
-
-    // Navigate right: allow if text is empty or cursor at end
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if ((isTextEmpty || isAtEnd) && widget.onRightArrow != null) {
-        widget.onRightArrow!();
-        return KeyEventResult.handled;
-      }
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      onKeyEvent: _handleKeyEvent,
-      skipTraversal: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: _isFocused
-              ? Border.all(color: kSettingsAccent, width: 2)
-              : null,
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: kSettingsAccent.withValues(alpha: 0.2),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        child: TextField(
-          controller: widget.controller,
-          focusNode: widget.focusNode,
-          decoration: InputDecoration(
-            labelText: widget.labelText,
-            hintText: widget.hintText,
-            prefixIcon: widget.prefixIcon,
-          ),
-          onSubmitted: widget.onSubmitted,
         ),
       ),
     );

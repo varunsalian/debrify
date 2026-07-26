@@ -10,6 +10,7 @@ import '../../screens/video_player/models/playlist_entry.dart';
 import '../../services/analytics_service.dart';
 import '../../services/download_service.dart';
 import '../../services/main_page_bridge.dart';
+import '../../widgets/tv_text_field.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/webdav_service.dart';
@@ -720,42 +721,45 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
 
   Widget _buildServerAndSearch() {
     if (_searchActive) {
-      return Focus(
-        onKeyEvent: _handleSearchFieldKey,
-        child: TextField(
-          controller: _searchController,
-          focusNode: _searchFocusNode,
-          textInputAction: TextInputAction.search,
-          style: const TextStyle(color: Colors.white),
-          onSubmitted: (_) => _focusFirstItem(),
-          onChanged: (value) {
-            setState(() {
-              _query = value;
-              _items = _applyViewMode(_filterVisible(_rawItems));
-            });
-          },
-          decoration: InputDecoration(
-            hintText: 'Search $_currentTitle',
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.38)),
-            prefixIcon: const Icon(
-              Icons.search_rounded,
+      return TvTextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(color: Colors.white),
+        // D-pad exits (formerly a Focus/onKeyEvent wrapper): left to the
+        // toolbar leading control, right to the search toggle, down into
+        // the results.
+        onLeftArrow: _focusToolbarLeading,
+        onRightArrow: () => _searchToggleFocusNode.requestFocus(),
+        onDownArrow: _focusFirstItem,
+        onSubmitted: (_) => _focusFirstItem(),
+        onChanged: (value) {
+          setState(() {
+            _query = value;
+            _items = _applyViewMode(_filterVisible(_rawItems));
+          });
+        },
+        decoration: InputDecoration(
+          hintText: 'Search $_currentTitle',
+          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.38)),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: CloudTheme.accent,
+          ),
+          filled: true,
+          fillColor: Colors.white.withValues(alpha: 0.06),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: Colors.white.withValues(alpha: 0.10),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(
               color: CloudTheme.accent,
-            ),
-            filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.06),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: Colors.white.withValues(alpha: 0.10),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: CloudTheme.accent,
-                width: 1.6,
-              ),
+              width: 1.6,
             ),
           ),
         ),
@@ -826,41 +830,6 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
         ),
       ],
     );
-  }
-
-  KeyEventResult _handleSearchFieldKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-    final textLength = _searchController.text.length;
-    final selection = _searchController.selection;
-    final isTextEmpty = textLength == 0;
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    if (key == LogicalKeyboardKey.arrowLeft && (isTextEmpty || isAtStart)) {
-      _focusToolbarLeading();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowRight && (isTextEmpty || isAtEnd)) {
-      _searchToggleFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowDown && (isTextEmpty || isAtEnd)) {
-      _focusFirstItem();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
-      _handleBackNavigation();
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
   }
 
   void _focusToolbarLeading() {

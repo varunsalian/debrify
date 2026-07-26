@@ -32,6 +32,7 @@ import '../services/pikpak_api_service.dart';
 import '../services/next_episode_service.dart';
 
 import '../widgets/series_browser.dart';
+import '../widgets/tv_text_field.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -5037,6 +5038,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return id;
     }
 
+    // IPTV launches carry no playlist, so the fallback below would key every
+    // channel in the session to the URL the player was OPENED with — zap to
+    // another channel and its position would be filed under the first one's
+    // name. Key on the channel actually playing instead. (Identical to the
+    // fallback until the user zaps, so existing resume points still resolve.)
+    final iptvChannels = widget.iptvChannels;
+    if (iptvChannels != null &&
+        _currentIptvIndex >= 0 &&
+        _currentIptvIndex < iptvChannels.length) {
+      return iptvChannels[_currentIptvIndex].url;
+    }
+
     // Fallback to videoUrl for single items
     // Note: This is the expected path for Debrify TV mode
     return widget.videoUrl;
@@ -5308,6 +5321,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _saveResume({bool debounced = false}) async {
     if (!_isReady) {
+      return;
+    }
+
+    // An IPTV zap flips _currentIptvIndex — and therefore _resumeKey — before
+    // the incoming stream opens, while _position/_duration still describe the
+    // OUTGOING one (_isReady is never cleared for the gap). A tick landing in
+    // that window would file the old movie's position under the new channel's
+    // key, which the Continue-watching shelf would then show as real progress.
+    // Nothing is lost by skipping: the next tick saves once the switch lands.
+    if (widget.iptvChannels != null && _isTransitioning) {
       return;
     }
 
@@ -7000,7 +7023,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                        child: TextField(
+                        child: TvTextField(
                           controller: controller,
                           autofocus: initialQuery.trim().isEmpty,
                           onSubmitted: (value) =>
@@ -7158,7 +7181,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   Row(
                     children: [
                       Expanded(
-                        child: TextField(
+                        child: TvTextField(
                           controller: seasonController,
                           keyboardType: TextInputType.number,
                           style: const TextStyle(color: Colors.white),
@@ -7172,7 +7195,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: TextField(
+                        child: TvTextField(
                           controller: episodeController,
                           keyboardType: TextInputType.number,
                           style: const TextStyle(color: Colors.white),

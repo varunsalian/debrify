@@ -49,6 +49,7 @@ import '../utils/rd_blocked_filter.dart';
 import '../utils/debrify_tv_filters.dart';
 import '../utils/series_parser.dart';
 import '../utils/tv_keys.dart';
+import '../widgets/tv_text_field.dart';
 import 'video_player_screen.dart';
 import 'debrify_tv/widgets/focus_highlight_wrapper.dart';
 import 'debrify_tv/widgets/random_start_slider.dart';
@@ -292,7 +293,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     AnalyticsService.screenView('magic_tv');
     _channelSearchFocusNode = FocusNode(
       debugLabel: 'DebrifyTVChannelSearch',
-      onKeyEvent: _handleChannelSearchKeyEvent,
     );
     _loadSettings();
     _loadChannels();
@@ -338,57 +338,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     super.dispose();
   }
 
-  KeyEventResult _handleChannelSearchKeyEvent(FocusNode node, KeyEvent event) {
+  /// Back/Escape ladder for the channel search bar: clear text first, then
+  /// close the bar. Sits on an ancestor Focus of the search field so it runs
+  /// when the TvTextField shell lets the key bubble.
+  KeyEventResult _handleChannelSearchBarBack(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-
-    final text = _channelSearchController.text;
-    final selection = _channelSearchController.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (isTextEmpty || isAtStart) {
-        MainPageBridge.focusTvSidebar?.call();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if (text.isNotEmpty && isAtEnd) {
-        _channelSearchClearFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    if (key == LogicalKeyboardKey.arrowDown) {
-      final ctx = node.context;
-      if (ctx != null) {
-        FocusScope.of(ctx).nextFocus();
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      _channelSearchButtonFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack) {
-      if (text.isNotEmpty) {
+    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+      if (_channelSearchController.text.isNotEmpty) {
         _channelSearchController.clear();
         setState(() {
           _channelSearchTerm = '';
         });
+        // Clearing unmounts the suffix ✕ — if IT held focus, focus would be
+        // stranded; parking on the field covers both cases.
+        _channelSearchFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
       if (_showSearchBar) {
@@ -401,7 +367,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     return KeyEventResult.ignored;
   }
-
 
   void _closeProgressDialog() {
     if (!_progressOpen) {
@@ -1851,59 +1816,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final keywordInputController = TextEditingController();
     FocusNode? channelNameFocus;
     FocusNode? channelKeywordFocus;
-    KeyEventResult handleNameKey(FocusNode node, KeyEvent event) {
-      if (!_isAndroidTv) {
-        return KeyEventResult.ignored;
-      }
-      if (event is! KeyDownEvent) {
-        return KeyEventResult.ignored;
-      }
-      final key = event.logicalKey;
-      if (key == LogicalKeyboardKey.arrowDown) {
-        channelKeywordFocus?.requestFocus();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowUp) {
-        final ctx = node.context;
-        if (ctx != null) {
-          FocusScope.of(ctx).previousFocus();
-          return KeyEventResult.handled;
-        }
-      }
-      return KeyEventResult.ignored;
-    }
-
-    KeyEventResult handleKeywordKey(FocusNode node, KeyEvent event) {
-      if (!_isAndroidTv) {
-        return KeyEventResult.ignored;
-      }
-      if (event is! KeyDownEvent) {
-        return KeyEventResult.ignored;
-      }
-      final key = event.logicalKey;
-      if (key == LogicalKeyboardKey.arrowUp) {
-        channelNameFocus?.requestFocus();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowDown) {
-        final ctx = node.context;
-        if (ctx != null) {
-          FocusScope.of(ctx).nextFocus();
-          return KeyEventResult.handled;
-        }
-      }
-      return KeyEventResult.ignored;
-    }
-
     if (_isAndroidTv) {
-      channelNameFocus = FocusNode(
-        debugLabel: 'DebrifyTVChannelName',
-        onKeyEvent: handleNameKey,
-      );
-      channelKeywordFocus = FocusNode(
-        debugLabel: 'DebrifyTVChannelKeyword',
-        onKeyEvent: handleKeywordKey,
-      );
+      channelNameFocus = FocusNode(debugLabel: 'DebrifyTVChannelName');
+      channelKeywordFocus = FocusNode(debugLabel: 'DebrifyTVChannelKeyword');
     }
     final List<String> keywordList = [];
     final seenKeywords = <String>{};
@@ -2048,7 +1963,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        TextField(
+                        TvTextField(
                           controller: nameController,
                           focusNode: channelNameFocus,
                           autofocus: _isAndroidTv,
@@ -2057,6 +1972,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             labelText: 'Channel name',
                             prefixIcon: Icon(Icons.label_rounded),
                           ),
+                          onDownArrow: () =>
+                              channelKeywordFocus?.requestFocus(),
+                          onUpArrow: () {
+                            final ctx = channelNameFocus?.context;
+                            if (ctx != null) {
+                              FocusScope.of(ctx).previousFocus();
+                            }
+                          },
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -2097,7 +2020,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             ),
                             SizedBox(
                               width: 200,
-                              child: TextField(
+                              child: TvTextField(
                                 controller: keywordInputController,
                                 focusNode: channelKeywordFocus,
                                 decoration: const InputDecoration(
@@ -2105,6 +2028,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                   prefixIcon: Icon(Icons.add_rounded),
                                 ),
                                 style: const TextStyle(color: Colors.white),
+                                onUpArrow: () =>
+                                    channelNameFocus?.requestFocus(),
+                                onDownArrow: () {
+                                  final ctx = channelKeywordFocus?.context;
+                                  if (ctx != null) {
+                                    FocusScope.of(ctx).nextFocus();
+                                  }
+                                },
                                 onSubmitted: (value) {
                                   final limitReached = _addKeywordsToList(
                                     value,
@@ -7978,10 +7909,27 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           // Search field for TV (only show when toggled)
           if (_showSearchBar) ...[
             const SizedBox(height: 16),
-            TextField(
+            Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: _handleChannelSearchBarBack,
+              child: TvTextField(
               focusNode: _channelSearchFocusNode,
               controller: _channelSearchController,
               style: const TextStyle(color: Colors.white),
+              onLeftArrow: () => MainPageBridge.focusTvSidebar?.call(),
+              onRightArrow: () {
+                if (_channelSearchController.text.isNotEmpty) {
+                  _channelSearchClearFocusNode.requestFocus();
+                }
+              },
+              onUpArrow: () => _channelSearchButtonFocusNode.requestFocus(),
+              onDownArrow: () {
+                final ctx = _channelSearchFocusNode.context;
+                if (ctx != null) {
+                  FocusScope.of(ctx).nextFocus();
+                }
+              },
               decoration: InputDecoration(
                 hintText: 'Search channels...',
                 hintStyle: TextStyle(
@@ -8074,6 +8022,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   _channelSearchTerm = value;
                 });
               },
+              ),
             ),
           ],
           const SizedBox(height: 16),
@@ -9017,7 +8966,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             },
           ),
           const SizedBox(height: 16),
-          TextField(
+          TvTextField(
             controller: _channelSearchController,
             focusNode: _isAndroidTv ? _channelSearchFocusNode : null,
             onChanged: (value) {
@@ -9073,25 +9022,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final TextEditingController controller = TextEditingController();
     final FocusNode keywordFocusNode = FocusNode(
       debugLabel: 'QuickPlayKeywordsField',
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) {
-          return KeyEventResult.ignored;
-        }
-        final focusContext = node.context;
-        if (focusContext == null) {
-          return KeyEventResult.ignored;
-        }
-        final key = event.logicalKey;
-        if (key == LogicalKeyboardKey.arrowDown) {
-          FocusScope.of(focusContext).nextFocus();
-          return KeyEventResult.handled;
-        }
-        if (key == LogicalKeyboardKey.arrowUp) {
-          FocusScope.of(focusContext).previousFocus();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
     );
 
     await showDialog<void>(
@@ -9112,7 +9042,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextField(
+                    TvTextField(
                       controller: controller,
                       autofocus: true,
                       focusNode: keywordFocusNode,
@@ -9121,6 +9051,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         labelText: 'Keywords',
                         hintText: 'Comma separated keywords',
                       ),
+                      onDownArrow: () {
+                        final ctx = keywordFocusNode.context;
+                        if (ctx != null) {
+                          FocusScope.of(ctx).nextFocus();
+                        }
+                      },
+                      onUpArrow: () {
+                        final ctx = keywordFocusNode.context;
+                        if (ctx != null) {
+                          FocusScope.of(ctx).previousFocus();
+                        }
+                      },
                       onChanged: (_) {
                         if (error != null) {
                           setDialogState(() => error = null);

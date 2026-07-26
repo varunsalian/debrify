@@ -9,6 +9,7 @@ import '../../services/analytics_service.dart';
 import '../../utils/m3u_parser.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 class IptvSettingsPage extends StatefulWidget {
@@ -498,8 +499,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       IptvService.instance.clearCache(playlist.url);
     }
 
-    // Remove favorites that belonged to this playlist
+    // Remove favorites and watch history that belonged to this playlist —
+    // both replay from stored metadata, so either would otherwise keep
+    // offering streams that no longer authenticate.
     await StorageService.removeIptvFavoritesByPlaylistId(playlist.id);
+    await StorageService.removeIptvWatchHistoryByPlaylistId(playlist.id);
 
     setState(() => _playlists = newPlaylists);
     // _ensureFocusNodes disposes the trailing nodes — including the one the
@@ -631,7 +635,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         // Name input
         FocusTraversalOrder(
           order: const NumericFocusOrder(2),
-          child: _TvFriendlyTextField(
+          child: TvTextField(
             controller: _nameController,
             focusNode: _nameInputFocusNode,
             labelText: 'Playlist Name',
@@ -650,7 +654,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         // URL input
         FocusTraversalOrder(
           order: const NumericFocusOrder(3),
-          child: _TvFriendlyTextField(
+          child: TvTextField(
             controller: _urlController,
             focusNode: _urlInputFocusNode,
             labelText: 'Playlist URL',
@@ -730,7 +734,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         // Server URL input
         FocusTraversalOrder(
           order: const NumericFocusOrder(2),
-          child: _TvFriendlyTextField(
+          child: TvTextField(
             controller: _xcServerController,
             focusNode: _xcServerFocusNode,
             labelText: 'Server URL',
@@ -749,7 +753,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         // Username input
         FocusTraversalOrder(
           order: const NumericFocusOrder(3),
-          child: _TvFriendlyTextField(
+          child: TvTextField(
             controller: _xcUsernameController,
             focusNode: _xcUsernameFocusNode,
             labelText: 'Username',
@@ -766,7 +770,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         // Password input
         FocusTraversalOrder(
           order: const NumericFocusOrder(3.5),
-          child: _TvFriendlyTextField(
+          child: TvTextField(
             controller: _xcPasswordController,
             focusNode: _xcPasswordFocusNode,
             labelText: 'Password',
@@ -929,250 +933,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           ],
         ),
       ),
-    );
-  }
-}
-
-/// A TV-friendly TextField.
-///
-/// On TV the DPAD stop is a non-editing SHELL [Focus] around the field:
-/// merely landing on it never pops the soft keyboard (focusing a real
-/// TextField opens the IME — the reason the page's entry seed avoids
-/// fields), OK starts editing, and UP/DOWN always leave the field — through
-/// the explicit [onUpArrow]/[onDownArrow] chain when wired (geometric search
-/// above these full-width fields center-lands on the WRONG tab, where DOWN
-/// then switches tabs under the half-filled form), falling back to
-/// directional traversal. BACK while editing returns to the shell; BACK on
-/// the shell bubbles on so the page pops normally.
-///
-/// Off-TV it stays a plain TextField: hardware-keyboard users keep in-field
-/// caret arrows, with UP/DOWN escaping at the text edges (the original
-/// sweep behavior).
-class _TvFriendlyTextField extends StatefulWidget {
-  const _TvFriendlyTextField({
-    required this.controller,
-    required this.focusNode,
-    required this.labelText,
-    required this.hintText,
-    required this.prefixIcon,
-    this.errorText,
-    this.autofocus = false,
-    this.textInputAction,
-    this.onSubmitted,
-    this.onUpArrow,
-    this.onDownArrow,
-  });
-
-  final TextEditingController controller;
-
-  /// The DPAD stop other controls chain to: the shell node on TV, the
-  /// TextField's own node elsewhere.
-  final FocusNode focusNode;
-  final String labelText;
-  final String hintText;
-  final Widget prefixIcon;
-  final String? errorText;
-
-  /// Off-TV only (a TV shell never autofocuses — that would pop the IME).
-  final bool autofocus;
-  final TextInputAction? textInputAction;
-  final ValueChanged<String>? onSubmitted;
-
-  /// Explicit DPAD exits. Null falls back to directional traversal.
-  final VoidCallback? onUpArrow;
-  final VoidCallback? onDownArrow;
-
-  @override
-  State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
-}
-
-class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
-  bool get _tvShell => PlatformUtil.isAndroidTvCached;
-
-  /// TV only: the actual TextField's node — skipTraversal so the shell is
-  /// the only DPAD stop; focused exclusively by OK ("start editing").
-  final FocusNode _editNode = FocusNode(
-    debugLabel: 'tv-textfield-edit',
-    skipTraversal: true,
-  );
-
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_handleFocusChange);
-    _editNode.addListener(_handleFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TvFriendlyTextField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode.removeListener(_handleFocusChange);
-      widget.focusNode.addListener(_handleFocusChange);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
-    _editNode.dispose();
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    // The ring stays lit while editing too (shell handed focus to the field).
-    final focused = widget.focusNode.hasFocus || _editNode.hasFocus;
-    if (mounted && focused != _isFocused) {
-      setState(() => _isFocused = focused);
-    }
-  }
-
-  void _goUp(FocusNode node) {
-    if (widget.onUpArrow != null) {
-      widget.onUpArrow!();
-    } else {
-      node.focusInDirection(TraversalDirection.up);
-    }
-  }
-
-  void _goDown(FocusNode node) {
-    if (widget.onDownArrow != null) {
-      widget.onDownArrow!();
-    } else {
-      node.focusInDirection(TraversalDirection.down);
-    }
-  }
-
-  /// TV shell mode. Runs with the shell focused AND for keys that bubble up
-  /// from the edit node (the IME consumes DPAD while open, so anything
-  /// arriving here means the keyboard is closed).
-  KeyEventResult _handleShellKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-
-    if (!_editNode.hasFocus && isActivateKey(key)) {
-      // OK begins editing — this (not DPAD landing) is what opens the IME.
-      _editNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.browserBack) {
-      if (_editNode.hasFocus) {
-        // The IME consumed one BACK to close itself; this one ends editing.
-        // The NEXT back reaches the page and pops it.
-        widget.focusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored; // shell: bubble on — page pops
-    }
-
-    // UP/DOWN always leave the field: vertical caret moves are meaningless
-    // in a single-line field, and the old cursor-at-edge gate made the first
-    // press die silently after typing (cursor mid/end) — the "needs two
-    // presses" glitch.
-    if (key == LogicalKeyboardKey.arrowUp) {
-      _goUp(node);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowDown) {
-      _goDown(node);
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  /// Off-TV: original behavior — arrows escape only at the text edges so
-  /// hardware-keyboard users keep in-field caret movement.
-  KeyEventResult _handleEdgeKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final text = widget.controller.text;
-    final selection = widget.controller.selection;
-    final textLength = text.length;
-    final isTextEmpty = textLength == 0;
-
-    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart =
-        !isSelectionValid ||
-        (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd =
-        !isSelectionValid ||
-        (selection.baseOffset == textLength &&
-            selection.extentOffset == textLength);
-
-    // Allow escape from TextField with back button
-    if (key == LogicalKeyboardKey.escape ||
-        key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.browserBack) {
-      final ctx = node.context;
-      if (ctx != null) {
-        FocusScope.of(ctx).previousFocus();
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (key == LogicalKeyboardKey.arrowUp && (isTextEmpty || isAtStart)) {
-      _goUp(node);
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.arrowDown && (isTextEmpty || isAtEnd)) {
-      _goDown(node);
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Snap, don't tween — animated focus decorations jank weak TV GPUs.
-    final decorated = Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: _isFocused ? Border.all(color: kSettingsAccent, width: 2) : null,
-        boxShadow: _isFocused
-            ? [
-                BoxShadow(
-                  color: kSettingsAccent.withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
-      ),
-      child: TextField(
-        controller: widget.controller,
-        focusNode: _tvShell ? _editNode : widget.focusNode,
-        autofocus: !_tvShell && widget.autofocus,
-        decoration: InputDecoration(
-          labelText: widget.labelText,
-          hintText: widget.hintText,
-          errorText: widget.errorText,
-          prefixIcon: widget.prefixIcon,
-        ),
-        textInputAction: widget.textInputAction,
-        onSubmitted: widget.onSubmitted,
-      ),
-    );
-
-    if (_tvShell) {
-      return Focus(
-        focusNode: widget.focusNode,
-        onKeyEvent: _handleShellKey,
-        child: decorated,
-      );
-    }
-    return Focus(
-      onKeyEvent: _handleEdgeKey,
-      skipTraversal: true,
-      child: decorated,
     );
   }
 }
@@ -2223,14 +1983,16 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
           // Shared TV field idiom: on TV this is a non-editing shell (DPAD
           // landing never pops the keyboard; OK starts editing). Off-TV it
           // autofocuses with the keyboard ready, as before.
-          _TvFriendlyTextField(
+          TvTextField(
             controller: _controller,
             focusNode: _fieldFocusNode,
             labelText: 'Playlist Name',
             hintText: 'Enter a name for this playlist',
             errorText: _errorText,
             prefixIcon: const Icon(Icons.label_outline),
-            autofocus: true,
+            // Off-TV only: on TV the dialog's action buttons seed DPAD focus
+            // (below), matching the old clone which never autofocused on TV.
+            autofocus: !PlatformUtil.isAndroidTvCached,
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _submit(),
           ),

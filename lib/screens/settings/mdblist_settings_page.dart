@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/analytics_service.dart';
@@ -7,6 +6,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
+import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Settings page for the MDBList integration.
@@ -29,12 +29,6 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   final FocusNode _addApiKeyButtonFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
   final FocusNode _logoutButtonFocusNode = FocusNode();
-
-  static const Map<ShortcutActivator, Intent> _dpadShortcuts =
-      <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-      };
 
   String? _savedApiKey;
   MdblistAccount? _account;
@@ -262,43 +256,26 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Shortcuts(
-          shortcuts: _dpadShortcuts,
-          child: Actions(
-            actions: <Type, Action<Intent>>{
-              NextFocusIntent: CallbackAction<NextFocusIntent>(
-                onInvoke: (intent) {
-                  FocusScope.of(context).nextFocus();
-                  return null;
-                },
+        TvTextField(
+          focusNode: _apiKeyFocusNode,
+          controller: _apiKeyController,
+          obscureText: _obscure,
+          enabled: !_saving,
+          textInputAction: TextInputAction.done,
+          onDownArrow: () => FocusScope.of(context).nextFocus(),
+          onUpArrow: () => FocusScope.of(context).previousFocus(),
+          decoration: InputDecoration(
+            labelText: 'MDBList API Key',
+            prefixIcon: const Icon(Icons.security),
+            suffixIcon: IconButton(
+              focusColor: kSettingsAccent.withValues(alpha: 0.4),
+              icon: Icon(
+                _obscure ? Icons.visibility : Icons.visibility_off,
               ),
-              PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-                onInvoke: (intent) {
-                  FocusScope.of(context).previousFocus();
-                  return null;
-                },
-              ),
-            },
-            child: TextField(
-              focusNode: _apiKeyFocusNode,
-              controller: _apiKeyController,
-              obscureText: _obscure,
-              enabled: !_saving,
-              textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                labelText: 'MDBList API Key',
-                prefixIcon: const Icon(Icons.security),
-                suffixIcon: IconButton(
-                  focusColor: kSettingsAccent.withValues(alpha: 0.4),
-                  icon: Icon(
-                    _obscure ? Icons.visibility : Icons.visibility_off,
-                  ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                ),
-              ),
-              onSubmitted: (_) => _saving ? null : _saveKey(),
+              onPressed: () => setState(() => _obscure = !_obscure),
             ),
           ),
+          onSubmitted: (_) => _saving ? null : _saveKey(),
         ),
         const SizedBox(height: 12),
         Row(

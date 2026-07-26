@@ -5,6 +5,7 @@ import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/torrent.dart';
 import '../../../services/series_source_fetcher.dart';
+import '../../../widgets/tv_text_field.dart';
 
 /// In-player source switcher panel (right-sliding, Netflix-dark).
 ///
@@ -840,7 +841,7 @@ class _SourceSheetState extends State<SourceSheet>
               ? [BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 16)]
               : [],
         ),
-        child: TextField(
+        child: TvTextField(
           controller: _searchController,
           focusNode: _searchFocusNode,
           style: const TextStyle(

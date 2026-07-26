@@ -16,6 +16,7 @@ import '../../widgets/cloud/cloud_file_row.dart';
 import '../../widgets/cloud/cloud_row_skeleton.dart';
 import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
+import '../../widgets/tv_text_field.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
   final String? initialFolderId;
@@ -1687,65 +1688,29 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Focus(
-              // D-pad navigation handler for Android TV
-              onKeyEvent: (node, event) {
-                if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                final key = event.logicalKey;
-                final textLength = _searchController.text.length;
-                final selection = _searchController.selection;
-                final isTextEmpty = textLength == 0;
-                final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-                final isAtStart = !isSelectionValid ||
-                    (selection.baseOffset == 0 && selection.extentOffset == 0);
-                final isAtEnd = !isSelectionValid ||
-                    (selection.baseOffset == textLength && selection.extentOffset == textLength);
-
-                // Arrow Up at start/empty: exit TextField
-                if (key == LogicalKeyboardKey.arrowUp) {
-                  if (isTextEmpty || isAtStart) {
-                    _searchFocusNode.unfocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                // Arrow Down at end/empty: exit TextField to results
-                if (key == LogicalKeyboardKey.arrowDown) {
-                  if (isTextEmpty || isAtEnd) {
-                    _searchFocusNode.unfocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                // Arrow Right at end: move to clear button if visible
-                if (key == LogicalKeyboardKey.arrowRight) {
-                  if (hasText && (isTextEmpty || isAtEnd)) {
-                    _searchClearFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                }
-
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Search files...',
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.06),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: TvTextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              textInputAction: TextInputAction.search,
+              // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
+              onUpArrow: () => _searchFocusNode.unfocus(),
+              onDownArrow: () => _searchFocusNode.unfocus(),
+              onRightArrow:
+                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              decoration: InputDecoration(
+                hintText: 'Search files...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
                 ),
-                style: const TextStyle(color: Colors.white),
-                onChanged: _performSearch,
-                onSubmitted: (_) => _searchFocusNode.unfocus(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
+              style: const TextStyle(color: Colors.white),
+              onChanged: _performSearch,
+              onSubmitted: (_) => _searchFocusNode.unfocus(),
             ),
           ),
           // Clear button - separate focusable widget for D-pad navigation

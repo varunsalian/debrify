@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/iptv_playlist.dart';
+import '../../../widgets/tv_text_field.dart';
 
 /// Premium IPTV channel sheet overlay for the video player.
 /// Full-height right panel with frosted glass, search, and channel list.
@@ -397,7 +398,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
               ? [BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 16)]
               : [],
         ),
-        child: TextField(
+        child: TvTextField(
           controller: _searchController,
           focusNode: _searchFocusNode,
           style: const TextStyle(

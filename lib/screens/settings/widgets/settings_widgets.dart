@@ -109,6 +109,11 @@ abstract final class SettingsRows {
     title: 'Debrify TV Settings',
     subtitle: 'Limits, channels, and playback configuration',
   );
+  static const tvKeyboard = SettingsRowContent(
+    icon: Icons.keyboard_rounded,
+    title: 'Debrify Keyboard',
+    subtitle: 'Remote-friendly on-screen keyboard for text fields',
+  );
   static const clearDownloads = SettingsRowContent(
     icon: Icons.download_rounded,
     title: 'Clear Download Data',
