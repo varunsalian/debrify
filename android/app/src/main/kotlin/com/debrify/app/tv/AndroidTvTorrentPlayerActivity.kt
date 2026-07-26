@@ -35,6 +35,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -47,6 +48,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.UnrecognizedInputFormatException
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -207,6 +209,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var isIptvMode = false
     private var iptvChannels = mutableListOf<IptvChannelEntry>()
     private var currentIptvIndex = 0
+
+    // Per-channel HTTP headers for the CURRENT channel, injected into every
+    // player request by the IPTV resolver installed in setupPlayer. Written
+    // on the main thread in setIptvMediaItem, read on ExoPlayer's loader
+    // threads — hence @Volatile.
+    @Volatile
+    private var currentIptvHttpHeaders: Map<String, String> = emptyMap()
+
+    // URLs that failed extractor sniffing and play as HLS instead (bare
+    // extension-less URLs — jmp2.uk-style — infer as progressive). Session
+    // memory so zapping back starts straight in HLS with no failed attempt.
+    private val iptvHlsForcedUrls = HashSet<String>()
+    private var currentIptvStreamUrl: String? = null
     private var iptvGuideOverlay: View? = null
     private var iptvGuideList: RecyclerView? = null
     private var iptvGuideSearch: android.widget.EditText? = null
@@ -566,14 +581,39 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            // Stale-delivery gate for EVERY IPTV recovery path below: a
+            // queued onPlayerError whose media item was already superseded
+            // (a zap's or the watchdog's prepare() cleared the error) reports
+            // playerError == null. Acting on one would attribute channel A's
+            // failure to channel B — e.g. force-HLS-poisoning B's URL for the
+            // whole session, or restarting A's stream under B's identity.
+            val isLiveIptvError = isIptvMode && player?.playerError != null
+
+            // IPTV: a stream that failed extractor sniffing is almost always
+            // an HLS playlist behind an extension-less URL (inferred as
+            // progressive). Retry the SAME url once with the type forced —
+            // before the Stremio ladder, so a playable-if-forced candidate
+            // isn't skipped.
+            if (isLiveIptvError && retryIptvAsHlsIfUnrecognized(error)) return
+
+            // IPTV live: falling behind the live window (long pause, hiccup
+            // on a short-window stream) is recoverable by rejoining the live
+            // edge — without this the channel just dies with an error.
+            if (isLiveIptvError &&
+                currentIptvStreamUrl != null &&
+                error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW
+            ) {
+                android.util.Log.w("AndroidTvPlayer", "Behind live window — rejoining live edge")
+                player?.seekToDefaultPosition()
+                player?.prepare()
+                player?.play()
+                return
+            }
+
             // Stremio-addon IPTV channels: a dead candidate URL is expected —
             // step down the ladder. Everything else keeps the pre-existing
             // behavior (no handler existed; playback simply stops).
-            // playerError gate: if the stall watchdog already advanced (its
-            // prepare() cleared the error), a stale queued delivery for the
-            // previous candidate arrives with playerError null — advancing
-            // again would skip the candidate the watchdog just started.
-            if (isIptvMode && player?.playerError != null && tryNextIptvStremioCandidate()) return
+            if (isLiveIptvError && tryNextIptvStremioCandidate()) return
             android.util.Log.e("AndroidTvPlayer", "Player error: ${error.errorCodeName}")
         }
 
@@ -1001,12 +1041,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val renderersFactory = OffsetRenderersFactory(baseRenderersFactory)
             .also { offsetRenderersFactory = it }
 
-        // Create HTTP data source factory with redirect support for HLS/live streams
+        // Create HTTP data source factory with redirect support for HLS/live streams.
+        // The browser UA rides in defaultRequestProperties, NOT setUserAgent:
+        // media3 applies the userAgent field LAST in makeConnection, silently
+        // clobbering any per-request User-Agent — which would break IPTV
+        // channels that declare their own UA (injected via the resolver's
+        // dataSpec headers, which override defaults in the merge).
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(15000)
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .setDefaultRequestProperties(
+                mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+            )
 
         // Wrap with DefaultDataSource.Factory for local file/content URI support
         val upstreamDataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
@@ -1036,9 +1085,32 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             upstreamDataSourceFactory
         }
 
+        // IPTV: inject the CURRENT channel's declared headers into every
+        // request (playlist + segments — CDNs enforce them on both). Read per
+        // request so channel zaps just update [currentIptvHttpHeaders]; the
+        // factory-level Chrome UA still applies when a channel names no UA.
+        // (Channel UA keys are canonicalized to "User-Agent" at parse time,
+        // so the dataSpec entry deterministically replaces the default.)
+        val finalDataSourceFactory = if (isIptvMode) {
+            ResolvingDataSource.Factory(
+                dataSourceFactory,
+                object : ResolvingDataSource.Resolver {
+                    override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
+                        val headers = currentIptvHttpHeaders
+                        return if (headers.isEmpty()) dataSpec
+                        else dataSpec.withAdditionalHeaders(headers)
+                    }
+
+                    override fun resolveReportedUri(uri: Uri): Uri = uri
+                }
+            )
+        } else {
+            dataSourceFactory
+        }
+
         // Create media source factory that uses the data source
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(dataSourceFactory)
+            .setDataSourceFactory(finalDataSourceFactory)
 
         val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
@@ -4895,6 +4967,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     },
                     isCurrent = false,
                     resumePositionMs = ch.optLong("resumePositionMs", 0L),
+                    httpHeaders = ch.optJSONObject("httpHeaders")?.let { obj ->
+                        buildMap {
+                            for (key in obj.keys()) {
+                                obj.optString(key).takeIf { it.isNotEmpty() }?.let {
+                                    // Canonicalize the UA key: the factory's
+                                    // default UA lives under "User-Agent",
+                                    // and the header merge into the request
+                                    // is a case-SENSITIVE HashMap — a
+                                    // lowercase "user-agent" from a playlist
+                                    // would produce two entries with a
+                                    // map-order-dependent winner.
+                                    val name =
+                                        if (key.equals("User-Agent", ignoreCase = true)) {
+                                            "User-Agent"
+                                        } else key
+                                    put(name, it)
+                                }
+                            }
+                        }
+                    } ?: emptyMap(),
                 )
             )
         }
@@ -5411,9 +5503,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setArtist(entry.group ?: "IPTV")
             .build()
 
+        // The channel's own headers ride every request from here on (the
+        // resolver installed in setupPlayer reads this per request). Set
+        // BEFORE the media item so the first playlist fetch already has them.
+        currentIptvHttpHeaders = entry.httpHeaders
+        currentIptvStreamUrl = streamUrl
+
         val mediaItem = MediaItem.Builder()
             .setUri(streamUrl)
             .setMediaMetadata(metadata)
+            .apply {
+                // Extension-less URLs infer as progressive and fail on HLS
+                // playlists; once a URL has proven to be HLS (via the error
+                // fallback) start it as HLS directly.
+                if (iptvHlsForcedUrls.contains(streamUrl)) {
+                    setMimeType(MimeTypes.APPLICATION_M3U8)
+                }
+            }
             .build()
 
         // Resume on-demand items where they were left off. Passing the start
@@ -5439,6 +5545,46 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     /**
+     * The extension-less-HLS fallback: when the current IPTV stream failed
+     * because no extractor recognized it (bare URLs — `jmp2.uk/stvp-…` —
+     * infer as progressive, and progressive extractors can't read an
+     * `#EXTM3U` text playlist), remember the URL as HLS and restart it once
+     * with the type forced. Returns true when a retry was started. mpv
+     * content-sniffs, which is why the same channels play on phone — this
+     * closes that gap for ExoPlayer.
+     */
+    private fun retryIptvAsHlsIfUnrecognized(error: PlaybackException): Boolean {
+        val url = currentIptvStreamUrl ?: return false
+        if (iptvHlsForcedUrls.contains(url)) return false // already tried
+        var cause: Throwable? = error
+        var unrecognized = false
+        while (cause != null) {
+            if (cause is UnrecognizedInputFormatException) {
+                unrecognized = true
+                break
+            }
+            cause = cause.cause
+        }
+        if (!unrecognized) return false
+
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
+        android.util.Log.d(
+            "AndroidTvPlayer",
+            "Unrecognized format for ${entry.name} — retrying as HLS"
+        )
+        iptvHlsForcedUrls.add(url)
+        setIptvMediaItem(entry, url)
+        // Stremio candidate: give the forced-HLS attempt a FULL stall window
+        // (arming re-cancels the one ticking since candidate start — a slow
+        // panel can eat most of that window on the failed sniff alone, and
+        // the ladder would advance past a candidate that plays when forced).
+        if (iptvStremioChannelKey != null) {
+            armIptvStremioStallWatchdog()
+        }
+        return true
+    }
+
+    /**
      * Start playback for an IPTV channel. Plain channels play their URL
      * directly; Stremio-addon channels first resolve their candidate stream
      * URLs through the Flutter bridge (cached on the Dart side), then play
@@ -5453,6 +5599,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvStremioWinnerReported = false
         cancelIptvStremioStallWatchdog()
         clearIptvStremioSources()
+
+        // The outgoing stream's URL must not be attributable from here on: a
+        // Stremio zap stops the player and resolves async — stop() does NOT
+        // clear playerError, so a stale error delivering mid-resolve would
+        // otherwise pass the liveness gate and restart the OLD stream under
+        // the new channel's identity. setIptvMediaItem re-sets this.
+        currentIptvStreamUrl = null
 
         if (!isStremioIptvUrl(entry.url)) {
             setIptvMediaItem(entry, entry.url)
@@ -9729,6 +9882,10 @@ private data class IptvChannelEntry(
     // half-watched movie and back returns to the right spot rather than to
     // the position it held at launch. Always 0 for live channels.
     var resumePositionMs: Long = 0L,
+    // Headers the playlist declared for this channel (#EXTVLCOPT/#EXTHTTP/
+    // pipe-suffix). Sent with every request while the channel plays — a
+    // UA/Referer-guarded channel is unplayable without them.
+    val httpHeaders: Map<String, String> = emptyMap(),
     // EPG (Xtream panels), fetched lazily over the bridge as rows bind.
     // Instances are shared between the master list and the adapter's filtered
     // copy, so a fetch landing updates both. epgLoaded means "asked once" —

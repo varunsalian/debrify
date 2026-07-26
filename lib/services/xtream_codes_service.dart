@@ -433,11 +433,16 @@ class XtreamCodesService {
   /// Fetch only the status code of a URL without downloading the body: some
   /// panels answer stream URLs with the live stream itself, which a plain
   /// http.get would buffer without bound.
+  ///
+  /// Probes with the PLAYBACK User-Agent, not the API one: the probe's whole
+  /// job is predicting what the players will get, and a panel that blocks
+  /// unknown UAs on stream URLs would otherwise 4xx every form and leave the
+  /// verdict wrong for a URL shape that plays fine.
   Future<int?> _probeStatusCode(String url) async {
     final client = http.Client();
     try {
       final request = http.Request('GET', Uri.parse(url));
-      request.headers.addAll(_headers);
+      request.headers['User-Agent'] = kIptvDefaultUserAgent;
       final response = await client
           .send(request)
           .timeout(const Duration(seconds: 10));

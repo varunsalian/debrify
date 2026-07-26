@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
@@ -20,6 +21,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.UnrecognizedInputFormatException
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -188,9 +190,32 @@ class TvTrailerTexturePlayer(
             // with its separate audio track. Cross-protocol redirects match the
             // main player (googlevideo redirects http↔https). If there's no
             // separate audio, [videoUrl] is already muxed — play it directly.
+            //
+            // UA + per-media headers match the main player: without a browser
+            // UA (ExoPlayer's default identifies the library) a large share of
+            // IPTV panels/CDNs 4xx every request, so channels previewed fine
+            // nowhere while playing everywhere.
+            val requestHeaders = (call.argument<Map<String, Any?>>("headers") ?: emptyMap())
+                .entries.mapNotNull { (k, v) -> (v as? String)?.let { k to it } }
+                .toMap()
+            // UA via defaultRequestProperties, NOT setUserAgent — media3
+            // applies the userAgent field last, which would clobber a
+            // channel-declared User-Agent in [requestHeaders]. In this merge
+            // the channel's own headers win over the browser default. The
+            // default is only added when the channel names no UA in ANY
+            // case — the merge map is case-sensitive, and two UA entries
+            // would race on map order.
+            val headerProps = HashMap<String, String>()
+            if (requestHeaders.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
+                headerProps["User-Agent"] = DEFAULT_UA
+            }
+            headerProps.putAll(requestHeaders)
             val httpFactory = DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
+                .setDefaultRequestProperties(headerProps)
             val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+            val mediaSourceFactory = DefaultMediaSourceFactory(context)
+                .setDataSourceFactory(dataSourceFactory)
             if (!audioUrl.isNullOrEmpty()) {
                 val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                     .createMediaSource(MediaItem.fromUri(videoUrl))
@@ -207,9 +232,7 @@ class TvTrailerTexturePlayer(
                 // progressive file (ProgressiveMediaSource can't parse an HLS
                 // playlist: the stream errors out and the preview never shows).
                 player.setMediaSource(
-                    DefaultMediaSourceFactory(context)
-                        .setDataSourceFactory(dataSourceFactory)
-                        .createMediaSource(MediaItem.fromUri(videoUrl))
+                    mediaSourceFactory.createMediaSource(MediaItem.fromUri(videoUrl))
                 )
             }
 
@@ -250,7 +273,33 @@ class TvTrailerTexturePlayer(
                     }
                 }
 
+                // Extension-less HLS (jmp2.uk-style IPTV URLs): the source
+                // factory infers by URL extension, so a bare URL is tried as
+                // progressive and fails to sniff the #EXTM3U text. One retry
+                // with the type forced to HLS before reporting failure.
+                private var hlsRetried = false
+
                 override fun onPlayerError(error: PlaybackException) {
+                    if (!hlsRetried && audioUrl.isNullOrEmpty() &&
+                        isUnrecognizedInputFormat(error)
+                    ) {
+                        hlsRetried = true
+                        android.util.Log.d(
+                            "TvTrailer",
+                            "Unrecognized format — retrying $videoUrl as HLS"
+                        )
+                        player.setMediaSource(
+                            mediaSourceFactory.createMediaSource(
+                                MediaItem.Builder()
+                                    .setUri(videoUrl)
+                                    .setMimeType(MimeTypes.APPLICATION_M3U8)
+                                    .build()
+                            )
+                        )
+                        player.prepare()
+                        player.play()
+                        return
+                    }
                     emit("error", id, mapOf("message" to (error.message ?: "playback error")))
                 }
             })
@@ -354,7 +403,23 @@ class TvTrailerTexturePlayer(
         channel.setMethodCallHandler(null)
     }
 
+    /** True when [error]'s cause chain contains a failed extractor sniff. */
+    private fun isUnrecognizedInputFormat(error: Throwable?): Boolean {
+        var cause: Throwable? = error
+        while (cause != null) {
+            if (cause is UnrecognizedInputFormatException) return true
+            cause = cause.cause
+        }
+        return false
+    }
+
     companion object {
         private const val CHANNEL = "com.debrify.app/tv_trailer"
+
+        /** Matches the main player's UA (and Dart's kIptvDefaultUserAgent):
+         *  a channel must behave identically in preview and playback. */
+        private const val DEFAULT_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 }

@@ -1312,6 +1312,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                     videoUrl: streamUrl,
                     enabled: true,
                     live: true,
+                    // The channel's declared UA/Referer — panels that guard
+                    // playback with them guard the preview identically.
+                    httpHeaders: ch.playbackHeaders,
                     imageBlurSigma: 0,
                     videoBlurSigma: 0,
                     // The dwell: arrowing down the guide never opens a stream

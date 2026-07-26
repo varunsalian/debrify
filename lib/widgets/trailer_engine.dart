@@ -39,11 +39,16 @@ abstract class TrailerEngine {
   /// Open [videoUrl] (muxing [audioUrl] when present), looping when [loop], at
   /// [volume] (0–100), and start playing. Called once. Safe against a [detach]
   /// landing mid-open — it aborts cleanly without leaking a native player.
+  ///
+  /// [httpHeaders] are sent with every request for this media (IPTV channels
+  /// declare per-channel User-Agent/Referer, and panels hard-block requests
+  /// without them — the live preview must send exactly what the players send).
   Future<void> open({
     required String videoUrl,
     String? audioUrl,
     required double volume,
     required bool loop,
+    Map<String, String>? httpHeaders,
   });
 
   Future<void> setVolume(double volume); // 0–100
@@ -103,6 +108,7 @@ class MediaKitTrailerEngine implements TrailerEngine {
     String? audioUrl,
     required double volume,
     required bool loop,
+    Map<String, String>? httpHeaders,
   }) async {
     // Re-check [_disposed] after every await: a detach (URL switch, toggle off)
     // can land mid-sequence, and media_kit throws on use-after-dispose.
@@ -112,7 +118,10 @@ class MediaKitTrailerEngine implements TrailerEngine {
       loop ? mk.PlaylistMode.single : mk.PlaylistMode.none,
     );
     if (_disposed) return;
-    await _player.open(mk.Media(videoUrl), play: true);
+    await _player.open(
+      mk.Media(videoUrl, httpHeaders: httpHeaders),
+      play: true,
+    );
     if (_disposed) return;
     if (audioUrl != null && audioUrl.isNotEmpty) {
       await _player.setAudioTrack(mk.AudioTrack.uri(audioUrl));
@@ -219,6 +228,7 @@ class ExoTrailerEngine implements TrailerEngine {
     String? audioUrl,
     required double volume,
     required bool loop,
+    Map<String, String>? httpHeaders,
   }) async {
     final id = await _TvTrailerChannel.instance.create(
       videoUrl: videoUrl,
@@ -227,6 +237,7 @@ class ExoTrailerEngine implements TrailerEngine {
       volume: (volume / 100).clamp(0.0, 1.0),
       loop: loop,
       underlay: underlay,
+      httpHeaders: httpHeaders,
     );
     if (_disposed) {
       // A detach raced the native create — release the orphaned player and drop
@@ -501,6 +512,7 @@ class _TvTrailerChannel {
     required double volume,
     required bool loop,
     required bool underlay,
+    Map<String, String>? httpHeaders,
   }) async {
     final res = await _channel.invokeMapMethod<String, dynamic>('create', {
       'videoUrl': videoUrl,
@@ -509,6 +521,8 @@ class _TvTrailerChannel {
       'volume': volume,
       'loop': loop,
       'underlay': underlay,
+      if (httpHeaders != null && httpHeaders.isNotEmpty)
+        'headers': httpHeaders,
     });
     return (res?['textureId'] as num).toInt();
   }
