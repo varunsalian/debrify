@@ -1,0 +1,12 @@
+{
+  "appId": "1530971783706972200",
+  "publicKey": "1d1eec985589f732b9d8adab166611c619dea4c2677a4a2f15dfb5bf07802c41",
+  "guildId": "1459167078643794036",
+  "trackerRepo": "varunsalian/debrify-tracker",
+  "channels": {
+    "general": "1459167079595905067",
+    "help-support": "1459168113529458720",
+    "bug-reports": "1459168268274241608",
+    "feature-requests": "1459168362063200328"
+  }
+}

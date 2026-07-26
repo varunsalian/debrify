@@ -46,3 +46,9 @@ app.*.map.json
 
 # Release automation secrets/tooling — never commit
 .release/
+
+# Discord bot secrets & deps — code is tracked, secrets/deps are not
+discord/.dev.vars
+discord/.deploy.env
+discord/node_modules/
+discord/.wrangler/
