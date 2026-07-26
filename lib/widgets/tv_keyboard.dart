@@ -132,11 +132,17 @@ class TvKeyboardController extends ChangeNotifier {
     return false;
   }
 
-  /// Moves the highlight one step; clamps at the grid edges.
+  /// Moves the highlight one step. Vertical clamps at the top/bottom rows;
+  /// horizontal WRAPS — left from the leftmost key lands on the rightmost and
+  /// vice versa, so long reaches across a row are one press, not nine.
   bool nav(int dx, int dy) {
     final grid = rows;
     row = (row + dy).clamp(0, grid.length - 1);
-    col = (col + dx).clamp(0, grid[row].length - 1);
+    final rowLen = grid[row].length;
+    col = col.clamp(0, rowLen - 1);
+    if (dx != 0) {
+      col = (col + dx + rowLen) % rowLen;
+    }
     notifyListeners();
     return true;
   }
