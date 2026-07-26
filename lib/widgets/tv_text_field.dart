@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -206,6 +208,39 @@ class TvTextFieldState extends State<TvTextField> {
   bool _editing = false;
   bool _focused = false;
 
+  /// Set when a Back KEY-DOWN closed the keyboard; the matching KEY-UP must
+  /// be swallowed too. Android fires the actual back action on the UP: an
+  /// unhandled up gets redispatched by the engine → onBackPressed →
+  /// popRoute — and by then [_editing] is already false, so the PopScope
+  /// guard below is un-armed and the route pops. One press would close the
+  /// keyboard AND leave the screen.
+  bool _swallowBackUp = false;
+
+  /// Keeps the PopScope armed for a beat after a Back-key close. TV builds
+  /// differ in HOW the same physical press turns into a route pop (key-event
+  /// redispatch, onBackPressed, predictive back) — some paths deliver the
+  /// pop after [_editing] already flipped false, un-arming a naive
+  /// `canPop: !_editing`. Any pop landing inside this window belongs to the
+  /// press that closed the keyboard and is swallowed. Only Back-key closes
+  /// arm it — submit/focus-loss closes must not eat a legitimate follow-up
+  /// back press.
+  bool _popGuard = false;
+  Timer? _popGuardTimer;
+
+  void _armPopGuard() {
+    _popGuard = true;
+    _popGuardTimer?.cancel();
+    // Same-press pops arrive within milliseconds; 300ms covers any dispatch
+    // path's latency while staying under a deliberate human double-press.
+    _popGuardTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) {
+        _popGuard = false;
+        return;
+      }
+      setState(() => _popGuard = false);
+    });
+  }
+
   /// The field was handed to the system IME (the keyboard's smartphone key):
   /// it runs with a real input type so the Google TV phone-remote keyboard /
   /// voice input engage, and this widget intercepts NOTHING — keys, focus and
@@ -243,6 +278,7 @@ class TvTextFieldState extends State<TvTextField> {
 
   @override
   void dispose() {
+    _popGuardTimer?.cancel();
     _removeOverlay();
     _kb?.dispose();
     (widget.focusNode ?? _internalShellNode)?.removeListener(
@@ -450,22 +486,41 @@ class TvTextFieldState extends State<TvTextField> {
   // ------------------------------------------------------------------- keys
 
   KeyEventResult _handleShellKey(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+    final isBackKey = key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.browserBack;
     // Arrows accept key-repeat (held DPAD keeps moving); OK/Back act on the
     // initial press only, so holding can't machine-gun edit sessions.
-    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    if (event is KeyUpEvent) {
+      // See [_swallowBackUp]: the UP of the press that closed the keyboard
+      // must never bubble unhandled, or Android turns it into a back action.
+      if (isBackKey && _swallowBackUp) {
+        _swallowBackUp = false;
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
     final repeat = event is KeyRepeatEvent;
+    // Flag hygiene: [_swallowBackUp] pairs strictly with the MOST RECENT
+    // Back key-down. If an old up never reached this handler (a focus race
+    // moved the up elsewhere), a stale flag would eat the up of a later
+    // press whose down was deliberately left to the screen.
+    if (isBackKey && !repeat) _swallowBackUp = false;
     // System-IME hand-off: intercept NOTHING. Keys, Back and focus behave
     // exactly like the Debrify-keyboard-off mode — the escape paths the
     // screen already provides (and that are known to work) stay intact.
     if (_useSystemIme) return KeyEventResult.ignored;
-    final key = event.logicalKey;
 
     if (_editing) {
-      if (!repeat &&
-          (key == LogicalKeyboardKey.escape ||
-              key == LogicalKeyboardKey.goBack ||
-              key == LogicalKeyboardKey.browserBack)) {
-        _endEdit();
+      if (isBackKey) {
+        // Repeats included: a held Back must not leak DOWN events either
+        // (only the first press acts; the rest are just consumed).
+        if (!repeat) {
+          _swallowBackUp = true;
+          _armPopGuard(); // before _endEdit — same rebuild registers it
+          _endEdit();
+        }
         return KeyEventResult.handled;
       }
       // Safety net: the edit-time Shortcuts below normally consume these
@@ -702,8 +757,11 @@ class TvTextFieldState extends State<TvTextField> {
     // ignores key-event consumption and pops the route. That double dispatch is
     // exactly why the screen used to leave *and* the keyboard close together.
     // PopScope intercepts that nav-channel back so editing ends without popping.
+    // [_popGuard] keeps it armed through the whole press: the key-DOWN handler
+    // already flipped [_editing] false before the same press's pop arrives, so
+    // `!_editing` alone re-arms the route a few milliseconds too early.
     return PopScope(
-      canPop: !_editing,
+      canPop: !_editing && !_popGuard,
       onPopInvoked: (didPop) {
         if (didPop) return;
         _endEdit();
