@@ -191,6 +191,9 @@ class IptvResultsViewState extends State<IptvResultsView>
       playlistId: (_selectedPlaylist?.isFavorites ?? false)
           ? _favoritePlaylistIds[channel.url]
           : _selectedPlaylist?.id,
+      // Favorites are replayed from stored metadata, never re-parsed from the
+      // playlist — so the channel's own headers have to travel with it.
+      httpHeaders: channel.httpHeaders,
     );
     if (mounted) {
       setState(() {
@@ -467,6 +470,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         logoUrl: logoUrl.isEmpty ? null : logoUrl,
         group: group.isEmpty ? null : group,
         duration: -1,
+        httpHeaders: StorageService.iptvFavoriteHeaders(meta),
       );
     }).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -598,6 +602,12 @@ class IptvResultsViewState extends State<IptvResultsView>
         viewMode: PlaylistViewMode.sorted,
         iptvChannels: channels,
         iptvStartIndex: channelIndex,
+        // Opening headers for the launch channel (later zaps read them off the
+        // channel they switch to). Stremio-addon links are already-resolved CDN
+        // URLs, so they keep the addon's own defaults.
+        httpHeaders: StremioIptvService.isStremioChannelUrl(channel.url)
+            ? null
+            : channel.playbackHeaders,
       ),
     );
     // Re-arm the preview stage (see [_previewEpoch]) — but NOT yet. On TV,

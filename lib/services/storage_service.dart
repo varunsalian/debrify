@@ -2988,6 +2988,7 @@ class StorageService {
     String? logoUrl,
     String? group,
     String? playlistId,
+    Map<String, String>? httpHeaders,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
@@ -3013,11 +3014,30 @@ class StorageService {
         'logoUrl': logoUrl ?? '',
         'group': group ?? '',
         'playlistId': playlistId ?? '',
+        // The favorites view rebuilds channels from this metadata alone (no
+        // re-fetch), so a channel that needs a specific UA/Referer has to
+        // carry it here or it would play from the playlist but not from
+        // Favorites. Omitted when empty — most channels declare none.
+        if (httpHeaders != null && httpHeaders.isNotEmpty)
+          'httpHeaders': httpHeaders,
         'addedAt': DateTime.now().millisecondsSinceEpoch,
       };
     }
 
     await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(favorites));
+  }
+
+  /// Per-channel HTTP headers stored with a favorite (see
+  /// [setIptvChannelFavorited]). JSON round-trips them as a dynamic map, and
+  /// favorites saved before headers existed simply have none.
+  static Map<String, String> iptvFavoriteHeaders(Map<String, dynamic> meta) {
+    final raw = meta['httpHeaders'];
+    if (raw is! Map) return const {};
+    final headers = <String, String>{};
+    raw.forEach((key, value) {
+      if (key is String && value != null) headers[key] = value.toString();
+    });
+    return headers;
   }
 
   /// Remove all IPTV favorites that belong to a specific playlist

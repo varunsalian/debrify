@@ -1,5 +1,15 @@
 // IPTV Playlist and Channel models for M3U support
 
+/// User-Agent sent for IPTV playback when the playlist doesn't name one.
+///
+/// Without it mpv/ffmpeg (the in-app player) sends its default `Lavf/<version>`,
+/// which a large share of IPTV panels and CDNs block outright to stop
+/// restreaming — so every channel dies with no visible reason. Matches the
+/// Android TV player's data-source UA so a channel behaves the same on both.
+const String kIptvDefaultUserAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 /// Represents an IPTV M3U playlist
 class IptvPlaylist {
   final String id;
@@ -80,6 +90,12 @@ class IptvChannel {
   final String? contentType; // 'live', 'vod', or null (M3U channels)
   final Map<String, String> attributes; // Additional tvg-* attributes
 
+  /// HTTP headers this channel's playlist declared for it — via `#EXTVLCOPT:`
+  /// / `#EXTHTTP:` lines, `http-user-agent="…"` EXTINF attributes, or a
+  /// `|User-Agent=…` URL suffix. Empty for channels that declare none; see
+  /// [playbackHeaders] for what players should actually send.
+  final Map<String, String> httpHeaders;
+
   IptvChannel({
     required this.name,
     required this.url,
@@ -88,7 +104,19 @@ class IptvChannel {
     this.duration,
     this.contentType,
     this.attributes = const {},
+    this.httpHeaders = const {},
   });
+
+  /// The headers to send when playing this channel: whatever the playlist
+  /// declared, with [kIptvDefaultUserAgent] filled in when it named no UA.
+  Map<String, String> get playbackHeaders {
+    final headers = <String, String>{...httpHeaders};
+    final hasUserAgent = headers.keys.any(
+      (k) => k.toLowerCase() == 'user-agent',
+    );
+    if (!hasUserAgent) headers['User-Agent'] = kIptvDefaultUserAgent;
+    return headers;
+  }
 
   /// Lowercased "name\ngroup" haystack for search, built once per channel on
   /// first use. Searching used to call toLowerCase() on every channel's name
@@ -117,6 +145,7 @@ class IptvChannel {
     if (group != null) 'group': group,
     if (duration != null) 'duration': duration,
     if (contentType != null) 'contentType': contentType,
+    if (httpHeaders.isNotEmpty) 'httpHeaders': httpHeaders,
   };
 
   @override

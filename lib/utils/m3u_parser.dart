@@ -44,6 +44,7 @@ class M3uParser {
     String? currentGroup;
     int? currentDuration;
     Map<String, String> currentAttributes = {};
+    Map<String, String> currentHeaders = {};
 
     for (int i = startIndex; i < lines.length; i++) {
       final line = lines[i];
@@ -60,14 +61,22 @@ class M3uParser {
         currentLogo = parsed.attributes['tvg-logo'];
         currentGroup = parsed.attributes['group-title'];
         currentAttributes = parsed.attributes;
+        // Some playlists declare the channel's headers inline on the EXTINF
+        // line; the #EXTVLCOPT/#EXTHTTP lines below may then add or override.
+        currentHeaders = _headersFromAttributes(parsed.attributes);
 
         if (currentGroup != null && currentGroup.isNotEmpty) {
           categories.add(currentGroup);
         }
+      } else if (line.startsWith('#EXTVLCOPT:')) {
+        _applyVlcOption(line.substring(11), currentHeaders);
+      } else if (line.startsWith('#EXTHTTP:')) {
+        _applyExtHttp(line.substring(9), currentHeaders);
       } else if (!line.startsWith('#')) {
         // This is the URL line
         if (currentName != null && line.isNotEmpty) {
-          final url = line.trim();
+          // `url|User-Agent=…` entries carry their headers in the URL itself.
+          final (url, urlHeaders) = _splitUrlOptions(line.trim());
           // Accept playable stream schemes; keep the list curated so
           // non-playable entries (plugin://, file://, ...) stay filtered out.
           if (RegExp(r'^(https?|rtmps?|rtsps?|udp|rtp|mms[ht]?|srt)://',
@@ -80,6 +89,11 @@ class M3uParser {
               group: currentGroup,
               duration: currentDuration,
               attributes: currentAttributes,
+              // Most channels declare none, and a big playlist is tens of
+              // thousands of these — don't hand each one its own empty map.
+              httpHeaders: currentHeaders.isEmpty && urlHeaders.isEmpty
+                  ? const {}
+                  : {...currentHeaders, ...urlHeaders},
             ));
           }
         }
@@ -90,6 +104,7 @@ class M3uParser {
         currentGroup = null;
         currentDuration = null;
         currentAttributes = {};
+        currentHeaders = {};
       }
     }
 
@@ -100,6 +115,121 @@ class M3uParser {
       channels: channels,
       categories: sortedCategories,
     );
+  }
+
+  // ── Per-channel HTTP headers ────────────────────────────────────────────
+  //
+  // Playlists declare these in several dialects and players are expected to
+  // honor all of them. Dropping them (as we used to) makes a channel that
+  // needs a specific UA or Referer fail with no visible reason — and for a
+  // provider that ships one UA line per entry, that is the whole playlist.
+
+  /// Playlist option name → HTTP header name. Returns null for options that
+  /// aren't headers at all (`#EXTVLCOPT:network-caching`, ...).
+  static String? _headerNameFor(String key) {
+    switch (key.trim().toLowerCase()) {
+      case 'http-user-agent':
+      case 'user-agent':
+      case 'useragent':
+        return 'User-Agent';
+      case 'http-referrer':
+      case 'http-referer':
+      case 'referrer':
+      case 'referer':
+        return 'Referer';
+      case 'http-origin':
+      case 'origin':
+        return 'Origin';
+      case 'http-cookie':
+      case 'cookie':
+        return 'Cookie';
+    }
+    return null;
+  }
+
+  /// Headers declared inline on the EXTINF line, e.g.
+  /// `#EXTINF:-1 http-user-agent="Mozilla/5.0 ..." group-title="News",BBC`.
+  static Map<String, String> _headersFromAttributes(
+    Map<String, String> attributes,
+  ) {
+    final headers = <String, String>{};
+    attributes.forEach((key, value) {
+      final name = _headerNameFor(key);
+      if (name != null && value.isNotEmpty) headers[name] = value;
+    });
+    return headers;
+  }
+
+  /// `#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows ...)` — one option per
+  /// line, the value unquoted and free to contain '=' and spaces.
+  static void _applyVlcOption(String option, Map<String, String> headers) {
+    final eq = option.indexOf('=');
+    if (eq <= 0) return;
+    final name = _headerNameFor(option.substring(0, eq));
+    if (name == null) return;
+    var value = option.substring(eq + 1).trim();
+    if (value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.substring(1, value.length - 1);
+    }
+    if (value.isNotEmpty) headers[name] = value;
+  }
+
+  /// `#EXTHTTP:{"User-Agent":"...","Referer":"..."}` — the keys are already
+  /// HTTP header names, so they pass through as written.
+  static void _applyExtHttp(String raw, Map<String, String> headers) {
+    try {
+      final decoded = jsonDecode(raw.trim());
+      if (decoded is! Map) return;
+      decoded.forEach((key, value) {
+        if (key is String && key.trim().isNotEmpty && value != null) {
+          headers[key.trim()] = value.toString();
+        }
+      });
+    } catch (_) {
+      // Malformed #EXTHTTP: the channel still plays with whatever else it
+      // declared, rather than losing the entry.
+    }
+  }
+
+  /// Split a `url|User-Agent=X&Referer=Y` entry into the bare URL and its
+  /// headers. Left joined, the pipe segment is part of the URL we hand the
+  /// player, so every channel in such a playlist 404s.
+  ///
+  /// A '|' that yields no options at all is left alone: it's a (technically
+  /// illegal but real) literal pipe inside the URL — usually in a token —
+  /// and truncating there would break a channel that works today.
+  static (String, Map<String, String>) _splitUrlOptions(String raw) {
+    final pipe = raw.indexOf('|');
+    if (pipe < 0) return (raw, const {});
+    final headers = <String, String>{};
+    // Both separators are in the wild: `|A=1|B=2` and `|A=1&B=2`.
+    for (final part in raw.substring(pipe + 1).split(RegExp(r'[|&]'))) {
+      final eq = part.indexOf('=');
+      if (eq <= 0) continue;
+      final rawKey = part.substring(0, eq).trim();
+      // Unknown keys pass through when they read as a header name — a server
+      // ignores request headers it doesn't know, but dropping a real one
+      // (Authorization, X-...) would break the channel.
+      final name = _headerNameFor(rawKey) ??
+          (RegExp(r'^[A-Za-z][A-Za-z0-9-]*$').hasMatch(rawKey) ? rawKey : null);
+      if (name == null) continue;
+      final value = _decodeOption(part.substring(eq + 1).trim());
+      if (value.isNotEmpty) headers[name] = value;
+    }
+    if (headers.isEmpty) return (raw, const {});
+    return (raw.substring(0, pipe).trim(), headers);
+  }
+
+  /// Pipe-suffix values are percent-encoded in some playlists and plain in
+  /// others; a malformed escape must not cost us the header.
+  static String _decodeOption(String value) {
+    try {
+      return Uri.decodeComponent(value);
+    } catch (_) {
+      return value;
+    }
   }
 
   /// Parse EXTINF line

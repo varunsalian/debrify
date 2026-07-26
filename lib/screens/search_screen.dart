@@ -2182,6 +2182,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               group: meta['group'] as String?,
               duration: -1, // live stream
               attributes: const {},
+              httpHeaders: StorageService.iptvFavoriteHeaders(meta),
             );
           }).toList()..sort(
             (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -2220,9 +2221,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _iptvFavLaunching = true;
     try {
       var videoUrl = channel.url;
-      List<IptvChannel>? iptvChannels;
-      int? iptvStartIndex;
-      if (StremioIptvService.isStremioChannelUrl(channel.url)) {
+      final isStremio = StremioIptvService.isStremioChannelUrl(channel.url);
+      if (isStremio) {
         // Explicit play intent: bypass a cached-empty resolve and explain an
         // empty answer specifically (addon unreachable vs. no streams).
         final candidates = await StremioIptvService.instance
@@ -2240,8 +2240,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           return;
         }
         videoUrl = candidates.first.url;
-        iptvChannels = [channel];
-        iptvStartIndex = 0;
       }
       VideoPlayerLauncher.push(
         context,
@@ -2250,8 +2248,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           title: channel.name,
           subtitle: channel.group ?? 'IPTV',
           viewMode: PlaylistViewMode.sorted,
-          iptvChannels: iptvChannels,
-          iptvStartIndex: iptvStartIndex,
+          // Identify the launch as IPTV for plain channels too (only the
+          // Stremio branch used to): it routes playback down the live path
+          // and lets the player report a dead stream instead of sitting on a
+          // black screen.
+          iptvChannels: [channel],
+          iptvStartIndex: 0,
+          // Playlist-declared headers (+ browser UA fallback) for the launch
+          // channel; Stremio-addon links keep the addon's own defaults.
+          httpHeaders: isStremio ? null : channel.playbackHeaders,
         ),
       );
     } finally {
