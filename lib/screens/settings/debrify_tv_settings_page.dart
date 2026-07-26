@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/tv_reveal.dart';
 import 'widgets/dynamic_settings_builder.dart';
 import 'widgets/settings_widgets.dart';
 import '../../services/engine/settings_manager.dart';
@@ -53,11 +54,7 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final ctx = first.context;
           if (ctx != null) {
-            Scrollable.ensureVisible(
-              ctx,
-              alignment: 0.15,
-              duration: const Duration(milliseconds: 180),
-            );
+            tvRevealMinimal(ctx);
           }
         });
       } else if (attempt < 600) {

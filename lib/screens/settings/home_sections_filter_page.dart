@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
@@ -262,8 +263,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   void _ensureVisible(FocusNode node) {
     final ctx = node.context;
     if (ctx == null) return;
-    Scrollable.ensureVisible(ctx,
-        alignment: 0.5, duration: const Duration(milliseconds: 120));
+    tvRevealMinimal(ctx, duration: const Duration(milliseconds: 120));
   }
 
   // ── DPAD handlers ────────────────────────────────────────────────────────

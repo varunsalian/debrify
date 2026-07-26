@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -1050,9 +1051,8 @@ class _ConnectionCardState extends State<ConnectionCard> {
     target.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (target.context != null) {
-        Scrollable.ensureVisible(
+        tvRevealMinimal(
           target.context!,
-          alignment: 0.3,
           duration: const Duration(milliseconds: 200),
         );
       }

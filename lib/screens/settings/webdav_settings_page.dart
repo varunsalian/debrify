@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/webdav_item.dart';
@@ -19,11 +20,7 @@ void _focusAndReveal(FocusNode target) {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     final ctx = target.context;
     if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        alignment: 0.2,
-        duration: const Duration(milliseconds: 180),
-      );
+      tvRevealMinimal(ctx);
     }
   });
 }

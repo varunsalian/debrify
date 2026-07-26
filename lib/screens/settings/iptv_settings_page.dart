@@ -9,6 +9,7 @@ import '../../services/analytics_service.dart';
 import '../../utils/m3u_parser.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+import '../../utils/tv_reveal.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -105,17 +106,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   /// House DPAD idiom: focus a node, then scroll it into view next frame.
+  /// Minimal + vertical-only via [tvRevealMinimal] — the alignment-pinning
+  /// `Scrollable.ensureVisible` both over-scrolled (button focus dragged the
+  /// playlists section into view) and dragged the TabBarView pager sideways
+  /// (focusing the right-aligned Add button visibly switched tabs).
   void _focusAndReveal(FocusNode node) {
     node.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = node.context;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.15,
-          duration: const Duration(milliseconds: 180),
-        );
-      }
+      if (ctx != null) tvRevealMinimal(ctx);
     });
     // If the node was already focused nothing above schedules a frame, and
     // the reveal would stall until some unrelated repaint — see
@@ -891,9 +890,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             ),
             const SizedBox(height: 16),
 
-            // Tab content (fixed height container)
+            // Tab content (fixed height container). Sized for the tallest
+            // tab — From URL's three fields + button since the EPG URL field
+            // joined; at 260 the button overflowed the box (painted-but-
+            // unclipped in release, overlapping the section below).
             SizedBox(
-              height: 260, // Fixed height for tab content
+              height: 340,
               child: TabBarView(
                 controller: _tabController,
                 physics: const NeverScrollableScrollPhysics(),
@@ -1551,11 +1553,9 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
   void _ensureVisible() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && context.mounted) {
-        Scrollable.ensureVisible(
-          context,
-          alignment: 0.5,
-          duration: const Duration(milliseconds: 200),
-        );
+        // Minimal, not centering: alignment 0.5 re-scrolled the page on
+        // EVERY tile-button focus even when the tile was fully visible.
+        tvRevealMinimal(context, duration: const Duration(milliseconds: 200));
       }
     });
   }

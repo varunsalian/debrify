@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/main_page_bridge.dart';
@@ -210,11 +211,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
       if (!mounted) return;
       final ctx = node.context;
       if (ctx != null && ctx.mounted) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.15,
-          duration: const Duration(milliseconds: 180),
-        );
+        tvRevealMinimal(ctx);
       }
     });
   }
