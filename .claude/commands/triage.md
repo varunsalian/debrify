@@ -29,7 +29,9 @@ There is exactly **ONE approval gate (Stage C)** — nothing is filed or closed 
 3. **Recent code activity** (the "already fixed" signal). Use a window a bit wider than N:
    `git log --since="<N+14> days ago" --pretty=format:'%ad %s' --date=short`
    `gh release list --repo varunsalian/debrify --limit 8`
-   Also consult the auto-memory `MEMORY.md` for shipped/deferred work when a report is ambiguous.
+   Also consult the auto-memory `MEMORY.md` for shipped/deferred work when a report is ambiguous, and
+   `CODEMAP.md` (area→files index) if you need to peek at the code owning a reported area to judge
+   "already fixed vs still broken".
 
 ## Stage B — Triage (analysis, no writes)
 
