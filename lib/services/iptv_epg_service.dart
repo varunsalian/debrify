@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
@@ -14,11 +15,23 @@ class EpgProgramme {
   final DateTime start;
   final DateTime stop;
 
+  /// Xtream: the panel recorded this programme (catchup/timeshift replay).
+  final bool hasArchive;
+
+  /// Xtream: the listing's raw `start` string, verbatim — panel-LOCAL time
+  /// ("2026-07-26 20:00:00"). The timeshift endpoint wants its start in
+  /// panel-local time too, so replay URLs are built from this string rather
+  /// than converting our epoch back through timezone guesswork. Null for
+  /// XMLTV programmes (no catchup there).
+  final String? rawStart;
+
   const EpgProgramme({
     required this.title,
     required this.description,
     required this.start,
     required this.stop,
+    this.hasArchive = false,
+    this.rawStart,
   });
 
   bool airsAt(DateTime t) => !t.isBefore(start) && t.isBefore(stop);
@@ -200,6 +213,127 @@ class IptvEpgService {
     return at > 0 ? tvgId.substring(0, at) : tvgId;
   }
 
+  // ── Catchup (Xtream timeshift) ───────────────────────────────────────────
+
+  /// Which timeshift URL form this panel serves — probed once per server,
+  /// like XtreamCodesService does for live URL forms.
+  final Map<String, _CatchupForm> _catchupFormCache = {};
+
+  /// Whether [programme] on [channel] can be replayed from the panel's
+  /// archive: the panel recorded it (`has_archive`), it has finished airing,
+  /// the channel isn't explicitly archive-off, it still sits inside the
+  /// channel's archive window, and the URL carries Xtream credentials.
+  /// XMLTV programmes never qualify (hasArchive is always false there).
+  static bool isCatchupAvailable(IptvChannel channel, EpgProgramme programme) {
+    if (!programme.hasArchive) return false;
+    final now = DateTime.now();
+    if (!programme.stop.isBefore(now)) return false; // airing or future
+    // Explicit deny only — favorites-rebuilt channels carry no attributes,
+    // and the per-programme flag is the more precise signal anyway.
+    if (channel.attributes['tv_archive'] == '0') return false;
+    final days =
+        int.tryParse(channel.attributes['tv_archive_duration'] ?? '') ?? 0;
+    if (days > 0 &&
+        programme.start.isBefore(now.subtract(Duration(days: days)))) {
+      return false;
+    }
+    return _parseXtreamUrl(channel.url) != null;
+  }
+
+  /// The timeshift `start` parameter: `YYYY-MM-DD:HH-MM` in PANEL-local
+  /// time. Prefer the listing's own raw start string (already panel-local);
+  /// fall back to our local clock rendering of the parsed start — right
+  /// whenever panel and device share a timezone.
+  @visibleForTesting
+  static String catchupStart(EpgProgramme programme) {
+    final raw = programme.rawStart?.trim();
+    if (raw != null) {
+      final match = RegExp(r'^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})')
+          .firstMatch(raw);
+      if (match != null) {
+        return '${match.group(1)}:${match.group(2)}-${match.group(3)}';
+      }
+    }
+    final s = programme.start;
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${s.year}-${two(s.month)}-${two(s.day)}:${two(s.hour)}-${two(s.minute)}';
+  }
+
+  /// Resolve a playable replay URL for [programme] on the channel behind
+  /// [channelUrl], probing the panel's timeshift dialects on first use
+  /// (modern `/timeshift/user/pass/min/start/id.ts|.m3u8` path forms, then
+  /// the legacy `streaming/timeshift.php` query form). Null when the panel
+  /// answers none of them — the caller shows "replay not available".
+  Future<String?> catchupUrl(String channelUrl, EpgProgramme programme) async {
+    final ref = _parseXtreamUrl(channelUrl);
+    if (ref == null) return null;
+
+    final start = catchupStart(programme);
+    // Round the duration UP — inMinutes truncation would shave up to 59s
+    // off the end of the replay.
+    final minutes =
+        ((programme.stop.difference(programme.start).inSeconds + 59) ~/ 60)
+            .clamp(1, 24 * 60);
+    final user = Uri.encodeComponent(ref.username);
+    final pass = Uri.encodeComponent(ref.password);
+
+    String urlFor(_CatchupForm form) => switch (form) {
+          _CatchupForm.pathTs =>
+            '${ref.server}/timeshift/$user/$pass/$minutes/$start/${ref.streamId}.ts',
+          _CatchupForm.pathM3u8 =>
+            '${ref.server}/timeshift/$user/$pass/$minutes/$start/${ref.streamId}.m3u8',
+          _CatchupForm.php =>
+            '${ref.server}/streaming/timeshift.php?username=$user&password=$pass'
+                '&stream=${ref.streamId}&start=$start&duration=$minutes',
+        };
+
+    final cached = _catchupFormCache[ref.server];
+    if (cached != null) return urlFor(cached);
+
+    for (final form in _CatchupForm.values) {
+      final status = await _probeStatus(urlFor(form));
+      if (status == _probeUnreachable) {
+        // Connection-level failure — the panel itself is down; probing the
+        // remaining forms would just stack failures. Don't cache a verdict.
+        return null;
+      }
+      // A TIMEOUT (as opposed to refused/DNS-dead) keeps probing: some
+      // panels hang on the unsupported dialect's path instead of 404ing,
+      // and the next form may answer instantly.
+      if (status != null && status >= 200 && status < 300) {
+        _catchupFormCache[ref.server] = form;
+        return urlFor(form);
+      }
+    }
+    return null;
+  }
+
+  static const int _probeUnreachable = -1;
+
+  /// Status-only GET (the body may be the stream itself — never buffer it).
+  /// Returns the status code, null on timeout, or [_probeUnreachable] on a
+  /// connection-level failure (refused, DNS) — callers treat those
+  /// differently: a hang is per-URL, a dead socket is per-server.
+  Future<int?> _probeStatus(String url) async {
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', Uri.parse(url));
+      request.headers['User-Agent'] = kIptvDefaultUserAgent;
+      final response =
+          await client.send(request).timeout(const Duration(seconds: 10));
+      await response.stream.listen((_) {}).cancel();
+      return response.statusCode;
+    } on TimeoutException {
+      debugPrint('IptvEpgService: catchup probe timed out for $url');
+      return null;
+    } catch (e) {
+      debugPrint('IptvEpgService: catchup probe failed for $url: $e');
+      return _probeUnreachable;
+    } finally {
+      client.close();
+    }
+  }
+
   // ── Capability + lookups ──────────────────────────────────────────────────
 
   /// Whether [channel] can have guide data at all: a live channel whose URL
@@ -362,11 +496,14 @@ class IptvEpgService {
 
     final title = _decodeXtreamText(item['title']);
     if (title.isEmpty) return null;
+    final archive = item['has_archive'];
     return EpgProgramme(
       title: title,
       description: _decodeXtreamText(item['description']),
       start: start,
       stop: stop,
+      hasArchive: archive == 1 || archive == '1' || archive == true,
+      rawStart: item['start'] is String ? item['start'] as String : null,
     );
   }
 
@@ -472,6 +609,9 @@ class _CachedNowNext {
     return now.difference(fetchedAt) >= IptvEpgService._emptyNowNextTtl;
   }
 }
+
+/// Timeshift URL dialects panels serve, in probe order.
+enum _CatchupForm { pathTs, pathM3u8, php }
 
 class _CachedSchedule {
   final List<EpgProgramme> value;

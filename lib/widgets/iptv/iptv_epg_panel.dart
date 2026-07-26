@@ -346,10 +346,16 @@ class _EpgProgressBar extends StatelessWidget {
 class IptvSchedulePane extends StatelessWidget {
   final IptvChannel channel;
   final VoidCallback onClose;
+
+  /// Replay a finished programme from the panel archive (Xtream catchup).
+  /// Rows only offer it when [IptvEpgService.isCatchupAvailable] says so.
+  final void Function(EpgProgramme programme)? onPlayProgramme;
+
   const IptvSchedulePane({
     super.key,
     required this.channel,
     required this.onClose,
+    this.onPlayProgramme,
   });
 
   @override
@@ -415,6 +421,7 @@ class IptvSchedulePane extends StatelessWidget {
                 child: EpgScheduleList(
                   channel: channel,
                   isTelevision: true,
+                  onPlayProgramme: onPlayProgramme,
                 ),
               ),
             ],
@@ -425,8 +432,14 @@ class IptvSchedulePane extends StatelessWidget {
   }
 }
 
-/// Phone/desktop: the same schedule as a modal bottom sheet.
-Future<void> showIptvScheduleSheet(BuildContext context, IptvChannel channel) {
+/// Phone/desktop: the same schedule as a modal bottom sheet. A replay tap
+/// closes the sheet before [onPlayProgramme] runs, so the player doesn't
+/// stack on top of it.
+Future<void> showIptvScheduleSheet(
+  BuildContext context,
+  IptvChannel channel, {
+  void Function(EpgProgramme programme)? onPlayProgramme,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -475,7 +488,16 @@ Future<void> showIptvScheduleSheet(BuildContext context, IptvChannel channel) {
               ),
             ),
             Expanded(
-              child: EpgScheduleList(channel: channel, isTelevision: false),
+              child: EpgScheduleList(
+                channel: channel,
+                isTelevision: false,
+                onPlayProgramme: onPlayProgramme == null
+                    ? null
+                    : (programme) {
+                        Navigator.of(sheetContext).pop();
+                        onPlayProgramme(programme);
+                      },
+              ),
             ),
           ],
         ),
@@ -504,10 +526,12 @@ class _ProgrammeItem extends _ScheduleItem {
 class EpgScheduleList extends StatefulWidget {
   final IptvChannel channel;
   final bool isTelevision;
+  final void Function(EpgProgramme programme)? onPlayProgramme;
   const EpgScheduleList({
     super.key,
     required this.channel,
     required this.isTelevision,
+    this.onPlayProgramme,
   });
 
   @override
@@ -661,6 +685,9 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
             );
           }
           final programme = (item as _ProgrammeItem).programme;
+          final onPlay = widget.onPlayProgramme;
+          final replayable = onPlay != null &&
+              IptvEpgService.isCatchupAvailable(widget.channel, programme);
           return _ScheduleRow(
             programme: programme,
             isNow: index == _nowIndex,
@@ -668,6 +695,7 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
             isTelevision: widget.isTelevision,
             autofocus: widget.isTelevision &&
                 (index == _nowIndex || (_nowIndex == -1 && index == 1)),
+            onPlay: replayable ? () => onPlay(programme) : null,
           );
         },
       ),
@@ -681,12 +709,19 @@ class _ScheduleRow extends StatefulWidget {
   final bool isPast;
   final bool isTelevision;
   final bool autofocus;
+
+  /// Non-null when this (finished) programme can be replayed from the panel
+  /// archive — OK on TV / tap on touch plays it, and the row wears a REPLAY
+  /// tag instead of fading out like ordinary past entries.
+  final VoidCallback? onPlay;
+
   const _ScheduleRow({
     required this.programme,
     required this.isNow,
     required this.isPast,
     required this.isTelevision,
     required this.autofocus,
+    this.onPlay,
   });
 
   @override
@@ -699,7 +734,12 @@ class _ScheduleRowState extends State<_ScheduleRow> {
   @override
   Widget build(BuildContext context) {
     final p = widget.programme;
-    final titleAlpha = widget.isPast ? 0.38 : (widget.isNow ? 1.0 : 0.85);
+    final replayable = widget.onPlay != null;
+    // Replayable past programmes stay readable — they're actionable, not
+    // history; ordinary past rows fade.
+    final titleAlpha = widget.isPast
+        ? (replayable ? 0.7 : 0.38)
+        : (widget.isNow ? 1.0 : 0.85);
 
     final row = Container(
       height: _EpgScheduleListState._rowExtent,
@@ -759,12 +799,24 @@ class _ScheduleRowState extends State<_ScheduleRow> {
             const Padding(
               padding: EdgeInsets.only(left: 8),
               child: _EpgTag('NOW'),
+            )
+          else if (replayable)
+            const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: _EpgTag('REPLAY', dim: true),
             ),
         ],
       ),
     );
 
-    if (!widget.isTelevision) return row;
+    if (!widget.isTelevision) {
+      if (!replayable) return row;
+      return GestureDetector(
+        onTap: widget.onPlay,
+        behavior: HitTestBehavior.opaque,
+        child: row,
+      );
+    }
 
     return Focus(
       autofocus: widget.autofocus,
@@ -783,9 +835,10 @@ class _ScheduleRowState extends State<_ScheduleRow> {
         }
       },
       onKeyEvent: (node, event) {
-        // OK on a schedule row does nothing — swallow it so it can't fall
-        // through to anything behind the pane.
+        // OK replays an archived programme; on anything else it's swallowed
+        // so it can't fall through to whatever sits behind the pane.
         if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
+          widget.onPlay?.call();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;

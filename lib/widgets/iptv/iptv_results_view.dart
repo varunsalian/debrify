@@ -197,7 +197,11 @@ class IptvResultsViewState extends State<IptvResultsView>
   VoidCallback? _scheduleActionFor(IptvChannel channel) {
     if (!IptvEpgService.isEpgCapable(channel)) return null;
     if (widget.isTelevision) return () => _openSchedulePane(channel);
-    return () => showIptvScheduleSheet(context, channel);
+    return () => showIptvScheduleSheet(
+          context,
+          channel,
+          onPlayProgramme: (programme) => _playCatchup(channel, programme),
+        );
   }
 
   void _openSchedulePane(IptvChannel channel) {
@@ -755,6 +759,99 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
+  /// Replay an archived programme (Xtream catchup). The replay is launched
+  /// as a single-item on-demand payload rather than through [_playChannel]:
+  /// the timeshift URL is a finite VOD-style stream that isn't part of any
+  /// channel list, and the in-player guide would otherwise point at an
+  /// unrelated channel. Resume/continue-watching ride the normal VOD path —
+  /// the timeshift URL is stable for a given programme, so a half-watched
+  /// replay picks up where it left off.
+  Future<void> _playCatchup(IptvChannel channel, EpgProgramme programme) async {
+    if (_launchingChannel) return;
+    _launchingChannel = true;
+    try {
+      // Everything origin-dependent is captured BEFORE the first await: the
+      // first-use dialect probe can run for tens of seconds, and the user
+      // can switch playlists meanwhile — the widget stays mounted, so
+      // `mounted` guards don't cover it. Recording with the switched-to
+      // playlist's id would break the provider-deletion sweep (deleting B
+      // would purge A's replay; deleting A would strand the entry).
+      final originPlaylistId = _originPlaylistIdFor(channel);
+      final ticket = _loadTicket;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Preparing replay of "${programme.title}"…'),
+          // Covers the worst-case first-use probe (3 dialects × 10s timeout);
+          // hidden explicitly the moment the probe answers.
+          duration: const Duration(seconds: 30),
+        ),
+      );
+
+      final url =
+          await IptvEpgService.instance.catchupUrl(channel.url, programme);
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      // Stale: the playlist reloaded/switched, or (TV) the schedule pane
+      // this replay was picked from is gone — a player appearing over
+      // whatever the user moved on to would read as the wrong programme
+      // launching itself.
+      if (ticket != _loadTicket) return;
+      if (widget.isTelevision && _scheduleChannel?.url != channel.url) return;
+      if (url == null) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Replay not available — the panel did not answer for '
+              '"${programme.title}"',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final replay = IptvChannel(
+        name: programme.title,
+        url: url,
+        logoUrl: channel.logoUrl,
+        group: channel.name, // reads as "on <channel>" in the player UI
+        contentType: 'vod',
+        httpHeaders: channel.httpHeaders,
+      );
+      await StorageService.recordIptvWatch(
+        replay.url,
+        channelName: replay.name,
+        logoUrl: replay.logoUrl,
+        group: replay.group,
+        playlistId: originPlaylistId,
+        httpHeaders: replay.httpHeaders,
+      );
+      if (!mounted) return;
+
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: url,
+          title: programme.title,
+          subtitle: channel.name,
+          viewMode: PlaylistViewMode.sorted,
+          iptvChannels: [replay],
+          iptvStartIndex: 0,
+          httpHeaders: replay.playbackHeaders,
+        ),
+      );
+      // Same parked preview re-arm discipline as _playChannelInner.
+      if (mounted && widget.isTelevision) {
+        _previewRearmPending = true;
+      }
+      if (!widget.isTelevision && mounted) {
+        await _refreshAfterPlayback();
+      }
+    } finally {
+      _launchingChannel = false;
+    }
+  }
+
   Future<void> _playChannelInner(IptvChannel channel) async {
     // Stremio channels have no stream URL yet — resolve the ladder now (the
     // preview's winner cache usually makes this instant) and launch on the
@@ -1069,6 +1166,8 @@ class IptvResultsViewState extends State<IptvResultsView>
                 IptvSchedulePane(
                   channel: scheduleChannel,
                   onClose: _closeSchedulePane,
+                  onPlayProgramme: (programme) =>
+                      _playCatchup(scheduleChannel, programme),
                 ),
             ],
           ),

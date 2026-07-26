@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_epg_service.dart';
 
 void main() {
@@ -19,6 +20,117 @@ void main() {
 
     test('a leading @ is not a suffix', () {
       expect(IptvEpgService.stripFeedSuffix('@weird'), '@weird');
+    });
+  });
+
+  group('catchupStart', () {
+    EpgProgramme programme({String? rawStart, DateTime? start}) => EpgProgramme(
+          title: 'T',
+          description: '',
+          start: start ?? DateTime(2026, 7, 26, 20, 30),
+          stop: DateTime(2026, 7, 26, 22, 0),
+          rawStart: rawStart,
+        );
+
+    test('uses the panel-local raw string verbatim', () {
+      expect(
+        IptvEpgService.catchupStart(programme(rawStart: '2026-07-26 20:30:00')),
+        '2026-07-26:20-30',
+      );
+    });
+
+    test('tolerates a T separator and missing seconds', () {
+      expect(
+        IptvEpgService.catchupStart(programme(rawStart: '2026-07-26T09:05')),
+        '2026-07-26:09-05',
+      );
+    });
+
+    test('falls back to the parsed start when raw is absent or malformed', () {
+      expect(
+        IptvEpgService.catchupStart(programme(rawStart: 'garbage')),
+        '2026-07-26:20-30',
+      );
+      expect(
+        IptvEpgService.catchupStart(programme()),
+        '2026-07-26:20-30',
+      );
+    });
+  });
+
+  group('isCatchupAvailable', () {
+    final now = DateTime.now();
+    IptvChannel channel({Map<String, String> attributes = const {}}) =>
+        IptvChannel(
+          name: 'ESPN',
+          url: 'http://host:8080/live/user/pass/42.m3u8',
+          duration: -1,
+          attributes: attributes,
+        );
+    EpgProgramme finished({bool hasArchive = true, Duration age = const Duration(hours: 3)}) =>
+        EpgProgramme(
+          title: 'T',
+          description: '',
+          start: now.subtract(age + const Duration(hours: 1)),
+          stop: now.subtract(age),
+          hasArchive: hasArchive,
+        );
+
+    test('finished + archived + xtream url → available', () {
+      expect(IptvEpgService.isCatchupAvailable(channel(), finished()), isTrue);
+    });
+
+    test('no archive flag → unavailable', () {
+      expect(
+        IptvEpgService.isCatchupAvailable(
+          channel(),
+          finished(hasArchive: false),
+        ),
+        isFalse,
+      );
+    });
+
+    test('still airing → unavailable', () {
+      final airing = EpgProgramme(
+        title: 'T',
+        description: '',
+        start: now.subtract(const Duration(minutes: 30)),
+        stop: now.add(const Duration(minutes: 30)),
+        hasArchive: true,
+      );
+      expect(IptvEpgService.isCatchupAvailable(channel(), airing), isFalse);
+    });
+
+    test('channel explicitly archive-off → unavailable', () {
+      expect(
+        IptvEpgService.isCatchupAvailable(
+          channel(attributes: const {'tv_archive': '0'}),
+          finished(),
+        ),
+        isFalse,
+      );
+    });
+
+    test('outside the archive window → unavailable', () {
+      expect(
+        IptvEpgService.isCatchupAvailable(
+          channel(attributes: const {'tv_archive_duration': '1'}),
+          finished(age: const Duration(days: 2)),
+        ),
+        isFalse,
+      );
+    });
+
+    test('non-xtream url → unavailable', () {
+      final m3uChannel = IptvChannel(
+        name: 'X',
+        url: 'http://cdn.example.com/some/stream.m3u8',
+        duration: -1,
+      );
+      expect(
+        IptvEpgService.isCatchupAvailable(m3uChannel, finished()),
+        isFalse,
+      );
     });
   });
 }

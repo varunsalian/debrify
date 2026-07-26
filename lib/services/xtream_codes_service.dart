@@ -323,6 +323,13 @@ class XtreamCodesService {
                 if (stream['epg_channel_id'] != null)
                   'tvg-id': stream['epg_channel_id'].toString(),
                 'stream_id': streamId,
+                // Catchup: whether the panel records this channel, and for
+                // how many days back the archive reaches.
+                if (stream['tv_archive'] != null)
+                  'tv_archive': stream['tv_archive'].toString(),
+                if (stream['tv_archive_duration'] != null)
+                  'tv_archive_duration':
+                      stream['tv_archive_duration'].toString(),
               },
             ),
           );
