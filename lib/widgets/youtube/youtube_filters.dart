@@ -82,7 +82,7 @@ class YoutubeFiltersBar extends StatelessWidget {
               if (resultCount > 0)
                 Text(
                   '$resultCount video${resultCount != 1 ? 's' : ''}'
-                  '${isTelevision ? '' : ' • long press to download'}',
+                  '${isTelevision ? ' • hold OK to download' : ' • long press to download'}',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.5),
                     fontSize: 12.5,

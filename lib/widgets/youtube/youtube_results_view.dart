@@ -306,7 +306,10 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Added to downloads')),
+        SnackBar(
+          content: Text(_downloadQualityMessage(streams)),
+          duration: const Duration(seconds: 7),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -314,6 +317,23 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
         SnackBar(content: Text('Download failed: $e')),
       );
     }
+  }
+
+  /// Snackbar text explaining the chosen download quality and why it isn't
+  /// selectable. YouTube only serves a single audio+video file at low
+  /// resolutions (≤720p); 1080p and up come as separate video/audio tracks that
+  /// must be merged (muxed) — which we don't do on download — so we grab the
+  /// best combined stream automatically.
+  String _downloadQualityMessage(YoutubeResolvedStreams? streams) {
+    final h = streams?.downloadHeight;
+    final quality = h != null ? '${h}p' : 'best available';
+    if (streams?.downloadHasAudio == false) {
+      return 'Added to downloads at $quality (no audio — YouTube offered no '
+          'combined video+audio file for this one).';
+    }
+    return 'Added to downloads at $quality — the best quality YouTube serves '
+        'as a single file with audio. Higher resolutions come as separate '
+        'video/audio that must be merged, so quality can’t be picked here.';
   }
 
   /// DPAD entry point from the search input: focus the quality selector.

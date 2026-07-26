@@ -75,6 +75,16 @@ class YoutubeResolvedStreams {
 
   /// Single-file (muxed) stream for downloads — has audio, but caps at ~360p.
   final String? downloadUrl;
+
+  /// Pixel height of [downloadUrl] (e.g. 720, 360), for surfacing the actual
+  /// download quality to the user. Null if it couldn't be determined.
+  final int? downloadHeight;
+
+  /// Whether [downloadUrl] carries audio. True for a muxed stream (the normal
+  /// case); false only in the rare fallback where the sole available stream is
+  /// a video-only track (YouTube served no combined file for this video).
+  final bool downloadHasAudio;
+
   final String? title;
   final String? thumbnailUrl;
   final int? durationSeconds;
@@ -89,6 +99,8 @@ class YoutubeResolvedStreams {
     this.playUrl,
     this.audioUrl,
     this.downloadUrl,
+    this.downloadHeight,
+    this.downloadHasAudio = true,
     this.title,
     this.thumbnailUrl,
     this.durationSeconds,
@@ -392,14 +404,17 @@ class YoutubeService {
         manifest = await yt.videos.streamsClient.getManifest(videoId);
       }
 
-      // Best muxed single-file stream (download + playback fallback).
+      // Best muxed single-file stream (download + playback fallback). Keep the
+      // stream object (not just its URL) so we can report its resolution as the
+      // actual download quality to the user.
       final muxed = manifest.muxed.toList()
         ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
       final muxedMp4 = muxed.where((s) => s.container.name.toLowerCase() == 'mp4');
-      final bestMuxed =
-          (muxedMp4.isNotEmpty ? muxedMp4.first : (muxed.isNotEmpty ? muxed.first : null))
-              ?.url
-              .toString();
+      final bestMuxedStream = muxedMp4.isNotEmpty
+          ? muxedMp4.first
+          : (muxed.isNotEmpty ? muxed.first : null);
+      final bestMuxed = bestMuxedStream?.url.toString();
+      final bestMuxedHeight = bestMuxedStream?.videoResolution.height;
 
       // High-res playback: video-only track + best AAC audio (mp4). We allow
       // H.264 (avc) AND VP9, but deliberately EXCLUDE AV1 (av01) — AV1 decode is
@@ -493,10 +508,27 @@ class YoutubeService {
         // Metadata is best-effort; the stream URL is what matters.
       }
 
+      // Describe the download stream for the user. Normally the muxed stream
+      // (has audio, ≤720p). Only when no muxed stream exists do we fall back to
+      // the video-only [playUrl] — a silent file whose height is its quality.
+      final downloadUrl = bestMuxed ?? playUrl;
+      int? downloadHeight;
+      bool downloadHasAudio;
+      if (bestMuxed != null) {
+        downloadHeight = bestMuxedHeight;
+        downloadHasAudio = true;
+      } else {
+        downloadHasAudio = false;
+        final match = qualities.where((q) => q.videoUrl == playUrl);
+        downloadHeight = match.isNotEmpty ? match.first.height : null;
+      }
+
       return YoutubeResolvedStreams(
         playUrl: playUrl,
         audioUrl: audioUrl,
-        downloadUrl: bestMuxed ?? playUrl,
+        downloadUrl: downloadUrl,
+        downloadHeight: downloadHeight,
+        downloadHasAudio: downloadHasAudio,
         title: title,
         thumbnailUrl: thumb,
         durationSeconds: duration,
