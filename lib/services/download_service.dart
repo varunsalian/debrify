@@ -2046,6 +2046,27 @@ class DownloadService {
   }
 
   Future<String> _appDownloadsSubdir() async {
+    // User-chosen download folder (Windows/Linux). Mirrors the Android SAF
+    // semantics: the custom root is used as-is (no forced 'Debrify' segment —
+    // the user picked the exact folder) and per-item subfolders nest inside
+    // it. Unlike the Android grant-lost path, an invalid folder does NOT
+    // clear the pref: on desktop unavailability is routinely transient (USB
+    // drive unplugged, network mount not up yet, AV briefly locking files),
+    // so this download falls back to the default and the setting survives
+    // for when the folder comes back.
+    if (Platform.isWindows || Platform.isLinux) {
+      try {
+        final saved = await StorageService.getDownloadDirPath();
+        if (saved != null && saved.isNotEmpty) {
+          if (await _validateDownloadDirCached(saved)) {
+            return saved;
+          }
+          debugPrint(
+            'DL: custom download folder missing/unwritable; using default for this download',
+          );
+        }
+      } catch (_) {}
+    }
     if (Platform.isWindows || Platform.isMacOS) {
       // On macOS, use the user's actual Downloads folder
       try {
@@ -2280,6 +2301,48 @@ class DownloadService {
   // must not run one cross-process DocumentsProvider query per file.
   String? _validatedTreeUri;
   DateTime? _validatedTreeUriAt;
+
+  String? _validatedDownloadDir;
+  DateTime? _validatedDownloadDirAt;
+
+  /// Desktop counterpart of [_validateTreeUriCached]: the custom folder still
+  /// exists and is writable (probe file), cached 30s so bulk enqueues don't
+  /// hit the filesystem per item. Catches unplugged drives, deleted folders,
+  /// and lost write permission.
+  Future<bool> _validateDownloadDirCached(String dirPath) async {
+    final at = _validatedDownloadDirAt;
+    if (_validatedDownloadDir == dirPath &&
+        at != null &&
+        DateTime.now().difference(at) < const Duration(seconds: 30)) {
+      return true;
+    }
+    bool ok = false;
+    try {
+      if (await Directory(dirPath).exists()) {
+        final probe = File(
+          path.join(dirPath, '.debrify_write_probe_${_idSeq++}'),
+        );
+        await probe.writeAsString('probe', flush: true);
+        // Write success alone proves writability. The delete is best-effort:
+        // on Windows an AV/indexer can briefly lock the fresh file and make
+        // delete throw — that must not fail the whole validation.
+        try {
+          await probe.delete();
+        } catch (_) {}
+        ok = true;
+      }
+    } catch (_) {
+      ok = false;
+    }
+    if (ok) {
+      _validatedDownloadDir = dirPath;
+      _validatedDownloadDirAt = DateTime.now();
+    } else {
+      _validatedDownloadDir = null;
+      _validatedDownloadDirAt = null;
+    }
+    return ok;
+  }
 
   Future<bool> _validateTreeUriCached(String treeUri) async {
     final at = _validatedTreeUriAt;

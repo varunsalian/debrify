@@ -916,6 +916,30 @@ class StorageService {
     await prefs.remove(_downloadTreeNameKey);
   }
 
+  // ── Custom download location (desktop: plain filesystem path) ───────────
+  // Windows/Linux only. macOS is deliberately excluded: the app is sandboxed
+  // with a read-only user-selected-files entitlement, so a picked folder
+  // needs security-scoped bookmarks to survive relaunch — separate feature.
+  static const String _downloadDirPathKey = 'download_dir_path_v1';
+
+  /// The persisted absolute directory for the user-chosen download folder on
+  /// desktop, or null when downloads go to the platform default.
+  static Future<String?> getDownloadDirPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_downloadDirPathKey);
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  static Future<void> setDownloadDirPath(String dirPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_downloadDirPathKey, dirPath);
+  }
+
+  static Future<void> clearDownloadDirPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_downloadDirPathKey);
+  }
+
   // ── Continue Watching (recently watched items for home screen) ──────────
 
   /// Get all continue watching items, sorted by most recent first.
