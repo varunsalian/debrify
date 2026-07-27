@@ -436,6 +436,9 @@
     <!-- Subtitle Settings Panel -->
     <include layout="@layout/view_subtitle_settings_panel" />
 
+    <!-- Unified Player Menu (Miller columns) -->
+    <include layout="@layout/view_unified_menu" />
+
     <!-- Buffering Indicator (OTT-style centered spinner) -->
     <FrameLayout
         android:id="@+id/player_buffering_indicator"

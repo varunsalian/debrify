@@ -37,7 +37,12 @@ class UnifiedMenuController(
     private val col2Header: TextView,
     private val col3Header: TextView,
     private val preview: TextView,
-    private val callbacks: Callbacks
+    private val callbacks: Callbacks,
+    // Ordered section ids — must match the order of Model.col1. Defaulted to the
+    // torrent player's five sections; the Torbox player passes its own subset
+    // (it has no "sources" section). Only used by show(sectionId).
+    private val sectionIds: List<String> =
+        listOf("audio", "subs", "sources", "display", "playback")
 ) {
 
     /** One rendered row. Painted, not natively focusable (except the search field). */
@@ -54,9 +59,51 @@ class UnifiedMenuController(
         val onAdjust: ((Int) -> Unit)? = null
     )
 
+    /** SAM shims so Java callers (the Torbox player) can pass lambdas for row actions. */
+    fun interface OkAction { fun run() }
+    fun interface AdjustAction { fun onAdjust(direction: Int) }
+
+    /**
+     * Fluent [Row] builder for Java callers — Kotlin's named/default args and
+     * trailing-lambda syntax aren't available from Java, so this keeps the Torbox
+     * player's menu model readable. Kotlin callers can keep using [Row] directly.
+     */
+    class RowBuilder internal constructor(private val title: String) {
+        private var value: String? = null
+        private var selected = false
+        private var accent = false
+        private var enabled = true
+        private var swatch: Int? = null
+        private var adjustable = false
+        private var tag: String? = null
+        private var onOk: (() -> Unit)? = null
+        private var onAdjust: ((Int) -> Unit)? = null
+
+        fun value(v: String?): RowBuilder { this.value = v; return this }
+        fun selected(b: Boolean): RowBuilder { this.selected = b; return this }
+        fun accent(b: Boolean): RowBuilder { this.accent = b; return this }
+        fun enabled(b: Boolean): RowBuilder { this.enabled = b; return this }
+        fun swatch(color: Int): RowBuilder { this.swatch = color; return this }
+        fun tag(t: String?): RowBuilder { this.tag = t; return this }
+        fun onOk(action: OkAction): RowBuilder { this.onOk = { action.run() }; return this }
+        fun onAdjust(action: AdjustAction): RowBuilder {
+            this.adjustable = true
+            this.onAdjust = { d -> action.onAdjust(d) }
+            return this
+        }
+
+        fun build(): Row =
+            Row(title, value, selected, accent, enabled, swatch, adjustable, tag, onOk, onAdjust)
+    }
+
+    companion object {
+        /** Start a [RowBuilder]; call `.build()` to finish. Intended for Java callers. */
+        @JvmStatic fun row(title: String): RowBuilder = RowBuilder(title)
+    }
+
     enum class Col3Mode { ROWS, SEARCH }
 
-    data class Model(
+    data class Model @JvmOverloads constructor(
         val col1: List<Row>,
         val col2Title: String,
         val col2: List<Row>,
@@ -78,9 +125,6 @@ class UnifiedMenuController(
         fun stylePreview(tv: TextView)
         fun onHidden()
     }
-
-    // Ordered section ids — must match the order of Model.col1.
-    private val sectionIds = listOf("audio", "subs", "sources", "display", "playback")
 
     private val sel = intArrayOf(0, 0, 0)   // section, col2, col3(+1 in SEARCH where 0=field)
     private var activeCol = 0

@@ -81,6 +81,7 @@ import com.debrify.app.util.SubtitleFontManager;
 import com.debrify.app.util.SubtitleSettings;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -297,6 +298,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private SubtitleLinePickerController linePickerOverlay;
     private final Handler subtitleSeekHandler = new Handler(Looper.getMainLooper());
 
+    // Unified player menu (Miller columns) — additive, gated by USE_UNIFIED_MENU.
+    // Mirrors the torrent player's new menu; the old dialogs/panel remain as
+    // fallback when the flag is off (or the layout view is absent).
+    private static final boolean USE_UNIFIED_MENU = true;
+    private UnifiedMenuController unifiedMenu;
+
     // Analytics keep-alive: this native player has no periodic progress channel
     // of its own, so we ping Flutter every few minutes while actually playing so
     // the analytics session is not cut off during a long watch. No content data
@@ -505,6 +512,24 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     findViewById(R.id.subtitle_identity_label),
                     findViewById(R.id.subtitle_search_button),
                     buildSubtitlePanelCallbacks()
+            );
+        }
+
+        // Unified player menu (Miller columns) — additive, gated by USE_UNIFIED_MENU.
+        // The Torbox player has no "sources" section, so it passes a 4-section list.
+        View unifiedMenuRoot = findViewById(R.id.unified_menu_root);
+        if (unifiedMenuRoot != null) {
+            unifiedMenu = new UnifiedMenuController(
+                    this,
+                    unifiedMenuRoot,
+                    findViewById(R.id.unified_col1),
+                    findViewById(R.id.unified_col2),
+                    findViewById(R.id.unified_col3),
+                    findViewById(R.id.unified_col2_header),
+                    findViewById(R.id.unified_col3_header),
+                    findViewById(R.id.unified_preview),
+                    buildUnifiedMenuCallbacks(),
+                    Arrays.asList("audio", "subs", "display", "playback")
             );
         }
 
@@ -831,7 +856,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (nightModeButton != null) {
             nightModeButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             nightModeButton.setOnClickListener(v -> {
-                showNightModeDialog();
+                if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                    hideControlsMenu();
+                    unifiedMenu.show("audio", "night");
+                } else {
+                    showNightModeDialog();
+                }
             });
             nightModeButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
@@ -839,8 +869,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (audioButton != null) {
             audioButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             audioButton.setOnClickListener(v -> {
-                showAudioSelectionDialog();
-                scheduleHideControlsMenu();
+                if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                    hideControlsMenu();
+                    unifiedMenu.show("audio", null);
+                } else {
+                    showAudioSelectionDialog();
+                    scheduleHideControlsMenu();
+                }
             });
             audioButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
@@ -849,7 +884,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             subtitleButton.setOnClickListener(v -> {
                 hideControlsMenu();
-                showSubtitleSettingsPanel();
+                if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                    unifiedMenu.show("subs", null);
+                } else {
+                    showSubtitleSettingsPanel();
+                }
             });
             subtitleButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
@@ -867,8 +906,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (speedButton != null) {
             speedButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             speedButton.setOnClickListener(v -> {
-                cyclePlaybackSpeed();
-                scheduleHideControlsMenu();
+                if (USE_UNIFIED_MENU && unifiedMenu != null) {
+                    hideControlsMenu();
+                    unifiedMenu.show("playback", "speed");
+                } else {
+                    cyclePlaybackSpeed();
+                    scheduleHideControlsMenu();
+                }
             });
             speedButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
@@ -3521,6 +3565,342 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         };
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // UNIFIED PLAYER MENU (Miller columns) — additive, gated by USE_UNIFIED_MENU.
+    // Mirrors the torrent player's menu but drops the "sources" section (Torbox
+    // plays a single cloud stream) and reuses the existing search/sync dialogs
+    // instead of an inline search field. All apply-logic delegates to the
+    // methods the old dialogs/panel already use — nothing is duplicated.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private UnifiedMenuController.Callbacks buildUnifiedMenuCallbacks() {
+        return new UnifiedMenuController.Callbacks() {
+            @NonNull
+            @Override
+            public UnifiedMenuController.Model buildModel(int sectionIndex, int col2Index) {
+                List<UnifiedMenuController.Row> col1 = umSectionRows();
+                switch (sectionIndex) {
+                    case 1:  return umSubsModel(col1, col2Index);
+                    case 2:  return umDisplayModel(col1, col2Index);
+                    case 3:  return umPlaybackModel(col1, col2Index);
+                    case 0:
+                    default: return umAudioModel(col1, col2Index);
+                }
+            }
+
+            @Override
+            public void onSearchSubmit(@NonNull String query) {
+                // Torbox subtitle search uses its own dialog (opened from the
+                // Subtitles → Search row), so the inline search field is unused.
+            }
+
+            @NonNull
+            @Override
+            public String searchInitialQuery() {
+                return "";
+            }
+
+            @Override
+            public void stylePreview(@NonNull TextView tv) {
+                umStylePreview(tv);
+            }
+
+            @Override
+            public void onHidden() {
+                if (playerView != null) {
+                    playerView.requestFocus();
+                }
+            }
+        };
+    }
+
+    /** Column 1 — the section list (order MUST match buildModel + sectionIds). */
+    private List<UnifiedMenuController.Row> umSectionRows() {
+        String subBadge = isLoadingStremioSubtitles
+                ? "…"
+                : (!stremioSubtitles.isEmpty() ? String.valueOf(stremioSubtitles.size()) : null);
+        List<UnifiedMenuController.Row> rows = new ArrayList<>();
+        rows.add(UnifiedMenuController.row("Audio").build());
+        rows.add(UnifiedMenuController.row("Subtitles").value(subBadge).build());
+        rows.add(UnifiedMenuController.row("Display").build());
+        rows.add(UnifiedMenuController.row("Playback").build());
+        return rows;
+    }
+
+    // ── Audio ────────────────────────────────────────────────────────────
+    private UnifiedMenuController.Model umAudioModel(List<UnifiedMenuController.Row> col1, int col2Index) {
+        List<UnifiedMenuController.Row> col2 = new ArrayList<>();
+        col2.add(UnifiedMenuController.row("Audio track").tag("audio").build());
+        col2.add(UnifiedMenuController.row("Night mode")
+                .value(nightModeLabels[Math.max(0, Math.min(nightModeIndex, nightModeLabels.length - 1))])
+                .tag("night").build());
+
+        List<UnifiedMenuController.Row> col3 = new ArrayList<>();
+        String col3Title;
+        if (col2Index == 1) {
+            col3Title = "Night mode · loudness";
+            for (int i = 0; i < nightModeLabels.length; i++) {
+                final int idx = i;
+                col3.add(UnifiedMenuController.row(nightModeLabels[i])
+                        .selected(i == nightModeIndex)
+                        .onOk(() -> applyNightMode(idx))
+                        .build());
+            }
+        } else {
+            col3Title = "Audio tracks";
+            List<TrackOption> tracks = (player != null && trackSelector != null)
+                    ? collectTrackOptions(C.TRACK_TYPE_AUDIO)
+                    : Collections.emptyList();
+            if (tracks.isEmpty()) {
+                col3.add(UnifiedMenuController.row("No audio tracks available").enabled(false).build());
+            } else {
+                for (TrackOption t : tracks) {
+                    final TrackOption option = t;
+                    boolean sel = option.group != null && option.group.isTrackSelected(option.trackIndex);
+                    col3.add(UnifiedMenuController.row(option.label)
+                            .selected(sel)
+                            .onOk(() -> applyAudioTrack(option))
+                            .build());
+                }
+            }
+        }
+        return new UnifiedMenuController.Model(col1, "AUDIO", col2, col3Title, col3);
+    }
+
+    // ── Subtitles (track + appearance + timing + search) ───────────────────
+    private UnifiedMenuController.Model umSubsModel(List<UnifiedMenuController.Row> col1, int col2Index) {
+        List<UnifiedMenuController.Row> col2 = new ArrayList<>();
+        col2.add(UnifiedMenuController.row("Track").tag("track").build());
+        col2.add(UnifiedMenuController.row("Appearance").tag("appearance").build());
+        col2.add(UnifiedMenuController.row("Timing").tag("timing").build());
+        col2.add(UnifiedMenuController.row("Search").tag("search").accent(true).build());
+
+        List<UnifiedMenuController.Row> col3;
+        String col3Title;
+        boolean previewVisible = false;
+        switch (col2Index) {
+            case 1:
+                col3Title = "Appearance · live";
+                col3 = umAppearanceRows();
+                previewVisible = true;
+                break;
+            case 2:
+                col3Title = "Timing";
+                col3 = umTimingRows();
+                break;
+            case 3:
+                col3Title = "Fix subtitles";
+                col3 = umSearchRows();
+                break;
+            case 0:
+            default:
+                col3Title = "Track";
+                col3 = umSubtitleTrackRows();
+                break;
+        }
+        return new UnifiedMenuController.Model(
+                col1, umSubtitleIdentityLabel(), col2, col3Title, col3,
+                UnifiedMenuController.Col3Mode.ROWS, previewVisible);
+    }
+
+    private List<UnifiedMenuController.Row> umSubtitleTrackRows() {
+        // Populate the flat list lazily (mirrors the panel). Don't rebuild on
+        // every render: rebuild re-derives the selected index from the not-yet-
+        // updated player tracks and would clobber a just-made selection.
+        if (subtitleTrackOptions.isEmpty()) {
+            rebuildSubtitleTrackOptions();
+        }
+        List<UnifiedMenuController.Row> rows = new ArrayList<>();
+        rows.add(UnifiedMenuController.row("Off")
+                .selected(currentSubtitleTrackIndex < 0)
+                .onOk(() -> umSelectSubtitle(0))
+                .build());
+        for (int i = 0; i < subtitleTrackOptions.size(); i++) {
+            final TrackOption opt = subtitleTrackOptions.get(i);
+            final int panelIndex = i + 1;
+            if (opt.trackIndex == -2) {   // "⏳ Loading external subtitles..." placeholder
+                rows.add(UnifiedMenuController.row(opt.label).enabled(false).build());
+            } else {
+                rows.add(UnifiedMenuController.row(opt.label)
+                        .selected(i == currentSubtitleTrackIndex)
+                        .onOk(() -> umSelectSubtitle(panelIndex))
+                        .build());
+            }
+        }
+        return rows;
+    }
+
+    /** Mirror of the subtitle panel's selectTrack(index): 0 == Off, else index-1
+     *  into [subtitleTrackOptions] (embedded or external). */
+    private void umSelectSubtitle(int index) {
+        if (index == 0) {
+            currentSubtitleTrackIndex = -1;
+            currentStremioSubtitleIndex = -1;
+            applySubtitleTrack(null);
+        } else {
+            int trackIdx = index - 1;
+            if (trackIdx < 0 || trackIdx >= subtitleTrackOptions.size()) return;
+            TrackOption opt = subtitleTrackOptions.get(trackIdx);
+            if (opt.trackIndex == -2) return;   // loading placeholder
+            currentSubtitleTrackIndex = trackIdx;
+            applySelectedSubtitleTrackFromPanel();
+        }
+    }
+
+    private List<UnifiedMenuController.Row> umAppearanceRows() {
+        List<UnifiedMenuController.Row> rows = new ArrayList<>();
+        rows.add(UnifiedMenuController.row("Size")
+                .value(SubtitleSettings.getCurrentSize(this).getLabel())
+                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleSizeUp(this); else SubtitleSettings.cycleSizeDown(this); applySubtitleSettings(); })
+                .build());
+        rows.add(UnifiedMenuController.row("Style")
+                .value(SubtitleSettings.getCurrentStyle(this).getLabel())
+                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleStyleUp(this); else SubtitleSettings.cycleStyleDown(this); applySubtitleSettings(); })
+                .build());
+
+        SubtitleSettings.ColorOption color = SubtitleSettings.getCurrentColor(this);
+        rows.add(UnifiedMenuController.row("Text colour")
+                .value(color.getLabel())
+                .swatch(color.getColor())
+                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleColorUp(this); else SubtitleSettings.cycleColorDown(this); applySubtitleSettings(); })
+                .build());
+
+        SubtitleSettings.OutlineColorOption outline = SubtitleSettings.getCurrentOutlineColor(this);
+        UnifiedMenuController.RowBuilder outlineRow = UnifiedMenuController.row("Outline colour")
+                .value(outline.getLabel());
+        if (outline.getColor() != null) {
+            outlineRow.swatch(outline.getColor());
+        }
+        outlineRow.onAdjust(d -> { if (d > 0) SubtitleSettings.cycleOutlineColorUp(this); else SubtitleSettings.cycleOutlineColorDown(this); applySubtitleSettings(); });
+        rows.add(outlineRow.build());
+
+        rows.add(UnifiedMenuController.row("Background")
+                .value(SubtitleSettings.getCurrentBg(this).getLabel())
+                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleBgUp(this); else SubtitleSettings.cycleBgDown(this); applySubtitleSettings(); })
+                .build());
+        rows.add(UnifiedMenuController.row("Position")
+                .value(SubtitleSettings.getCurrentElevation(this).getLabel())
+                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleElevationUp(this); else SubtitleSettings.cycleElevationDown(this); applySubtitleSettings(); })
+                .build());
+        rows.add(UnifiedMenuController.row("Font")
+                .value(SubtitleFontManager.getCurrentFontLabel(this))
+                .onAdjust(d -> { if (d > 0) SubtitleFontManager.cycleFontUp(this); else SubtitleFontManager.cycleFontDown(this); applySubtitleSettings(); })
+                .build());
+        rows.add(UnifiedMenuController.row("Bold")
+                .value(SubtitleSettings.getBold(this) ? "On" : "Off")
+                .onAdjust(d -> { SubtitleSettings.setBold(this, !SubtitleSettings.getBold(this)); applySubtitleSettings(); })
+                .build());
+        rows.add(UnifiedMenuController.row("Reset all to defaults")
+                .accent(true)
+                .onOk(() -> { SubtitleSettings.resetToDefaults(this); SubtitleFontManager.resetToDefault(this); applySubtitleSettings(); })
+                .build());
+        return rows;
+    }
+
+    private List<UnifiedMenuController.Row> umTimingRows() {
+        long ms = SubtitleSettings.getSyncOffsetMs(this);
+        List<UnifiedMenuController.Row> rows = new ArrayList<>();
+        // Sync needs the subtitle on screen to judge alignment (a bottom menu
+        // column covers it), so this opens the dedicated over-video overlay:
+        // slider for embedded subs, "tap the line" picker for downloaded subs.
+        rows.add(UnifiedMenuController.row("Adjust timing  ▸")
+                .value(SubtitleSettings.formatSyncOffset(ms))
+                .swatch(SubtitleSettings.getSyncOffsetColor(ms))
+                .accent(true)
+                .onOk(() -> { if (unifiedMenu != null) unifiedMenu.hide(); showSyncOverlay(); })
+                .build());
+        return rows;
+    }
+
+    private List<UnifiedMenuController.Row> umSearchRows() {
+        List<UnifiedMenuController.Row> rows = new ArrayList<>();
+        rows.add(UnifiedMenuController.row("Search online…")
+                .accent(true)
+                .onOk(() -> { if (unifiedMenu != null) unifiedMenu.hide(); showSearchSubtitleDialog(); })
+                .build());
+        return rows;
+    }
+
+    /** Header shown above the subtitle sub-controls (detected / chosen identity). */
+    private String umSubtitleIdentityLabel() {
+        if (manualSubtitleDisplayLabel != null && !manualSubtitleDisplayLabel.isEmpty()) {
+            return "Chosen: " + manualSubtitleDisplayLabel;
+        }
+        String query = buildSubtitleSearchInitialQuery(currentStreamTitle);
+        if (!query.isEmpty()) {
+            return "Subtitles · " + query;
+        }
+        return "SUBTITLES";
+    }
+
+    // ── Display ────────────────────────────────────────────────────────────
+    private UnifiedMenuController.Model umDisplayModel(List<UnifiedMenuController.Row> col1, int col2Index) {
+        int idx = Math.max(0, Math.min(resizeModeIndex, resizeModeLabels.length - 1));
+        List<UnifiedMenuController.Row> col2 = new ArrayList<>();
+        col2.add(UnifiedMenuController.row("Aspect ratio").value(resizeModeLabels[idx]).tag("aspect").build());
+
+        List<UnifiedMenuController.Row> col3 = new ArrayList<>();
+        for (int i = 0; i < resizeModeLabels.length; i++) {
+            final int target = i;
+            col3.add(UnifiedMenuController.row(resizeModeLabels[i])
+                    .selected(i == resizeModeIndex)
+                    .onOk(() -> {
+                        resizeModeIndex = Math.max(0, Math.min(target, resizeModes.length - 1));
+                        if (playerView != null) {
+                            playerView.setResizeMode(resizeModes[resizeModeIndex]);
+                        }
+                        updateAspectButtonLabel();
+                    })
+                    .build());
+        }
+        return new UnifiedMenuController.Model(col1, "DISPLAY", col2, "Aspect ratio", col3);
+    }
+
+    // ── Playback ─────────────────────────────────────────────────────────
+    private UnifiedMenuController.Model umPlaybackModel(List<UnifiedMenuController.Row> col1, int col2Index) {
+        int idx = Math.max(0, Math.min(playbackSpeedIndex, playbackSpeedLabels.length - 1));
+        List<UnifiedMenuController.Row> col2 = new ArrayList<>();
+        col2.add(UnifiedMenuController.row("Playback speed").value(playbackSpeedLabels[idx]).tag("speed").build());
+
+        List<UnifiedMenuController.Row> col3 = new ArrayList<>();
+        for (int i = 0; i < playbackSpeedLabels.length; i++) {
+            final int target = i;
+            col3.add(UnifiedMenuController.row(playbackSpeedLabels[i])
+                    .selected(i == playbackSpeedIndex)
+                    .onOk(() -> {
+                        playbackSpeedIndex = Math.max(0, Math.min(target, playbackSpeeds.length - 1));
+                        if (player != null) {
+                            player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex]);
+                        }
+                    })
+                    .build());
+        }
+        return new UnifiedMenuController.Model(col1, "PLAYBACK", col2, "Playback speed", col3);
+    }
+
+    /** Style the live subtitle-appearance preview from the current SubtitleSettings. */
+    private void umStylePreview(TextView tv) {
+        tv.setText("Sample subtitle preview");
+        tv.setTextColor(SubtitleSettings.getCurrentColor(this).getColor());
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, SubtitleSettings.getFontSizeSp(this));
+        tv.setTypeface(SubtitleSettings.getEffectiveTypeface(this));
+        tv.setBackgroundColor(SubtitleSettings.getCurrentBg(this).getColor());
+        if (SubtitleSettings.getStyleIndex(this) != 0) {   // 0 = "None" edge
+            Integer edge = SubtitleSettings.getCurrentOutlineColor(this).getColor();
+            tv.setShadowLayer(6f, 0f, 0f, edge != null ? edge : Color.BLACK);
+        } else {
+            tv.setShadowLayer(0f, 0f, 0f, 0);
+        }
+    }
+
+    /** Re-render the unified menu when its backing state changes (e.g. subtitles
+     *  finish loading) — no-op if it isn't open. */
+    private void refreshUnifiedMenuIfVisible() {
+        if (unifiedMenu != null && unifiedMenu.isVisible()) {
+            unifiedMenu.render();
+        }
+    }
+
     // ---------------------------------------------------------------------
     // Manual "Search Movie/Show Subtitles" flow
     // ---------------------------------------------------------------------
@@ -4078,6 +4458,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (subtitlePanel != null) {
             subtitlePanel.refresh();
         }
+        // Keep the unified menu's subtitle list/badge in sync when it's the
+        // surface that's open (e.g. external subtitles finish downloading).
+        refreshUnifiedMenuIfVisible();
     }
 
     private void applySelectedSubtitleTrackFromPanel() {
@@ -4710,6 +5093,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Subtitle Settings Panel is visible - handle keys
         if (subtitlePanel != null && subtitlePanel.isVisible()) {
             return subtitlePanel.dispatchKey(event);
+        }
+
+        // Unified player menu (Miller columns). Only navigation keys are consumed;
+        // in edit mode (unused on Torbox, but handled for parity) all keys fall
+        // through except the boundary keys the controller uses to leave the field.
+        if (unifiedMenu != null && unifiedMenu.isVisible()) {
+            if (unifiedMenu.getInEditMode()) {
+                if (unifiedMenu.handleEditModeKey(event)) return true;
+                return super.dispatchKeyEvent(event);
+            }
+            if (unifiedMenu.dispatchKey(event)) return true;
+            return super.dispatchKeyEvent(event);
         }
 
         if (seekbarVisible) {
