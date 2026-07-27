@@ -35,6 +35,7 @@ import '../services/update_service.dart';
 import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
+import 'settings/settings_search.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
@@ -595,6 +596,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _indexerManagersInfo,
       ],
       firstFocusNode: _firstCardFocusNode,
+      onOpenSearch: _openSettingsSearch,
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
@@ -645,6 +647,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         indexerManagers: _indexerManagersInfo,
         firstCardFocusNode: _firstCardFocusNode,
       ),
+      onOpenSearch: _openSettingsSearch,
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenFilterSettings: _openFilterSettings,
       onOpenProviderSettings: _openProviderSettings,
@@ -677,6 +680,602 @@ class _SettingsScreenState extends State<SettingsScreen> {
       supportDonationSubtitle: _supportSettingsSubtitle,
       onOpenSupportDonation: _openSupportDonation,
     );
+  }
+
+  Future<void> _openSettingsSearch() async {
+    await pushSettingsPage(
+      context,
+      SettingsSearchPage(entries: _buildSearchIndex()),
+    );
+    if (!mounted) return;
+    // A deep-linked page may have changed a connection/login; refresh so the
+    // underlying settings surface is current when search closes.
+    setState(() {});
+  }
+
+  /// Flat, searchable index of every settings destination. Built fresh on open
+  /// so dynamic copy (download folder, update status, connection captions) and
+  /// live toggle values are current. Navigable entries reuse the same
+  /// `_openXxx` handlers the layouts wire, so actions never drift; toggle
+  /// entries read/write the same state fields as their inline rows.
+  ///
+  /// Only top-level destinations are indexed today; [SettingsSearchEntry.keywords]
+  /// carry the in-page concepts (sd card, 4k, epg, scrobble…) so a search still
+  /// lands on the owning page. Per-leaf deep-links are a future extension —
+  /// add entries here.
+  List<SettingsSearchEntry> _buildSearchIndex() {
+    SettingsSearchEntry conn(ConnectionInfo info, List<String> keywords) =>
+        SettingsSearchEntry(
+          icon: Icons.link_rounded,
+          title: info.title,
+          subtitle: info.caption,
+          category: 'Connections',
+          keywords: keywords,
+          onTap: info.onTap,
+        );
+
+    SettingsSearchEntry nav(
+      SettingsRowContent c,
+      String category,
+      Future<void> Function() onTap, {
+      List<String> keywords = const [],
+      String? subtitle,
+      bool destructive = false,
+    }) => SettingsSearchEntry(
+      icon: c.icon,
+      title: c.title,
+      subtitle: subtitle ?? c.subtitle,
+      category: category,
+      keywords: keywords,
+      destructive: destructive,
+      onTap: onTap,
+    );
+
+    return [
+      // Connections
+      conn(_rdInfo, const ['debrid', 'real-debrid', 'rd', 'premium']),
+      conn(_torboxInfo, const ['debrid', 'premium']),
+      conn(_premiumizeInfo, const ['debrid', 'premium']),
+      conn(_allDebridInfo, const ['debrid', 'ad', 'premium']),
+      conn(_pikpakInfo, const ['cloud', 'storage']),
+      conn(_webDavInfo, const ['cloud', 'nas', 'server']),
+      conn(_iptvInfo, const [
+        'live tv',
+        'm3u',
+        'playlist',
+        'channels',
+        'epg',
+        'xtream',
+      ]),
+      conn(_traktInfo, const [
+        'scrobble',
+        'sync',
+        'watch history',
+        'watchlist',
+      ]),
+      conn(_simklInfo, const ['scrobble', 'sync', 'watch history']),
+      if (kMdblistEnabled) conn(_mdblistInfo, const ['lists', 'ratings']),
+      conn(_indexerManagersInfo, const [
+        'indexer',
+        'torznab',
+        'jackett',
+        'prowlarr',
+        'engines',
+      ]),
+
+      // General
+      nav(
+        SettingsRows.homePage,
+        'General',
+        _openHomePageSettings,
+        keywords: const ['default view', 'startup', 'landing', 'tab'],
+      ),
+      nav(
+        SettingsRows.player,
+        'General',
+        _openExternalPlayerSettings,
+        keywords: const [
+          'external player',
+          'vlc',
+          'mpv',
+          'mx player',
+          'video player',
+          'subtitle',
+          'subtitles',
+          'audio track',
+        ],
+      ),
+      nav(
+        SettingsRows.remote,
+        'General',
+        _openRemoteControl,
+        keywords: const ['cast', 'handoff', 'phone', 'receive', 'send', 'setup'],
+      ),
+
+      // Search
+      nav(
+        SettingsRows.searchSettings,
+        'Search',
+        _openTorrentSettings,
+        keywords: const ['engines', 'sorting', 'torrent', 'sources'],
+      ),
+      nav(
+        SettingsRows.filterSettings,
+        'Search',
+        _openFilterSettings,
+        keywords: const [
+          'quality',
+          'resolution',
+          '1080p',
+          '4k',
+          '2160p',
+          'hdr',
+          'language',
+          'codec',
+          'hevc',
+        ],
+      ),
+      nav(
+        SettingsRows.providerSettings,
+        'Search',
+        _openProviderSettings,
+        keywords: const ['default provider', 'add torrent', 'debrid'],
+      ),
+      nav(
+        SettingsRows.quickPlay,
+        'Search',
+        _openQuickPlaySettings,
+        keywords: const ['instant', 'auto play', 'one tap'],
+      ),
+
+      // TV Mode
+      nav(
+        SettingsRows.debrifyTv,
+        'TV Mode',
+        _openDebrifyTvSettings,
+        keywords: const ['channels', 'limits', 'playback', 'android tv'],
+      ),
+      SettingsSearchEntry(
+        icon: SettingsRows.tvKeyboard.icon,
+        title: SettingsRows.tvKeyboard.title,
+        subtitle: SettingsRows.tvKeyboard.subtitle,
+        category: 'TV Mode',
+        keywords: const [
+          'on-screen keyboard',
+          'remote',
+          'text input',
+          'ime',
+          'typing',
+        ],
+        toggleValue: () => _tvKeyboardEnabled,
+        onToggle: _toggleTvKeyboard,
+      ),
+
+      // Downloads
+      if (_downloadLocationSupported)
+        nav(
+          SettingsRows.downloadLocation,
+          'Downloads',
+          _openDownloadLocationSettings,
+          subtitle: _downloadLocationSubtitle,
+          keywords: const [
+            'sd card',
+            'folder',
+            'external storage',
+            'saf',
+            'location',
+            'path',
+            'directory',
+            'sd',
+          ],
+        ),
+
+      // Maintenance
+      nav(
+        SettingsRows.clearDownloads,
+        'Maintenance',
+        _clearDownloadData,
+        keywords: const ['queue', 'history', 'clear', 'remove'],
+      ),
+      nav(
+        SettingsRows.clearPlayback,
+        'Maintenance',
+        _clearPlaybackData,
+        keywords: const [
+          'resume',
+          'watch history',
+          'reset progress',
+          'continue watching',
+        ],
+      ),
+
+      // Backup & Restore
+      nav(
+        SettingsRows.createBackup,
+        'Backup & Restore',
+        _createBackup,
+        keywords: const ['export', 'save', 'addons'],
+      ),
+      nav(
+        SettingsRows.restoreBackup,
+        'Backup & Restore',
+        _restoreBackup,
+        keywords: const ['import', 'load'],
+      ),
+
+      // Updates
+      SettingsSearchEntry(
+        icon: SettingsRows.autoUpdate.icon,
+        title: SettingsRows.autoUpdate.title,
+        subtitle: SettingsRows.autoUpdate.subtitle,
+        category: 'Updates',
+        keywords: const ['notify', 'releases', 'startup'],
+        toggleValue: () => _autoUpdateChecksEnabled,
+        onToggle: _toggleAutoUpdateChecks,
+      ),
+      nav(
+        SettingsRows.checkUpdates,
+        'Updates',
+        _checkForAppUpdates,
+        subtitle: _updateSubtitle,
+        keywords: const ['version', 'upgrade', 'github', 'new build'],
+      ),
+
+      // Support
+      if (_supportDonation.hasProviders)
+        SettingsSearchEntry(
+          icon: SettingsRows.supportDebrify.icon,
+          title: _supportSettingsLabel,
+          subtitle: _supportSettingsSubtitle,
+          category: 'Support',
+          keywords: const ['donate', 'tip', 'contribute', 'fund'],
+          onTap: _openSupportDonation,
+        ),
+      nav(
+        SettingsRows.reddit,
+        'Support',
+        () => launchSettingsUrl(SettingsRows.reddit.url!),
+        keywords: const ['community', 'subreddit'],
+      ),
+      nav(
+        SettingsRows.discord,
+        'Support',
+        () => launchSettingsUrl(SettingsRows.discord.url!),
+        keywords: const ['community', 'chat', 'help'],
+      ),
+      nav(
+        SettingsRows.github,
+        'Support',
+        () => launchSettingsUrl(SettingsRows.github.url!),
+        keywords: const ['source code', 'contribute', 'issues'],
+      ),
+
+      // Danger Zone
+      nav(
+        SettingsRows.resetDebrify,
+        'Danger Zone',
+        _resetAppData,
+        destructive: true,
+        keywords: const ['wipe', 'factory reset', 'clear all', 'erase'],
+      ),
+
+      // In-page options (deep-link to the page that hosts them).
+      ..._leafSearchEntries(),
+    ];
+  }
+
+  /// Sublevel settings that live *inside* a subpage (cache checks, post-torrent
+  /// action, filters, subtitle options…). Each is grouped under its owning
+  /// page's name and deep-links to that page (no scroll-to-highlight yet), so a
+  /// search like "cache" or "post torrent" surfaces every provider's option.
+  /// Titles mirror the real in-page labels — keep them in sync if a page's copy
+  /// changes.
+  List<SettingsSearchEntry> _leafSearchEntries() {
+    const pageIcons = <String, IconData>{
+      'Torbox': Icons.link_rounded,
+      'Premiumize': Icons.link_rounded,
+      'Real Debrid': Icons.link_rounded,
+      'AllDebrid': Icons.link_rounded,
+      'PikPak': Icons.link_rounded,
+      'Search Settings': Icons.search_rounded,
+      'Filter Settings': Icons.filter_list_rounded,
+      'Provider Settings': Icons.cloud_sync_rounded,
+      'Quick Play': Icons.bolt_rounded,
+      'Home Page': Icons.home_rounded,
+      'Player Settings': Icons.open_in_new_rounded,
+      'Debrify TV': Icons.live_tv_rounded,
+    };
+    final pageOpeners = <String, Future<void> Function()>{
+      'Torbox': _openTorboxSettings,
+      'Premiumize': _openPremiumizeSettings,
+      'Real Debrid': _openRealDebridSettings,
+      'AllDebrid': _openAllDebridSettings,
+      'PikPak': _openPikPakSettings,
+      'Search Settings': _openTorrentSettings,
+      'Filter Settings': _openFilterSettings,
+      'Provider Settings': _openProviderSettings,
+      'Quick Play': _openQuickPlaySettings,
+      'Home Page': _openHomePageSettings,
+      'Player Settings': _openExternalPlayerSettings,
+      'Debrify TV': _openDebrifyTvSettings,
+    };
+
+    SettingsSearchEntry leaf(
+      String page,
+      String title,
+      String subtitle,
+      List<String> keywords,
+    ) => SettingsSearchEntry(
+      icon: pageIcons[page]!,
+      title: title,
+      subtitle: subtitle,
+      category: page,
+      keywords: keywords,
+      onTap: pageOpeners[page]!,
+    );
+
+    return [
+      // Debrid providers — cache checks, post-torrent action, file handling.
+      leaf(
+        'Torbox',
+        'Check Torbox cache during searches',
+        'Verify a cached copy before enabling quick actions',
+        const ['cache', 'cached', 'quick action', 'badge', 'instant'],
+      ),
+      leaf(
+        'Torbox',
+        'Post-Torrent Action',
+        'What happens after adding a torrent to Torbox',
+        const ['after adding', 'post torrent', 'play', 'download', 'open'],
+      ),
+      leaf(
+        'Torbox',
+        'Hide Torbox from Navigation',
+        'Hide the Torbox tab from the nav bar',
+        const ['hide', 'navigation', 'nav', 'tab'],
+      ),
+      leaf(
+        'Premiumize',
+        'Check Premiumize cache during searches',
+        'Show a cached badge on Premiumize results',
+        const ['cache', 'cached', 'badge', 'instant'],
+      ),
+      leaf(
+        'Premiumize',
+        'Post-Torrent Action',
+        'What happens after adding a torrent to Premiumize',
+        const ['after adding', 'post torrent', 'play', 'download', 'open'],
+      ),
+      leaf(
+        'Real Debrid',
+        'File Selection',
+        'How files are picked when adding to Real-Debrid',
+        const [
+          'file selection',
+          'smart',
+          'largest',
+          'video files',
+          'all files',
+        ],
+      ),
+      leaf(
+        'Real Debrid',
+        'Post-Torrent Action',
+        'What happens after adding a torrent to Real-Debrid',
+        const ['after adding', 'post torrent', 'play', 'download', 'open'],
+      ),
+      leaf(
+        'Real Debrid',
+        'Skip blocked torrents',
+        'Skip likely-blocked releases in Quick Play',
+        const [
+          'content filter',
+          'bypass',
+          'blocked',
+          'web-dl',
+          'webrip',
+          'hdrip',
+        ],
+      ),
+      leaf(
+        'AllDebrid',
+        'Post-Torrent Action',
+        'What happens after adding a torrent to AllDebrid',
+        const ['after adding', 'post torrent', 'play', 'download'],
+      ),
+      leaf(
+        'PikPak',
+        'Show Only Video Files',
+        'Filter PikPak folders to video files only',
+        const ['video only', 'files', 'folders', 'filter'],
+      ),
+      leaf(
+        'PikPak',
+        'Ignore Videos Under 100MB',
+        'Hide small video files in PikPak',
+        const ['ignore small', '100mb', 'small videos', 'filter'],
+      ),
+      leaf(
+        'PikPak',
+        'Post-Torrent Action',
+        'What happens after adding a torrent to PikPak',
+        const ['after adding', 'post torrent', 'play', 'download', 'open'],
+      ),
+      leaf(
+        'PikPak',
+        'Restrict Access to Folder',
+        'Limit PikPak access to a single folder',
+        const ['restrict', 'folder', 'access', 'security'],
+      ),
+
+      // Search / Filter / Provider
+      leaf(
+        'Filter Settings',
+        'Quality filter',
+        'Default resolution filter for results',
+        const ['quality', 'resolution', '4k', '2160p', '1080p', '720p', '480p'],
+      ),
+      leaf(
+        'Filter Settings',
+        'Rip / Source filter',
+        'Default release type filter',
+        const [
+          'rip',
+          'source',
+          'web-dl',
+          'bluray',
+          'brrip',
+          'hdrip',
+          'cam',
+          'dvdrip',
+        ],
+      ),
+      leaf(
+        'Filter Settings',
+        'Language filter',
+        'Default audio-language filter',
+        const ['language', 'audio', 'english', 'hindi', 'multi-audio'],
+      ),
+      leaf(
+        'Filter Settings',
+        'Size filter',
+        'Default file/pack size filter',
+        const ['size', 'gb', 'mb', 'file size'],
+      ),
+      leaf(
+        'Filter Settings',
+        'Apply filters to Quick Play',
+        'Quick Play prefers filtered sources',
+        const ['quick play', 'apply filters', 'honor', 'sources'],
+      ),
+      leaf(
+        'Provider Settings',
+        'Default Torrent Provider',
+        'Which service torrents are added to',
+        const ['default provider', 'ask every time', 'torbox', 'real-debrid'],
+      ),
+
+      // Quick Play
+      leaf(
+        'Quick Play',
+        'Quick Play Timeout',
+        'Max wait for search before playback',
+        const ['timeout', 'wait', 'seconds'],
+      ),
+      leaf(
+        'Quick Play',
+        'Sources Timeout',
+        'Max wait per Stremio addon',
+        const ['sources', 'timeout', 'stremio', 'addon', 'seconds'],
+      ),
+      leaf(
+        'Quick Play',
+        'Prefer and pin series packs',
+        'Search packs first and pin the source',
+        const ['series', 'packs', 'pin', 'season pack', 'auto-pin'],
+      ),
+      leaf(
+        'Quick Play',
+        'Cache Fallback',
+        'What to do when a torrent is not cached',
+        const [
+          'cache',
+          'not cached',
+          'fallback',
+          'try multiple',
+          'retry',
+          'max torrents',
+        ],
+      ),
+
+      // Home Page
+      leaf(
+        'Home Page',
+        'Home Rows',
+        'Choose which rows appear on Home',
+        const ['home rows', 'rows', 'catalogs', 'customize'],
+      ),
+      leaf(
+        'Home Page',
+        'Continue Watching',
+        'Show recently watched on Home',
+        const ['continue watching', 'recently watched', 'history'],
+      ),
+      leaf(
+        'Home Page',
+        'Hide Provider Cards',
+        'Hide debrid status cards on Home',
+        const ['hide', 'provider cards', 'debrid', 'status'],
+      ),
+      leaf(
+        'Home Page',
+        'Home trailer & sound',
+        'Ambient trailer playback and volume',
+        const ['trailer', 'spotlight', 'hero', 'sound', 'volume', 'autoplay'],
+      ),
+
+      // Player Settings
+      leaf(
+        'Player Settings',
+        'Default Player',
+        'Which player plays videos',
+        const ['default player', 'debrify player', 'external', 'deovr'],
+      ),
+      leaf(
+        'Player Settings',
+        'Default Subtitle language',
+        'Preferred subtitle language',
+        const ['subtitle', 'subtitles', 'language', 'captions'],
+      ),
+      leaf(
+        'Player Settings',
+        'Default Audio language',
+        'Preferred audio language / track',
+        const ['audio', 'language', 'track', 'dub'],
+      ),
+      leaf(
+        'Player Settings',
+        'Subtitle Appearance',
+        'Subtitle size, style, color, background & font',
+        const [
+          'subtitle',
+          'size',
+          'style',
+          'color',
+          'background',
+          'font',
+          'bold',
+          'outline',
+          'captions',
+        ],
+      ),
+      leaf(
+        'Player Settings',
+        'Default Aspect Ratio',
+        'Default video aspect / zoom',
+        const ['aspect', 'ratio', 'zoom', 'fit', 'fill'],
+      ),
+      leaf(
+        'Player Settings',
+        'Allow system audio effects',
+        'Let equalizer apps process audio (Android)',
+        const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
+      ),
+      leaf(
+        'Player Settings',
+        'Preferred external player',
+        'Choose the external player app',
+        const ['external', 'vlc', 'mpv', 'mx player', 'custom command'],
+      ),
+
+      // Debrify TV
+      leaf(
+        'Debrify TV',
+        'Channel result limits',
+        'Per-engine channel size & result caps',
+        const ['limits', 'result limit', 'channel max', 'engines', 'nsfw'],
+      ),
+    ];
   }
 
   Future<void> _openTorrentSettings() async {
@@ -1866,6 +2465,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _SettingsLayout extends StatelessWidget {
   final ConnectionsSummary connections;
+  final VoidCallback onOpenSearch;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenFilterSettings;
   final Future<void> Function() onOpenProviderSettings;
@@ -1899,6 +2499,7 @@ class _SettingsLayout extends StatelessWidget {
 
   const _SettingsLayout({
     required this.connections,
+    required this.onOpenSearch,
     required this.onOpenTorrentSettings,
     required this.onOpenFilterSettings,
     required this.onOpenProviderSettings,
@@ -1942,6 +2543,8 @@ class _SettingsLayout extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SettingsHeader(),
+                const SizedBox(height: 18),
+                _SettingsSearchBar(onTap: onOpenSearch),
                 const SizedBox(height: 24),
                 // Connections section with cards
                 connections,
@@ -2119,6 +2722,62 @@ class _SettingsLayout extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tappable search affordance on the phone/desktop settings root. Looks like a
+/// search field but opens the dedicated [SettingsSearchPage] (which owns the
+/// live field) so the root layout stays a cheap StatelessWidget.
+class _SettingsSearchBar extends StatefulWidget {
+  final VoidCallback onTap;
+  const _SettingsSearchBar({required this.onTap});
+
+  @override
+  State<_SettingsSearchBar> createState() => _SettingsSearchBarState();
+}
+
+class _SettingsSearchBarState extends State<_SettingsSearchBar> {
+  bool _focused = false;
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool lit = _focused || _hovered;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: widget.onTap,
+        onFocusChange: (f) => setState(() => _focused = f),
+        onHover: (h) => setState(() => _hovered = h),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: lit ? kSettingsPanel2 : kSettingsPanel,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _focused ? kSettingsAccent : kSettingsLine,
+              width: _focused ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: lit ? kSettingsAccent2 : kSettingsDim,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Search settings',
+                style: TextStyle(fontSize: 13.5, color: kSettingsDim),
+              ),
+            ],
           ),
         ),
       ),
