@@ -8,13 +8,42 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:xml/xml_events.dart';
 
+/// The filtered guide for one playlist: programmes per XMLTV channel id,
+/// plus the name→id resolutions the parser made for channels that matched by
+/// display-name rather than tvg-id (Kodi-style fallback — see
+/// [XmltvEpgSource.normalizeChannelName]).
+///
+/// An instance with an empty [byId] means the guide downloaded and parsed
+/// fine but matched nothing — a real answer, distinct from a null load
+/// (download/parse failure).
+class XmltvGuide {
+  /// XMLTV channel id → sorted `[startMs, stopMs, title, desc]` rows.
+  final Map<String, List<List<Object?>>> byId;
+
+  /// Normalized display-name → XMLTV channel id, only for names the caller
+  /// asked about. First guide channel carrying a name wins.
+  final Map<String, String> nameToId;
+
+  /// Whether any `<channel>` element paired with the playlist at all (by id
+  /// or name). Distinguishes "the pairing works but no programmes survived
+  /// the time window" from "ids and names genuinely don't line up" when
+  /// [byId] comes back empty.
+  final bool sawWantedChannel;
+
+  const XmltvGuide({
+    required this.byId,
+    required this.nameToId,
+    this.sawWantedChannel = false,
+  });
+}
+
 /// Loads an XMLTV guide for one playlist: streams the (often multi-hundred-MB,
 /// often gzipped) file to disk, parses it in an isolate with the streaming
 /// event decoder — never `XmlDocument.parse`, the TV boxes have <2GB — and
-/// keeps only the programmes that matter: channels whose tvg-id appears in
-/// the playlist, inside a bounded time window. The surviving index is a few
-/// MB at most and is snapshotted to disk so app restarts don't re-download
-/// the guide.
+/// keeps only the programmes that matter: channels the playlist references by
+/// tvg-id or by name, inside a bounded time window. The surviving index is a
+/// few MB at most and is snapshotted to disk so app restarts don't
+/// re-download the guide.
 ///
 /// Output rows are `[startMs, stopMs, title, description]` — deliberately
 /// primitive so the same shape crosses the isolate boundary and serializes to
@@ -25,6 +54,12 @@ class XmltvEpgSource {
   /// Re-download when the snapshot is older than this. Guide files typically
   /// update daily; half a day keeps evenings fresh without hammering hosts.
   static const _cacheTtl = Duration(hours: 12);
+
+  /// TTL for a snapshot of an empty (nothing-matched) result: long enough
+  /// that a permanently mismatched pairing doesn't re-download a huge guide
+  /// on every playlist open, short enough that a user mid-fixing their
+  /// playlist/EPG pairing sees the fix land quickly.
+  static const _emptyCacheTtl = Duration(minutes: 30);
 
   /// Hard ceiling on the raw download.
   static const _maxDownloadBytes = 300 * 1024 * 1024;
@@ -43,33 +78,45 @@ class XmltvEpgSource {
   static const _maxDescriptionChars = 400;
 
   /// Serializes loads per cache key so a double-tap can't download twice.
-  static final Map<String, Future<Map<String, List<List<Object?>>>?>>
-      _inFlight = {};
+  static final Map<String, Future<XmltvGuide?>> _inFlight = {};
+
+  /// Kodi-style name matching key: lowercase with everything that isn't a
+  /// letter or digit removed, so "BBC One HD" == "bbc-one_HD" == "BBC.One.HD".
+  /// Unicode letters survive — plenty of guides publish non-Latin names.
+  static String normalizeChannelName(String raw) =>
+      raw.toLowerCase().replaceAll(_nonNameChars, '');
+  static final _nonNameChars = RegExp(r'[^\p{L}\p{N}]+', unicode: true);
 
   /// Load (from snapshot or network) the guide for [epgUrl], filtered to
-  /// [tvgIds]. Returns tvg-id → sorted `[startMs, stopMs, title, desc]` rows,
-  /// or null when nothing could be loaded. Never throws.
-  static Future<Map<String, List<List<Object?>>>?> load({
+  /// channels the playlist references by tvg-id ([tvgIds]) or by normalized
+  /// name ([channelNames], pre-normalized via [normalizeChannelName]).
+  /// Returns null only when nothing could be loaded at all. Never throws.
+  static Future<XmltvGuide?> load({
     required String epgUrl,
     required Set<String> tvgIds,
+    required Set<String> channelNames,
   }) {
-    if (tvgIds.isEmpty) return Future.value(null);
-    // In-flight coalescing keys on the exact request (URL + id set);
+    if (tvgIds.isEmpty && channelNames.isEmpty) return Future.value(null);
+    // In-flight coalescing keys on the exact request (URL + id/name sets);
     // the disk snapshot below keys on the URL alone.
     final ids = tvgIds.toList()..sort();
-    final key = md5.convert(utf8.encode('$epgUrl\n${ids.join(',')}')).toString();
+    final names = channelNames.toList()..sort();
+    final key = md5
+        .convert(utf8.encode('$epgUrl\n${ids.join(',')}\n${names.join(',')}'))
+        .toString();
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
-    final future = _load(epgUrl, tvgIds).whenComplete(() {
+    final future = _load(epgUrl, tvgIds, channelNames).whenComplete(() {
       _inFlight.remove(key);
     });
     _inFlight[key] = future;
     return future;
   }
 
-  static Future<Map<String, List<List<Object?>>>?> _load(
+  static Future<XmltvGuide?> _load(
     String epgUrl,
     Set<String> tvgIds,
+    Set<String> channelNames,
   ) async {
     // One snapshot per guide URL, overwritten in place — keying on the id
     // set too would mint a new multi-MB orphan on every channel-list churn
@@ -83,24 +130,41 @@ class XmltvEpgSource {
 
     // Fresh snapshot → done, no network at all.
     final cached = await _readSnapshot(cacheFile);
-    if (cached != null && !cached.isStale) return cached.index;
+    if (cached != null && !cached.isStale) return cached.guide;
 
     // Download + parse. On any failure fall back to the stale snapshot —
     // yesterday's guide beats no guide.
-    final index = await _downloadAndParse(epgUrl, tvgIds);
-    if (index == null) {
+    final guide = await _downloadAndParse(epgUrl, tvgIds, channelNames);
+    if (guide == null) {
       debugPrint('XmltvEpgSource: falling back to stale snapshot: $epgUrl');
-      return cached?.index;
+      return cached?.guide;
     }
-    await _writeSnapshot(cacheFile, epgUrl, index);
-    return index;
+    if (guide.byId.isEmpty) {
+      // Empty parse. A transient provider hiccup (guide mid-regeneration,
+      // ids rotated for a day) must not erase a still-useful stale snapshot:
+      // its 48h programme window outlives the 12h TTL by a lot.
+      final fallback = cached?.guide;
+      if (fallback != null && fallback.byId.isNotEmpty) {
+        debugPrint('XmltvEpgSource: empty parse, keeping stale snapshot: '
+            '$epgUrl');
+        return fallback;
+      }
+      // No better answer exists — negative-cache the empty result briefly
+      // (see _emptyCacheTtl) so a permanently mismatched pairing doesn't
+      // re-download a multi-hundred-MB guide on every playlist open.
+      await _writeSnapshot(cacheFile, epgUrl, guide);
+      return guide;
+    }
+    await _writeSnapshot(cacheFile, epgUrl, guide);
+    return guide;
   }
 
   // ── Download ──────────────────────────────────────────────────────────────
 
-  static Future<Map<String, List<List<Object?>>>?> _downloadAndParse(
+  static Future<XmltvGuide?> _downloadAndParse(
     String epgUrl,
     Set<String> tvgIds,
+    Set<String> channelNames,
   ) async {
     final client = http.Client();
     File? tempFile;
@@ -143,19 +207,23 @@ class XmltvEpgSource {
       }
 
       // The heavy part runs off the UI isolate. Everything captured is
-      // sendable (strings, ints, a set copy).
+      // sendable (strings, ints, set copies).
       final path = tempFile.path;
       final ids = Set<String>.of(tvgIds);
+      final names = Set<String>.of(channelNames);
       final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final index = await Isolate.run(() => parseXmltvFile(path, ids, nowMs));
-      if (index.isEmpty) {
+      final guide =
+          await Isolate.run(() => parseXmltvFile(path, ids, names, nowMs));
+      if (guide.byId.isEmpty) {
+        // Parsed fine, matched nothing — a real answer (the caller tells the
+        // user WHY there's no guide), distinct from a null failure.
         debugPrint('XmltvEpgSource: no matching programmes in $epgUrl');
-        return null;
+      } else {
+        debugPrint(
+          'XmltvEpgSource: indexed ${guide.byId.length} channels from $epgUrl',
+        );
       }
-      debugPrint(
-        'XmltvEpgSource: indexed ${index.length} channels from $epgUrl',
-      );
-      return index;
+      return guide;
     } catch (e) {
       debugPrint('XmltvEpgSource: download/parse failed for $epgUrl: $e');
       return null;
@@ -172,13 +240,17 @@ class XmltvEpgSource {
   // ── Parse (runs inside Isolate.run) ──────────────────────────────────────
 
   /// Stream-parse an XMLTV file, keeping `[startMs, stopMs, title, desc]`
-  /// rows for channels in [tvgIds] within the time window around [nowMs].
+  /// rows for matched channels within the time window around [nowMs]. A
+  /// channel matches by id (in [tvgIds]) or by any of its `<display-name>`s
+  /// normalizing into [wantedNames] — the Kodi-style fallback chain, resolved
+  /// here because `<channel>` elements precede `<programme>`s in XMLTV.
   /// Exposed (not private) only because Isolate.run needs a callable that
   /// doesn't capture `this`; not part of the class's real API.
   @visibleForTesting
-  static Future<Map<String, List<List<Object?>>>> parseXmltvFile(
+  static Future<XmltvGuide> parseXmltvFile(
     String path,
     Set<String> tvgIds,
+    Set<String> wantedNames,
     int nowMs,
   ) async {
     final file = File(path);
@@ -208,6 +280,15 @@ class XmltvEpgSource {
     StringBuffer? desc;
     StringBuffer? textTarget;
 
+    // <channel> element state (name-fallback matching): the element's id and
+    // the <display-name> being collected. Ids that matched a wanted name are
+    // admitted to the programme filter alongside the explicit tvg-ids.
+    String? channelElemId;
+    StringBuffer? displayName;
+    final nameToId = <String, String>{};
+    final nameMatchedIds = <String>{};
+    var sawWantedChannel = false;
+
     final events = bytes
         .transform(const Utf8Decoder(allowMalformed: true))
         .toXmlEvents();
@@ -215,6 +296,29 @@ class XmltvEpgSource {
       for (final event in batch) {
         if (event is XmlStartElementEvent) {
           switch (event.name) {
+            case 'channel':
+              String? id;
+              for (final a in event.attributes) {
+                if (a.name == 'id') id = a.value;
+              }
+              if (id != null && id.isNotEmpty && tvgIds.contains(id)) {
+                sawWantedChannel = true;
+              }
+              // Unconditional (re)assignment: a self-closing or id-less
+              // <channel> must also RESET the state, or (on malformed XML
+              // missing a </channel>) its display-names would be attributed
+              // to the previous channel's id.
+              channelElemId = (wantedNames.isNotEmpty &&
+                      !event.isSelfClosing &&
+                      id != null &&
+                      id.isNotEmpty)
+                  ? id
+                  : null;
+            case 'display-name':
+              if (channelElemId != null && !event.isSelfClosing) {
+                displayName = StringBuffer();
+                textTarget = displayName;
+              }
             case 'programme':
               String? ch, start, stop;
               for (final a in event.attributes) {
@@ -227,7 +331,8 @@ class XmltvEpgSource {
                     stop = a.value;
                 }
               }
-              if (ch != null && tvgIds.contains(ch)) {
+              if (ch != null &&
+                  (tvgIds.contains(ch) || nameMatchedIds.contains(ch))) {
                 channel = ch;
                 startMs = _parseXmltvTime(start);
                 stopMs = _parseXmltvTime(stop);
@@ -258,6 +363,27 @@ class XmltvEpgSource {
           }
         } else if (event is XmlEndElementEvent) {
           switch (event.name) {
+            case 'display-name':
+              final name = displayName;
+              final id = channelElemId;
+              if (name != null && id != null) {
+                final norm = normalizeChannelName(name.toString());
+                // First guide channel carrying a name wins (Kodi semantics);
+                // later duplicates would silently shadow real programmes.
+                if (norm.isNotEmpty && wantedNames.contains(norm)) {
+                  sawWantedChannel = true;
+                  if (!nameToId.containsKey(norm)) {
+                    nameToId[norm] = id;
+                    nameMatchedIds.add(id);
+                  }
+                }
+              }
+              displayName = null;
+              textTarget = null;
+            case 'channel':
+              channelElemId = null;
+              displayName = null;
+              textTarget = null;
             case 'title':
             case 'desc':
               textTarget = null;
@@ -314,7 +440,11 @@ class XmltvEpgSource {
         rows.removeRange(_maxProgrammesPerChannel, rows.length);
       }
     }
-    return index;
+    return XmltvGuide(
+      byId: index,
+      nameToId: nameToId,
+      sawWantedChannel: sawWantedChannel,
+    );
   }
 
   /// XMLTV time: `yyyyMMddHHmmss [±HHMM]`. Seconds and the offset are both
@@ -397,7 +527,24 @@ class XmltvEpgSource {
               ],
           ],
       };
-      return _Snapshot(index: index, fetchedAt: fetchedAt);
+      // Pre-name-matching snapshots have no 'names' map. Treat them as
+      // stale (refresh promptly so name matching kicks in) but keep them
+      // usable as the network-failure fallback.
+      final namesRaw = decoded['names'];
+      final nameToId = <String, String>{
+        if (namesRaw is Map<String, dynamic>)
+          for (final entry in namesRaw.entries)
+            if (entry.value is String) entry.key: entry.value as String,
+      };
+      return _Snapshot(
+        guide: XmltvGuide(
+          byId: index,
+          nameToId: nameToId,
+          sawWantedChannel: decoded['sawWanted'] == true,
+        ),
+        fetchedAt: fetchedAt,
+        legacy: namesRaw is! Map<String, dynamic>,
+      );
     } catch (e) {
       debugPrint('XmltvEpgSource: bad snapshot ${file.path}: $e');
       return null;
@@ -407,7 +554,7 @@ class XmltvEpgSource {
   static Future<void> _writeSnapshot(
     File file,
     String epgUrl,
-    Map<String, List<List<Object?>>> index,
+    XmltvGuide guide,
   ) async {
     try {
       // Encode off the UI isolate — the index can run to several MB, and the
@@ -415,7 +562,9 @@ class XmltvEpgSource {
       final encoded = await compute(jsonEncode, <String, dynamic>{
         'epgUrl': epgUrl,
         'fetchedAt': DateTime.now().toIso8601String(),
-        'channels': index,
+        'channels': guide.byId,
+        'names': guide.nameToId,
+        'sawWanted': guide.sawWantedChannel,
       });
       await file.writeAsString(encoded);
     } catch (e) {
@@ -425,10 +574,17 @@ class XmltvEpgSource {
 }
 
 class _Snapshot {
-  final Map<String, List<List<Object?>>> index;
+  final XmltvGuide guide;
   final DateTime fetchedAt;
-  _Snapshot({required this.index, required this.fetchedAt});
+
+  /// Written before name matching existed — no 'names' map to serve from.
+  final bool legacy;
+  _Snapshot({required this.guide, required this.fetchedAt, this.legacy = false});
 
   bool get isStale =>
-      DateTime.now().difference(fetchedAt) >= XmltvEpgSource._cacheTtl;
+      legacy ||
+      DateTime.now().difference(fetchedAt) >=
+          (guide.byId.isEmpty
+              ? XmltvEpgSource._emptyCacheTtl
+              : XmltvEpgSource._cacheTtl);
 }

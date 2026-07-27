@@ -35,6 +35,38 @@ import org.json.JSONArray
 class MainActivity : FlutterActivity() {
 	private val CHANNEL = "com.debrify.app/downloader"
 	private val EVENTS = "com.debrify.app/downloader_events"
+
+	// ── SAF download-folder picker ──────────────────────────────────────────
+	private val REQUEST_PICK_DOWNLOAD_DIR = 51423
+	private var pendingDirPickResult: MethodChannel.Result? = null
+
+	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+		if (requestCode == REQUEST_PICK_DOWNLOAD_DIR) {
+			val pending = pendingDirPickResult
+			pendingDirPickResult = null
+			if (pending != null) {
+				val treeUri = data?.data
+				if (resultCode == RESULT_OK && treeUri != null) {
+					try {
+						contentResolver.takePersistableUriPermission(
+							treeUri,
+							Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+						)
+						val name = androidx.documentfile.provider.DocumentFile
+							.fromTreeUri(this, treeUri)?.name ?: treeUri.lastPathSegment ?: "Custom folder"
+						pending.success(mapOf("treeUri" to treeUri.toString(), "displayName" to name))
+					} catch (e: Exception) {
+						pending.error("pick_failed", e.message, null)
+					}
+				} else {
+					// User backed out of the picker.
+					pending.success(null)
+				}
+			}
+			return
+		}
+		super.onActivityResult(requestCode, resultCode, data)
+	}
     private val ANDROID_TV_CHANNEL = "com.debrify.app/android_tv_player"
     private val REMOTE_CONTROL_CHANNEL = "com.debrify.app/remote_control"
     private val PIP_CHANNEL = "com.debrify.app/pip"
@@ -502,6 +534,7 @@ class MainActivity : FlutterActivity() {
 					val subDir = call.argument<String>("subDir") ?: "Debrify"
 					val mimeType = call.argument<String>("mimeType") ?: "application/octet-stream"
 					val markAsUpdate = call.argument<Boolean>("markAsUpdate") ?: false
+					val treeUri = call.argument<String>("treeUri")
 					@Suppress("UNCHECKED_CAST")
 					val headers = call.argument<HashMap<String, String>>("headers") ?: hashMapOf()
 
@@ -510,8 +543,13 @@ class MainActivity : FlutterActivity() {
 						return@setMethodCallHandler
 					}
 
+					// Dart mints and passes the taskId so record id == native
+					// task id end-to-end (start-or-adopt on the service side
+					// resumes a persisted task under the same id with a
+					// refreshed URL). Fallback for callers that don't.
 					val baseId = System.currentTimeMillis().toString()
-					val taskId = if (markAsUpdate) "update-$baseId" else baseId
+					val taskId = call.argument<String>("taskId")
+						?: (if (markAsUpdate) "update-$baseId" else baseId)
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_START
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
@@ -520,6 +558,9 @@ class MainActivity : FlutterActivity() {
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_RELATIVE_SUBDIR, subDir)
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_MIME_TYPE, mimeType)
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_HEADERS, headers)
+						if (!treeUri.isNullOrEmpty()) {
+							putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TREE_URI, treeUri)
+						}
 					}
 					try {
 						androidx.core.content.ContextCompat.startForegroundService(this, intent)
@@ -528,6 +569,102 @@ class MainActivity : FlutterActivity() {
 						// Android 12+ forbids foreground-service starts from the
 						// background (ForegroundServiceStartNotAllowedException).
 						result.error("fgs_not_allowed", e.message, null)
+					}
+				}
+				"queryDownloadTasks" -> {
+					// Native truth for Dart reconciliation: the persisted store
+					// merged with the live in-memory registry. A stored
+					// "running" with no live worker means the process died
+					// mid-download — report it as paused (bytes are on disk).
+					try {
+						val entries = com.debrify.app.download.DownloadTaskStore.all(this)
+						val list = entries.values.map { e ->
+							val live = com.debrify.app.download.DownloadRegistry.live[e.taskId]
+							val bytes = live?.bytes ?: (e.uri?.let { u ->
+								try {
+									contentResolver.openFileDescriptor(Uri.parse(u), "r")?.use { pfd ->
+										java.io.FileInputStream(pfd.fileDescriptor).use { fis -> fis.channel.size() }
+									} ?: 0L
+								} catch (_: Exception) { 0L }
+							} ?: 0L)
+							val status = if (live != null) "running"
+								else if (e.status == "running") "paused" else e.status
+							mapOf(
+								"taskId" to e.taskId,
+								"status" to status,
+								"bytes" to bytes,
+								"total" to (live?.total ?: e.total),
+								"uri" to e.uri,
+								"destType" to e.destType,
+								"fileName" to e.fileName,
+								"subDir" to e.subDir,
+								"url" to e.url,
+								"errorMessage" to e.errorMessage,
+								"updatedAt" to e.updatedAt,
+							)
+						}
+						result.success(list)
+					} catch (e: Exception) {
+						result.error("query_failed", e.message, null)
+					}
+				}
+				"forgetDownloadTask" -> {
+					val taskId = call.argument<String>("taskId")
+					if (taskId.isNullOrEmpty()) { result.error("bad_args", "taskId required", null); return@setMethodCallHandler }
+					try {
+						com.debrify.app.download.DownloadTaskStore.remove(this, taskId)
+						com.debrify.app.download.DownloadRegistry.live.remove(taskId)
+						result.success(true)
+					} catch (e: Exception) {
+						result.error("forget_failed", e.message, null)
+					}
+				}
+				"pickDownloadDirectory" -> {
+					if (pendingDirPickResult != null) {
+						result.error("busy", "picker already open", null)
+						return@setMethodCallHandler
+					}
+					try {
+						pendingDirPickResult = result
+						val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+							addFlags(
+								Intent.FLAG_GRANT_READ_URI_PERMISSION or
+									Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+									Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+							)
+						}
+						startActivityForResult(intent, REQUEST_PICK_DOWNLOAD_DIR)
+					} catch (e: Exception) {
+						pendingDirPickResult = null
+						result.error("pick_failed", e.message, null)
+					}
+				}
+				"releaseDownloadDirectory" -> {
+					val treeUri = call.argument<String>("treeUri")
+					if (treeUri.isNullOrEmpty()) { result.error("bad_args", "treeUri required", null); return@setMethodCallHandler }
+					try {
+						contentResolver.releasePersistableUriPermission(
+							Uri.parse(treeUri),
+							Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+						)
+						result.success(true)
+					} catch (_: Exception) {
+						// Grant already gone — releasing is best-effort.
+						result.success(false)
+					}
+				}
+				"validateDownloadDirectory" -> {
+					val treeUri = call.argument<String>("treeUri")
+					if (treeUri.isNullOrEmpty()) { result.error("bad_args", "treeUri required", null); return@setMethodCallHandler }
+					try {
+						val uri = Uri.parse(treeUri)
+						val held = contentResolver.persistedUriPermissions.any {
+							it.uri == uri && it.isWritePermission
+						}
+						val canWrite = held && (androidx.documentfile.provider.DocumentFile.fromTreeUri(this, uri)?.canWrite() == true)
+						result.success(canWrite)
+					} catch (_: Exception) {
+						result.success(false)
 					}
 				}
 				"pause" -> {

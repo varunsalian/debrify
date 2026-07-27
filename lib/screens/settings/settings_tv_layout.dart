@@ -28,6 +28,9 @@ class SettingsTvLayout extends StatefulWidget {
   /// attached to the first rail item.
   final FocusNode? firstFocusNode;
 
+  /// Opens the full-screen settings search (the rail's search item / OK / Right).
+  final VoidCallback onOpenSearch;
+
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
@@ -38,6 +41,9 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
+  // Android-only custom download folder (SAF); null hides the row.
+  final Future<void> Function()? onOpenDownloadLocation;
+  final String downloadLocationSubtitle;
   final Future<void> Function() onCreateBackup;
   final Future<void> Function() onRestoreBackup;
   final Future<void> Function() onDangerAction;
@@ -58,6 +64,7 @@ class SettingsTvLayout extends StatefulWidget {
     super.key,
     required this.connections,
     required this.firstFocusNode,
+    required this.onOpenSearch,
     required this.onOpenHomePageSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
@@ -68,6 +75,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenDebrifyTvSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
+    this.onOpenDownloadLocation,
+    this.downloadLocationSubtitle = '',
     required this.onCreateBackup,
     required this.onRestoreBackup,
     required this.onDangerAction,
@@ -92,24 +101,28 @@ class SettingsTvLayout extends StatefulWidget {
 class _Category {
   final IconData icon;
   final String label;
-  const _Category(this.icon, this.label);
+
+  /// One-line hint of what the category holds, shown under [label] in the
+  /// rail so a glance down the list previews each section's contents.
+  final String subtitle;
+  const _Category(this.icon, this.label, this.subtitle);
 }
 
 const List<_Category> _kCategories = [
-  _Category(Icons.link_rounded, 'Connections'),
-  _Category(Icons.tune_rounded, 'General'),
-  _Category(Icons.search_rounded, 'Search'),
-  _Category(Icons.live_tv_rounded, 'TV Mode'),
-  _Category(Icons.storage_rounded, 'Data & Backup'),
-  _Category(Icons.system_update_rounded, 'Updates'),
-  _Category(Icons.favorite_rounded, 'Support'),
-  _Category(Icons.warning_amber_rounded, 'Danger Zone'),
+  _Category(Icons.link_rounded, 'Connections', 'Debrid, Trakt, IPTV & more'),
+  _Category(Icons.tune_rounded, 'General', 'Home, player & remote'),
+  _Category(Icons.search_rounded, 'Search', 'Engines, filters & providers'),
+  _Category(Icons.live_tv_rounded, 'TV Mode', 'Debrify TV & keyboard'),
+  _Category(Icons.storage_rounded, 'Data & Backup', 'Downloads, backup & restore'),
+  _Category(Icons.system_update_rounded, 'Updates', 'Version & auto-update'),
+  _Category(Icons.favorite_rounded, 'Support', 'Donate & community links'),
+  _Category(Icons.warning_amber_rounded, 'Danger Zone', 'Reset Debrify'),
 ];
 
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
-  /// Max focusable rows in any single non-Connections category (General /
-  /// Search / Data & Backup each have 4) — used to size the pane node pool.
-  static const int _kMaxCategoryRows = 4;
+  /// Max focusable rows in any single non-Connections category (Data & Backup
+  /// has up to 5 with the download-location row) — sizes the pane node pool.
+  static const int _kMaxCategoryRows = 5;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -123,6 +136,10 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// category, so bouncing out to the sidebar and back doesn't reset the pane.
   late final List<FocusNode> _railNodes;
 
+  /// The search item sits above the category rail — its own node so Up from the
+  /// first category lands here and Down from here returns to the categories.
+  final FocusNode _searchNode = FocusNode(debugLabel: 'settings-tv-rail-search');
+
   /// Pool of focus nodes for the pane rows, indexed top-to-bottom. Reused
   /// across categories (only one pane is shown at a time). A node whose
   /// `context` is null isn't attached to a row in the current category, which
@@ -131,6 +148,11 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   late final List<FocusNode> _paneNodes;
 
   final ScrollController _paneScroll = ScrollController();
+
+  /// The rail is scrollable so the taller two-line items + search entry can't
+  /// overflow a short TV surface (e.g. 540-logical-px panels); focused items
+  /// are revealed into view like the pane's rows.
+  final ScrollController _railScroll = ScrollController();
 
   @override
   void initState() {
@@ -170,8 +192,10 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     for (final n in _paneNodes) {
       n.dispose();
     }
+    _searchNode.dispose();
     _selected.dispose();
     _paneScroll.dispose();
+    _railScroll.dispose();
     super.dispose();
   }
 
@@ -220,7 +244,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowUp) {
-      if (index > 0) _railNodes[index - 1].requestFocus();
+      // Above the first category sits the search item.
+      if (index > 0) {
+        _railNodes[index - 1].requestFocus();
+      } else {
+        _searchNode.requestFocus();
+      }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowDown) {
@@ -234,6 +263,29 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     if (key == LogicalKeyboardKey.arrowLeft) {
       // Always consume Left so focus never escapes the rail via directional
       // traversal, even if the sidebar hand-off isn't registered.
+      MainPageBridge.focusTvSidebar?.call();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// DPAD for the rail's search item: Down enters the category list, Right/OK
+  /// opens search, Left hands off to the sidebar, Up is trapped (topmost).
+  KeyEventResult _searchKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _railNodes[0].requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      widget.onOpenSearch();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
       MainPageBridge.focusTvSidebar?.call();
       return KeyEventResult.handled;
     }
@@ -310,14 +362,15 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
 
   Widget _buildRail() {
     return SizedBox(
-      width: 300,
-      child: Padding(
+      width: 320,
+      child: SingleChildScrollView(
+        controller: _railScroll,
         padding: const EdgeInsets.fromLTRB(24, 28, 16, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Padding(
-              padding: EdgeInsets.only(left: 14, bottom: 22),
+              padding: EdgeInsets.only(left: 14, bottom: 18),
               child: Text(
                 'Settings',
                 style: TextStyle(
@@ -328,6 +381,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 ),
               ),
             ),
+            _RailSearchItem(
+              focusNode: _searchNode,
+              onKey: _searchKey,
+              onActivate: widget.onOpenSearch,
+            ),
+            const SizedBox(height: 12),
             for (int i = 0; i < _kCategories.length; i++)
               _RailItem(
                 index: i,
@@ -465,7 +524,27 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           ),
         ];
       case 4: // Data & Backup
+      {
+        // Focus nodes are claimed sequentially so the optional
+        // download-location row doesn't shift hardcoded indices.
+        int paneIdx = 0;
+        FocusNode nextNode() => _paneNodes[paneIdx++];
         return [
+          if (widget.onOpenDownloadLocation != null) ...[
+            const SettingsSectionLabel('Downloads'),
+            SettingsSection(
+              title: '',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.downloadLocation,
+                  subtitle: widget.downloadLocationSubtitle,
+                  onTap: widget.onOpenDownloadLocation!,
+                  focusNode: nextNode(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+          ],
           const SettingsSectionLabel('Maintenance'),
           SettingsSection(
             title: '',
@@ -473,12 +552,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
               SettingsTile.spec(
                 SettingsRows.clearDownloads,
                 onTap: widget.onClearDownloads,
-                focusNode: _paneNodes[0],
+                focusNode: nextNode(),
               ),
               SettingsTile.spec(
                 SettingsRows.clearPlayback,
                 onTap: widget.onClearPlayback,
-                focusNode: _paneNodes[1],
+                focusNode: nextNode(),
               ),
             ],
           ),
@@ -490,16 +569,17 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
               SettingsTile.spec(
                 SettingsRows.createBackup,
                 onTap: widget.onCreateBackup,
-                focusNode: _paneNodes[2],
+                focusNode: nextNode(),
               ),
               SettingsTile.spec(
                 SettingsRows.restoreBackup,
                 onTap: widget.onRestoreBackup,
-                focusNode: _paneNodes[3],
+                focusNode: nextNode(),
               ),
             ],
           ),
         ];
+      }
       case 5: // Updates
         return [
           SettingsSection(
@@ -633,7 +713,13 @@ class _RailItemState extends State<_RailItem> {
             onTap: widget.onActivate,
             onFocusChange: (f) {
               setState(() => _focused = f);
-              if (f) widget.onFocused(widget.index);
+              if (f) {
+                widget.onFocused(widget.index);
+                // Scroll the focused item into view — the rail scrolls now.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && context.mounted) tvRevealMinimal(context);
+                });
+              }
             },
             child: ValueListenableBuilder<int>(
               valueListenable: widget.selected,
@@ -646,10 +732,15 @@ class _RailItemState extends State<_RailItem> {
                 final Color iconColor = (focused || selected)
                     ? kSettingsAccent2
                     : kSettingsDim;
+                // Subtitle brightens with the row but stays a step dimmer than
+                // the title so the label still reads as primary.
+                final Color subColor = (focused || selected)
+                    ? Colors.white.withValues(alpha: 0.60)
+                    : kSettingsDim2;
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
-                    vertical: 13,
+                    vertical: 10,
                   ),
                   decoration: BoxDecoration(
                     color: selected
@@ -668,23 +759,128 @@ class _RailItemState extends State<_RailItem> {
                       Icon(widget.category.icon, size: 20, color: iconColor),
                       const SizedBox(width: 13),
                       Expanded(
-                        child: Text(
-                          widget.category.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : FontWeight.w600,
-                            color: fg,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.category.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                                color: fg,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.category.subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                height: 1.2,
+                                fontWeight: FontWeight.w500,
+                                color: subColor,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 );
               },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Search entry at the top of the rail — looks like a search field, opens the
+/// full-screen [SettingsSearchPage]. Self-contained (local `_focused`) so a
+/// focus move only rebuilds this item, matching [_RailItem].
+class _RailSearchItem extends StatefulWidget {
+  final FocusNode focusNode;
+  final KeyEventResult Function(FocusNode, KeyEvent) onKey;
+  final VoidCallback onActivate;
+
+  const _RailSearchItem({
+    required this.focusNode,
+    required this.onKey,
+    required this.onActivate,
+  });
+
+  @override
+  State<_RailSearchItem> createState() => _RailSearchItemState();
+}
+
+class _RailSearchItemState extends State<_RailSearchItem> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool focused = _focused;
+    final Color fg = focused ? Colors.white : kSettingsDim;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: widget.onKey,
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            focusNode: widget.focusNode,
+            borderRadius: BorderRadius.circular(12),
+            onTap: widget.onActivate,
+            onFocusChange: (f) {
+              setState(() => _focused = f);
+              if (f) {
+                // Reveal the top of the rail (search sits above category 0).
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && context.mounted) tvRevealMinimal(context);
+                });
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: focused ? kSettingsPanel2 : kSettingsPanel,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: focused ? kSettingsAccent : kSettingsLine,
+                  width: focused ? 1.5 : 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search_rounded,
+                    size: 20,
+                    color: focused ? kSettingsAccent2 : kSettingsDim,
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Text(
+                      'Search settings',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: fg,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

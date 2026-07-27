@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../services/analytics_service.dart';
 import '../services/download_service.dart';
+import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/shimmer.dart';
@@ -384,13 +385,32 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           .trim();
       final dot = filename.lastIndexOf('.');
       final folder = sanitize(dot > 0 ? filename.substring(0, dot) : filename);
-      if (Platform.isAndroid) {
-        destPath = 'Download/Debrify/$filename';
-      } else if (Platform.isMacOS) {
+      // Preview only — the authoritative path is resolved by
+      // DownloadService at start (same custom-folder pref + fallback).
+      String? customDir;
+      if (Platform.isWindows || Platform.isLinux) {
+        try {
+          customDir = await StorageService.getDownloadDirPath();
+        } catch (_) {}
+      }
+      if (customDir != null && customDir.isNotEmpty) {
+        final sep = Platform.pathSeparator;
+        destPath = '$customDir$sep$folder$sep$filename';
+      } else if (Platform.isAndroid) {
+        String? treeName;
+        try {
+          treeName = await StorageService.getDownloadTreeDisplayName();
+        } catch (_) {}
+        destPath = treeName != null
+            ? '$treeName/$filename'
+            : 'Download/Debrify/$filename';
+      } else if (Platform.isMacOS || Platform.isWindows) {
+        // Same default the service resolves: <user Downloads>/Debrify/<folder>.
         try {
           final Directory? downloadsDir = await getDownloadsDirectory();
           if (downloadsDir != null) {
-            destPath = 'Downloads/Debrify/$folder/$filename';
+            final sep = Platform.pathSeparator;
+            destPath = 'Downloads${sep}Debrify$sep$folder$sep$filename';
           } else {
             final docs = await getApplicationDocumentsDirectory();
             destPath = '${docs.path}/downloads/$folder/$filename';

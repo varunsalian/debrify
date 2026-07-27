@@ -883,6 +883,63 @@ class StorageService {
     // No-op: parallel downloads are fixed to 1
   }
 
+  // ── Custom download location (Android SAF tree) ─────────────────────────
+  static const String _downloadTreeUriKey = 'download_tree_uri_v1';
+  static const String _downloadTreeNameKey = 'download_tree_display_name_v1';
+
+  /// The persisted SAF tree URI for the user-chosen download folder, or null
+  /// when downloads go to the default location (Downloads/Debrify).
+  static Future<String?> getDownloadTreeUri() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_downloadTreeUriKey);
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  static Future<String?> getDownloadTreeDisplayName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_downloadTreeNameKey);
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  static Future<void> setDownloadTreeUri(
+    String treeUri,
+    String displayName,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_downloadTreeUriKey, treeUri);
+    await prefs.setString(_downloadTreeNameKey, displayName);
+  }
+
+  static Future<void> clearDownloadTreeUri() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_downloadTreeUriKey);
+    await prefs.remove(_downloadTreeNameKey);
+  }
+
+  // ── Custom download location (desktop: plain filesystem path) ───────────
+  // Windows/Linux only. macOS is deliberately excluded: the app is sandboxed
+  // with a read-only user-selected-files entitlement, so a picked folder
+  // needs security-scoped bookmarks to survive relaunch — separate feature.
+  static const String _downloadDirPathKey = 'download_dir_path_v1';
+
+  /// The persisted absolute directory for the user-chosen download folder on
+  /// desktop, or null when downloads go to the platform default.
+  static Future<String?> getDownloadDirPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_downloadDirPathKey);
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  static Future<void> setDownloadDirPath(String dirPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_downloadDirPathKey, dirPath);
+  }
+
+  static Future<void> clearDownloadDirPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_downloadDirPathKey);
+  }
+
   // ── Continue Watching (recently watched items for home screen) ──────────
 
   /// Get all continue watching items, sorted by most recent first.
@@ -3128,7 +3185,7 @@ class StorageService {
   /// floor nothing meaningful was watched (a mis-click, or a few seconds of
   /// buffering), and above the ceiling it's effectively finished.
   static const double _iptvWatchStartedFraction = 0.02;
-  static const double _iptvWatchFinishedFraction = 0.95;
+  static const double iptvWatchFinishedFraction = 0.95;
 
   /// Remember that an on-demand IPTV item was played, capturing enough
   /// metadata to rebuild its row without re-fetching the panel — the same
@@ -3147,6 +3204,15 @@ class StorageService {
     String? group,
     String? playlistId,
     Map<String, String>? httpHeaders,
+    // Series-episode markers (Xtream series only). When set, the Continue
+    // Watching shelf collapses a series' episodes into one row and keeps the
+    // series present after a mid-series episode finishes. Absent for movies /
+    // catchup / live — their behavior is unchanged.
+    String? seriesId,
+    String? seriesName,
+    int? season,
+    int? episode,
+    bool? hasNextEpisode,
   }) async {
     if (channelUrl.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
@@ -3170,6 +3236,11 @@ class StorageService {
       // specific UA/Referer has to carry it here — exactly as favorites do.
       if (httpHeaders != null && httpHeaders.isNotEmpty)
         'httpHeaders': httpHeaders,
+      if (seriesId != null && seriesId.isNotEmpty) 'seriesId': seriesId,
+      if (seriesName != null && seriesName.isNotEmpty) 'seriesName': seriesName,
+      if (season != null) 'season': season,
+      if (episode != null) 'episode': episode,
+      if (hasNextEpisode != null) 'hasNext': hasNextEpisode,
       'lastPlayedAt': DateTime.now().millisecondsSinceEpoch,
     };
 
@@ -3231,23 +3302,36 @@ class StorageService {
     if (history.isEmpty) return [];
 
     final resumeMap = await _getVideoResumeMap();
-    final items = <Map<String, dynamic>>[];
 
+    // Series identity for grouping: <playlistId>::<seriesId>. Same shape the
+    // shelf and per-series audio use.
+    String? seriesKeyOf(Map<String, dynamic> meta) {
+      final sid = meta['seriesId'];
+      if (sid == null || (sid is String && sid.isEmpty)) return null;
+      return '${meta['playlistId'] ?? ''}::$sid';
+    }
+
+    // First pass: gather every started entry with its recency, and track the
+    // most-recent recency per series.
+    final started = <Map<String, dynamic>>[];
+    final seriesLatest = <String, int>{};
     for (final entry in history.entries) {
       final resume = resumeMap[entry.key];
       if (resume is! Map) continue;
-
       final positionMs = (resume['positionMs'] as num?)?.toInt() ?? 0;
       final durationMs = (resume['durationMs'] as num?)?.toInt() ?? 0;
       if (durationMs <= 0) continue;
-
       final progress = positionMs / durationMs;
-      if (progress < _iptvWatchStartedFraction ||
-          progress > _iptvWatchFinishedFraction) {
-        continue;
-      }
+      if (progress < _iptvWatchStartedFraction) continue;
 
-      items.add({
+      final sortAt = (resume['updatedAt'] as num?)?.toInt() ??
+          _iptvWatchTimestamp(entry.value);
+      final seriesKey = seriesKeyOf(entry.value);
+      if (seriesKey != null) {
+        final prev = seriesLatest[seriesKey];
+        if (prev == null || sortAt > prev) seriesLatest[seriesKey] = sortAt;
+      }
+      started.add({
         ...entry.value,
         'url': entry.key,
         'positionMs': positionMs,
@@ -3255,9 +3339,29 @@ class StorageService {
         'progress': progress,
         // Prefer when playback last moved; a rebuilt-metadata entry can be
         // older than the watching it describes.
-        'sortAt': (resume['updatedAt'] as num?)?.toInt() ??
-            _iptvWatchTimestamp(entry.value),
+        'sortAt': sortAt,
+        if (seriesKey != null) '_seriesKey': seriesKey,
       });
+    }
+
+    // Second pass: a partially-watched item always shows. A FINISHED item is
+    // kept only when it's a series episode that (a) still has a next episode
+    // and (b) is the most-recent watched episode of its series — so a series
+    // stays for "next up" after finishing a middle episode, but leaves once
+    // its finale (or last-watched episode) is done. Movies/catchup and older
+    // finished episodes drop out as before.
+    final items = <Map<String, dynamic>>[];
+    for (final item in started) {
+      final progress = item['progress'] as double;
+      if (progress <= iptvWatchFinishedFraction) {
+        items.add(item);
+        continue;
+      }
+      final seriesKey = item['_seriesKey'] as String?;
+      final keep = seriesKey != null &&
+          item['hasNext'] == true &&
+          (item['sortAt'] as int) == seriesLatest[seriesKey];
+      if (keep) items.add(item);
     }
 
     items.sort(
@@ -3315,7 +3419,7 @@ class StorageService {
     return {
       for (final entry in states.entries)
         if (entry.value.fraction >= _iptvWatchStartedFraction &&
-            entry.value.fraction <= _iptvWatchFinishedFraction)
+            entry.value.fraction <= iptvWatchFinishedFraction)
           entry.key: entry.value.positionMs,
     };
   }
@@ -5231,6 +5335,43 @@ class StorageService {
     } else {
       await prefs.setString(_playerDefaultAudioLanguageKey, languageCode);
     }
+  }
+
+  static const String _iptvSeriesAudioLangKey = 'iptv_series_audio_lang';
+
+  /// The audio LANGUAGE the user last chose for an IPTV series (keyed by the
+  /// series' name). Language, not the mpv track ordinal — episodes are
+  /// separate files whose track ordering differs, so an ordinal wouldn't
+  /// carry. Null when the series has no remembered choice.
+  static Future<String?> getIptvSeriesAudioLanguage(String seriesKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_iptvSeriesAudioLangKey);
+    if (raw == null) return null;
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      return map[seriesKey] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Remember the audio language for an IPTV series so later episodes (and
+  /// future sessions) default to it.
+  static Future<void> setIptvSeriesAudioLanguage(
+    String seriesKey,
+    String languageCode,
+  ) async {
+    if (seriesKey.isEmpty || languageCode.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    Map<String, dynamic> map = {};
+    final raw = prefs.getString(_iptvSeriesAudioLangKey);
+    if (raw != null) {
+      try {
+        map = jsonDecode(raw) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+    map[seriesKey] = languageCode;
+    await prefs.setString(_iptvSeriesAudioLangKey, jsonEncode(map));
   }
 
   // IPTV Playlist Settings

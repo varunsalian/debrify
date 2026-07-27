@@ -182,6 +182,11 @@ class VideoPlayerScreen extends StatefulWidget {
   final bool simklScrobble;
   final double? simklProgressPercent;
 
+  /// Subtitle tracks known at launch (e.g. YouTube closed captions), surfaced
+  /// in the subtitle menu as a pre-loaded provider group. Null for sources
+  /// whose subtitles are fetched lazily from Stremio addons by IMDb id.
+  final List<StremioSubtitle>? initialSubtitles;
+
   const VideoPlayerScreen({
     Key? key,
     required this.videoUrl,
@@ -231,6 +236,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.traktProgressPercent,
     this.simklScrobble = false,
     this.simklProgressPercent,
+    this.initialSubtitles,
   }) : assert(randomStartMaxPercent >= 0),
        super(key: key);
 
@@ -453,6 +459,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Per-addon view of the same fetch (drives the sheet's addon groups);
   // _cachedStremioSubtitles is its deduped flat projection.
   List<AddonSubtitleSlot>? _cachedAddonSlots;
+  // Subtitle tracks supplied at launch (e.g. YouTube captions), surfaced as a
+  // pre-loaded provider group. Content-independent: not keyed by IMDb, so it
+  // survives the IMDb-gated cache logic and is offered whenever no per-item
+  // slots exist. Built once in initState from widget.initialSubtitles.
+  List<AddonSubtitleSlot>? _injectedSubtitleSlots;
   String? _cachedSubtitleKey; // Format: "imdbId:season:episode" or "imdbId"
   String?
   _selectedStremioSubtitleId; // Track selected addon subtitle for UI state
@@ -605,6 +616,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     AnalyticsService.screenView('video_player');
     _startAnalyticsHeartbeat();
     _activePlaylist = widget.playlist;
+
+    // Launch-time subtitles (e.g. YouTube captions): wrap into a single loaded
+    // provider group so they appear in the subtitle menu without an addon
+    // fetch. Grouped under the first track's source label (e.g. "YouTube").
+    final initialSubs = widget.initialSubtitles;
+    if (initialSubs != null && initialSubs.isNotEmpty) {
+      _injectedSubtitleSlots = [
+        AddonSubtitleSlot(
+          addonId: 'injected',
+          addonName: initialSubs.first.source,
+          status: AddonSubtitleStatus.ok,
+          subtitles: initialSubs,
+        ),
+      ];
+    }
 
     // Picture-in-Picture (Android phone): once native confirms capability,
     // become the active PiP owner and listen so we can collapse chrome inside
@@ -1634,6 +1660,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Mark the current episode as finished if it's a series
     await _markCurrentEpisodeAsFinished();
+
+    // IPTV episode list (series/VOD): advance to the next episode in the
+    // season, mirroring the Next button. Checked first because IPTV episodes
+    // carry no playlist / magic-next, so the branches below would otherwise
+    // leave the player parked on the final frame with a next episode available.
+    if (_hasIptvNext) {
+      await _switchToIptvChannel(_currentIptvIndex + 1);
+      return;
+    }
 
     // Playlist auto-advance keeps priority over guide-based Stremio TV next.
     if (_continuousShuffleEnabled) {
@@ -2849,6 +2884,127 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Switch to IPTV channel at given index
+  /// The IPTV channel currently playing (from [widget.iptvChannels]), or null
+  /// when not in an IPTV context or the index is out of range.
+  IptvChannel? get _currentIptvChannel {
+    final chans = widget.iptvChannels;
+    if (chans == null || _currentIptvIndex < 0 ||
+        _currentIptvIndex >= chans.length) {
+      return null;
+    }
+    return chans[_currentIptvIndex];
+  }
+
+  /// Next/Previous (and end-of-episode auto-advance) are scoped to an Xtream
+  /// SERIES episode list — NOT every non-live IPTV item. A plain Movies-grid
+  /// play also passes iptvChannels, and advancing to the next unrelated movie
+  /// (or showing Next/Prev on it) would be a regression; those keep the channel
+  /// sheet only, exactly as before. [_isIptvSeriesContext] gates on the
+  /// series_id the launcher stamps onto episode channels.
+  bool get _hasIptvNext =>
+      _isIptvSeriesContext &&
+      _currentIptvIndex + 1 < (widget.iptvChannels?.length ?? 0);
+
+  bool get _hasIptvPrevious =>
+      _isIptvSeriesContext && _currentIptvIndex - 1 >= 0;
+
+  /// True only for an Xtream SERIES episode — the launcher stamps `series_id`
+  /// (+ `series_playlist_id`) into the channel's attributes. Audio-language
+  /// memory is scoped to this: a plain VOD / catchup single item (non-live but
+  /// not a series) gets the normal default-language handling, not per-series
+  /// carry-over.
+  bool get _isIptvSeriesContext {
+    final ch = _currentIptvChannel;
+    if (ch == null || ch.isLive) return false;
+    return (ch.attributes['series_id'] ?? '').isNotEmpty;
+  }
+
+  /// Session-scoped audio language the user picked while in this IPTV series
+  /// (carries across episode switches in this sitting). Persisted per-series
+  /// too — see [StorageService.setIptvSeriesAudioLanguage].
+  String? _preferredIptvAudioLanguage;
+
+  /// Per-series key for remembering the audio language — `<playlistId>::<id>`,
+  /// the SAME identity Continue Watching keys by, so two series that merely
+  /// share a display name never collide. Null unless this is a series episode.
+  String? _iptvSeriesAudioKey() {
+    final ch = _currentIptvChannel;
+    if (ch == null || ch.isLive) return null;
+    final sid = ch.attributes['series_id'];
+    if (sid == null || sid.isEmpty) return null;
+    final pid = ch.attributes['series_playlist_id'] ?? '';
+    return '$pid::$sid';
+  }
+
+  /// Remember the audio language the user just chose for the current IPTV
+  /// series episode, so later episodes and future sessions default to it.
+  /// No-op for non-IPTV / live / non-series content.
+  void _captureIptvAudioLanguage(String audioId) {
+    if (!_isIptvSeriesContext) return;
+    String? lang;
+    for (final t in _player.state.tracks.audio) {
+      if (t.id == audioId) {
+        lang = t.language;
+        break;
+      }
+    }
+    if (lang == null || lang.isEmpty || lang == 'auto' || lang == 'und') return;
+    // onTrackChanged also fires on subtitle-only changes and after our own
+    // auto-apply — skip the redundant write when the language is unchanged.
+    if (lang == _preferredIptvAudioLanguage) return;
+    _preferredIptvAudioLanguage = lang;
+    final key = _iptvSeriesAudioKey();
+    if (key != null) {
+      unawaited(StorageService.setIptvSeriesAudioLanguage(key, lang));
+    }
+  }
+
+  /// Re-apply the preferred audio track for an IPTV series episode after a
+  /// source change: this sitting's pick → this series' stored pick → the
+  /// global default audio language. Matches by language (robust across
+  /// episodes whose track ordinals differ). [ticket] is the switch generation
+  /// this apply belongs to — a newer switch (or unmount) abandons it, so it
+  /// can't set audio on the wrong episode. The preferred language is read
+  /// AFTER the track wait, so a manual pick made during the wait wins.
+  Future<void> _applyIptvAudioPreference(int ticket) async {
+    try {
+      // Tracks aren't enumerated the instant open() returns — wait briefly,
+      // bailing if a newer switch supersedes this one.
+      for (var i = 0; i < 20; i++) {
+        if (!mounted || ticket != _iptvSwitchTicket) return;
+        if (_player.state.tracks.audio.length >= 2) break;
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      if (!mounted || ticket != _iptvSwitchTicket) return;
+      final tracks = _player.state.tracks;
+      if (tracks.audio.length < 2) return; // nothing to switch to
+
+      // Resolve the target language now (not before the wait): a manual pick
+      // during the wait updated _preferredIptvAudioLanguage, and it should win.
+      String? lang = _preferredIptvAudioLanguage;
+      if (lang == null) {
+        final key = _iptvSeriesAudioKey();
+        if (key != null) {
+          lang = await StorageService.getIptvSeriesAudioLanguage(key);
+        }
+      }
+      lang ??= await StorageService.getDefaultAudioLanguage();
+      if (lang == null || !mounted || ticket != _iptvSwitchTicket) return;
+
+      mk.AudioTrack? match;
+      for (final t in tracks.audio) {
+        if (LanguageMapper.matchesLanguage(lang, t.language) ||
+            LanguageMapper.matchesLanguage(lang, t.title)) {
+          match = t;
+          break;
+        }
+      }
+      if (match != null) await _player.setAudioTrack(match);
+    } catch (_) {
+      // Non-critical — audio preference is best-effort.
+    }
+  }
+
   Future<void> _switchToIptvChannel(int index) async {
     final channels = widget.iptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
@@ -2947,6 +3103,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     if (!mounted || ticket != _iptvSwitchTicket) return;
+
+    // Carry the audio choice onto the new episode (series memory). Fire and
+    // forget: it waits for the new source's tracks then matches by language;
+    // [ticket] is this switch's generation so a newer switch abandons it.
+    if (_isIptvSeriesContext) {
+      unawaited(_applyIptvAudioPreference(ticket));
+    }
 
     // Directly trigger transition overlay cleanup sequence.
     // Unlike debrid channel switching (where _playSub listener handles
@@ -6513,14 +6676,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               _lastSliderSeekPos = null;
                             }
                           },
-                          onNext: _hasAnyNext ? _goToNextEpisode : null,
+                          // IPTV episode list (series/VOD) gets Next/Previous
+                          // that walk the season; falls back to the Debrify-TV
+                          // episode/playlist flow otherwise.
+                          onNext: _hasIptvNext
+                              ? () => _switchToIptvChannel(_currentIptvIndex + 1)
+                              : (_hasAnyNext ? _goToNextEpisode : null),
                           onNextChannel: widget.requestNextChannel != null
                               ? _goToNextChannel
                               : null,
-                          onPrevious: _hasPreviousEpisode()
-                              ? _goToPreviousEpisode
-                              : null,
-                          hasNext: _hasAnyNext,
+                          onPrevious: _hasIptvPrevious
+                              ? () => _switchToIptvChannel(_currentIptvIndex - 1)
+                              : (_hasPreviousEpisode()
+                                    ? _goToPreviousEpisode
+                                    : null),
+                          hasNext: _hasAnyNext || _hasIptvNext,
                           hasNextChannel: widget.requestNextChannel != null,
                           hasGuide:
                               (_channelEntries.isNotEmpty &&
@@ -6533,7 +6703,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               : _hasStremioTvGuide
                               ? _showStremioTvGuideOverlay
                               : null,
-                          hasPrevious: _hasPreviousEpisode(),
+                          hasPrevious: _hasPreviousEpisode() || _hasIptvPrevious,
                           hideSeekbar: widget.hideSeekbar,
                           hideOptions: widget.hideOptions,
                           hideBackButton: widget.hideBackButton,
@@ -7454,11 +7624,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               : effectiveImdbId)
         : null;
 
-    // Check if we have cached per-addon subtitle slots for this content
-    final List<AddonSubtitleSlot>? cachedSlots =
+    // Check if we have cached per-addon subtitle slots for this content.
+    final List<AddonSubtitleSlot>? baseSlots =
         (cacheKey != null && _cachedSubtitleKey == cacheKey)
         ? _cachedAddonSlots
         : null;
+    // Always include launch-supplied subtitles (e.g. YouTube captions). They
+    // aren't IMDb-keyed, so they never live in the per-item cache above and
+    // must be appended unconditionally — otherwise identifying the title (which
+    // populates _cachedAddonSlots) would make the caption group disappear.
+    final List<AddonSubtitleSlot>? cachedSlots = _injectedSubtitleSlots != null
+        ? [...?baseSlots, ..._injectedSubtitleSlots!]
+        : baseSlots;
 
     if (cachedSlots != null) {
       debugPrint(
@@ -7475,6 +7652,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (!subtitleId.startsWith('stremio:')) {
           _activeExternalSubtitlePath = null;
         }
+        // Remember the chosen audio language for this IPTV series (carries to
+        // later episodes and future sessions). No-op off IPTV.
+        _captureIptvAudioLanguage(audioId);
         await _persistTrackChoice(audioId, subtitleId);
       },
       // Fires only on a genuine subtitle switch (not audio, not re-select, not a
@@ -7680,6 +7860,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         subtitleApplied = await _applyDefaultSubtitleLanguage();
       }
 
+      // IPTV series: the language-based memory wins over the per-title ordinal
+      // / global default applied above (episodes are separate files whose track
+      // orderings differ, so only language carries). No-op off a series episode.
+      // No switch is in flight on the initial open, so the current ticket is a
+      // valid generation for the staleness guard.
+      if (_isIptvSeriesContext) {
+        await _applyIptvAudioPreference(_iptvSwitchTicket);
+      }
+
       // Final check before applying state
       if (restoreToken != _addonSubtitleFetchToken) {
         debugPrint('SubAuto: restore aborted post-apply (content changed)');
@@ -7808,6 +7997,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ext = 'ttml';
       } else if (urlPath.endsWith('.sub')) {
         ext = 'sub';
+      } else {
+        // No file extension in the path (e.g. YouTube's timedtext endpoint) —
+        // fall back to the format carried in the `fmt`/`format` query param so
+        // the temp file gets the right extension for libmpv's demuxer.
+        final fmt = (uri.queryParameters['fmt'] ??
+                uri.queryParameters['format'] ??
+                '')
+            .toLowerCase();
+        if (fmt == 'vtt') {
+          ext = 'vtt';
+        } else if (fmt == 'ttml') {
+          ext = 'ttml';
+        }
+        // Note: YouTube's srv1/srv2/srv3 are XML timedtext, NOT TTML, and
+        // libmpv can't parse them — we deliberately request fmt=vtt for
+        // YouTube captions, so those never reach here. Leaving ext='srt' for
+        // any unknown fmt is a safe default (WEBVTT/SRT auto-detect by libmpv).
       }
 
       final dir = await getTemporaryDirectory();

@@ -1,0 +1,4 @@
+# Copy to .dev.vars (gitignored) and fill in. Values also go to Cloudflare via `wrangler secret put`.
+DISCORD_TOKEN=            # Bot token from the Discord Developer Portal → Bot tab
+DISCORD_PUBLIC_KEY=       # General Information → Public Key
+GITHUB_TOKEN=             # Fine-grained PAT, Issues:write on the tracker repo

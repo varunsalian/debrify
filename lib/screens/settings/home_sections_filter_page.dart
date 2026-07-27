@@ -131,6 +131,10 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         _Item('simkl:movies', 'Movies', on('simkl:movies')),
         _Item('simkl:shows', 'Shows', on('simkl:shows')),
       ]),
+      _Group('IPTV Continue Watching', [
+        _Item('iptv:movies', 'Movies', on('iptv:movies')),
+        _Item('iptv:series', 'Series', on('iptv:series')),
+      ]),
       _Group('Favorites', [
         _Item('fav:playlist', 'Playlist', on('fav:playlist')),
         _Item('fav:debrify', 'Debrify TV', on('fav:debrify')),

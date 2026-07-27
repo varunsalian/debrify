@@ -21,6 +21,7 @@ import '../services/analytics_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/settings_manager.dart';
+import '../services/iptv_cw_router.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
@@ -515,6 +516,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   final List<FocusNode> _cwMovieNodes = [];
   final List<FocusNode> _cwSeriesNodes = [];
 
+  // IPTV Continue Watching (Xtream VOD movies + series), sourced from the
+  // player's own watch history via [IptvCwRouter] — kept separate from the
+  // metadata-addon rows above because IPTV items aren't IMDb-keyed, so their
+  // progress/episode lookups and routing key off the router's routeKey (stored
+  // as the synthetic meta id) instead of an imdbId.
+  List<StremioMeta> _iptvCwMovies = [];
+  List<StremioMeta> _iptvCwSeries = [];
+  final List<FocusNode> _iptvCwMovieNodes = [];
+  final List<FocusNode> _iptvCwSeriesNodes = [];
+  final Map<String, double> _iptvCwProgress = {}; // routeKey → 0..1
+  final Map<String, String> _iptvCwEpisode = {}; // routeKey → 'S2 · E5'
+  final Map<String, IptvCwEntry> _iptvCwByKey = {}; // routeKey → routing entry
+  int _iptvCwLoadToken = 0;
+
   /// Monotonic guard so an earlier, slower Continue Watching load (which does
   /// one SharedPreferences round-trip per item) can't finish after a newer one
   /// and dispose the focus nodes / state the newer run just installed.
@@ -729,6 +744,32 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         onQuickPlay: _playSimklCwItem,
         onSeeAll: () => _openSimklCwSeeAll('series'),
       ),
+    // IPTV Continue Watching (Xtream VOD). Routes through [IptvCwRouter], not
+    // the addon/tracker pipeline — a movie resumes playback, a series opens the
+    // merged Xtream series page. Progress/episode key off the synthetic meta id
+    // (routeKey) since these metas carry no imdbId.
+    if (_iptvCwMovies.isNotEmpty && !_homeDisabled.contains('iptv:movies'))
+      _CwRow(
+        title: 'IPTV Continue Watching',
+        tag: 'Movies',
+        items: _iptvCwMovies,
+        nodes: _iptvCwMovieNodes,
+        progressOf: (m) => _iptvCwProgress[m.id],
+        episodeOf: (_) => null,
+        onOpen: _openIptvCwItem,
+        onQuickPlay: _openIptvCwItem,
+      ),
+    if (_iptvCwSeries.isNotEmpty && !_homeDisabled.contains('iptv:series'))
+      _CwRow(
+        title: 'IPTV Continue Watching',
+        tag: 'Series',
+        items: _iptvCwSeries,
+        nodes: _iptvCwSeriesNodes,
+        progressOf: (m) => _iptvCwProgress[m.id],
+        episodeOf: (m) => _iptvCwEpisode[m.id],
+        onOpen: _openIptvCwItem,
+        onQuickPlay: _openIptvCwItem,
+      ),
   ];
 
   /// Whether any Continue Watching row is currently on-screen (drives focus
@@ -746,7 +787,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           (_simklMovies.isNotEmpty &&
               !_homeDisabled.contains('simkl:movies')) ||
           (_simklSeries.isNotEmpty &&
-              !_homeDisabled.contains('simkl:shows'))) &&
+              !_homeDisabled.contains('simkl:shows')) ||
+          (_iptvCwMovies.isNotEmpty &&
+              !_homeDisabled.contains('iptv:movies')) ||
+          (_iptvCwSeries.isNotEmpty &&
+              !_homeDisabled.contains('iptv:series'))) &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
@@ -1109,6 +1154,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Simkl rows) runs after this on cold start, so a 2nd concurrent scan
         // here would be pure duplicate startup work on weak TV hardware.
         _loadSimklContinueWatching(refreshBound: false),
+        _loadIptvContinueWatching(),
         _loadTvFavorites(),
         _loadStremioTvFavorites(),
         _loadIptvFavorites(),
@@ -1367,6 +1413,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     for (final n in [
       ..._cwMovieNodes,
       ..._cwSeriesNodes,
+      ..._iptvCwMovieNodes,
+      ..._iptvCwSeriesNodes,
       ..._traktMovieNodes,
       ..._traktSeriesNodes,
       ..._simklMovieNodes,
@@ -1381,6 +1429,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
     _cwMovieNodes.clear();
     _cwSeriesNodes.clear();
+    _iptvCwMovieNodes.clear();
+    _iptvCwSeriesNodes.clear();
     _traktMovieNodes.clear();
     _traktSeriesNodes.clear();
     _simklMovieNodes.clear();
@@ -1827,6 +1877,76 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ..addAll(addonIds);
     });
     _maybeAutoFocusBoard();
+  }
+
+  /// Load the IPTV Continue Watching shelves (Xtream VOD movies + series) from
+  /// the player's own watch history. Independent of [_loadContinueWatching] —
+  /// different data source, different (non-IMDb) identity — but follows the same
+  /// token-guard + node-sync discipline so a slow reload can't clobber a newer
+  /// one or drop the focus node the user is sitting on.
+  Future<void> _loadIptvContinueWatching() async {
+    // Never rendered on the dedicated Search tab (mirrors the tracker rows).
+    if (widget.searchMode) return;
+    final token = ++_iptvCwLoadToken;
+    final rows = await IptvCwRouter.load();
+    if (!mounted || token != _iptvCwLoadToken) return;
+
+    StremioMeta metaFor(IptvCwEntry e) => StremioMeta(
+      // routeKey as the id (no imdbId → all addon enrichment / bound-source /
+      // hero-trailer lookups no-op, which is what we want for IPTV).
+      id: e.routeKey,
+      type: e.isSeries ? 'series' : 'movie',
+      name: e.title,
+      poster: e.posterUrl,
+    );
+
+    final movies = [for (final e in rows.movies) metaFor(e)];
+    final series = [for (final e in rows.series) metaFor(e)];
+    final progress = <String, double>{};
+    final episode = <String, String>{};
+    final byKey = <String, IptvCwEntry>{};
+    for (final e in [...rows.movies, ...rows.series]) {
+      byKey[e.routeKey] = e;
+      progress[e.routeKey] = e.progress;
+      if (e.seLabel != null) episode[e.routeKey] = e.seLabel!;
+    }
+
+    _syncCwNodes(_iptvCwMovieNodes, movies.length, 'iptv-movie');
+    _syncCwNodes(_iptvCwSeriesNodes, series.length, 'iptv-series');
+
+    setState(() {
+      _iptvCwMovies = movies;
+      _iptvCwSeries = series;
+      _iptvCwProgress
+        ..clear()
+        ..addAll(progress);
+      _iptvCwEpisode
+        ..clear()
+        ..addAll(episode);
+      _iptvCwByKey
+        ..clear()
+        ..addAll(byKey);
+    });
+    _maybeAutoFocusBoard();
+  }
+
+  /// Open an IPTV Continue Watching card: a series routes to the merged Xtream
+  /// series page, a movie resumes playback. Both go through [IptvCwRouter];
+  /// [_playedSinceRefresh] latches so the return refresh rebuilds the shelves.
+  Future<void> _openIptvCwItem(StremioMeta item) async {
+    final entry = _iptvCwByKey[item.id];
+    if (entry == null) return;
+    _playedSinceRefresh = true;
+    await IptvCwRouter.open(
+      context,
+      entry,
+      isTelevision: widget.isTelevision,
+    );
+    if (!mounted) return;
+    // Off-TV push() awaits to the pop; on TV the native-return hook
+    // ([_onPlaybackReturned]) refreshes. Refresh here too for the in-app path
+    // (series detail / in-app player) so a resumed position updates the shelf.
+    await _refreshAfterPlayback();
   }
 
   /// Resize a Continue Watching row's focus-node list to [count], preserving
@@ -9706,6 +9826,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _playedSinceRefresh = false;
     try {
       await _loadContinueWatching();
+      if (!mounted) return;
+      await _loadIptvContinueWatching();
       if (!mounted) return;
       // The dedicated Search tab never renders the tracker rows (mirrors the
       // guard in _onIntegrationsChanged) — don't spend the calls there.

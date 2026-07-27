@@ -204,6 +204,14 @@
 
             <!-- ══ RIGHT GROUP ══ -->
 
+            <!-- Previous Episode (IPTV series only; shown at runtime) -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_prev_button"
+                style="@style/CinemaControlButton"
+                android:drawableStart="@drawable/ic_prev_stream"
+                android:visibility="gone"
+                android:text="Previous" />
+
             <!-- Next Episode -->
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_next_button"

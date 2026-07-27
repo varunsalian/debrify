@@ -3,6 +3,18 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+/// Result of a native start: either a [taskId] on success, or the reason the
+/// start failed (e.g. `fgs_not_allowed` on Android 12+ background starts).
+class AndroidStartResult {
+  final String? taskId;
+  final String? errorCode;
+  final String? errorMessage;
+
+  const AndroidStartResult({this.taskId, this.errorCode, this.errorMessage});
+
+  bool get ok => taskId != null;
+}
+
 class AndroidNativeDownloader {
   static const MethodChannel _channel = MethodChannel(
     'com.debrify.app/downloader',
@@ -21,30 +33,94 @@ class AndroidNativeDownloader {
     return _eventStream!;
   }
 
-  static Future<String?> start({
+  static Future<AndroidStartResult> start({
     required String url,
+    String? taskId,
     String fileName = 'download',
     String subDir = 'Debrify',
     String mimeType = 'application/octet-stream',
     Map<String, String>? headers,
+    String? treeUri,
   }) async {
-    if (!Platform.isAndroid) return null;
+    if (!Platform.isAndroid) {
+      return const AndroidStartResult(errorCode: 'not_android');
+    }
     // A PlatformException (e.g. foreground-service start not allowed from
-    // the background on Android 12+) must surface as a failed start, not an
-    // uncaught error in the download UI.
+    // the background on Android 12+) must surface as a failed start WITH its
+    // reason — swallowing it to null loses e.g. fgs_not_allowed, which the
+    // orchestrator handles differently from a dead link.
     try {
-      return await _channel.invokeMethod<String>('startMediaStoreDownload', {
+      final id = await _channel.invokeMethod<String>('startMediaStoreDownload', {
         'url': url,
+        if (taskId != null) 'taskId': taskId,
         'fileName': fileName,
         'subDir': subDir,
         'mimeType': mimeType,
         'headers': headers ?? <String, String>{},
+        if (treeUri != null) 'treeUri': treeUri,
       });
+      if (id == null) {
+        return const AndroidStartResult(errorCode: 'no_task_id');
+      }
+      return AndroidStartResult(taskId: id);
+    } on PlatformException catch (e) {
+      return AndroidStartResult(errorCode: e.code, errorMessage: e.message);
+    } on MissingPluginException {
+      return const AndroidStartResult(errorCode: 'missing_plugin');
+    }
+  }
+
+  /// Native truth for reconciliation: every persisted task merged with the
+  /// live in-memory registry. Status is one of running/paused/failed.
+  static Future<List<Map<String, dynamic>>> queryTasks() async {
+    if (!Platform.isAndroid) return const [];
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>('queryDownloadTasks');
+      if (raw == null) return const [];
+      return raw
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(growable: false);
+    } on PlatformException {
+      return const [];
+    } on MissingPluginException {
+      return const [];
+    }
+  }
+
+  /// Purge a task from the native persistent store (after Dart has consumed
+  /// its terminal state or cleaned a ghost). Does not touch the file.
+  static Future<bool> forgetTask(String taskId) async {
+    if (!Platform.isAndroid) return false;
+    return _invokeBool('forgetDownloadTask', {'taskId': taskId});
+  }
+
+  /// Opens the system folder picker (ACTION_OPEN_DOCUMENT_TREE) and persists
+  /// the grant. Returns {treeUri, displayName}, or null if the user backed out.
+  static Future<Map<String, dynamic>?> pickDownloadDirectory() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final res = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('pickDownloadDirectory');
+      if (res == null) return null;
+      return Map<String, dynamic>.from(res);
     } on PlatformException {
       return null;
     } on MissingPluginException {
       return null;
     }
+  }
+
+  /// Releases a previously persisted folder grant (on change/reset).
+  static Future<bool> releaseDownloadDirectory(String treeUri) async {
+    if (!Platform.isAndroid) return false;
+    return _invokeBool('releaseDownloadDirectory', {'treeUri': treeUri});
+  }
+
+  /// True when the grant for [treeUri] is still held and the folder is
+  /// writable (SD card present, folder not deleted).
+  static Future<bool> validateDownloadDirectory(String treeUri) async {
+    if (!Platform.isAndroid) return false;
+    return _invokeBool('validateDownloadDirectory', {'treeUri': treeUri});
   }
 
   static Future<String?> startUpdate({
