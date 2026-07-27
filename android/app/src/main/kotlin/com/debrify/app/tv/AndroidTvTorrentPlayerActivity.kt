@@ -6191,40 +6191,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun umAppearanceRows(): List<UnifiedMenuController.Row> {
-        val ctx = this
-        val color = SubtitleSettings.getCurrentColor(ctx)
-        val outline = SubtitleSettings.getCurrentOutlineColor(ctx)
-        return listOf(
-            mrow("Size", value = SubtitleSettings.getCurrentSize(ctx).label, adjustable = true, onAdjust = { d ->
-                if (d > 0) SubtitleSettings.cycleSizeUp(ctx) else SubtitleSettings.cycleSizeDown(ctx); applySubtitleSettings()
-            }),
-            mrow("Style", value = SubtitleSettings.getCurrentStyle(ctx).label, adjustable = true, onAdjust = { d ->
-                if (d > 0) SubtitleSettings.cycleStyleUp(ctx) else SubtitleSettings.cycleStyleDown(ctx); applySubtitleSettings()
-            }),
-            mrow("Text colour", value = color.label, swatch = color.color, adjustable = true, onAdjust = { d ->
-                if (d > 0) SubtitleSettings.cycleColorUp(ctx) else SubtitleSettings.cycleColorDown(ctx); applySubtitleSettings()
-            }),
-            mrow("Outline colour", value = outline.label, swatch = outline.color, adjustable = true, onAdjust = { d ->
-                if (d > 0) SubtitleSettings.cycleOutlineColorUp(ctx) else SubtitleSettings.cycleOutlineColorDown(ctx); applySubtitleSettings()
-            }),
-            mrow("Background", value = SubtitleSettings.getCurrentBg(ctx).label, adjustable = true, onAdjust = { d ->
-                if (d > 0) SubtitleSettings.cycleBgUp(ctx) else SubtitleSettings.cycleBgDown(ctx); applySubtitleSettings()
-            }),
-            mrow("Position", value = SubtitleSettings.getCurrentElevation(ctx).label, adjustable = true, onAdjust = { d ->
-                if (d > 0) SubtitleSettings.cycleElevationUp(ctx) else SubtitleSettings.cycleElevationDown(ctx); applySubtitleSettings()
-            }),
-            mrow("Font", value = SubtitleFontManager.getCurrentFontLabel(ctx), adjustable = true, onAdjust = { d ->
-                if (d > 0) SubtitleFontManager.cycleFontUp(ctx) else SubtitleFontManager.cycleFontDown(ctx); applySubtitleSettings()
-            }),
-            mrow("Bold", value = if (SubtitleSettings.getBold(ctx)) "On" else "Off", adjustable = true, onAdjust = { _ ->
-                SubtitleSettings.setBold(ctx, !SubtitleSettings.getBold(ctx)); applySubtitleSettings()
-            }),
-            mrow("Reset all to defaults", accent = true, onOk = {
-                SubtitleSettings.resetToDefaults(ctx); SubtitleFontManager.resetToDefault(ctx); applySubtitleSettings()
-            })
-        )
-    }
+    private fun umAppearanceRows(): List<UnifiedMenuController.Row> =
+        // Shared with the Torbox player so the subtitle-appearance controls
+        // can't drift between the two (see UnifiedMenuSections).
+        UnifiedMenuSections.appearanceRows(this) { applySubtitleSettings() }
 
     private fun umTimingRows(): List<UnifiedMenuController.Row> {
         val ctx = this

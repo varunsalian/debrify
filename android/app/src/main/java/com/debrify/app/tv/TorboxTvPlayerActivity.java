@@ -303,6 +303,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     // fallback when the flag is off (or the layout view is absent).
     private static final boolean USE_UNIFIED_MENU = true;
     private UnifiedMenuController unifiedMenu;
+    // Whether the unified Subtitles→Track list has been built for this menu
+    // opening. Guards a one-shot lazy rebuild so an empty list (a stream with
+    // no subtitle tracks) doesn't re-collect tracks on every DPAD keypress.
+    // Reset when the menu closes; load-event refreshes rebuild via their own path.
+    private boolean umSubtitleTracksBuilt = false;
 
     // Analytics keep-alive: this native player has no periodic progress channel
     // of its own, so we ping Flutter every few minutes while actually playing so
@@ -3616,6 +3621,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
             @Override
             public void onHidden() {
+                umSubtitleTracksBuilt = false;   // rebuild the track list on next open
                 if (playerView != null) {
                     playerView.requestFocus();
                 }
@@ -3713,11 +3719,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private List<UnifiedMenuController.Row> umSubtitleTrackRows() {
-        // Populate the flat list lazily (mirrors the panel). Don't rebuild on
-        // every render: rebuild re-derives the selected index from the not-yet-
-        // updated player tracks and would clobber a just-made selection.
-        if (subtitleTrackOptions.isEmpty()) {
+        // Populate the flat list once per menu opening. Don't rebuild on every
+        // render: rebuild re-derives the selected index from the not-yet-updated
+        // player tracks and would clobber a just-made selection — and a stream
+        // with no subtitle tracks stays empty, which would otherwise re-collect
+        // tracks on every DPAD keypress. Load-event refreshes rebuild separately.
+        if (!umSubtitleTracksBuilt) {
             rebuildSubtitleTrackOptions();
+            umSubtitleTracksBuilt = true;
         }
         List<UnifiedMenuController.Row> rows = new ArrayList<>();
         rows.add(UnifiedMenuController.row("Off")
@@ -3757,53 +3766,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private List<UnifiedMenuController.Row> umAppearanceRows() {
-        List<UnifiedMenuController.Row> rows = new ArrayList<>();
-        rows.add(UnifiedMenuController.row("Size")
-                .value(SubtitleSettings.getCurrentSize(this).getLabel())
-                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleSizeUp(this); else SubtitleSettings.cycleSizeDown(this); applySubtitleSettings(); })
-                .build());
-        rows.add(UnifiedMenuController.row("Style")
-                .value(SubtitleSettings.getCurrentStyle(this).getLabel())
-                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleStyleUp(this); else SubtitleSettings.cycleStyleDown(this); applySubtitleSettings(); })
-                .build());
-
-        SubtitleSettings.ColorOption color = SubtitleSettings.getCurrentColor(this);
-        rows.add(UnifiedMenuController.row("Text colour")
-                .value(color.getLabel())
-                .swatch(color.getColor())
-                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleColorUp(this); else SubtitleSettings.cycleColorDown(this); applySubtitleSettings(); })
-                .build());
-
-        SubtitleSettings.OutlineColorOption outline = SubtitleSettings.getCurrentOutlineColor(this);
-        UnifiedMenuController.RowBuilder outlineRow = UnifiedMenuController.row("Outline colour")
-                .value(outline.getLabel());
-        if (outline.getColor() != null) {
-            outlineRow.swatch(outline.getColor());
-        }
-        outlineRow.onAdjust(d -> { if (d > 0) SubtitleSettings.cycleOutlineColorUp(this); else SubtitleSettings.cycleOutlineColorDown(this); applySubtitleSettings(); });
-        rows.add(outlineRow.build());
-
-        rows.add(UnifiedMenuController.row("Background")
-                .value(SubtitleSettings.getCurrentBg(this).getLabel())
-                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleBgUp(this); else SubtitleSettings.cycleBgDown(this); applySubtitleSettings(); })
-                .build());
-        rows.add(UnifiedMenuController.row("Position")
-                .value(SubtitleSettings.getCurrentElevation(this).getLabel())
-                .onAdjust(d -> { if (d > 0) SubtitleSettings.cycleElevationUp(this); else SubtitleSettings.cycleElevationDown(this); applySubtitleSettings(); })
-                .build());
-        rows.add(UnifiedMenuController.row("Font")
-                .value(SubtitleFontManager.getCurrentFontLabel(this))
-                .onAdjust(d -> { if (d > 0) SubtitleFontManager.cycleFontUp(this); else SubtitleFontManager.cycleFontDown(this); applySubtitleSettings(); })
-                .build());
-        rows.add(UnifiedMenuController.row("Bold")
-                .value(SubtitleSettings.getBold(this) ? "On" : "Off")
-                .onAdjust(d -> { SubtitleSettings.setBold(this, !SubtitleSettings.getBold(this)); applySubtitleSettings(); })
-                .build());
-        rows.add(UnifiedMenuController.row("Reset all to defaults")
-                .accent(true)
-                .onOk(() -> { SubtitleSettings.resetToDefaults(this); SubtitleFontManager.resetToDefault(this); applySubtitleSettings(); })
-                .build());
-        return rows;
+        // Shared with the torrent player so the subtitle-appearance controls
+        // can't drift between the two (see UnifiedMenuSections).
+        return UnifiedMenuSections.appearanceRows(this, this::applySubtitleSettings);
     }
 
     private List<UnifiedMenuController.Row> umTimingRows() {
