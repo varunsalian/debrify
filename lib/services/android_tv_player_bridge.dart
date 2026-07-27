@@ -9,6 +9,7 @@ import 'package:flutter/material.dart' show debugPrint;
 import '../utils/movie_parser.dart';
 import 'analytics_service.dart';
 import 'iptv_epg_service.dart';
+import 'storage_service.dart';
 import 'movie_metadata_service.dart';
 import 'stremio_iptv_service.dart';
 import 'stremio_service.dart';
@@ -181,6 +182,20 @@ class AndroidTvPlayerBridge {
           // Dedicated keep-alive ping from the Java (Torbox/Real-Debrid/stream)
           // TV player, which has no periodic progress channel of its own.
           AnalyticsService.playbackHeartbeat('torbox_tv');
+          return null;
+        case 'saveIptvSeriesAudio':
+          // The native TV player captured the user's audio-language pick for an
+          // Xtream series — persist it under the same per-series key the phone/
+          // desktop player uses, so both surfaces remember the same choice.
+          if (call.arguments is Map) {
+            final m = call.arguments as Map;
+            final key = m['seriesKey'] as String?;
+            final lang = m['lang'] as String?;
+            if (key != null && key.isNotEmpty && lang != null &&
+                lang.isNotEmpty) {
+              await StorageService.setIptvSeriesAudioLanguage(key, lang);
+            }
+          }
           return null;
         case 'torboxPlaybackFinished':
         case 'realDebridPlaybackFinished':

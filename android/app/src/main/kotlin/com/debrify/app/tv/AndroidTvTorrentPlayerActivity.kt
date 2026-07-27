@@ -137,6 +137,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Controls
     private var controlsOverlay: View? = null
     private var pauseButton: AppCompatButton? = null
+    private var iptvPrevButton: AppCompatButton? = null
+    private var iptvNextButton: AppCompatButton? = null
     private var audioButton: AppCompatButton? = null
     private var subtitleButton: AppCompatButton? = null
     private var aspectButton: AppCompatButton? = null
@@ -209,6 +211,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var isIptvMode = false
     private var iptvChannels = mutableListOf<IptvChannelEntry>()
     private var currentIptvIndex = 0
+
+    // Xtream series audio memory: the `<playlistId>::<seriesId>` key the Flutter
+    // store uses, and the language resolved from it at launch. A native audio
+    // pick updates the TrackSelector's preferred language (so it carries to the
+    // next episode) and rounds back to Flutter to persist. Null unless this
+    // IPTV session is an Xtream series.
+    private var iptvSeriesAudioKey: String? = null
+    private var iptvPreferredAudioLang: String? = null
 
     // Per-channel HTTP headers for the CURRENT channel, injected into every
     // player request by the IPTV resolver installed in setupPlayer. Written
@@ -545,6 +555,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         return
                     }
                     sendProgress(completed = true)
+
+                    // IPTV episode list (series/VOD): auto-advance to the next
+                    // episode, mirroring the Next button. Checked before the
+                    // payload guard below because IPTV mode has no `payload`
+                    // model — without this an episode just parks on its final
+                    // frame with a next episode available.
+                    if (isIptvMode) {
+                        nextIptvEpisode()?.let { switchToIptvChannel(it) }
+                        return
+                    }
+
                     val model = payload ?: return
                     if (continuousShuffleEnabled) {
                         val shuffleIndex = pickShuffleIndex()
@@ -1792,7 +1813,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         speedButton = playerView.findViewById(R.id.debrify_speed_button)
         val playlistButton: AppCompatButton? = playerView.findViewById(R.id.debrify_playlist_button)
         val nextButton: AppCompatButton? = playerView.findViewById(R.id.debrify_next_button)
+        val prevButton: AppCompatButton? = playerView.findViewById(R.id.debrify_prev_button)
         val randomButton: AppCompatButton? = playerView.findViewById(R.id.debrify_random_button)
+        iptvNextButton = nextButton
+        iptvPrevButton = prevButton
 
         // Time display views (Cinema Mode)
         debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display)  // Legacy (hidden)
@@ -1852,6 +1876,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         applyAppleTvAnimation(speedButton)
         applyAppleTvAnimation(playlistButton)
         applyAppleTvAnimation(nextButton)
+        applyAppleTvAnimation(prevButton)
         applyAppleTvAnimation(randomButton)
 
         val extendTimerOnFocus = View.OnFocusChangeListener { _, hasFocus ->
@@ -1927,9 +1952,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         nextButton?.setOnClickListener {
             hideControlsMenu()
-            playNext()
+            // In an IPTV episode list, walk the season; otherwise the playlist.
+            val iptvNext = nextIptvEpisode()
+            if (iptvNext != null) switchToIptvChannel(iptvNext) else playNext()
         }
         nextButton?.onFocusChangeListener = extendTimerOnFocus
+
+        // Previous-episode button — IPTV episode lists only (GONE by default in
+        // the layout; shown via updateIptvEpisodeControls when a previous
+        // episode exists).
+        prevButton?.setOnClickListener {
+            hideControlsMenu()
+            prevIptvEpisode()?.let { switchToIptvChannel(it) }
+        }
+        prevButton?.onFocusChangeListener = extendTimerOnFocus
 
         randomButton?.setOnClickListener {
             hideControlsMenu()
@@ -5080,11 +5116,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val title = json.optString("title")
         android.util.Log.d("AndroidTvPlayer", "initIptvMode: ${iptvChannels.size} channels, startIndex=$currentIptvIndex, title=$title")
 
+        // Xtream series audio memory (see fields). Applied to the TrackSelector
+        // below so it carries across every episode automatically.
+        iptvSeriesAudioKey = json.optString("seriesAudioKey").takeIf { it.isNotEmpty() }
+        iptvPreferredAudioLang = json.optString("preferredAudioLang").takeIf { it.isNotEmpty() }
+
         // Bind views and setup player
         bindViews()
         setupPlayer()
         setupSeekbar()
         setupControls()
+
+        // A remembered per-series audio language overrides setupPlayer's global
+        // default. It's a TrackSelector parameter, so it re-applies to every
+        // episode on switch without any per-media work.
+        iptvPreferredAudioLang?.let { setIptvPreferredAudioLang(it) }
+
+        // Show the Previous-episode control only for a non-live episode list.
+        updateIptvEpisodeControls()
 
         // Initialize seek feedback manager
         seekFeedbackManager = SeekFeedbackManager(findViewById(android.R.id.content))
@@ -5531,6 +5580,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         progressHandler.postDelayed({ hideNextOverlay() }, 1500)
 
         updateIptvGuideCurrentName()
+        // Index moved — a previous episode may have (dis)appeared.
+        updateIptvEpisodeControls()
     }
 
     /**
@@ -5568,6 +5619,79 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         titleView.text = entry.name
         titleOttContainer.visibility = View.GONE
         titleContainer.visibility = View.VISIBLE
+    }
+
+    // ── IPTV episode navigation (series/VOD lists) ──────────────────────────
+
+    /** This IPTV session is an Xtream SERIES episode list. Scoped to series
+     *  (the launcher sets seriesAudioKey only then) — NOT every non-live item —
+     *  so a plain Movies-grid play keeps the guide only, with no Next/Previous
+     *  or auto-advance, exactly as before. */
+    private fun isIptvEpisodeMode(): Boolean {
+        if (!isIptvMode || iptvSeriesAudioKey == null) return false
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
+        return !entry.isLive
+    }
+
+    private fun nextIptvEpisode(): IptvChannelEntry? {
+        if (!isIptvEpisodeMode()) return null
+        return iptvChannels.getOrNull(currentIptvIndex + 1)
+    }
+
+    private fun prevIptvEpisode(): IptvChannelEntry? {
+        if (!isIptvEpisodeMode()) return null
+        return iptvChannels.getOrNull(currentIptvIndex - 1)
+    }
+
+    /** Manage the episode controls ONLY for a series session: show Previous
+     *  when a previous episode exists, and hide Next at the last episode. For
+     *  every other flow (non-series IPTV, movies, torrent playlists) the
+     *  controls are left exactly as they were — no regression. */
+    private fun updateIptvEpisodeControls() {
+        val seriesSession = isIptvMode && iptvSeriesAudioKey != null
+        if (!seriesSession) return
+        iptvPrevButton?.visibility =
+            if (prevIptvEpisode() != null) View.VISIBLE else View.GONE
+        iptvNextButton?.visibility =
+            if (nextIptvEpisode() != null) View.VISIBLE else View.GONE
+    }
+
+    /** Set the TrackSelector's preferred audio language — a persistent
+     *  parameter, so it re-applies to each episode's tracks on switch. */
+    private fun setIptvPreferredAudioLang(lang: String) {
+        val ts = trackSelector ?: return
+        val variants = LanguageMapper.getLanguageVariantsForExoPlayer(lang)
+        val p = ts.parameters.buildUpon()
+        if (variants.isNotEmpty()) {
+            p.setPreferredAudioLanguages(*variants.toTypedArray())
+        } else {
+            p.setPreferredAudioLanguage(lang)
+        }
+        ts.parameters = p.build()
+    }
+
+    /** A native audio pick in a series: carry it to later episodes (preferred-
+     *  language param) and persist it back to Flutter's per-series store. */
+    private fun onIptvSeriesAudioPicked(lang: String?) {
+        val key = iptvSeriesAudioKey ?: return
+        if (lang.isNullOrEmpty() || lang == "und" || lang == "auto") return
+        iptvPreferredAudioLang = lang
+        setIptvPreferredAudioLang(lang)
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+            "saveIptvSeriesAudio",
+            mapOf("seriesKey" to key, "lang" to lang)
+        )
+    }
+
+    /** The audio language of a track-selection override, for capturing a pick. */
+    private fun languageOfOverride(override: TrackSelectionOverride?): String? {
+        if (override == null) return null
+        val idx = override.trackIndices.firstOrNull() ?: return null
+        return try {
+            override.mediaTrackGroup.getFormat(idx).language
+        } catch (e: Exception) {
+            null
+        }
     }
 
     // ── Stremio-addon IPTV channels (resolve-on-demand + serial ladder) ──────
@@ -6093,6 +6217,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             p.setOverrideForType(override); p.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
                         } else p.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
                         ts.parameters = p.build()
+                        // Series: remember this language for later episodes + sessions.
+                        onIptvSeriesAudioPicked(languageOfOverride(override))
                     }
                 })
             }
@@ -6445,6 +6571,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     params.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
                 }
                 ts.parameters = params.build()
+                // Series: remember this language for later episodes + sessions.
+                onIptvSeriesAudioPicked(languageOfOverride(override))
             }
             .show()
     }

@@ -662,29 +662,62 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// so they survive a provider that has since renumbered or expired.
   Future<IptvParseResult> _buildContinueResult() async {
     final items = await StorageService.getIptvContinueWatching();
-    _continuePlaylistIds = {
-      for (final item in items)
-        item['url'] as String: (item['playlistId'] as String?) ?? '',
-    };
-    final channels = [
-      for (final item in items)
-        IptvChannel(
-          name: (item['name'] as String?)?.isNotEmpty == true
-              ? item['name'] as String
-              : 'Unknown',
-          url: item['url'] as String,
+    _continuePlaylistIds = {};
+    final channels = <IptvChannel>[];
+    // A series' episodes collapse to ONE row: items are most-recent-first, so
+    // the first entry per (provider, series) wins and the rest are folded in.
+    // Non-series items (movies/catchup) keep one row each, exactly as before.
+    final seenSeries = <String>{};
+    for (final item in items) {
+      final seriesId = (item['seriesId'] as String?) ?? '';
+      final originId = (item['playlistId'] as String?) ?? '';
+      if (seriesId.isNotEmpty) {
+        final groupKey = '$originId::$seriesId';
+        if (!seenSeries.add(groupKey)) continue; // already have this series
+        // A series sentinel URL, so a tap routes into the merged series page
+        // (which resumes at the true next-up from the players' saved
+        // positions) rather than playing one episode standalone. The origin
+        // provider id is baked into the URL: Xtream series ids are per-provider
+        // small integers, so two providers routinely share one — a plain
+        // `xtream-series://<id>` would collide in the url-keyed row/focus/
+        // origin bookkeeping and open the wrong show.
+        final sentinelUrl = 'xtream-series://$originId/$seriesId';
+        _continuePlaylistIds[sentinelUrl] = originId;
+        final seriesName = (item['seriesName'] as String?)?.isNotEmpty == true
+            ? item['seriesName'] as String
+            : ((item['group'] as String?)?.isNotEmpty == true
+                ? item['group'] as String
+                : 'Unknown series');
+        channels.add(IptvChannel(
+          name: seriesName,
+          url: sentinelUrl,
           logoUrl: (item['logoUrl'] as String?)?.isNotEmpty == true
               ? item['logoUrl'] as String
               : null,
-          group: (item['group'] as String?)?.isNotEmpty == true
-              ? item['group'] as String
-              : null,
-          // Always on-demand — live channels are never recorded — so the row
-          // draws a poster and the "LIVE" dot stays off.
-          contentType: 'vod',
-          httpHeaders: StorageService.iptvFavoriteHeaders(item),
-        ),
-    ];
+          group: seriesName,
+          contentType: 'series',
+          attributes: {'series_id': seriesId},
+        ));
+        continue;
+      }
+      _continuePlaylistIds[item['url'] as String] = originId;
+      channels.add(IptvChannel(
+        name: (item['name'] as String?)?.isNotEmpty == true
+            ? item['name'] as String
+            : 'Unknown',
+        url: item['url'] as String,
+        logoUrl: (item['logoUrl'] as String?)?.isNotEmpty == true
+            ? item['logoUrl'] as String
+            : null,
+        group: (item['group'] as String?)?.isNotEmpty == true
+            ? item['group'] as String
+            : null,
+        // Always on-demand — live channels are never recorded — so the row
+        // draws a poster and the "LIVE" dot stays off.
+        contentType: 'vod',
+        httpHeaders: StorageService.iptvFavoriteHeaders(item),
+      ));
+    }
     final categories = <String>{
       for (final channel in channels)
         if (channel.group != null) channel.group!,
@@ -1017,8 +1050,32 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// inside that page (episode list / Resume), so none of [_playChannelInner]'s
   /// launch bookkeeping applies here.
   Future<void> _openSeriesDetail(IptvChannel channel) async {
-    final playlist = _selectedPlaylist;
-    if (playlist == null || !playlist.isXtreamCodes) return;
+    var playlist = _selectedPlaylist;
+    if (playlist == null) return;
+    // Reached from a virtual shelf (Continue watching): the selected playlist
+    // is the shelf itself, not the provider — resolve the series' real Xtream
+    // provider from the origin id stored per row.
+    if (!playlist.isXtreamCodes) {
+      final originId = _originPlaylistIdFor(channel);
+      IptvPlaylist? origin;
+      for (final p in _playlists) {
+        if (p.id == originId && p.isXtreamCodes) {
+          origin = p;
+          break;
+        }
+      }
+      if (origin == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("This series' provider is no longer available"),
+            ),
+          );
+        }
+        return;
+      }
+      playlist = origin;
+    }
     // Empty the stage BEFORE the route covers it: the app-resume path after
     // in-page playback flushes the parked re-arm, and a remounted backdrop
     // must not open a stream underneath the detail route. With the shown
@@ -1076,7 +1133,16 @@ class IptvResultsViewState extends State<IptvResultsView>
       // finished and dropped off, or a newly watched one arrived. A reload
       // disposes every row's focus node (see _loadPlaylist), so doing it for
       // a mere position bump would scramble DPAD focus to redraw one bar.
-      final fresh = {for (final item in items) item['url'] as String};
+      // Compare against the SAME collapsed keys the shelf renders (a series'
+      // episodes fold to one sentinel row — see _buildContinueResult), or a
+      // series would read as changed on every return and force a reload.
+      final fresh = {
+        for (final item in items)
+          ((item['seriesId'] as String?)?.isNotEmpty ?? false)
+              ? 'xtream-series://${(item['playlistId'] as String?) ?? ''}'
+                  '/${item['seriesId']}'
+              : item['url'] as String,
+      };
       final current = {for (final channel in _allChannels) channel.url};
       if (!setEquals(fresh, current)) {
         await _loadPlaylist(_continuePlaylist);

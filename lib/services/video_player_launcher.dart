@@ -1957,6 +1957,26 @@ class VideoPlayerLauncher {
           if (!c.isLive) c.url,
       ]);
 
+      // Per-series audio memory: Xtream series episodes carry a series identity
+      // (series_id + series_playlist_id) in their attributes. The native player
+      // has no per-series audio store of its own — resolve the remembered
+      // language here and hand it the same `<playlistId>::<seriesId>` key so a
+      // native audio pick round-trips back to the shared store.
+      String? seriesAudioKey;
+      String? preferredAudioLang;
+      for (final c in channels) {
+        final sid = c.attributes['series_id'];
+        if (sid != null && sid.isNotEmpty) {
+          final pid = c.attributes['series_playlist_id'] ?? '';
+          seriesAudioKey = '$pid::$sid';
+          break;
+        }
+      }
+      if (seriesAudioKey != null) {
+        preferredAudioLang =
+            await StorageService.getIptvSeriesAudioLanguage(seriesAudioKey);
+      }
+
       final payload = <String, dynamic>{
         'mode': 'iptv',
         'initialUrl': args.videoUrl,
@@ -1972,6 +1992,8 @@ class VideoPlayerLauncher {
             },
         ],
         'categories': categories,
+        if (seriesAudioKey != null) 'seriesAudioKey': seriesAudioKey,
+        if (preferredAudioLang != null) 'preferredAudioLang': preferredAudioLang,
       };
 
       // Hide auto-launch overlay before launching player

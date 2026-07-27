@@ -31,10 +31,7 @@ Future<void> openXtreamSeries(
   final serverUrl = playlist.serverUrl;
   final username = playlist.username;
   final password = playlist.password;
-  final seriesId = series.attributes['series_id'] ??
-      (series.url.startsWith('xtream-series://')
-          ? series.url.substring('xtream-series://'.length)
-          : '');
+  final seriesId = _seriesIdOf(series);
   if (serverUrl == null ||
       username == null ||
       password == null ||
@@ -288,6 +285,16 @@ Future<void> openXtreamSeries(
   );
 }
 
+/// The Xtream series id for a series channel: the stamped attribute, else the
+/// `xtream-series://<id>` grid-sentinel's id. NOT parsed from the Continue
+/// Watching sentinel (`xtream-series://<origin>/<id>`) — those rows always
+/// carry the `series_id` attribute, so the attribute branch wins first.
+String _seriesIdOf(IptvChannel series) =>
+    series.attributes['series_id'] ??
+    (series.url.startsWith('xtream-series://')
+        ? series.url.substring('xtream-series://'.length)
+        : '');
+
 /// Display order for episodes: season ascending with Specials (season 0)
 /// last, then episode number — the flat-episode counterpart of
 /// [seasonsSpecialsLast].
@@ -300,8 +307,9 @@ int _episodesSpecialsLast(XtreamSeriesEpisode a, XtreamSeriesEpisode b) {
 
 /// Launch an episode in the regular IPTV on-demand pipeline: recorded to the
 /// continue-watching shelf before launch (the player process can be killed
-/// outright on TV), played with the season's episodes as the in-player list so
-/// next/previous walks the season, resumed by URL like any IPTV VOD item.
+/// outright on TV), played with the WHOLE series as the in-player list so
+/// next/previous/auto-advance walk across seasons, resumed by URL like any
+/// IPTV VOD item.
 Future<void> _launchEpisode(
   BuildContext context,
   IptvPlaylist playlist,
@@ -309,12 +317,13 @@ Future<void> _launchEpisode(
   List<XtreamSeriesEpisode> all,
   XtreamSeriesEpisode target,
 ) async {
-  final seasonEps = [
-    for (final e in all)
-      if (e.season == target.season) e,
-  ];
+  final seriesId = _seriesIdOf(series);
+  // The in-player list is the WHOLE series (Specials-last, matching the resume/
+  // landing order), NOT just the target's season — so Next / auto-advance
+  // cross season boundaries (S1 finale → S2E1) instead of dead-ending.
+  final ordered = [...all]..sort(_episodesSpecialsLast);
   final channels = [
-    for (final e in seasonEps)
+    for (final e in ordered)
       IptvChannel(
         name: _episodeDisplayName(series.name, e),
         url: e.url,
@@ -323,10 +332,23 @@ Future<void> _launchEpisode(
             : series.logoUrl,
         group: series.name,
         contentType: 'vod',
+        // Series identity so the player can key per-series audio memory the
+        // same way Continue Watching does (<playlistId>::<seriesId>), instead
+        // of the collision-prone display name.
+        attributes: {
+          if (seriesId.isNotEmpty) 'series_id': seriesId,
+          'series_playlist_id': playlist.id,
+        },
       ),
   ];
-  var index = seasonEps.indexOf(target);
+  var index = ordered.indexWhere((e) => e.url == target.url);
   if (index < 0) index = 0;
+
+  // Series marker for the Continue Watching "keep after finish" rule. hasNext =
+  // there is a later REAL (non-special) episode after this one. A trailing
+  // season-0 special must NOT count, or a completed show that has specials
+  // would register hasNext=true on its finale and never age out of the shelf.
+  final hasNext = ordered.skip(index + 1).any((e) => e.season != 0);
 
   await StorageService.recordIptvWatch(
     target.url,
@@ -334,6 +356,11 @@ Future<void> _launchEpisode(
     logoUrl: series.logoUrl,
     group: series.name,
     playlistId: playlist.id,
+    seriesId: seriesId.isEmpty ? null : seriesId,
+    seriesName: series.name,
+    season: target.season,
+    episode: target.episode,
+    hasNextEpisode: hasNext,
   );
   if (!context.mounted) return;
 
