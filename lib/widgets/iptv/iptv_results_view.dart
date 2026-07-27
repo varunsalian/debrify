@@ -17,6 +17,7 @@ import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
 import '../home/home_theme.dart';
@@ -130,7 +131,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     final playlist = _selectedPlaylist;
     if (playlist == null) return false;
     if (playlist.isContinueWatching) return true;
-    if (playlist.isXtreamCodes) return _selectedContentType == 'vod';
+    if (playlist.isXtreamCodes) {
+      return _selectedContentType == 'vod' || _selectedContentType == 'series';
+    }
     return false;
   }
 
@@ -409,6 +412,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     StremioService.instance
         .removeAddonsChangedListener(_onStremioAddonsChanged);
     _searchDebounce?.cancel();
+    _contentTypeDebounce?.cancel();
     _scrollController.dispose();
     _playlistFilterFocusNode.dispose();
     _categoryFilterFocusNode.dispose();
@@ -476,6 +480,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       final xcService = XtreamCodesService.instance;
       if (_selectedContentType == 'vod') {
         result = await xcService.fetchVodStreams(playlist.serverUrl!, playlist.username!, playlist.password!);
+      } else if (_selectedContentType == 'series') {
+        result = await xcService.fetchSeriesStreams(playlist.serverUrl!, playlist.username!, playlist.password!);
       } else {
         result = await xcService.fetchLiveStreams(playlist.serverUrl!, playlist.username!, playlist.password!);
       }
@@ -635,7 +641,9 @@ class IptvResultsViewState extends State<IptvResultsView>
   Future<void> _loadProgress(int ticket, List<IptvChannel> channels) async {
     final onDemand = [
       for (final channel in channels)
-        if (!channel.isLive) channel.url,
+        // Series rows carry a sentinel (non-stream) URL — no position can
+        // exist for it; their per-episode progress lives on the detail page.
+        if (!channel.isLive && channel.contentType != 'series') channel.url,
     ];
     if (onDemand.isEmpty) {
       if (_progressByUrl.isNotEmpty && mounted && ticket == _loadTicket) {
@@ -735,6 +743,8 @@ class IptvResultsViewState extends State<IptvResultsView>
   void _onPlaylistChanged(IptvPlaylist? playlist) {
     if (playlist == null || playlist == _selectedPlaylist) return;
 
+    // A pending content-type load belongs to the outgoing playlist.
+    _contentTypeDebounce?.cancel();
     setState(() {
       _selectedPlaylist = playlist;
       _selectedCategory = null;
@@ -746,17 +756,43 @@ class IptvResultsViewState extends State<IptvResultsView>
     _loadPlaylist(playlist);
   }
 
+  Timer? _contentTypeDebounce;
+
   void _onContentTypeChanged(String contentType) {
     if (contentType == _selectedContentType) return;
 
     setState(() {
       _selectedContentType = contentType;
       _selectedCategory = null;
+      // The outgoing type's rows leave NOW, not when the debounced load
+      // lands: they'd otherwise render for the debounce window under the new
+      // type's layout flag (_showsPosterRows flips immediately), and a tap in
+      // that window would play an item of a type the filter no longer shows.
+      // Mirrors the reset _loadPlaylist performs; the spinner covers the gap
+      // exactly as it did when the load was synchronous.
+      _isLoading = true;
+      _allChannels = [];
+      _filteredChannels = [];
+      _categories = [];
+      _progressByUrl = {};
+      _scheduleChannel = null;
     });
+    _clearPreview();
 
-    if (_selectedPlaylist != null) {
-      _loadPlaylist(_selectedPlaylist!);
-    }
+    // Debounced: the classic layout's toggle CYCLES Live → Movies → Series,
+    // so reaching a non-adjacent type means passing through one the user
+    // never wanted — a full playlist load (focus-node disposal, possibly a
+    // multi-second uncached panel fetch) per intermediate step. Let the
+    // selection settle first; only the type the user stops on loads. Short
+    // enough to be imperceptible on a single direct pick (the TV dropdown
+    // path).
+    _contentTypeDebounce?.cancel();
+    _contentTypeDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      if (_selectedPlaylist != null) {
+        _loadPlaylist(_selectedPlaylist!);
+      }
+    });
   }
 
   void _onCategoryChanged(String? category) {
@@ -880,6 +916,12 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _playChannelInner(IptvChannel channel) async {
+    // Series entries aren't playable — their sentinel URL routes to the
+    // merged series page, whose episode list does the actual playing.
+    if (channel.contentType == 'series') {
+      await _openSeriesDetail(channel);
+      return;
+    }
     // Stremio channels have no stream URL yet — resolve the ladder now (the
     // preview's winner cache usually makes this instant) and launch on the
     // best candidate. The in-player guide still gets the full mixed list;
@@ -969,6 +1011,30 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (!widget.isTelevision) {
       await _refreshAfterPlayback();
     }
+  }
+
+  /// Open the merged series page for an Xtream series entry. Playback happens
+  /// inside that page (episode list / Resume), so none of [_playChannelInner]'s
+  /// launch bookkeeping applies here.
+  Future<void> _openSeriesDetail(IptvChannel channel) async {
+    final playlist = _selectedPlaylist;
+    if (playlist == null || !playlist.isXtreamCodes) return;
+    // Empty the stage BEFORE the route covers it: the app-resume path after
+    // in-page playback flushes the parked re-arm, and a remounted backdrop
+    // must not open a stream underneath the detail route. With the shown
+    // channel cleared, an epoch bump remounts nothing.
+    _clearPreview();
+    await openXtreamSeries(
+      context,
+      playlist: playlist,
+      series: channel,
+      isTelevision: widget.isTelevision,
+    );
+    if (!mounted) return;
+    // Episodes watched inside the page entered the continue-watching shelf —
+    // reflect that (and any position changes) now. The preview re-arms itself
+    // on the next row focus.
+    await _refreshAfterPlayback();
   }
 
   /// Pull freshly saved positions back into the list after playback. The
@@ -1248,6 +1314,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             options: const [
               StremioDropdownOption('live', 'Live TV'),
               StremioDropdownOption('vod', 'Movies'),
+              StremioDropdownOption('series', 'Series'),
             ],
             onSelected: _onContentTypeChanged,
           ),
@@ -1309,6 +1376,13 @@ class IptvResultsViewState extends State<IptvResultsView>
     _previewResolveTicket++;
     final ticket = _previewResolveTicket;
     _previewCandidates = null;
+    // Series carry a sentinel URL, not a stream — the stage rests on its
+    // floor (logo slab), like a channel with nothing playable.
+    if (channel.contentType == 'series') {
+      _previewStreamUrl.value = null;
+      _previewShowing.value = false;
+      return;
+    }
     if (!StremioIptvService.isStremioChannelUrl(channel.url)) {
       _previewStreamUrl.value = channel.url;
       return;
@@ -1681,8 +1755,13 @@ class IptvResultsViewState extends State<IptvResultsView>
                   onTap: () => _playChannel(channel),
                   focusNode: _focusNodeFor(channel),
                   isFavorited: _favoriteUrls.contains(channel.url),
-                  onFavoriteToggle: (isFavorited) =>
-                      _toggleFavorite(channel, isFavorited),
+                  // Series rows can't be starred: the favorites store replays
+                  // entries by URL, and a series' sentinel URL isn't playable
+                  // (nor are its credentials recoverable from the store).
+                  onFavoriteToggle: channel.contentType == 'series'
+                      ? null
+                      : (isFavorited) =>
+                          _toggleFavorite(channel, isFavorited),
                   onFocused: tvPane ? () => _onChannelFocused(channel) : null,
                   onSchedule: _scheduleActionFor(channel),
                   scheduleOnRightKey: rightEdge,

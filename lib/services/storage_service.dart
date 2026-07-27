@@ -3185,7 +3185,7 @@ class StorageService {
   /// floor nothing meaningful was watched (a mis-click, or a few seconds of
   /// buffering), and above the ceiling it's effectively finished.
   static const double _iptvWatchStartedFraction = 0.02;
-  static const double _iptvWatchFinishedFraction = 0.95;
+  static const double iptvWatchFinishedFraction = 0.95;
 
   /// Remember that an on-demand IPTV item was played, capturing enough
   /// metadata to rebuild its row without re-fetching the panel — the same
@@ -3300,7 +3300,7 @@ class StorageService {
 
       final progress = positionMs / durationMs;
       if (progress < _iptvWatchStartedFraction ||
-          progress > _iptvWatchFinishedFraction) {
+          progress > iptvWatchFinishedFraction) {
         continue;
       }
 
@@ -3372,7 +3372,7 @@ class StorageService {
     return {
       for (final entry in states.entries)
         if (entry.value.fraction >= _iptvWatchStartedFraction &&
-            entry.value.fraction <= _iptvWatchFinishedFraction)
+            entry.value.fraction <= iptvWatchFinishedFraction)
           entry.key: entry.value.positionMs,
     };
   }

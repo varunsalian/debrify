@@ -100,6 +100,22 @@ class EpisodesPanel extends StatefulWidget {
   /// source button) instead of letting geometry pick a random mid-column item.
   final VoidCallback? onFocusLeftEdge;
 
+  /// Direct-source mode (Xtream IPTV series): the sole season/episode source.
+  /// When set, the Stremio-addon meta and Trakt season fetches are skipped
+  /// entirely, along with every IMDb-keyed enrichment (TVMaze stills, Trakt
+  /// ratings/next-episode, Trakt/Simkl episode menus) — these shows have no
+  /// IMDb identity. Episodes are expected to carry [TraktEpisode.playbackUrl].
+  final Future<List<TraktSeason>> Function()? seasonsLoader;
+
+  /// Direct-source mode: play an episode outright (the host launches its
+  /// player on top of the page, like quick-play). When set, episode taps and
+  /// quick-plays route here instead of building an [AdvancedSearchSelection].
+  final void Function(TraktEpisode episode)? onPlayEpisode;
+
+  /// Direct-source mode: resolves the `'<season>-<episode>'` → percent (0-100)
+  /// watch-progress map, replacing the IMDb-keyed local/Trakt/Simkl merge.
+  final Future<Map<String, double>> Function()? watchProgressLoader;
+
   const EpisodesPanel({
     super.key,
     required this.show,
@@ -118,6 +134,9 @@ class EpisodesPanel extends StatefulWidget {
     this.showChrome = true,
     this.compact = false,
     this.onFocusLeftEdge,
+    this.seasonsLoader,
+    this.onPlayEpisode,
+    this.watchProgressLoader,
   });
 
   @override
@@ -216,6 +235,21 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Discover→Trakt needs both. All three sources key episodes as
   /// `'<season>-<episode>'`, so they merge directly.
   Future<void> _loadEpisodeWatchProgress(StremioMeta show, int generation) async {
+    // Direct-source mode: the host owns progress (URL-keyed player positions
+    // mapped to S-E), and none of the IMDb-keyed sources below can know these
+    // episodes.
+    final progressLoader = widget.watchProgressLoader;
+    if (progressLoader != null) {
+      try {
+        final map = await progressLoader();
+        if (!mounted || generation != _episodeModeGeneration) return;
+        setState(() => _episodeWatchProgress = map);
+      } catch (e) {
+        debugPrint('EpisodesPanel: direct progress fetch failed: $e');
+      }
+      return;
+    }
+
     final imdbId = show.effectiveImdbId;
     if (imdbId == null) return;
 
@@ -289,8 +323,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     await _loadEpisodeWatchProgress(show, _episodeModeGeneration);
   }
 
+  /// Direct-source mode (see [EpisodesPanel.seasonsLoader]) — episodes are
+  /// playable URLs with no IMDb identity, so every IMDb-keyed pathway is off.
+  bool get _isDirectSource => widget.seasonsLoader != null;
+
   /// Resolve whether a Trakt account is connected (gates the episode menu).
   Future<void> _resolveTraktAuth() async {
+    if (_isDirectSource) return; // no IMDb id — the Trakt menu can't act
     final authed = await _traktService.isAuthenticated();
     if (mounted && authed != _isTraktAuthenticated) {
       setState(() => _isTraktAuthenticated = authed);
@@ -299,6 +338,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   /// Resolve whether a Simkl account is connected — mirrors [_resolveTraktAuth].
   Future<void> _resolveSimklAuth() async {
+    if (_isDirectSource) return; // mirrors _resolveTraktAuth
     final authed = await _simklService.isAuthenticated();
     if (mounted && authed != _isSimklAuthenticated) {
       setState(() => _isSimklAuthenticated = authed);
@@ -459,6 +499,19 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// addon meta fetch returns nothing — Trakt is the only source that has their
   /// episodes. Returns an empty list only if neither source yields episodes.
   Future<List<TraktSeason>> _fetchSeasons(StremioMeta show) async {
+    // 0) Direct-source mode: the loader is the only season source — a failure
+    //    surfaces the retry panel rather than falling through to fetchers
+    //    that cannot know this show.
+    final directLoader = widget.seasonsLoader;
+    if (directLoader != null) {
+      try {
+        return await directLoader();
+      } catch (e) {
+        debugPrint('EpisodesPanel: direct seasons fetch failed: $e');
+        return [];
+      }
+    }
+
     // 1) Addon meta endpoint — skip when the addon is a stub (no base URL),
     //    which is the case for Trakt-sourced items.
     if (widget.addon.baseUrl.isNotEmpty ||
@@ -492,7 +545,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                 .where((s) =>
                     s.number >= 0 && s.episodes.isNotEmpty && seen.add(s.number))
                 .toList()
-              ..sort(_seasonsSpecialsLast);
+              ..sort(seasonsSpecialsLast);
         if (seasons.isNotEmpty) return seasons;
       } catch (e) {
         debugPrint('EpisodesPanel: Trakt seasons fetch failed: $e');
@@ -555,7 +608,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         episodeCount: episodes.length,
         episodes: episodes,
       );
-    }).toList()..sort(_seasonsSpecialsLast);
+    }).toList()..sort(seasonsSpecialsLast);
   }
 
   /// Cinemeta episode stills come as episodes.metahub.space/…/w780.jpg — a 301
@@ -565,14 +618,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   static String? _downsizeMetahubThumb(String? url) {
     if (url == null || !url.contains('episodes.metahub.space')) return url;
     return url.replaceFirst(RegExp(r'/w\d+\.jpg$'), '/w300.jpg');
-  }
-
-  /// Sort seasons ascending, but with Specials (season 0) at the very end —
-  /// matching old home so a "Specials" entry sits after the real seasons.
-  static int _seasonsSpecialsLast(TraktSeason a, TraktSeason b) {
-    if (a.number == 0 && b.number != 0) return 1;
-    if (a.number != 0 && b.number == 0) return -1;
-    return a.number.compareTo(b.number);
   }
 
   void _enterEpisodeMode(
@@ -593,7 +638,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     // Load watch progress (non-blocking; generation-guarded). The "up next"
     // marker is resolved inline below since it also drives where we land.
-    _loadEpisodeWatchProgress(show, generation);
+    // Direct-source mode awaits this future before landing — progress is its
+    // only resume signal (there is no Trakt next-episode for these shows).
+    final progressFuture = _loadEpisodeWatchProgress(show, generation);
 
     for (final node in _episodeFocusNodes) {
       node.dispose();
@@ -611,22 +658,27 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       // Trakt "next episode" — drives the up-next tile highlight and the
       // landing target. Instant/null without a Trakt account (no token → no
-      // request).
-      final nextEpisodeFuture = _traktService
-          .fetchNextEpisode(show.effectiveImdbId ?? show.id)
-          .catchError((Object e) {
-        debugPrint('EpisodesPanel: next-episode fetch failed: $e');
-        return null;
-      });
+      // request). Direct-source shows have no Trakt identity — skip outright
+      // rather than fire a request keyed on a sentinel id.
+      final nextEpisodeFuture = _isDirectSource
+          ? Future<({int season, int episode})?>.value(null)
+          : _traktService
+              .fetchNextEpisode(show.effectiveImdbId ?? show.id)
+              .catchError((Object e) {
+              debugPrint('EpisodesPanel: next-episode fetch failed: $e');
+              return null;
+            });
 
       // Trakt-sourced items carry a stub addon (no base URL) and their
       // episodes arrive without stills — warm the TVMaze map alongside the
       // seasons fetch so tiles can show real stills at (or right after) first
-      // paint instead of swapping in seconds later.
+      // paint instead of swapping in seconds later. Direct-source episodes
+      // bring their own stills (or none) — TVMaze can't know them.
       final addonHasMeta = widget.addon.baseUrl.isNotEmpty ||
           widget.addon.manifestUrl.isNotEmpty;
-      final prefetchedThumbs =
-          addonHasMeta ? null : _fetchTvmazeThumbMap(show.effectiveImdbId);
+      final prefetchedThumbs = (addonHasMeta || _isDirectSource)
+          ? null
+          : _fetchTvmazeThumbMap(show.effectiveImdbId);
 
       final seasons = await seasonsFuture;
       if (!mounted || generation != _episodeModeGeneration) return;
@@ -667,8 +719,25 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         effectiveEpisode = nextEpisode.episode;
       }
 
+      // 3a. Direct-source resume — from the host's progress map (the only
+      //     signal these shows have): land on the last started episode, or
+      //     the one after it when it's essentially finished.
+      if (_isDirectSource &&
+          effectiveSeason == null &&
+          effectiveEpisode == null) {
+        await progressFuture;
+        if (!mounted || generation != _episodeModeGeneration) return;
+        final target = _directLandingTarget(seasons);
+        if (target != null) {
+          effectiveSeason = target.season;
+          effectiveEpisode = target.episode;
+        }
+      }
+
       // 3. Last-played (local) fallback — by IMDb id, then by title.
-      if (effectiveSeason == null && effectiveEpisode == null) {
+      if (!_isDirectSource &&
+          effectiveSeason == null &&
+          effectiveEpisode == null) {
         final imdbId = show.effectiveImdbId;
         if (imdbId != null) {
           final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
@@ -714,16 +783,19 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // come with one (Trakt-sourced items have none; addon items keep theirs).
       // Non-blocking — and on the Trakt path the map was prefetched alongside
       // the seasons, so stills usually land within a frame of first paint.
-      _enrichEpisodeThumbnails(
-        show,
-        seasons,
-        generation,
-        prefetched: prefetchedThumbs,
-      );
+      // Both enrichments are IMDb-keyed, so direct-source shows skip them.
+      if (!_isDirectSource) {
+        _enrichEpisodeThumbnails(
+          show,
+          seasons,
+          generation,
+          prefetched: prefetchedThumbs,
+        );
 
-      // Backfill per-episode ratings from Trakt when the addon didn't supply
-      // real ones (Cinemeta sends rating:0). Non-blocking — ratings pop in.
-      _enrichEpisodeRatings(show, seasons, generation);
+        // Backfill per-episode ratings from Trakt when the addon didn't supply
+        // real ones (Cinemeta sends rating:0). Non-blocking — ratings pop in.
+        _enrichEpisodeRatings(show, seasons, generation);
+      }
 
       // Scroll to (and focus) the target episode once its tile is built.
       // Robust against variable EpisodeTile height + lazy ListView building
@@ -744,6 +816,28 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         _episodesUnavailable = true;
       });
     }
+  }
+
+  /// Direct-source landing: the last episode (in season/episode order, with
+  /// the same Specials-last rule the list renders in) that has any progress —
+  /// advanced to the next episode when it's essentially finished (≥95%). Null
+  /// when nothing has been started, leaving the default first-episode landing.
+  ({int season, int episode})? _directLandingTarget(List<TraktSeason> seasons) {
+    final flat = [for (final s in seasons) ...s.episodes];
+    int lastStarted = -1;
+    for (var i = 0; i < flat.length; i++) {
+      final p =
+          _episodeWatchProgress['${flat[i].season}-${flat[i].number}'] ?? 0;
+      if (p > 0) lastStarted = i;
+    }
+    if (lastStarted < 0) return null;
+    final p = _episodeWatchProgress[
+            '${flat[lastStarted].season}-${flat[lastStarted].number}'] ??
+        0;
+    final target = (p >= 95 && lastStarted + 1 < flat.length)
+        ? flat[lastStarted + 1]
+        : flat[lastStarted];
+    return (season: target.season, episode: target.number);
   }
 
   /// Backfill per-episode ratings from Trakt's public seasons API, keyed off
@@ -949,6 +1043,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   void _onEpisodeTap(TraktEpisode episode) {
+    // Direct-source mode: no sources flow exists — a tap plays outright, on
+    // top of the page (no terminal dispatch/pop, like quick-play).
+    if (widget.onPlayEpisode != null) {
+      widget.onPlayEpisode!(episode);
+      return;
+    }
     final show = _selectedShow;
     if (show == null || widget.onItemSelected == null) return;
 
@@ -976,6 +1076,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   void _onEpisodeQuickPlay(TraktEpisode episode) {
+    if (widget.onPlayEpisode != null) {
+      widget.onPlayEpisode!(episode);
+      return;
+    }
     final show = _selectedShow;
     if (show == null) return;
 
@@ -1284,19 +1388,22 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   icon: const Icon(Icons.refresh_rounded),
                   label: const Text('Retry'),
                 ),
-                OutlinedButton.icon(
-                  style: ButtonStyle(
-                    side: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.focused)
-                          ? const BorderSide(
-                              color: HomeTheme.focusGold, width: 2)
-                          : const BorderSide(color: Colors.white24),
+                // No torrent-search fallback exists for direct-source shows —
+                // Retry is the only honest offer there.
+                if (widget.onItemSelected != null)
+                  OutlinedButton.icon(
+                    style: ButtonStyle(
+                      side: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.focused)
+                            ? const BorderSide(
+                                color: HomeTheme.focusGold, width: 2)
+                            : const BorderSide(color: Colors.white24),
+                      ),
                     ),
+                    onPressed: () => _fallbackToDirectSearch(show),
+                    icon: const Icon(Icons.search_rounded),
+                    label: const Text('Search for sources'),
                   ),
-                  onPressed: () => _fallbackToDirectSearch(show),
-                  icon: const Icon(Icons.search_rounded),
-                  label: const Text('Search for sources'),
-                ),
               ],
             ),
           ],
@@ -1560,8 +1667,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           tile(Icons.play_arrow_rounded, 'Play',
               () => _onEpisodeQuickPlay(episode),
               autofocus: widget.isTelevision),
-          tile(Icons.layers_rounded, 'Sources',
-              () => _onEpisodeTap(episode)),
+          // Direct-source episodes ARE the source — no torrent list to open.
+          if (widget.onPlayEpisode == null)
+            tile(Icons.layers_rounded, 'Sources',
+                () => _onEpisodeTap(episode)),
           if (_isTraktAuthenticated) ...[
             if (!watched)
               tile(Icons.check_circle_rounded, 'Mark as Watched',

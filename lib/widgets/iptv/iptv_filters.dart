@@ -450,7 +450,7 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
   }
 }
 
-/// Content type toggle (Live TV / Movies) for Xtream Codes playlists
+/// Content type toggle (Live TV / Movies / Series) for Xtream Codes playlists
 class _ContentTypeToggle extends StatefulWidget {
   final String selectedContentType;
   final ValueChanged<String> onChanged;
@@ -493,15 +493,58 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
     setState(() => _isFocused = widget.focusNode?.hasFocus ?? false);
   }
 
+  /// Advance to the next content type in order. Keeps the control a single
+  /// focus target on TV (OK cycles Live → Movies → Series), and each segment
+  /// is still directly tappable on touch.
   void _toggle() {
-    widget.onChanged(widget.selectedContentType == 'live' ? 'vod' : 'live');
+    const order = ['live', 'vod', 'series'];
+    final i = order.indexOf(widget.selectedContentType);
+    widget.onChanged(order[(i + 1) % order.length]);
+  }
+
+  Widget _segment(
+    ThemeData theme,
+    ColorScheme colorScheme, {
+    required String value,
+    required IconData icon,
+    required String label,
+  }) {
+    final selected = widget.selectedContentType == value;
+    return GestureDetector(
+      onTap: () => widget.onChanged(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? kSeeAllAccent : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: selected ? Colors.white : colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: selected ? Colors.white : colorScheme.onSurfaceVariant,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isLive = widget.selectedContentType == 'live';
 
     return Focus(
       focusNode: widget.focusNode,
@@ -535,8 +578,12 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
 
         return KeyEventResult.ignored;
       },
+      // Control-wide tap cycles (edge/padding hits included — the segments'
+      // own detectors win where they overlap), so no part of the pill is a
+      // dead zone on touch.
       child: GestureDetector(
         onTap: _toggle,
+        behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -551,60 +598,12 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Live TV segment
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isLive ? kSeeAllAccent : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.live_tv,
-                      size: 14,
-                      color: isLive ? Colors.white : colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Live',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: isLive ? Colors.white : colorScheme.onSurfaceVariant,
-                        fontWeight: isLive ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Movies segment
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: !isLive ? kSeeAllAccent : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.movie,
-                      size: 14,
-                      color: !isLive ? Colors.white : colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Movies',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: !isLive ? Colors.white : colorScheme.onSurfaceVariant,
-                        fontWeight: !isLive ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _segment(theme, colorScheme,
+                  value: 'live', icon: Icons.live_tv, label: 'Live'),
+              _segment(theme, colorScheme,
+                  value: 'vod', icon: Icons.movie, label: 'Movies'),
+              _segment(theme, colorScheme,
+                  value: 'series', icon: Icons.video_library, label: 'Series'),
             ],
           ),
         ),

@@ -22,6 +22,7 @@ import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
+import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
@@ -107,6 +108,14 @@ class MergedDetailScreen extends StatefulWidget {
   final int? initialSeason;
   final int? initialEpisode;
 
+  /// Direct-source mode (Xtream IPTV series) — forwarded verbatim to
+  /// [EpisodesPanel]. See its fields of the same names: [seasonsLoader] is the
+  /// sole episode source, [onPlayEpisode] plays a URL-backed episode on top of
+  /// this page, [watchProgressLoader] replaces the IMDb-keyed progress merge.
+  final Future<List<TraktSeason>> Function()? seasonsLoader;
+  final void Function(TraktEpisode episode)? onPlayEpisode;
+  final Future<Map<String, double>> Function()? watchProgressLoader;
+
   const MergedDetailScreen({
     super.key,
     required this.item,
@@ -135,6 +144,9 @@ class MergedDetailScreen extends StatefulWidget {
     this.onRecommendationTap,
     this.metaEnricher,
     this.heroTag,
+    this.seasonsLoader,
+    this.onPlayEpisode,
+    this.watchProgressLoader,
   });
 
   @override
@@ -1683,6 +1695,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           ? () => _leftEntryFocusNode.requestFocus()
           : null,
       onBack: () => Navigator.of(context).maybePop(),
+      // Direct-source mode (Xtream IPTV series) — pass-throughs.
+      seasonsLoader: widget.seasonsLoader,
+      onPlayEpisode: widget.onPlayEpisode,
+      watchProgressLoader: widget.watchProgressLoader,
     );
   }
 

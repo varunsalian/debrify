@@ -180,6 +180,18 @@ class XtreamCodesService {
     return _fetchStreams(serverUrl, username, password, contentType: 'vod');
   }
 
+  /// Fetch series (the browse list, one entry per show), converted to
+  /// IptvChannel list + categories. A series has no playable URL of its own —
+  /// each channel carries an `xtream-series://<id>` sentinel and its episodes
+  /// are fetched on drill-in via [fetchSeriesInfo].
+  Future<IptvParseResult> fetchSeriesStreams(
+    String serverUrl,
+    String username,
+    String password,
+  ) {
+    return _fetchStreams(serverUrl, username, password, contentType: 'series');
+  }
+
   /// Shared fetch pipeline for live and VOD content.
   Future<IptvParseResult> _fetchStreams(
     String serverUrl,
@@ -188,7 +200,8 @@ class XtreamCodesService {
     required String contentType,
   }) async {
     final isLive = contentType == 'live';
-    final label = isLive ? 'live' : 'VOD';
+    final isSeries = contentType == 'series';
+    final label = isLive ? 'live' : (isSeries ? 'series' : 'VOD');
     final cacheKey = '$serverUrl:$username:$contentType';
 
     // Check cache
@@ -206,8 +219,14 @@ class XtreamCodesService {
       final base = _baseUrl(serverUrl, username, password);
       final categoriesAction = isLive
           ? 'get_live_categories'
-          : 'get_vod_categories';
-      final streamsAction = isLive ? 'get_live_streams' : 'get_vod_streams';
+          : isSeries
+              ? 'get_series_categories'
+              : 'get_vod_categories';
+      final streamsAction = isLive
+          ? 'get_live_streams'
+          : isSeries
+              ? 'get_series'
+              : 'get_vod_streams';
 
       // Kick off both requests in parallel, but only the stream list is
       // required: a category failure (network or malformed body) must not
@@ -297,12 +316,61 @@ class XtreamCodesService {
       // Convert streams to IptvChannel
       final channels = <IptvChannel>[];
       for (final stream in streamsData!) {
-        final streamId = stream['stream_id']?.toString() ?? '';
         final name = stream['name']?.toString() ?? '';
-        if (streamId.isEmpty || name.isEmpty) continue;
+        if (name.isEmpty) continue;
 
         final categoryId = stream['category_id']?.toString() ?? '';
         final group = categoryMap[categoryId];
+
+        // Series entries are shows, not streams: keyed by series_id, no
+        // playable URL (episodes come from get_series_info on drill-in).
+        // The sentinel URL keeps every URL-keyed pathway (focus maps, search,
+        // dedupe) working; play/tap handlers branch on contentType before it
+        // could ever reach a player.
+        if (isSeries) {
+          final seriesId = stream['series_id']?.toString() ?? '';
+          if (seriesId.isEmpty) continue;
+          final backdrops = stream['backdrop_path'];
+          final backdrop = backdrops is List && backdrops.isNotEmpty
+              ? backdrops.first?.toString()
+              : null;
+          // Panels disagree on the release-date key — resolve the known
+          // spellings in order (same alias set other mature clients use).
+          final releaseDate = (stream['releaseDate'] ??
+                  stream['release_date'] ??
+                  stream['releasedate'])
+              ?.toString();
+          channels.add(
+            IptvChannel(
+              name: name,
+              url: 'xtream-series://$seriesId',
+              // `cover` is the canonical series art; some panels send
+              // `stream_icon` instead (the live/VOD field).
+              logoUrl:
+                  (stream['cover'] ?? stream['stream_icon'])?.toString(),
+              group: group,
+              duration: null, // not live
+              contentType: 'series',
+              attributes: {
+                'series_id': seriesId,
+                if ((stream['plot']?.toString() ?? '').isNotEmpty)
+                  'plot': stream['plot'].toString(),
+                if ((stream['genre']?.toString() ?? '').isNotEmpty)
+                  'genre': stream['genre'].toString(),
+                if (releaseDate != null && releaseDate.isNotEmpty)
+                  'releaseDate': releaseDate,
+                if ((stream['rating']?.toString() ?? '').isNotEmpty)
+                  'rating': stream['rating'].toString(),
+                if (backdrop != null && backdrop.isNotEmpty)
+                  'backdrop': backdrop,
+              },
+            ),
+          );
+          continue;
+        }
+
+        final streamId = stream['stream_id']?.toString() ?? '';
+        if (streamId.isEmpty) continue;
 
         if (isLive) {
           channels.add(
@@ -464,14 +532,213 @@ class XtreamCodesService {
     }
   }
 
+  // Per-series episode lists (get_series_info). Small entries, but keep a cap
+  // anyway — a browse session can drill into dozens of shows.
+  final Map<String, _CachedSeriesInfo> _seriesInfoCache = {};
+  static const _maxCachedSeriesInfo = 12;
+
+  /// Fetch one series' seasons + episodes (`get_series_info`). Returns null on
+  /// any failure — the caller shows its retry state. Cached for the standard
+  /// TTL so the detail page's parallel consumers (episode list, resume state,
+  /// Play) share one panel round-trip.
+  Future<XtreamSeriesInfo?> fetchSeriesInfo(
+    String serverUrl,
+    String username,
+    String password,
+    String seriesId,
+  ) async {
+    final cacheKey = '$serverUrl:$username:$seriesId';
+    final cached = _seriesInfoCache[cacheKey];
+    if (cached != null &&
+        DateTime.now().difference(cached.fetchedAt) < _cacheDuration) {
+      return cached.info;
+    }
+
+    try {
+      final base = _baseUrl(serverUrl, username, password);
+      final response = await http
+          .get(
+            Uri.parse(
+              '$base&action=get_series_info&series_id='
+              '${Uri.encodeQueryComponent(seriesId)}',
+            ),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) return null;
+
+      final body = response.body;
+      dynamic decoded;
+      try {
+        decoded = body.length > _computeDecodeThreshold
+            ? await compute(jsonDecode, body)
+            : jsonDecode(body);
+      } catch (_) {
+        return null;
+      }
+      if (decoded is! Map) return null;
+
+      final info = decoded['info'] is Map
+          ? Map<String, dynamic>.from(decoded['info'] as Map)
+          : const <String, dynamic>{};
+
+      // `episodes` is normally a map of season-number → episode list, but some
+      // panels serve a bare list of lists. Normalize to one iterable of
+      // (seasonHint, episodeJson) pairs.
+      final episodesRaw = decoded['episodes'];
+      final entries = <(int?, Map<String, dynamic>)>[];
+      if (episodesRaw is Map) {
+        episodesRaw.forEach((key, value) {
+          final seasonHint = int.tryParse(key.toString());
+          if (value is List) {
+            for (final e in value) {
+              if (e is Map) {
+                entries.add((seasonHint, Map<String, dynamic>.from(e)));
+              }
+            }
+          }
+        });
+      } else if (episodesRaw is List) {
+        for (final seasonList in episodesRaw) {
+          if (seasonList is List) {
+            for (final e in seasonList) {
+              if (e is Map) entries.add((null, Map<String, dynamic>.from(e)));
+            }
+          }
+        }
+      }
+
+      final encodedUser = Uri.encodeComponent(username);
+      final encodedPass = Uri.encodeComponent(password);
+      final episodes = <XtreamSeriesEpisode>[];
+      for (final (seasonHint, e) in entries) {
+        final id = e['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        final seasonRaw = e['season'];
+        // Episode's own season field wins; the map key is the fallback; a
+        // panel that supplies neither still keeps its episodes (bucketed
+        // into season 1) rather than losing them.
+        final season = (seasonRaw is num
+                ? seasonRaw.toInt()
+                : int.tryParse(seasonRaw?.toString() ?? '') ?? seasonHint) ??
+            1;
+        final numRaw = e['episode_num'];
+        final number = numRaw is num
+            ? numRaw.toInt()
+            : int.tryParse(numRaw?.toString() ?? '');
+        if (season < 0 || number == null) continue;
+        final ext = e['container_extension']?.toString() ?? 'mp4';
+        final epInfo = e['info'] is Map
+            ? Map<String, dynamic>.from(e['info'] as Map)
+            : const <String, dynamic>{};
+        final ratingRaw = epInfo['rating'] ?? e['rating'];
+        final rating = ratingRaw is num
+            ? ratingRaw.toDouble()
+            : double.tryParse(ratingRaw?.toString() ?? '');
+        episodes.add(
+          XtreamSeriesEpisode(
+            season: season,
+            episode: number,
+            title: e['title']?.toString() ?? '',
+            plot: epInfo['plot']?.toString(),
+            // Real panels use lowercase `releasedate` at episode level (vs
+            // camelCase at series level) — try every known spelling.
+            airDate: (epInfo['releasedate'] ??
+                    epInfo['release_date'] ??
+                    epInfo['releaseDate'] ??
+                    epInfo['air_date'])
+                ?.toString(),
+            durationSecs: _durationSecs(
+              epInfo['duration_secs'],
+              epInfo['duration'],
+            ),
+            thumbnailUrl: epInfo['movie_image']?.toString(),
+            rating: rating != null && rating > 0 ? rating : null,
+            url: '$serverUrl/series/$encodedUser/$encodedPass/$id.$ext',
+          ),
+        );
+      }
+      episodes.sort((a, b) {
+        if (a.season != b.season) return a.season.compareTo(b.season);
+        return a.episode.compareTo(b.episode);
+      });
+
+      final backdrops = info['backdrop_path'];
+      final result = XtreamSeriesInfo(
+        plot: info['plot']?.toString(),
+        cast: info['cast']?.toString(),
+        genre: info['genre']?.toString(),
+        releaseDate: (info['releaseDate'] ??
+                info['release_date'] ??
+                info['releasedate'])
+            ?.toString(),
+        rating: double.tryParse(info['rating']?.toString() ?? ''),
+        poster: info['cover']?.toString(),
+        backdrop: backdrops is List && backdrops.isNotEmpty
+            ? backdrops.first?.toString()
+            : null,
+        episodes: episodes,
+      );
+
+      // Never cache an episode-less answer: it's indistinguishable from a
+      // transient panel hiccup, and pinning it for the TTL would leave the
+      // page's Retry re-serving the same emptiness for 30 minutes.
+      if (episodes.isEmpty) return result;
+
+      _seriesInfoCache[cacheKey] =
+          _CachedSeriesInfo(info: result, fetchedAt: DateTime.now());
+      while (_seriesInfoCache.length > _maxCachedSeriesInfo) {
+        String? oldestKey;
+        DateTime? oldestAt;
+        _seriesInfoCache.forEach((key, cached) {
+          if (oldestAt == null || cached.fetchedAt.isBefore(oldestAt!)) {
+            oldestAt = cached.fetchedAt;
+            oldestKey = key;
+          }
+        });
+        _seriesInfoCache.remove(oldestKey);
+      }
+      return result;
+    } catch (e) {
+      debugPrint('XtreamCodesService: Error fetching series info: $e');
+      return null;
+    }
+  }
+
+  /// Episode duration in seconds: `duration_secs` (number or numeric string)
+  /// when present AND positive, else the `duration` "HH:MM:SS"/"MM:SS" string
+  /// some panels send instead. A zero `duration_secs` means "unset" on panels
+  /// that only fill the display string, so it falls through rather than
+  /// short-circuiting the fallback. Null when neither parses.
+  static int? _durationSecs(dynamic secsRaw, dynamic hmsRaw) {
+    final secs = secsRaw is num
+        ? secsRaw.toInt()
+        : int.tryParse(secsRaw?.toString() ?? '');
+    if (secs != null && secs > 0) return secs;
+
+    final hms = hmsRaw?.toString().trim() ?? '';
+    if (hms.isEmpty) return null;
+    final parts = hms.split(':');
+    if (parts.isEmpty || parts.length > 3) return null;
+    var total = 0;
+    for (final part in parts) {
+      final v = int.tryParse(part.trim());
+      if (v == null) return null;
+      total = total * 60 + v;
+    }
+    return total > 0 ? total : null;
+  }
+
   /// Clear cache for a specific server or all
   void clearCache([String? serverUrl]) {
     if (serverUrl != null) {
       _cache.removeWhere((key, _) => key.startsWith(serverUrl));
       _liveUrlFormCache.removeWhere((key, _) => key.startsWith(serverUrl));
+      _seriesInfoCache.removeWhere((key, _) => key.startsWith(serverUrl));
     } else {
       _cache.clear();
       _liveUrlFormCache.clear();
+      _seriesInfoCache.clear();
     }
   }
 
@@ -498,6 +765,64 @@ class _CachedResult {
   final DateTime fetchedAt;
 
   _CachedResult({required this.result, required this.fetchedAt});
+}
+
+class _CachedSeriesInfo {
+  final XtreamSeriesInfo info;
+  final DateTime fetchedAt;
+
+  _CachedSeriesInfo({required this.info, required this.fetchedAt});
+}
+
+/// One playable episode from `get_series_info` — carries its ready-built
+/// `/series/user/pass/id.ext` URL, so downstream consumers never touch panel
+/// credentials.
+class XtreamSeriesEpisode {
+  final int season;
+  final int episode;
+  final String title;
+  final String? plot;
+  final String? airDate;
+  final int? durationSecs;
+  final String? thumbnailUrl;
+  final double? rating;
+  final String url;
+
+  const XtreamSeriesEpisode({
+    required this.season,
+    required this.episode,
+    required this.title,
+    this.plot,
+    this.airDate,
+    this.durationSecs,
+    this.thumbnailUrl,
+    this.rating,
+    required this.url,
+  });
+}
+
+/// A series' detail metadata + flat episode list (sorted season, then episode)
+/// from `get_series_info`.
+class XtreamSeriesInfo {
+  final String? plot;
+  final String? cast;
+  final String? genre;
+  final String? releaseDate;
+  final double? rating;
+  final String? poster;
+  final String? backdrop;
+  final List<XtreamSeriesEpisode> episodes;
+
+  const XtreamSeriesInfo({
+    this.plot,
+    this.cast,
+    this.genre,
+    this.releaseDate,
+    this.rating,
+    this.poster,
+    this.backdrop,
+    required this.episodes,
+  });
 }
 
 /// Live stream URL forms panels serve, in probe order. Standard panels route

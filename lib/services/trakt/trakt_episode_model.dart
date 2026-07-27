@@ -17,6 +17,11 @@ class TraktEpisode {
   /// Episode thumbnail URL from TVMaze (set after enrichment).
   String? thumbnailUrl;
 
+  /// Direct stream URL for sources whose episodes ARE playable links (Xtream
+  /// IPTV series). Null everywhere else — torrent-backed episodes resolve
+  /// their stream through the search/debrid flow instead.
+  final String? playbackUrl;
+
   TraktEpisode({
     required this.season,
     required this.number,
@@ -27,6 +32,7 @@ class TraktEpisode {
     this.runtime,
     this.imdbId,
     this.thumbnailUrl,
+    this.playbackUrl,
   });
 
   /// Display title like "E01 - Pilot" or "E01" if no meaningful title.
@@ -71,6 +77,15 @@ class TraktEpisode {
       imdbId: ids['imdb'] as String?,
     );
   }
+}
+
+/// Sort seasons ascending with Specials (season 0) at the very end — the
+/// house display order for every season list (episodes panel, Xtream series
+/// bridge). Lives next to the model so the two hosts can't drift apart.
+int seasonsSpecialsLast(TraktSeason a, TraktSeason b) {
+  if (a.number == 0 && b.number != 0) return 1;
+  if (a.number != 0 && b.number == 0) return -1;
+  return a.number.compareTo(b.number);
 }
 
 /// A season containing its episodes.
