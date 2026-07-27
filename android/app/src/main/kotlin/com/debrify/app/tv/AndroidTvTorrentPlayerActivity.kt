@@ -311,6 +311,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioSubtitleService: StremioSubtitleService? = null
     private val stremioSubtitles = mutableListOf<StremioSubtitle>()  // deduped flat view over addonSubtitleResults
     private val addonSubtitleResults = mutableListOf<AddonSubtitleResult>()  // per-addon, ordered/stable
+    // Subtitles supplied at launch (e.g. YouTube closed captions). Parsed once
+    // from the payload; re-seeded as a provider group on each item instead of
+    // an IMDb-keyed addon fetch. Non-empty only for sources that carry their
+    // own captions.
+    private val injectedSubtitles = mutableListOf<StremioSubtitle>()
+    // When launch-supplied captions are the only subtitles (YouTube), don't
+    // auto-enable them — matches YouTube's captions-off default and the phone
+    // player. The user turns them on from the subtitle menu.
+    private var suppressSubtitleAutoSelect = false
     private val addonFetchTokens = mutableMapOf<String, Int>()  // per-addon retry generation
     private val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues — don't re-auto-select
     private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
@@ -726,6 +735,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Stremio TV guide init failed", e)
+        }
+
+        // Launch-supplied subtitles (e.g. YouTube captions). Parsed once here;
+        // seeded per-item in fetchStremioSubtitles instead of an addon fetch.
+        try {
+            val payloadJson = JSONObject(rawPayload)
+            val subsArray = payloadJson.optJSONArray("initialSubtitles")
+            if (subsArray != null) {
+                for (i in 0 until subsArray.length()) {
+                    val obj = subsArray.optJSONObject(i) ?: continue
+                    val source = obj.optString("source").takeIf { it.isNotEmpty() } ?: "Captions"
+                    injectedSubtitles.add(StremioSubtitle.fromJson(obj, source, addonId = "injected"))
+                }
+                android.util.Log.d("AndroidTvPlayer", "Loaded ${injectedSubtitles.size} launch-supplied subtitles")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "Failed to parse initialSubtitles from payload", e)
         }
 
         // Initialize seek feedback manager
@@ -2018,6 +2044,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         isLoadingStremioSubtitles = false
         embeddedSubtitleSelected = false
         userManuallySelectedSubtitle = false
+        // Re-established by seedInjectedSubtitles() when the next item has
+        // launch-supplied captions; cleared here so a non-injected item never
+        // inherits the previous item's auto-select suppression.
+        suppressSubtitleAutoSelect = false
         manualSubtitleImdbId = null
         manualSubtitleType = null
         manualSubtitleSeason = null
@@ -2146,6 +2176,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun fetchStremioSubtitles(item: PlaybackItem) {
         val model = payload ?: return
 
+        // Launch-supplied captions (e.g. YouTube): use them directly and skip
+        // addon discovery entirely — the title-based IMDB lookup would be
+        // spurious for arbitrary video titles, and these tracks are already
+        // known. Seeded as a single provider group so the subtitle menu shows
+        // them; not auto-selected (captions stay off until the user picks one).
+        //
+        // Exception: once the user has manually identified a title (Search
+        // Subtitle), honour that identity and fall through to the real addon
+        // fetch below — otherwise a re-fetch (source/quality switch, playlist
+        // advance) would silently discard their searched subtitles.
+        if (injectedSubtitles.isNotEmpty() && manualSubtitleImdbId.isNullOrEmpty()) {
+            seedInjectedSubtitles()
+            return
+        }
+
         // The addon match is spurious for YouTube (title-based IMDB lookup on
         // arbitrary video titles), so skip addon subtitle fetching for merged
         // YouTube items. (Side-rendering no longer re-prepares the source, so
@@ -2249,6 +2294,36 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             fetchStremioSubtitlesWithImdb(imdbId, type, item)
         }
+    }
+
+    /**
+     * Seed the launch-supplied captions ([injectedSubtitles]) as a single
+     * OK provider group, so they appear in the subtitle menu without any addon
+     * fetch. Not auto-selected: [suppressSubtitleAutoSelect] keeps them off
+     * until the user opts in from the menu (matching YouTube's own default).
+     */
+    private fun seedInjectedSubtitles() {
+        suppressSubtitleAutoSelect = true
+        val groupName = injectedSubtitles.first().source
+        val addon = StremioAddon(
+            id = "injected",
+            name = groupName,
+            baseUrl = "",
+            resources = listOf("subtitles"),
+            types = emptyList(),
+            enabled = true
+        )
+        addonSubtitleResults.clear()
+        addonSubtitleResults.add(
+            AddonSubtitleResult(
+                addon,
+                AddonSubtitleStatus.OK,
+                injectedSubtitles.filter { isSideRenderableSubtitle(it.url) }
+            )
+        )
+        rebuildFlatStremioSubtitles()
+        clearStremioLoadingState()
+        refreshSubtitleUiForLoading()
     }
 
     /**
@@ -3611,6 +3686,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * Called after Stremio subtitles are fetched, if no embedded subtitle was selected.
      */
     private fun tryAutoSelectAddonSubtitle() {
+        // Skip when the offered subtitles are launch-supplied captions (YouTube):
+        // they stay off until the user picks one, so we never force them on.
+        if (suppressSubtitleAutoSelect) {
+            return
+        }
+
         // Skip if embedded subtitle was already selected
         if (embeddedSubtitleSelected) {
             return

@@ -182,6 +182,11 @@ class VideoPlayerScreen extends StatefulWidget {
   final bool simklScrobble;
   final double? simklProgressPercent;
 
+  /// Subtitle tracks known at launch (e.g. YouTube closed captions), surfaced
+  /// in the subtitle menu as a pre-loaded provider group. Null for sources
+  /// whose subtitles are fetched lazily from Stremio addons by IMDb id.
+  final List<StremioSubtitle>? initialSubtitles;
+
   const VideoPlayerScreen({
     Key? key,
     required this.videoUrl,
@@ -231,6 +236,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.traktProgressPercent,
     this.simklScrobble = false,
     this.simklProgressPercent,
+    this.initialSubtitles,
   }) : assert(randomStartMaxPercent >= 0),
        super(key: key);
 
@@ -453,6 +459,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Per-addon view of the same fetch (drives the sheet's addon groups);
   // _cachedStremioSubtitles is its deduped flat projection.
   List<AddonSubtitleSlot>? _cachedAddonSlots;
+  // Subtitle tracks supplied at launch (e.g. YouTube captions), surfaced as a
+  // pre-loaded provider group. Content-independent: not keyed by IMDb, so it
+  // survives the IMDb-gated cache logic and is offered whenever no per-item
+  // slots exist. Built once in initState from widget.initialSubtitles.
+  List<AddonSubtitleSlot>? _injectedSubtitleSlots;
   String? _cachedSubtitleKey; // Format: "imdbId:season:episode" or "imdbId"
   String?
   _selectedStremioSubtitleId; // Track selected addon subtitle for UI state
@@ -605,6 +616,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     AnalyticsService.screenView('video_player');
     _startAnalyticsHeartbeat();
     _activePlaylist = widget.playlist;
+
+    // Launch-time subtitles (e.g. YouTube captions): wrap into a single loaded
+    // provider group so they appear in the subtitle menu without an addon
+    // fetch. Grouped under the first track's source label (e.g. "YouTube").
+    final initialSubs = widget.initialSubtitles;
+    if (initialSubs != null && initialSubs.isNotEmpty) {
+      _injectedSubtitleSlots = [
+        AddonSubtitleSlot(
+          addonId: 'injected',
+          addonName: initialSubs.first.source,
+          status: AddonSubtitleStatus.ok,
+          subtitles: initialSubs,
+        ),
+      ];
+    }
 
     // Picture-in-Picture (Android phone): once native confirms capability,
     // become the active PiP owner and listen so we can collapse chrome inside
@@ -7454,11 +7480,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               : effectiveImdbId)
         : null;
 
-    // Check if we have cached per-addon subtitle slots for this content
-    final List<AddonSubtitleSlot>? cachedSlots =
+    // Check if we have cached per-addon subtitle slots for this content.
+    final List<AddonSubtitleSlot>? baseSlots =
         (cacheKey != null && _cachedSubtitleKey == cacheKey)
         ? _cachedAddonSlots
         : null;
+    // Always include launch-supplied subtitles (e.g. YouTube captions). They
+    // aren't IMDb-keyed, so they never live in the per-item cache above and
+    // must be appended unconditionally — otherwise identifying the title (which
+    // populates _cachedAddonSlots) would make the caption group disappear.
+    final List<AddonSubtitleSlot>? cachedSlots = _injectedSubtitleSlots != null
+        ? [...?baseSlots, ..._injectedSubtitleSlots!]
+        : baseSlots;
 
     if (cachedSlots != null) {
       debugPrint(
@@ -7808,6 +7841,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ext = 'ttml';
       } else if (urlPath.endsWith('.sub')) {
         ext = 'sub';
+      } else {
+        // No file extension in the path (e.g. YouTube's timedtext endpoint) —
+        // fall back to the format carried in the `fmt`/`format` query param so
+        // the temp file gets the right extension for libmpv's demuxer.
+        final fmt = (uri.queryParameters['fmt'] ??
+                uri.queryParameters['format'] ??
+                '')
+            .toLowerCase();
+        if (fmt == 'vtt') {
+          ext = 'vtt';
+        } else if (fmt == 'ttml') {
+          ext = 'ttml';
+        }
+        // Note: YouTube's srv1/srv2/srv3 are XML timedtext, NOT TTML, and
+        // libmpv can't parse them — we deliberately request fmt=vtt for
+        // YouTube captions, so those never reach here. Leaving ext='srt' for
+        // any unknown fmt is a safe default (WEBVTT/SRT auto-detect by libmpv).
       }
 
       final dir = await getTemporaryDirectory();

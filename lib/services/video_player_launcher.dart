@@ -15,6 +15,7 @@ import '../services/external_player_service.dart';
 import '../utils/deovr_utils.dart' as deovr;
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
+import '../models/stremio_subtitle.dart';
 import '../screens/video_player_screen.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
@@ -260,6 +261,12 @@ class VideoPlayerLaunchArgs {
   final String? contentYear;
   final String? addonId; // Stremio addon used for playback
 
+  /// Subtitle tracks known at launch time, surfaced in the player's subtitle
+  /// menu as a pre-loaded provider group (no addon fetch needed). Used for
+  /// sources that carry their own captions — e.g. YouTube closed captions —
+  /// where the IMDb-keyed addon fetch never runs.
+  final List<StremioSubtitle>? initialSubtitles;
+
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
     this.audioUrl,
@@ -319,6 +326,7 @@ class VideoPlayerLaunchArgs {
     this.posterUrl,
     this.contentYear,
     this.addonId,
+    this.initialSubtitles,
   });
 
   VideoPlayerScreen toWidget() {
@@ -368,6 +376,7 @@ class VideoPlayerLaunchArgs {
       traktProgressPercent: traktProgressPercent,
       simklScrobble: simklScrobble,
       simklProgressPercent: simklProgressPercent,
+      initialSubtitles: initialSubtitles,
     );
   }
 }
@@ -636,6 +645,7 @@ class VideoPlayerLauncher {
           posterUrl: args.posterUrl,
           contentYear: args.contentYear,
           addonId: args.addonId,
+          initialSubtitles: args.initialSubtitles,
         );
         // Clean up any existing local Continue Watching entry (Trakt tracks it now)
         await StorageService.removeContinueWatchingItem(args.contentImdbId!);
@@ -718,6 +728,7 @@ class VideoPlayerLauncher {
           posterUrl: args.posterUrl,
           contentYear: args.contentYear,
           addonId: args.addonId,
+          initialSubtitles: args.initialSubtitles,
         );
         // Clean up any pre-existing local Continue Watching entry (from before
         // Simkl was connected, or a prior non-Simkl play) — Simkl's own CW row
@@ -2959,6 +2970,9 @@ class _AndroidTvPlaybackPayload {
   // progress percent folds into the native resume seed via toMap below).
   final bool simklScrobble;
   final double? simklProgressPercent;
+  // Subtitle tracks known at launch (e.g. YouTube captions), surfaced natively
+  // as a pre-loaded provider group without an addon fetch.
+  final List<StremioSubtitle>? initialSubtitles;
 
   const _AndroidTvPlaybackPayload({
     required this.contentType,
@@ -2981,6 +2995,7 @@ class _AndroidTvPlaybackPayload {
     this.traktProgressPercent,
     this.simklScrobble = false,
     this.simklProgressPercent,
+    this.initialSubtitles,
   });
 
   /// The effective cross-tracker launch resume percent: the FURTHEST of the
@@ -3024,6 +3039,17 @@ class _AndroidTvPlaybackPayload {
       // input, but carries the furthest of the Trakt/Simkl launch percents.
       if (_effectiveLaunchPercent != null)
         'traktProgressPercent': _effectiveLaunchPercent,
+      if (initialSubtitles != null && initialSubtitles!.isNotEmpty)
+        'initialSubtitles': [
+          for (final s in initialSubtitles!)
+            {
+              'id': s.id,
+              'url': s.url,
+              'lang': s.lang,
+              if (s.label != null) 'label': s.label,
+              'source': s.source,
+            },
+        ],
     };
   }
 }
@@ -3494,6 +3520,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       traktProgressPercent: args.traktProgressPercent,
       simklScrobble: args.simklScrobble,
       simklProgressPercent: args.simklProgressPercent,
+      initialSubtitles: args.initialSubtitles,
     );
 
     return _AndroidTvPlaybackPayloadResult(

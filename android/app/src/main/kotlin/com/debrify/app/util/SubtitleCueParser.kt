@@ -96,6 +96,11 @@ object SubtitleCueParser {
 
     /** Dispatch on the file extension found in the URL path. */
     fun parseByUrl(url: String, content: String): List<SubtitleCue> {
+        // Content signature wins over the URL. Some sources carry the format in
+        // a query param rather than a path extension (e.g. YouTube's timedtext
+        // endpoint, `.../api/timedtext?...&fmt=vtt`), so the URL path looks
+        // extension-less and would wrongly fall through to the SRT parser.
+        if (content.trimStart().startsWith("WEBVTT")) return parseVtt(content)
         val lower = url.substringBefore("?").lowercase()
         return when {
             lower.contains(".srt") -> parseSrt(content)
