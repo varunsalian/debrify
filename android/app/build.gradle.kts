@@ -87,4 +87,7 @@ dependencies {
 
     // Glide for image loading
     implementation("com.github.bumptech.glide:glide:4.16.0")
+
+    // SAF tree handling for the custom download-folder feature
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }

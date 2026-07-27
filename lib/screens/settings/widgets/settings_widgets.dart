@@ -115,6 +115,12 @@ abstract final class SettingsRows {
     title: 'Debrify Keyboard',
     subtitle: 'Remote-friendly on-screen keyboard for text fields',
   );
+  // Subtitle is dynamic (current folder) — passed per call site.
+  static const downloadLocation = SettingsRowContent(
+    icon: Icons.folder_rounded,
+    title: 'Download Location',
+    subtitle: '',
+  );
   static const clearDownloads = SettingsRowContent(
     icon: Icons.download_rounded,
     title: 'Clear Download Data',

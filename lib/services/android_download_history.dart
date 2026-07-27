@@ -13,6 +13,11 @@ class AndroidDownloadHistory {
 
   final Map<String, TaskRecord> _recordsById = {};
   SharedPreferences? _prefs;
+  // Serializes persist writes: rapid successive upserts used to fire
+  // overlapping setString calls (last-writer-wins race). Chaining on the
+  // previous write keeps ordering; a snapshot is taken when the write runs.
+  Future<void> _persistChain = Future.value();
+  bool _persistQueued = false;
 
   Future<void> initialize() async {
     if (!Platform.isAndroid) return;
@@ -29,10 +34,19 @@ class AndroidDownloadHistory {
     }
   }
 
-  Future<void> _persist() async {
+  void _persist() {
     if (_prefs == null) return;
-    final List<Map<String, dynamic>> list = _recordsById.values.map((e) => e.toJson()).toList();
-    await _prefs!.setString(_prefsKey, jsonEncode(list));
+    // Coalesce: one queued write is enough — it snapshots the latest map.
+    if (_persistQueued) return;
+    _persistQueued = true;
+    _persistChain = _persistChain.then((_) async {
+      _persistQueued = false;
+      try {
+        final List<Map<String, dynamic>> list =
+            _recordsById.values.map((e) => e.toJson()).toList();
+        await _prefs!.setString(_prefsKey, jsonEncode(list));
+      } catch (_) {}
+    });
   }
 
   void upsert(Task task, TaskStatus status, double progress, {int expectedFileSize = -1}) {
@@ -43,6 +57,13 @@ class AndroidDownloadHistory {
 
   void removeById(String taskId) {
     _recordsById.remove(taskId);
+    _persist();
+  }
+
+  TaskRecord? byId(String taskId) => _recordsById[taskId];
+
+  void clearAll() {
+    _recordsById.clear();
     _persist();
   }
 

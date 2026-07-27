@@ -38,6 +38,9 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
+  // Android-only custom download folder (SAF); null hides the row.
+  final Future<void> Function()? onOpenDownloadLocation;
+  final String downloadLocationSubtitle;
   final Future<void> Function() onCreateBackup;
   final Future<void> Function() onRestoreBackup;
   final Future<void> Function() onDangerAction;
@@ -68,6 +71,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenDebrifyTvSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
+    this.onOpenDownloadLocation,
+    this.downloadLocationSubtitle = '',
     required this.onCreateBackup,
     required this.onRestoreBackup,
     required this.onDangerAction,
@@ -107,9 +112,9 @@ const List<_Category> _kCategories = [
 ];
 
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
-  /// Max focusable rows in any single non-Connections category (General /
-  /// Search / Data & Backup each have 4) — used to size the pane node pool.
-  static const int _kMaxCategoryRows = 4;
+  /// Max focusable rows in any single non-Connections category (Data & Backup
+  /// has up to 5 with the download-location row) — sizes the pane node pool.
+  static const int _kMaxCategoryRows = 5;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -465,7 +470,27 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           ),
         ];
       case 4: // Data & Backup
+      {
+        // Focus nodes are claimed sequentially so the optional
+        // download-location row doesn't shift hardcoded indices.
+        int paneIdx = 0;
+        FocusNode nextNode() => _paneNodes[paneIdx++];
         return [
+          if (widget.onOpenDownloadLocation != null) ...[
+            const SettingsSectionLabel('Downloads'),
+            SettingsSection(
+              title: '',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.downloadLocation,
+                  subtitle: widget.downloadLocationSubtitle,
+                  onTap: widget.onOpenDownloadLocation!,
+                  focusNode: nextNode(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+          ],
           const SettingsSectionLabel('Maintenance'),
           SettingsSection(
             title: '',
@@ -473,12 +498,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
               SettingsTile.spec(
                 SettingsRows.clearDownloads,
                 onTap: widget.onClearDownloads,
-                focusNode: _paneNodes[0],
+                focusNode: nextNode(),
               ),
               SettingsTile.spec(
                 SettingsRows.clearPlayback,
                 onTap: widget.onClearPlayback,
-                focusNode: _paneNodes[1],
+                focusNode: nextNode(),
               ),
             ],
           ),
@@ -490,16 +515,17 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
               SettingsTile.spec(
                 SettingsRows.createBackup,
                 onTap: widget.onCreateBackup,
-                focusNode: _paneNodes[2],
+                focusNode: nextNode(),
               ),
               SettingsTile.spec(
                 SettingsRows.restoreBackup,
                 onTap: widget.onRestoreBackup,
-                focusNode: _paneNodes[3],
+                focusNode: nextNode(),
               ),
             ],
           ),
         ];
+      }
       case 5: // Updates
         return [
           SettingsSection(

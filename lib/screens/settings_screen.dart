@@ -121,6 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _updateDownloadTaskId;
   bool _autoUpdateChecksEnabled = true;
   bool _tvKeyboardEnabled = true;
+  String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
   String _supportSettingsSubtitle = 'Help fund development with a donation';
@@ -131,6 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AnalyticsService.screenView('settings');
     _loadSummaries();
     _loadSupportConfig();
+    _loadDownloadLocation();
 
     // Register TV sidebar focus handler (tab index 8 = Settings)
     _tvContentFocusHandler = () {
@@ -603,6 +605,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
+      onOpenDownloadLocation: _downloadLocationSupported
+          ? _openDownloadLocationSettings
+          : null,
+      downloadLocationSubtitle: _downloadLocationSubtitle,
       onCreateBackup: _createBackup,
       onRestoreBackup: _restoreBackup,
       onDangerAction: _resetAppData,
@@ -651,6 +657,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       isAndroidTv: _isAndroidTv,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
+      onOpenDownloadLocation: _downloadLocationSupported
+          ? _openDownloadLocationSettings
+          : null,
+      downloadLocationSubtitle: _downloadLocationSubtitle,
       onCreateBackup: _createBackup,
       onRestoreBackup: _restoreBackup,
       onDangerAction: _resetAppData,
@@ -1253,6 +1263,114 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '$withNotes — failed: ${failed.join(', ')}';
   }
 
+  bool get _downloadLocationSupported => !kIsWeb && Platform.isAndroid;
+
+  Future<void> _loadDownloadLocation() async {
+    if (!_downloadLocationSupported) return;
+    final name = await StorageService.getDownloadTreeDisplayName();
+    if (!mounted) return;
+    setState(() {
+      _downloadLocationSubtitle = name == null
+          ? 'Downloads/Debrify (default)'
+          : 'Custom: $name';
+    });
+  }
+
+  Future<void> _openDownloadLocationSettings() async {
+    final currentTree = await StorageService.getDownloadTreeUri();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF0B1220),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF334155),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.folder_rounded),
+                title: const Text('Download location'),
+                subtitle: Text(_downloadLocationSubtitle),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                autofocus: true,
+                leading: const Icon(Icons.drive_folder_upload_rounded),
+                title: const Text('Choose folder…'),
+                subtitle: const Text(
+                  'Pick any folder, including an SD card. New downloads go there.',
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _chooseDownloadFolder();
+                },
+              ),
+              if (currentTree != null)
+                ListTile(
+                  leading: const Icon(Icons.restart_alt_rounded),
+                  title: const Text('Reset to default'),
+                  subtitle: const Text('Save to Downloads/Debrify again'),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _resetDownloadFolder();
+                  },
+                ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _chooseDownloadFolder() async {
+    final res = await AndroidNativeDownloader.pickDownloadDirectory();
+    if (res == null) return; // user backed out of the picker
+    final newTree = (res['treeUri'] ?? '').toString();
+    final name = (res['displayName'] ?? 'Custom folder').toString();
+    if (newTree.isEmpty) return;
+    final old = await StorageService.getDownloadTreeUri();
+    if (old != null && old.isNotEmpty && old != newTree) {
+      // Release the previous grant — persisted-permission slots are limited.
+      await AndroidNativeDownloader.releaseDownloadDirectory(old);
+    }
+    await StorageService.setDownloadTreeUri(newTree, name);
+    await _loadDownloadLocation();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('New downloads will be saved to "$name"')),
+    );
+  }
+
+  Future<void> _resetDownloadFolder() async {
+    final old = await StorageService.getDownloadTreeUri();
+    if (old != null && old.isNotEmpty) {
+      await AndroidNativeDownloader.releaseDownloadDirectory(old);
+    }
+    await StorageService.clearDownloadTreeUri();
+    await _loadDownloadLocation();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Downloads will be saved to Downloads/Debrify'),
+      ),
+    );
+  }
+
   Future<void> _clearDownloadData() async {
     final confirmed = await showSettingsDialog<bool>(
       context: context,
@@ -1760,6 +1878,9 @@ class _SettingsLayout extends StatelessWidget {
   final bool isAndroidTv;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
+  // Android-only custom download folder (SAF); null hides the row.
+  final Future<void> Function()? onOpenDownloadLocation;
+  final String downloadLocationSubtitle;
   final Future<void> Function() onCreateBackup;
   final Future<void> Function() onRestoreBackup;
   final Future<void> Function() onDangerAction;
@@ -1790,6 +1911,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.isAndroidTv,
     required this.onClearDownloads,
     required this.onClearPlayback,
+    this.onOpenDownloadLocation,
+    this.downloadLocationSubtitle = '',
     required this.onCreateBackup,
     required this.onRestoreBackup,
     required this.onDangerAction,
@@ -1887,6 +2010,20 @@ class _SettingsLayout extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (onOpenDownloadLocation != null) ...[
+                  const SizedBox(height: 24),
+                  // Downloads section
+                  SettingsSection(
+                    title: 'Downloads',
+                    children: [
+                      SettingsTile.spec(
+                        SettingsRows.downloadLocation,
+                        subtitle: downloadLocationSubtitle,
+                        onTap: onOpenDownloadLocation!,
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
                 // Maintenance section
                 SettingsSection(

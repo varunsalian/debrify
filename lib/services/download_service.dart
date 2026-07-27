@@ -111,6 +111,18 @@ class DownloadService {
   final Set<String> _canceledDuringStart = {};
   bool _reevaluating = false;
   bool _reevaluateScheduled = false;
+  // Monotonic suffix so two enqueues in the same millisecond can't mint the
+  // same record id (which used to silently overwrite the earlier record).
+  int _idSeq = 0;
+  // Per-task debrid-link refresh attempts; caps the error→refresh→error loop
+  // for genuinely dead content. Reset only by FRESH progress: byte count at
+  // the last error is the baseline, because progress events carry cumulative
+  // bytes and any partially-downloaded task would otherwise reset the budget
+  // on its first tick after every restart.
+  final Map<String, int> _linkRefreshAttempts = {};
+  final Map<String, int> _bytesAtLastError = {};
+  static const int _maxLinkRefreshAttempts = 2;
+  static const int _refreshResetFreshBytes = 1024 * 1024;
 
   // Persistence for pending queue (crash-safe, survives restarts)
   static const String _pendingKey = 'pending_download_queue_v1';
@@ -499,30 +511,21 @@ class DownloadService {
 
   Future<void> retryAllFailed() async {
     await _loadRecords();
-    final failed = _records.entries.where(
-      (e) => (e.value['state'] == 'failed'),
-    );
-    for (final e in failed) {
-      final rec = e.value;
-      final meta = rec['meta'] as String?;
-      final url = rec['url'] as String?;
-      final fileName = rec['displayName'] as String?;
-      final torrentName = rec['torrentName'] as String?;
-      if (meta != null && meta.isNotEmpty) {
-        await enqueueDownload(
-          url: url ?? '',
-          fileName: fileName,
-          meta: meta,
-          torrentName: torrentName,
-        );
-      } else if (url != null && url.isNotEmpty) {
-        await enqueueDownload(
-          url: url,
-          fileName: fileName,
-          torrentName: torrentName,
-        );
+    // Snapshot: _queueFromRecord mutates bookkeeping while we iterate, and
+    // re-queue the SAME record (same id) — a retry must never mint a ghost
+    // duplicate or be swallowed by content-key dedup.
+    final failedIds = _records.entries
+        .where((e) => (e.value['state'] == 'failed'))
+        .map((e) => e.key)
+        .toList(growable: false);
+    for (final recordId in failedIds) {
+      final requeued = await _queueFromRecord(recordId, paused: false);
+      if (!requeued) {
+        debugPrint('DL RETRY-ALL: could not re-queue $recordId');
       }
-      _upsertRecord(e.key, {'state': 'queued'});
+    }
+    if (failedIds.isNotEmpty) {
+      unawaited(_reevaluateQueue());
     }
   }
 
@@ -530,14 +533,39 @@ class DownloadService {
     // Clear durable records
     _records = {};
     await _saveRecords();
+    // Clear in-memory queues so cleared items can't be revived by a later pass
+    _pending.clear();
+    _pendingById.clear();
+    _pausedPending.clear();
+    _pendingResumeAndroid.clear();
+    _canceledDuringStart.clear();
+    _linkRefreshAttempts.clear();
     // Clear persisted pending queue
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_pendingKey);
       await prefs.remove(_pausedKey);
     } catch (_) {}
-    // Best-effort clear of non-Android plugin DB (Android handled via native history elsewhere)
-    if (!Platform.isAndroid) {
+    if (Platform.isAndroid) {
+      // A "clear" must clear ALL Android stores: the UI history and the
+      // native service's persistent task store. Running tasks are CANCELED
+      // (not just forgotten) — a live worker would otherwise keep streaming
+      // and its next event/persist would resurrect the entry just cleared.
+      try {
+        final tasks = await AndroidNativeDownloader.queryTasks();
+        for (final t in tasks) {
+          final id = (t['taskId'] ?? '').toString();
+          if (id.isEmpty) continue;
+          if ((t['status'] ?? '').toString() == 'running') {
+            await AndroidNativeDownloader.cancel(id);
+          } else {
+            await AndroidNativeDownloader.forgetTask(id);
+          }
+        }
+      } catch (_) {}
+      AndroidDownloadHistory.instance.clearAll();
+    } else {
+      // Best-effort clear of non-Android plugin DB
       try {
         final all = await FileDownloader().database.allRecords();
         for (final r in all) {
@@ -564,6 +592,7 @@ class DownloadService {
               'contentKey': p.contentKey,
               'destPath': p.destPath,
               'relativeSubDir': p.relativeSubDir,
+              'treeUri': p.treeUri,
             },
           )
           .toList();
@@ -592,6 +621,7 @@ class DownloadService {
               'contentKey': p.contentKey,
               'destPath': p.destPath,
               'relativeSubDir': p.relativeSubDir,
+              'treeUri': p.treeUri,
             },
           )
           .toList();
@@ -625,6 +655,7 @@ class DownloadService {
       contentKey: contentKey,
       destPath: item['destPath'] as String?,
       relativeSubDir: item['relativeSubDir'] as String?,
+      treeUri: item['treeUri'] as String?,
     );
   }
 
@@ -656,6 +687,7 @@ class DownloadService {
       contentKey: contentKey,
       destPath: rec['destPath'] as String?,
       relativeSubDir: rec['relativeSubDir'] as String?,
+      treeUri: rec['treeUri'] as String?,
     );
   }
 
@@ -701,8 +733,40 @@ class DownloadService {
 
     if (_pendingById.containsKey(recordId)) return true;
     pending.canceled = false;
-    _addPendingRequest(_pending, _pendingById, pending, atFront: insertFront);
+    _canceledDuringStart.remove(recordId);
+    // Internal re-queue of an existing record: bypass content-key dedup so a
+    // retry/resume-fallback can never be silently swallowed.
+    final added = _addPendingRequest(
+      _pending,
+      _pendingById,
+      pending,
+      atFront: insertFront,
+      allowDuplicate: true,
+    );
+    if (!added) return true; // already queued under this id
     _upsertRecord(recordId, {'state': 'queued'});
+
+    // Visibility: the re-queued item must show up as enqueued in the UI.
+    final downloadTask = DownloadTask(
+      taskId: recordId,
+      url: pending.url,
+      filename: pending.providedFileName ?? 'download',
+    );
+    if (Platform.isAndroid) {
+      AndroidDownloadHistory.instance.upsert(
+        downloadTask,
+        TaskStatus.enqueued,
+        0.0,
+      );
+    } else {
+      _nonAndroidQueuedRecords[recordId] = TaskRecord(
+        downloadTask,
+        TaskStatus.enqueued,
+        0.0,
+        -1,
+      );
+    }
+    _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.enqueued));
     await _persistPending();
     return true;
   }
@@ -1079,7 +1143,13 @@ class DownloadService {
               .all()
               .where((r) => r.status == TaskStatus.paused)
               .map((r) => r.taskId)
-              .where((id) => !id.startsWith('queued-'))
+              // Queue-managed entries (pending/paused-queued placeholders)
+              // are owned by the scheduler, not the native resume path.
+              .where(
+                (id) =>
+                    !_pendingById.containsKey(id) &&
+                    !_pausedPending.containsKey(id),
+              )
               .toList(growable: false);
           int scheduled = 0;
           for (final id in paused) {
@@ -1110,10 +1180,13 @@ class DownloadService {
         final String? recId = _resolveRecordIdForTaskId(taskId);
         switch (type) {
           case 'started':
+            // Never regress progress: an out-of-order 'started' (or an
+            // adopt-restart of a partially downloaded task) must not clobber
+            // a known progress value back to 0.
             AndroidDownloadHistory.instance.upsert(
               task,
               TaskStatus.running,
-              0.0,
+              _preservedProgress(taskId),
             );
             _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
             if (recId != null)
@@ -1125,6 +1198,13 @@ class DownloadService {
           case 'progress':
             final total = (event['total'] as num?)?.toInt() ?? 0;
             final bytes = (event['bytes'] as num?)?.toInt() ?? 0;
+            // Fresh progress past the last-error baseline means the refreshed
+            // link genuinely works — only then reset the refresh budget.
+            final baseline = _bytesAtLastError[taskId];
+            if (baseline != null && bytes > baseline + _refreshResetFreshBytes) {
+              _linkRefreshAttempts.remove(taskId);
+              _bytesAtLastError.remove(taskId);
+            }
             final prog = total > 0 ? (bytes / total).clamp(0.0, 1.0) : 0.0;
             AndroidDownloadHistory.instance.upsert(
               task,
@@ -1153,10 +1233,12 @@ class DownloadService {
             _reevaluateQueue();
             break;
           case 'resumed':
+            // A revive-from-store resume is exactly the partial-bytes case —
+            // keep the known progress instead of flashing back to 0%.
             AndroidDownloadHistory.instance.upsert(
               task,
               TaskStatus.running,
-              0.0,
+              _preservedProgress(taskId),
             );
             _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
             if (recId != null) _upsertRecord(recId, {'state': 'running'});
@@ -1213,12 +1295,21 @@ class DownloadService {
               _lastFileByTaskId.remove(taskId);
               _reevaluateQueue();
             } else {
-              // Network is online - try PikPak cold storage retry first
+              // Network is online: the native side already retried transient
+              // errors, so this is usually an expired debrid link. Refresh it
+              // (RD/Torbox/PikPak) and restart under the SAME task id so the
+              // partial bytes on disk are resumed.
               _lastFileByTaskId.remove(taskId);
+              final httpCode = (event['httpCode'] as num?)?.toInt();
+              final errorBytes = (event['bytes'] as num?)?.toInt() ?? 0;
               unawaited(() async {
-                final retried = await _handlePikPakFailedRetry(recId);
+                final retried = await _handleAndroidErrorRetry(
+                  recId,
+                  taskId,
+                  httpCode,
+                  errorBytes,
+                );
                 if (!retried) {
-                  // Not PikPak or max retries exceeded - mark as failed
                   debugPrint('ANDR ERR net=${nowNet.name} → failed');
                   AndroidDownloadHistory.instance.upsert(
                     task,
@@ -1420,15 +1511,18 @@ class DownloadService {
         }
       }
     }
-    // On Android: seed paused/enqueued/running tasks into pending resume to let scheduler handle capacity
+    // On Android: reconcile Dart records/history against native truth (the
+    // service's persistent store + live registry) — adopts survivors of
+    // process death into the SAME records instead of re-enqueueing ghosts —
+    // then seed resumable tasks into the scheduler.
     if (Platform.isAndroid) {
+      await _reconcileWithNative();
       final hist = AndroidDownloadHistory.instance.all();
       int seeded = 0;
       for (final r in hist) {
-        if (r.status == TaskStatus.paused ||
-            r.status == TaskStatus.enqueued ||
-            r.status == TaskStatus.running) {
-          if (!r.taskId.startsWith('queued-') &&
+        if (r.status == TaskStatus.paused || r.status == TaskStatus.enqueued) {
+          if (!_pendingById.containsKey(r.taskId) &&
+              !_pausedPending.containsKey(r.taskId) &&
               !_pendingResumeAndroid.contains(r.taskId)) {
             _pendingResumeAndroid.add(r.taskId);
             seeded++;
@@ -1500,9 +1594,34 @@ class DownloadService {
         ? _sanitizeName(fileName!.trim())
         : null;
 
-    // Create a queued placeholder task/record for visibility
+    // One identity end-to-end: this id is the durable record key AND the
+    // native task id (start-or-adopt on the service side), so reconciliation
+    // never has to correlate two id spaces. The monotonic suffix prevents
+    // same-millisecond collisions that used to silently overwrite records.
     final String queuedId =
-        'queued-${DateTime.now().millisecondsSinceEpoch}-${url.hashCode}';
+        'dl-${DateTime.now().millisecondsSinceEpoch}-${_idSeq++}';
+
+    // Custom download location (SAF): captured at enqueue time and persisted
+    // per-download, so in-flight downloads keep their original destination
+    // even if the preference changes later.
+    String? treeUri;
+    if (Platform.isAndroid) {
+      try {
+        final saved = await StorageService.getDownloadTreeUri();
+        if (saved != null && saved.isNotEmpty) {
+          if (await _validateTreeUriCached(saved)) {
+            treeUri = saved;
+          } else {
+            // Grant lost (SD card ejected/reformatted, folder deleted):
+            // fall back to the default location and clear the stale pref.
+            debugPrint(
+              'DL: custom download folder grant lost; falling back to default',
+            );
+            await StorageService.clearDownloadTreeUri();
+          }
+        }
+      } catch (_) {}
+    }
     final String displayName =
         providedName ??
         (() {
@@ -1554,6 +1673,7 @@ class DownloadService {
       'headers': headers,
       if (destPath != null) 'destPath': destPath,
       if (relativeSubDir != null) 'relativeSubDir': relativeSubDir,
+      if (treeUri != null) 'treeUri': treeUri,
     });
 
     // Add to in-memory pending queue (prevent duplicates by contentKey)
@@ -1570,8 +1690,32 @@ class DownloadService {
       contentKey: contentKey,
       destPath: destPath,
       relativeSubDir: relativeSubDir,
+      treeUri: treeUri,
     );
-    _addPendingRequest(_pending, _pendingById, pending, atFront: insertAtFront);
+    final added = _addPendingRequest(
+      _pending,
+      _pendingById,
+      pending,
+      atFront: insertAtFront,
+    );
+    if (!added) {
+      // Dedup suppressed the enqueue (same content already queued): roll back
+      // the record and placeholder created above, or they'd sit as a
+      // permanent "queued" ghost no scheduler entry ever starts.
+      _records.remove(queuedId);
+      unawaited(_saveRecords());
+      if (Platform.isAndroid) {
+        AndroidDownloadHistory.instance.removeById(queuedId);
+      } else {
+        _nonAndroidQueuedRecords.remove(queuedId);
+      }
+      _statusController.add(TaskStatusUpdate(queuedTask, TaskStatus.canceled));
+      return DownloadEntry(
+        task: queuedTask,
+        displayName: displayName,
+        directory: '',
+      );
+    }
     await _persistPending();
 
     // Try to start if capacity allows
@@ -1585,7 +1729,31 @@ class DownloadService {
   }
 
   Future<void> pause(Task task) async {
+    // A queued item (not yet started) has no native task — pausing it means
+    // parking it in the paused queue, or it would start anyway moments later.
+    if (_pendingById.containsKey(task.taskId)) {
+      await pauseQueuedTasksByIds([task.taskId]);
+      return;
+    }
+    if (_pausedPending.containsKey(task.taskId)) return; // already paused
     if (Platform.isAndroid) {
+      // The native channel can't report "unknown task" (the intent dispatch
+      // always succeeds), so ownership is decided HERE: a record still in
+      // 'queued' state is scheduler-owned — possibly mid-start inside the
+      // drain's multi-second link refresh — and must be parked in the paused
+      // queue, or the drain would start it anyway and ignore the pause.
+      final recId = _resolveRecordIdForTaskId(task.taskId);
+      final recState = recId != null
+          ? (_records[recId]?['state'] ?? '').toString()
+          : '';
+      if (recState == 'queued') {
+        _canceledDuringStart.add(task.taskId);
+        await _queueFromRecord(recId!, paused: true);
+        return;
+      }
+      // Native-owned (running, or persisted from a killed process): the
+      // service pauses it (reconstructing from its store when needed) and
+      // confirms with a 'paused' event.
       await AndroidNativeDownloader.pause(task.taskId);
       return;
     }
@@ -1595,6 +1763,12 @@ class DownloadService {
   }
 
   Future<bool> resume(Task task) async {
+    // A paused-queued item resumes by rejoining the queue, not via native.
+    if (_pausedPending.containsKey(task.taskId)) {
+      await resumeQueuedTasksByIds([task.taskId]);
+      return true;
+    }
+    _canceledDuringStart.remove(task.taskId);
     // Enforce concurrency: if at capacity, queue the resume
     final int maxParallel = await StorageService.getMaxParallelDownloads();
     int runningCount;
@@ -1613,19 +1787,34 @@ class DownloadService {
         unawaited(_reevaluateQueue());
         return true;
       }
-      // Native resume failures (unknown id, already resumed, or a
-      // channel-level PlatformException mapped to false by
-      // AndroidNativeDownloader): downgrade to enqueued and let the
-      // reevaluator proceed.
-      final ok = await AndroidNativeDownloader.resume(task.taskId);
+      // Plain native resume first (cheap: uses the stored URL; the service
+      // reconstructs from its persistent store if its memory is gone). If the
+      // stored link has expired, the resulting error event goes through
+      // _handleAndroidErrorRetry which refreshes the link and re-adopts.
+      bool ok = await AndroidNativeDownloader.resume(task.taskId);
       if (!ok) {
-        AndroidDownloadHistory.instance.upsert(
-          task as DownloadTask,
-          TaskStatus.enqueued,
-          0.0,
-        );
-        _statusController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
-        unawaited(_reevaluateQueue());
+        // Native knows nothing about this task at all. Try a link-refresh
+        // start-or-adopt (same id, resumes on-disk bytes); as a last resort
+        // hand it to the scheduler's resume set so SOMETHING owns it instead
+        // of it stranding as "enqueued" forever.
+        final recId = _resolveRecordIdForTaskId(task.taskId);
+        final metaStr = recId != null
+            ? (_records[recId]?['meta'] as String?)
+            : null;
+        final fresh = await _refreshUrlFromMeta(metaStr);
+        if (fresh != null) {
+          ok = await _startAdoptAndroid(task.taskId, url: fresh.url);
+        }
+        if (!ok) {
+          _pendingResumeAndroid.add(task.taskId);
+          AndroidDownloadHistory.instance.upsert(
+            task as DownloadTask,
+            TaskStatus.enqueued,
+            0.0,
+          );
+          _statusController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
+          unawaited(_reevaluateQueue());
+        }
       }
       return ok;
     } else {
@@ -1643,6 +1832,16 @@ class DownloadService {
       }
       if (task is DownloadTask && await FileDownloader().taskCanResume(task)) {
         return FileDownloader().resume(task);
+      }
+      // Not resumable (no resume data): don't dead-end the tap — restart the
+      // download from its durable record instead of silently doing nothing.
+      final recId = _resolveRecordIdForTaskId(task.taskId);
+      if (recId != null && await _queueFromRecord(recId, paused: false)) {
+        try {
+          await FileDownloader().database.deleteRecordWithId(task.taskId);
+        } catch (_) {}
+        unawaited(_reevaluateQueue());
+        return true;
       }
       return false;
     }
@@ -1716,11 +1915,30 @@ class DownloadService {
         );
         final recId = _resolveRecordIdForTaskId(task.taskId);
         if (recId != null) _upsertRecord(recId, {'state': 'canceled'});
+        // Failed tasks keep a native store entry (for resume); a cancel is
+        // the user saying "let it go" — purge it so it can't be adopted.
+        unawaited(AndroidNativeDownloader.forgetTask(task.taskId));
         return;
       }
+      bool ok = false;
       try {
-        await AndroidNativeDownloader.cancel(task.taskId);
+        ok = await AndroidNativeDownloader.cancel(task.taskId);
       } catch (_) {}
+      if (!ok) {
+        // The cancel command never reached the service. Check native truth:
+        // if the task is still alive there, retry once rather than locally
+        // marking canceled while native keeps downloading (resurrection).
+        try {
+          final tasks = await AndroidNativeDownloader.queryTasks();
+          final alive = tasks.any(
+            (t) => (t['taskId'] ?? '').toString() == task.taskId,
+          );
+          if (alive) {
+            await AndroidNativeDownloader.cancel(task.taskId);
+          }
+        } catch (_) {}
+      }
+      _canceledDuringStart.add(task.taskId);
       AndroidDownloadHistory.instance.removeById(task.taskId);
       _statusController.add(
         TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled),
@@ -1971,6 +2189,310 @@ class DownloadService {
     }
   }
 
+  /// Refreshes an expired debrid link from the record's meta. Returns the
+  /// fresh URL (and, when the provider reports one, the real filename), or
+  /// null when meta is absent/unsupported or the refresh failed.
+  ///
+  /// Debrid links expire — this is the URL-level recovery half of the retry
+  /// split: native retries transient network errors on the SAME url; Dart owns
+  /// getting a NEW url (needs API credentials).
+  Future<({String url, String? fileName})?> _refreshUrlFromMeta(
+    String? metaStr,
+  ) async {
+    if (metaStr == null || metaStr.isEmpty) return null;
+    try {
+      final meta = jsonDecode(metaStr);
+      if (meta is! Map) return null;
+
+      if (meta['pikpakDownload'] == true) {
+        final fileId = (meta['pikpakFileId'] ?? '').toString();
+        if (fileId.isEmpty) return null;
+        final freshData = await PikPakApiService.instance.getFileDetails(
+          fileId,
+        );
+        final freshUrl = PikPakApiService.instance.getStreamingUrl(freshData);
+        if (freshUrl == null || freshUrl.isEmpty) return null;
+        return (url: freshUrl, fileName: null);
+      }
+
+      final apiKey = (meta['apiKey'] ?? '').toString();
+      if (meta['torboxWebDownload'] == true) {
+        final webDownloadId = meta['torboxWebDownloadId'] as int?;
+        final fileId = meta['torboxFileId'] as int?;
+        if (apiKey.isEmpty) return null;
+        if (meta['torboxZip'] == true && webDownloadId != null) {
+          return (
+            url: TorboxService.createWebDownloadZipPermalink(
+              apiKey,
+              webDownloadId,
+            ),
+            fileName: null,
+          );
+        }
+        if (webDownloadId != null && fileId != null) {
+          final fresh = await TorboxService.requestWebDownloadFileLink(
+            apiKey: apiKey,
+            webId: webDownloadId,
+            fileId: fileId,
+          );
+          if (fresh.isEmpty) return null;
+          return (url: fresh, fileName: null);
+        }
+        return null;
+      }
+      if (meta['torboxDownload'] == true) {
+        final torrentId = meta['torboxTorrentId'] as int?;
+        final fileId = meta['torboxFileId'] as int?;
+        if (apiKey.isEmpty) return null;
+        if (meta['torboxZip'] == true && torrentId != null) {
+          return (
+            url: TorboxService.createZipPermalink(apiKey, torrentId),
+            fileName: null,
+          );
+        }
+        if (torrentId != null && fileId != null) {
+          final fresh = await TorboxService.requestFileDownloadLink(
+            apiKey: apiKey,
+            torrentId: torrentId,
+            fileId: fileId,
+          );
+          if (fresh.isEmpty) return null;
+          return (url: fresh, fileName: null);
+        }
+        return null;
+      }
+
+      // RealDebrid
+      final restricted = (meta['restrictedLink'] ?? '').toString();
+      if (restricted.isEmpty || apiKey.isEmpty) return null;
+      final fresh = await DebridService.unrestrictLink(apiKey, restricted);
+      final freshUrl = (fresh['download'] ?? '').toString();
+      if (freshUrl.isEmpty) return null;
+      final rdName = (fresh['filename'] ?? '').toString();
+      return (url: freshUrl, fileName: rdName.isEmpty ? null : rdName);
+    } catch (e) {
+      debugPrint('DL REFRESH: link refresh failed: $e');
+      return null;
+    }
+  }
+
+  // Short-lived cache for the SAF grant check: bulk-adding a torrent's files
+  // must not run one cross-process DocumentsProvider query per file.
+  String? _validatedTreeUri;
+  DateTime? _validatedTreeUriAt;
+
+  Future<bool> _validateTreeUriCached(String treeUri) async {
+    final at = _validatedTreeUriAt;
+    if (_validatedTreeUri == treeUri &&
+        at != null &&
+        DateTime.now().difference(at) < const Duration(seconds: 30)) {
+      return true;
+    }
+    final ok = await AndroidNativeDownloader.validateDownloadDirectory(treeUri);
+    if (ok) {
+      _validatedTreeUri = treeUri;
+      _validatedTreeUriAt = DateTime.now();
+    } else {
+      _validatedTreeUri = null;
+      _validatedTreeUriAt = null;
+    }
+    return ok;
+  }
+
+  /// Progress currently shown for [taskId], if any — used so restart/resume
+  /// events never regress a partially-downloaded task's bar back to 0%.
+  double _preservedProgress(String taskId) {
+    final existing = AndroidDownloadHistory.instance.byId(taskId);
+    if (existing != null &&
+        existing.progress > 0.0 &&
+        existing.progress <= 1.0) {
+      return existing.progress;
+    }
+    return 0.0;
+  }
+
+  /// The MediaStore-relative folder a record's download belongs in — the same
+  /// shape the scheduler's start path computes.
+  String _subDirForRecord(Map<String, dynamic>? rec) {
+    final torrentName = (rec?['torrentName'] as String?)?.trim() ?? '';
+    if (torrentName.isEmpty) return 'Debrify';
+    final rel = (rec?['relativeSubDir'] as String?)?.trim() ?? '';
+    final sanitizedRel = rel.isNotEmpty ? _sanitizeRelativePath(rel) : '';
+    final parts = sanitizedRel.isNotEmpty
+        ? ['Debrify', _sanitizeName(torrentName), sanitizedRel]
+        : ['Debrify', _sanitizeName(torrentName)];
+    return parts.join('/').replaceAll(r'\', '/');
+  }
+
+  /// Restart an existing native task under its SAME id with a fresh URL. The
+  /// service adopts its persisted state (destination uri, validators) and
+  /// resumes from the bytes on disk — no new record, no ghost duplicate.
+  Future<bool> _startAdoptAndroid(String taskId, {required String url}) async {
+    final recId = _resolveRecordIdForTaskId(taskId);
+    final rec = recId != null ? _records[recId] : null;
+    final name = (rec?['displayName'] ?? 'download').toString();
+    final res = await AndroidNativeDownloader.start(
+      taskId: taskId,
+      url: url,
+      fileName: name,
+      // Only consulted when the native store has nothing to adopt (fresh
+      // destination) — without it the file would land in the Debrify root
+      // instead of its torrent subfolder.
+      subDir: _subDirForRecord(rec),
+      headers: (rec?['headers'] as Map?)?.cast<String, String>(),
+      treeUri: rec?['treeUri'] as String?,
+    );
+    if (!res.ok) {
+      debugPrint(
+        'DL ADOPT: start failed for $taskId: ${res.errorCode} ${res.errorMessage}',
+      );
+      return false;
+    }
+    final task = DownloadTask(taskId: taskId, url: url, filename: name);
+    AndroidDownloadHistory.instance.upsert(
+      task,
+      TaskStatus.running,
+      _preservedProgress(taskId),
+    );
+    _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+    if (recId != null) {
+      _upsertRecord(recId, {
+        'state': 'running',
+        'pluginTaskId': taskId,
+        'url': url,
+      });
+    }
+    return true;
+  }
+
+  /// Error-path recovery for a native task that failed while online: refresh
+  /// the debrid link and restart under the same task id (resuming the partial
+  /// bytes). Returns true when a retry was started.
+  Future<bool> _handleAndroidErrorRetry(
+    String? recId,
+    String taskId,
+    int? httpCode,
+    int errorBytes,
+  ) async {
+    // PikPak keeps its dedicated cold-storage ladder.
+    if (await _handlePikPakFailedRetry(recId)) return true;
+    if (recId == null) return false;
+    final rec = _records[recId];
+    final metaStr = rec?['meta'] as String?;
+    if (metaStr == null || metaStr.isEmpty) return false;
+    // Native already retried transient errors, so a refresh only helps when
+    // the URL itself is dead: a 4xx (expired debrid link) or a non-HTTP
+    // failure. A 5xx that exhausted native retries is a server problem a new
+    // link won't fix.
+    if (httpCode != null && (httpCode < 400 || httpCode >= 500)) {
+      return false;
+    }
+    final attempts = _linkRefreshAttempts[taskId] ?? 0;
+    if (attempts >= _maxLinkRefreshAttempts) {
+      debugPrint('DL REFRESH: attempts exhausted for $taskId');
+      return false;
+    }
+    _linkRefreshAttempts[taskId] = attempts + 1;
+    // Baseline for the budget reset: only bytes downloaded BEYOND this point
+    // prove the refreshed link works.
+    _bytesAtLastError[taskId] = errorBytes;
+    final fresh = await _refreshUrlFromMeta(metaStr);
+    if (fresh == null) return false;
+    debugPrint(
+      'DL REFRESH: restarting $taskId with fresh link (attempt ${attempts + 1}, httpCode=$httpCode)',
+    );
+    return _startAdoptAndroid(taskId, url: fresh.url);
+  }
+
+  /// Startup reconciliation: adopt native truth (persistent store + live
+  /// registry) into history/records, and settle Dart-side entries whose
+  /// native task is gone — same record, never a re-enqueued duplicate.
+  Future<void> _reconcileWithNative() async {
+    if (!Platform.isAndroid) return;
+    List<Map<String, dynamic>> tasks;
+    try {
+      tasks = await AndroidNativeDownloader.queryTasks();
+    } catch (_) {
+      return;
+    }
+    final Map<String, Map<String, dynamic>> byId = {
+      for (final t in tasks) (t['taskId'] ?? '').toString(): t,
+    };
+    byId.remove('');
+
+    // 1) Native tasks -> adopt status/bytes into history + records.
+    for (final entry in byId.entries) {
+      final id = entry.key;
+      if (id.startsWith(AndroidNativeDownloader.updateTaskPrefix)) continue;
+      final t = entry.value;
+      final status = (t['status'] ?? '').toString();
+      final bytes = (t['bytes'] as num?)?.toInt() ?? 0;
+      final total = (t['total'] as num?)?.toInt() ?? 0;
+      final task = DownloadTask(
+        taskId: id,
+        url: (t['url'] ?? '').toString(),
+        filename: (t['fileName'] ?? 'download').toString(),
+      );
+      final prog = total > 0 ? (bytes / total).clamp(0.0, 1.0) : 0.0;
+      final recId = _resolveRecordIdForTaskId(id);
+      switch (status) {
+        case 'running':
+          AndroidDownloadHistory.instance.upsert(
+            task,
+            TaskStatus.running,
+            prog,
+            expectedFileSize: total,
+          );
+          if (recId != null) _upsertRecord(recId, {'state': 'running'});
+          break;
+        case 'failed':
+          AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+          if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+          break;
+        default: // paused (incl. stored-running with no live worker)
+          AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
+          if (recId != null) _upsertRecord(recId, {'state': 'paused'});
+          break;
+      }
+      debugPrint('DL RECONCILE: adopted $id status=$status bytes=$bytes');
+    }
+
+    // 2) History entries claiming active work that native doesn't know about
+    //    (and that aren't queue-managed placeholders) are dead: settle them on
+    //    the SAME record — paused when resumable, failed otherwise.
+    for (final r in AndroidDownloadHistory.instance.all()) {
+      final id = r.taskId;
+      if (byId.containsKey(id)) continue;
+      if (_pendingById.containsKey(id) ||
+          _pausedPending.containsKey(id) ||
+          id.startsWith(AndroidNativeDownloader.updateTaskPrefix)) {
+        continue;
+      }
+      if (r.status == TaskStatus.running || r.status == TaskStatus.enqueued) {
+        final recId = _resolveRecordIdForTaskId(id);
+        final rec = recId != null ? _records[recId] : null;
+        final recState = (rec?['state'] ?? '').toString();
+        if (recState == 'queued') {
+          // Queue-managed; the scheduler owns it.
+          continue;
+        }
+        final hasMeta = ((rec?['meta'] as String?) ?? '').isNotEmpty;
+        final settled = hasMeta ? TaskStatus.paused : TaskStatus.failed;
+        AndroidDownloadHistory.instance.upsert(
+          r.task,
+          settled,
+          settled == TaskStatus.paused ? -5.0 : -1.0,
+        );
+        if (recId != null) {
+          _upsertRecord(recId, {
+            'state': settled == TaskStatus.paused ? 'paused' : 'failed',
+          });
+        }
+        debugPrint('DL RECONCILE: settled dead $id -> ${settled.name}');
+      }
+    }
+  }
+
   Future<void> _reevaluateQueue() async {
     if (_reevaluating) {
       _reevaluateScheduled = true;
@@ -1989,13 +2511,14 @@ class DownloadService {
       runningCount = list.where((r) => r.status == TaskStatus.running).length;
     }
 
-    // First, process pending resumes up to capacity
+    // First, process pending resumes up to capacity. One failed resume must
+    // NOT abort the drain — each item is handled (resumed, re-queued on its
+    // own record, or settled as failed) and the loop continues.
     while (runningCount < maxParallel) {
-      bool resumedSomeone = false;
       if (Platform.isAndroid && _pendingResumeAndroid.isNotEmpty) {
         final taskId = _pendingResumeAndroid.first;
         _pendingResumeAndroid.remove(taskId);
-        // Skip if already running/enqueued
+        // Skip if already running (or canceled while waiting)
         final hist = AndroidDownloadHistory.instance.all().firstWhere(
           (r) => r.taskId == taskId,
           orElse: () => TaskRecord(
@@ -2006,7 +2529,8 @@ class DownloadService {
           ),
         );
         if (hist.status == TaskStatus.running ||
-            hist.status == TaskStatus.enqueued) {
+            hist.status == TaskStatus.canceled ||
+            hist.status == TaskStatus.complete) {
           continue;
         }
         bool ok = false;
@@ -2015,46 +2539,68 @@ class DownloadService {
         } catch (_) {
           ok = false;
         }
-        if (ok) {
-          resumedSomeone = true;
-          runningCount += 1;
-        } else {
-          // Resume failed: fall back to re-enqueue based on durable record
+        if (!ok) {
+          // Native has nothing to adopt. Refresh the link and re-adopt under
+          // the same id; else re-queue the SAME record (never a new ghost).
           final recId = _resolveRecordIdForTaskId(taskId);
-          if (recId != null) {
-            final rec = _records[recId];
-            if (rec != null) {
-              final url = (rec['url'] ?? '').toString();
-              final name = (rec['displayName'] ?? 'download').toString();
-              final meta = rec['meta'] as String?;
-              final tname = rec['torrentName'] as String?;
-              if (url.isNotEmpty || (meta != null && meta.isNotEmpty)) {
-                unawaited(
-                  enqueueDownload(
-                    url: url,
-                    fileName: name,
-                    meta: meta,
-                    torrentName: tname,
-                  ),
-                );
-              }
+          final metaStr = recId != null
+              ? (_records[recId]?['meta'] as String?)
+              : null;
+          try {
+            final fresh = await _refreshUrlFromMeta(metaStr);
+            if (fresh != null) {
+              ok = await _startAdoptAndroid(taskId, url: fresh.url);
+            }
+          } catch (_) {}
+          if (!ok && recId != null) {
+            if (await _queueFromRecord(recId, paused: false)) {
+              debugPrint('DL RESUME-DRAIN: re-queued record $recId');
+              continue; // started by the pending drain below
             }
           }
+          if (!ok) {
+            debugPrint('DL RESUME-DRAIN: could not revive $taskId → failed');
+            final failTask = DownloadTask(
+              taskId: taskId,
+              url: '',
+              filename: hist.task.filename,
+            );
+            AndroidDownloadHistory.instance.upsert(
+              failTask,
+              TaskStatus.failed,
+              -1.0,
+            );
+            _statusController.add(
+              TaskStatusUpdate(failTask, TaskStatus.failed),
+            );
+            if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+            continue;
+          }
         }
+        runningCount += 1;
+        continue;
       } else if (!Platform.isAndroid && _pendingResumeNonAndroid.isNotEmpty) {
         final entry = _pendingResumeNonAndroid.entries.first;
         _pendingResumeNonAndroid.remove(entry.key);
         _nonAndroidResumeQueuedOverlay.remove(entry.key);
         final DownloadTask task = entry.value;
+        bool ok = false;
         if (await FileDownloader().taskCanResume(task)) {
-          final ok = await FileDownloader().resume(task);
-          if (ok) {
-            resumedSomeone = true;
-            runningCount += 1;
+          ok = await FileDownloader().resume(task);
+        }
+        if (ok) {
+          runningCount += 1;
+        } else {
+          // Not resumable: restart from the durable record instead of
+          // silently dropping the task from every queue.
+          final recId = _resolveRecordIdForTaskId(task.taskId);
+          if (recId != null) {
+            await _queueFromRecord(recId, paused: false);
           }
         }
+        continue;
       }
-      if (!resumedSomeone) break;
+      break;
     }
 
     // Start as many as possible
@@ -2274,6 +2820,18 @@ class DownloadService {
           debugPrint('DL SKIP: No meta information provided');
         }
 
+        // The link refresh above can take seconds — a pause/cancel that
+        // landed during those awaits must win, or the download starts anyway
+        // and desyncs from the paused/canceled bookkeeping.
+        if (p.canceled ||
+            _canceledDuringStart.remove(p.queuedId) ||
+            _pausedPending.containsKey(p.queuedId)) {
+          debugPrint(
+            'DL START: ${p.queuedId} paused/canceled during link refresh; skipping',
+          );
+          continue;
+        }
+
         // Fresh-link policy: if start fails due to expired URL, we'll refresh below in catch
         if (Platform.isAndroid) {
           // Remove queued placeholder
@@ -2313,15 +2871,49 @@ class DownloadService {
                     .replaceAll(r'\', '/')
               : 'Debrify';
 
-          final taskId = await AndroidNativeDownloader.start(
+          final startRes = await AndroidNativeDownloader.start(
+            // Same id as the durable record: the service adopts persisted
+            // state under this id, and reconciliation never has to correlate
+            // two id spaces.
+            taskId: p.queuedId,
             url: finalUrl,
             fileName: name,
             subDir: subDir,
             headers: p.headers,
+            treeUri: p.treeUri,
           );
-          if (taskId == null) {
-            throw Exception('Failed to start download');
+          if (!startRes.ok) {
+            if (startRes.errorCode == 'fgs_not_allowed') {
+              // Android 12+ refused a foreground-service start from the
+              // background. The link is fine — put the item back at the front
+              // and stop draining; the next reevaluation (app foregrounded,
+              // event, connectivity) will start it. NOT a failure.
+              debugPrint(
+                'DL START: fgs_not_allowed — requeueing ${p.queuedId} until app is foregrounded',
+              );
+              _pending.insert(0, p);
+              _pendingById[p.queuedId] = p;
+              await _persistPending();
+              final queuedTask = DownloadTask(
+                taskId: p.queuedId,
+                url: p.url,
+                filename: name,
+              );
+              AndroidDownloadHistory.instance.upsert(
+                queuedTask,
+                TaskStatus.enqueued,
+                0.0,
+              );
+              _statusController.add(
+                TaskStatusUpdate(queuedTask, TaskStatus.enqueued),
+              );
+              break;
+            }
+            throw Exception(
+              'Failed to start download: ${startRes.errorCode ?? ''} ${startRes.errorMessage ?? ''}',
+            );
           }
+          final taskId = startRes.taskId!;
           final task = DownloadTask(
             taskId: taskId,
             url: finalUrl,
@@ -2335,6 +2927,17 @@ class DownloadService {
             'url': finalUrl,
             'displayName': name,
           });
+          // Last un-guarded window: a pause/cancel that landed while the
+          // native start round-trip itself was in flight (the pre-start check
+          // above had already passed). Forward it to the now-live task.
+          if (p.canceled || _canceledDuringStart.remove(p.queuedId)) {
+            unawaited(AndroidNativeDownloader.cancel(taskId));
+          } else if (_pausedPending.remove(p.queuedId) != null) {
+            // Native owns the paused state from here on; its 'paused' event
+            // settles history/record.
+            await _persistPaused();
+            unawaited(AndroidNativeDownloader.pause(taskId));
+          }
         } else {
           // Remove queued placeholder from our in-memory list
           _nonAndroidQueuedRecords.remove(p.queuedId);
@@ -2505,6 +3108,7 @@ class DownloadService {
                         contentKey: p.contentKey,
                         destPath: p.destPath,
                         relativeSubDir: p.relativeSubDir,
+                        treeUri: p.treeUri,
                       );
                       _pending.insert(0, refreshed);
                       _pendingById[refreshed.queuedId] = refreshed;
@@ -2570,6 +3174,7 @@ class DownloadService {
                       contentKey: p.contentKey,
                       destPath: p.destPath,
                       relativeSubDir: p.relativeSubDir,
+                      treeUri: p.treeUri,
                     );
                     _pending.insert(0, refreshed);
                     _pendingById[refreshed.queuedId] = refreshed;
@@ -2620,6 +3225,7 @@ class DownloadService {
                       contentKey: p.contentKey,
                       destPath: p.destPath,
                       relativeSubDir: p.relativeSubDir,
+                      treeUri: p.treeUri,
                     );
                     _pending.insert(0, refreshed);
                     _pendingById[refreshed.queuedId] = refreshed;
@@ -2654,6 +3260,9 @@ class DownloadService {
                       context: p.context,
                       torrentName: p.torrentName,
                       contentKey: p.contentKey,
+                      destPath: p.destPath,
+                      relativeSubDir: p.relativeSubDir,
+                      treeUri: p.treeUri,
                     );
                     _pending.insert(0, refreshed);
                     _pendingById[refreshed.queuedId] = refreshed;
@@ -2809,6 +3418,7 @@ class _PendingRequest {
   bool canceled;
   String? destPath;
   final String? relativeSubDir;
+  final String? treeUri;
 
   _PendingRequest({
     required this.queuedId,
@@ -2824,18 +3434,31 @@ class _PendingRequest {
     this.canceled = false,
     this.destPath,
     this.relativeSubDir,
+    this.treeUri,
   });
 }
 
-void _addPendingRequest(
+/// Returns true when the request joined the queue. Duplicate suppression only
+/// applies to fresh user-initiated enqueues against LIVE entries — internal
+/// re-queues of an existing record (retry, resume fallback) pass
+/// [allowDuplicate] so a retry can never be silently swallowed.
+bool _addPendingRequest(
   List<_PendingRequest> pendingList,
   Map<String, _PendingRequest> pendingById,
   _PendingRequest request, {
   bool atFront = false,
+  bool allowDuplicate = false,
 }) {
-  if (pendingList.any((p) => p.contentKey == request.contentKey)) {
+  if (pendingById.containsKey(request.queuedId)) {
+    // Same record already queued — nothing to add.
+    return false;
+  }
+  if (!allowDuplicate &&
+      pendingList.any(
+        (p) => !p.canceled && p.contentKey == request.contentKey,
+      )) {
     debugPrint('DL: skip enqueue duplicate contentKey=${request.contentKey}');
-    return;
+    return false;
   }
   if (atFront) {
     pendingList.insert(0, request);
@@ -2843,4 +3466,5 @@ void _addPendingRequest(
     pendingList.add(request);
   }
   pendingById[request.queuedId] = request;
+  return true;
 }

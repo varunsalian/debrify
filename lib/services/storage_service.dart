@@ -883,6 +883,39 @@ class StorageService {
     // No-op: parallel downloads are fixed to 1
   }
 
+  // ── Custom download location (Android SAF tree) ─────────────────────────
+  static const String _downloadTreeUriKey = 'download_tree_uri_v1';
+  static const String _downloadTreeNameKey = 'download_tree_display_name_v1';
+
+  /// The persisted SAF tree URI for the user-chosen download folder, or null
+  /// when downloads go to the default location (Downloads/Debrify).
+  static Future<String?> getDownloadTreeUri() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_downloadTreeUriKey);
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  static Future<String?> getDownloadTreeDisplayName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_downloadTreeNameKey);
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  static Future<void> setDownloadTreeUri(
+    String treeUri,
+    String displayName,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_downloadTreeUriKey, treeUri);
+    await prefs.setString(_downloadTreeNameKey, displayName);
+  }
+
+  static Future<void> clearDownloadTreeUri() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_downloadTreeUriKey);
+    await prefs.remove(_downloadTreeNameKey);
+  }
+
   // ── Continue Watching (recently watched items for home screen) ──────────
 
   /// Get all continue watching items, sorted by most recent first.
