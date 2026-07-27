@@ -408,6 +408,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         @Override
+        public void onTracksChanged(Tracks tracks) {
+            // The unified menu's audio-track marker is derived live from
+            // player.getCurrentTracks(); ExoPlayer applies a track override
+            // asynchronously, so repaint once it actually takes effect (the
+            // menu stays open after a pick, unlike the old dialog).
+            refreshUnifiedMenuIfVisible();
+        }
+
+        @Override
         public void onIsPlayingChanged(boolean isPlaying) {
             updatePauseButtonLabel();
         }
@@ -2132,7 +2141,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Set loading state and refresh panel if visible
         isLoadingStremioSubtitles = true;
-        if (subtitleSettingsVisible) {
+        if (isSubtitleSurfaceVisible()) {
             refreshSubtitlePanelForLoading();
         }
 
@@ -2189,7 +2198,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
      */
     private void clearStremioLoadingState() {
         isLoadingStremioSubtitles = false;
-        if (subtitleSettingsVisible) {
+        if (isSubtitleSurfaceVisible()) {
             refreshSubtitlePanelForLoading();
         }
     }
@@ -2242,7 +2251,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     tryAutoSelectAddonSubtitle();
 
                     // Refresh panel if visible to show loaded subtitles
-                    if (subtitleSettingsVisible) {
+                    if (isSubtitleSurfaceVisible()) {
                         refreshSubtitlePanelForLoading();
                     }
                 });
@@ -2258,7 +2267,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     currentStremioSubtitleIndex = -1;
                     isLoadingStremioSubtitles = false;
                     // Refresh panel if visible to clear loading indicator
-                    if (subtitleSettingsVisible) {
+                    if (isSubtitleSurfaceVisible()) {
                         refreshSubtitlePanelForLoading();
                     }
                 });
@@ -2359,7 +2368,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                         .build());
             }
-            if (subtitleSettingsVisible) {
+            if (isSubtitleSurfaceVisible()) {
                 refreshSubtitlePanelForLoading();
             }
             return;
@@ -3901,6 +3910,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     }
 
+    /** True when a subtitle-listing surface is on screen — either the legacy
+     *  settings panel or the unified menu. Async subtitle-load callbacks use
+     *  this to decide whether a refresh is worth doing; gating on the panel's
+     *  own flag alone left the unified menu showing a stale loading placeholder. */
+    private boolean isSubtitleSurfaceVisible() {
+        return subtitleSettingsVisible || (unifiedMenu != null && unifiedMenu.isVisible());
+    }
+
     // ---------------------------------------------------------------------
     // Manual "Search Movie/Show Subtitles" flow
     // ---------------------------------------------------------------------
@@ -4232,7 +4249,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     .build());
         }
 
-        if (subtitleSettingsVisible) {
+        if (isSubtitleSurfaceVisible()) {
             refreshSubtitlePanelForLoading();
         }
 
