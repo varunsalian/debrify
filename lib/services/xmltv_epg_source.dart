@@ -80,6 +80,14 @@ class XmltvEpgSource {
   /// Serializes loads per cache key so a double-tap can't download twice.
   static final Map<String, Future<XmltvGuide?>> _inFlight = {};
 
+  /// Last outright download/parse FAILURE per guide URL. Failures write no
+  /// snapshot (only empty parses get the 30-min negative cache), and with
+  /// guides now auto-derived for every Xtream login, a hanging or oversized
+  /// xmltv.php would otherwise re-stream up to 300MB on every playlist
+  /// open. In-memory on purpose — an app restart retries immediately.
+  static final Map<String, DateTime> _lastFailureAt = {};
+  static const _failureBackoff = Duration(minutes: 10);
+
   /// Kodi-style name matching key: lowercase with everything that isn't a
   /// letter or digit removed, so "BBC One HD" == "bbc-one_HD" == "BBC.One.HD".
   /// Unicode letters survive — plenty of guides publish non-Latin names.
@@ -88,8 +96,10 @@ class XmltvEpgSource {
   static final _nonNameChars = RegExp(r'[^\p{L}\p{N}]+', unicode: true);
 
   /// Load (from snapshot or network) the guide for [epgUrl], filtered to
-  /// channels the playlist references by tvg-id ([tvgIds]) or by normalized
-  /// name ([channelNames], pre-normalized via [normalizeChannelName]).
+  /// channels the playlist references by tvg-id ([tvgIds], matched
+  /// case-insensitively — Kodi's default, and panels/guides really do
+  /// disagree on casing) or by normalized name ([channelNames],
+  /// pre-normalized via [normalizeChannelName]).
   /// Returns null only when nothing could be loaded at all. Never throws.
   static Future<XmltvGuide?> load({
     required String epgUrl,
@@ -132,13 +142,23 @@ class XmltvEpgSource {
     final cached = await _readSnapshot(cacheFile);
     if (cached != null && !cached.isStale) return cached.guide;
 
+    // A recent hard failure (hang, oversize, network) backs off rather than
+    // re-attempting a potentially enormous download on every open.
+    final lastFailure = _lastFailureAt[epgUrl];
+    if (lastFailure != null &&
+        DateTime.now().difference(lastFailure) < _failureBackoff) {
+      return cached?.guide;
+    }
+
     // Download + parse. On any failure fall back to the stale snapshot —
     // yesterday's guide beats no guide.
     final guide = await _downloadAndParse(epgUrl, tvgIds, channelNames);
     if (guide == null) {
+      _lastFailureAt[epgUrl] = DateTime.now();
       debugPrint('XmltvEpgSource: falling back to stale snapshot: $epgUrl');
       return cached?.guide;
     }
+    _lastFailureAt.remove(epgUrl);
     if (guide.byId.isEmpty) {
       // Empty parse. A transient provider hiccup (guide mid-regeneration,
       // ids rotated for a day) must not erase a still-useful stale snapshot:
@@ -170,7 +190,9 @@ class XmltvEpgSource {
     File? tempFile;
     try {
       final request = http.Request('GET', Uri.parse(epgUrl));
-      request.headers['User-Agent'] = 'Debrify/1.0';
+      // Known-player UA: panel xmltv.php endpoints sit behind the same WAFs
+      // as player_api and challenge unknown agents (see IptvEpgService).
+      request.headers['User-Agent'] = 'VLC/3.0.18 LibVLC/3.0.18';
       request.headers['Accept'] = '*/*';
       final response =
           await client.send(request).timeout(const Duration(seconds: 30));
@@ -244,6 +266,11 @@ class XmltvEpgSource {
   /// channel matches by id (in [tvgIds]) or by any of its `<display-name>`s
   /// normalizing into [wantedNames] — the Kodi-style fallback chain, resolved
   /// here because `<channel>` elements precede `<programme>`s in XMLTV.
+  ///
+  /// Ids are canonicalized to LOWERCASE on both sides — the index's keys,
+  /// the name→id map's values, and every membership test — because playlist
+  /// tvg-ids and guide channel ids routinely disagree only in case (Kodi
+  /// matches ids case-insensitively by default for the same reason).
   /// Exposed (not private) only because Isolate.run needs a callable that
   /// doesn't capture `this`; not part of the class's real API.
   @visibleForTesting
@@ -266,6 +293,7 @@ class XmltvEpgSource {
     Stream<List<int>> bytes = file.openRead();
     if (isGzip) bytes = bytes.transform(gzip.decoder);
 
+    final wantedIdsLower = {for (final id in tvgIds) id.toLowerCase()};
     final floorMs = nowMs - _pastWindow.inMilliseconds;
     final ceilMs = nowMs + _futureWindow.inMilliseconds;
     final index = <String, List<List<Object?>>>{};
@@ -301,7 +329,9 @@ class XmltvEpgSource {
               for (final a in event.attributes) {
                 if (a.name == 'id') id = a.value;
               }
-              if (id != null && id.isNotEmpty && tvgIds.contains(id)) {
+              if (id != null &&
+                  id.isNotEmpty &&
+                  wantedIdsLower.contains(id.toLowerCase())) {
                 sawWantedChannel = true;
               }
               // Unconditional (re)assignment: a self-closing or id-less
@@ -331,9 +361,11 @@ class XmltvEpgSource {
                     stop = a.value;
                 }
               }
-              if (ch != null &&
-                  (tvgIds.contains(ch) || nameMatchedIds.contains(ch))) {
-                channel = ch;
+              final chLower = ch?.toLowerCase();
+              if (chLower != null &&
+                  (wantedIdsLower.contains(chLower) ||
+                      nameMatchedIds.contains(chLower))) {
+                channel = chLower;
                 startMs = _parseXmltvTime(start);
                 stopMs = _parseXmltvTime(stop);
                 title = StringBuffer();
@@ -373,8 +405,8 @@ class XmltvEpgSource {
                 if (norm.isNotEmpty && wantedNames.contains(norm)) {
                   sawWantedChannel = true;
                   if (!nameToId.containsKey(norm)) {
-                    nameToId[norm] = id;
-                    nameMatchedIds.add(id);
+                    nameToId[norm] = id.toLowerCase();
+                    nameMatchedIds.add(id.toLowerCase());
                   }
                 }
               }
@@ -448,8 +480,9 @@ class XmltvEpgSource {
   }
 
   /// XMLTV time: `yyyyMMddHHmmss [±HHMM]`. Seconds and the offset are both
-  /// optional in the wild; a missing offset means the publisher's local time,
-  /// which we can only read as ours.
+  /// optional in the wild; a missing offset is read as UTC — what both Kodi's
+  /// pvr.iptvsimple and IPTVnator do, so guides authored against the major
+  /// clients line up.
   static int? _parseXmltvTime(String? raw) {
     if (raw == null) return null;
     final match = RegExp(
@@ -463,7 +496,7 @@ class XmltvEpgSource {
     final mi = int.parse(match.group(5)!);
     final s = int.tryParse(match.group(6) ?? '') ?? 0;
     if (match.group(7) == null) {
-      return DateTime(y, mo, d, h, mi, s).millisecondsSinceEpoch;
+      return DateTime.utc(y, mo, d, h, mi, s).millisecondsSinceEpoch;
     }
     final offsetMinutes = (int.parse(match.group(8)!) * 60 +
             int.parse(match.group(9)!)) *
@@ -515,9 +548,13 @@ class XmltvEpgSource {
       final fetchedAt = DateTime.tryParse(decoded['fetchedAt'] as String? ?? '');
       final channels = decoded['channels'];
       if (fetchedAt == null || channels is! Map<String, dynamic>) return null;
+      // Keys lowercased on READ, not just trusted from disk: legacy v1
+      // snapshots stored guide-original-case ids, and they remain the
+      // network-failure fallback — served verbatim, their keys would miss
+      // every lowercased lookup and the promised fallback would be dead.
       final index = <String, List<List<Object?>>>{
         for (final entry in channels.entries)
-          entry.key: [
+          entry.key.toLowerCase(): [
             for (final row in (entry.value as List))
               [
                 (row[0] as num).toInt(),
@@ -527,14 +564,16 @@ class XmltvEpgSource {
               ],
           ],
       };
-      // Pre-name-matching snapshots have no 'names' map. Treat them as
-      // stale (refresh promptly so name matching kicks in) but keep them
-      // usable as the network-failure fallback.
+      // Snapshots from before name matching (no 'names' map) or before
+      // lowercase-id canonicalization (v < 2) predate the current index
+      // shape. Treat them as stale (refresh promptly) but keep them usable
+      // as the network-failure fallback.
       final namesRaw = decoded['names'];
       final nameToId = <String, String>{
         if (namesRaw is Map<String, dynamic>)
           for (final entry in namesRaw.entries)
-            if (entry.value is String) entry.key: entry.value as String,
+            if (entry.value is String)
+              entry.key: (entry.value as String).toLowerCase(),
       };
       return _Snapshot(
         guide: XmltvGuide(
@@ -543,7 +582,8 @@ class XmltvEpgSource {
           sawWantedChannel: decoded['sawWanted'] == true,
         ),
         fetchedAt: fetchedAt,
-        legacy: namesRaw is! Map<String, dynamic>,
+        legacy: namesRaw is! Map<String, dynamic> ||
+            (decoded['v'] as num? ?? 1) < 2,
       );
     } catch (e) {
       debugPrint('XmltvEpgSource: bad snapshot ${file.path}: $e');
@@ -560,6 +600,7 @@ class XmltvEpgSource {
       // Encode off the UI isolate — the index can run to several MB, and the
       // read path already offloads its decode for the same reason.
       final encoded = await compute(jsonEncode, <String, dynamic>{
+        'v': 2, // 2 = lowercase-canonicalized channel ids
         'epgUrl': epgUrl,
         'fetchedAt': DateTime.now().toIso8601String(),
         'channels': guide.byId,

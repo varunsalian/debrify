@@ -27,7 +27,11 @@ class XtreamCodesService {
   static final XtreamCodesService instance = XtreamCodesService._();
   XtreamCodesService._();
 
-  static const _headers = {'User-Agent': 'Debrify/1.0'};
+  /// Known-player UA for player_api calls — panels behind WAFs challenge
+  /// generic User-Agents but allowlist recognizable IPTV players (same
+  /// string IPTVnator ships for the same reason). Stream probes/playback
+  /// use the playback UA instead (see _probeStatusCode).
+  static const _headers = {'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18'};
 
   // Cache for parsed results (key -> result)
   final Map<String, _CachedResult> _cache = {};
@@ -38,8 +42,14 @@ class XtreamCodesService {
   static const _maxCachedResults = 3;
 
   // Per-server probe result: which live URL form this panel actually serves
-  // (standard /live/ vs legacy un-prefixed, HLS .m3u8 vs raw .ts — panels
-  // with HLS output disabled only route the .ts forms).
+  // (standard /live/ vs legacy un-prefixed, raw .ts vs HLS .m3u8 — panels
+  // with HLS output disabled only route the .ts forms, and vice versa).
+  //
+  // Raw MPEG-TS is preferred over HLS on purpose (TiviMate's default for the
+  // same reason): the .ts output is the original broadcast stream, while a
+  // panel's .m3u8 output can be a multi-variant ladder — adaptive players
+  // then start low and often SIT low on TV boxes with pessimistic bandwidth
+  // estimates, which users report as "my 4K channels play at 720p".
   final Map<String, _LiveUrlForm> _liveUrlFormCache = {};
 
   String _baseUrl(String serverUrl, String username, String password) {
@@ -295,10 +305,11 @@ class XtreamCodesService {
       final encodedUser = Uri.encodeComponent(username);
       final encodedPass = Uri.encodeComponent(password);
 
-      // Standard live URLs use the /live/ prefix and HLS (.m3u8), but some
-      // panels only route the legacy un-prefixed form, and HLS-off panels
-      // only serve raw MPEG-TS (.ts); probe once per server and remember.
-      var liveUrlForm = _LiveUrlForm.standardHls;
+      // Standard live URLs use the /live/ prefix, preferring raw MPEG-TS
+      // (see _liveUrlFormCache for why TS beats HLS); some panels only route
+      // the legacy un-prefixed form or only one output format — probe once
+      // per server and remember.
+      var liveUrlForm = _LiveUrlForm.standardTs;
       if (isLive && streamsData!.isNotEmpty) {
         final sampleId = streamsData
             .map((s) => s['stream_id']?.toString() ?? '')
@@ -458,15 +469,15 @@ class XtreamCodesService {
   ) {
     final creds = '$encodedUser/$encodedPass/$streamId';
     return switch (form) {
-      _LiveUrlForm.standardHls => '$serverUrl/live/$creds.m3u8',
       _LiveUrlForm.standardTs => '$serverUrl/live/$creds.ts',
-      _LiveUrlForm.legacyHls => '$serverUrl/$creds.m3u8',
+      _LiveUrlForm.standardHls => '$serverUrl/live/$creds.m3u8',
       _LiveUrlForm.legacyTs => '$serverUrl/$creds.ts',
+      _LiveUrlForm.legacyHls => '$serverUrl/$creds.m3u8',
     };
   }
 
   /// Probe which live URL form this panel serves, in order of preference:
-  /// standard /live/ HLS, standard /live/ raw TS (HLS-off panels), then the
+  /// standard /live/ raw TS, standard /live/ HLS (TS-off panels), then the
   /// two legacy un-prefixed forms. First 2xx wins.
   Future<_LiveUrlForm> _detectLiveUrlForm(
     String serverUrl,
@@ -486,11 +497,11 @@ class XtreamCodesService {
         // Network failure — the panel is likely unreachable, so probing the
         // remaining forms would just stack timeouts. Keep the standard form
         // and don't cache an undetermined verdict; the next fetch re-probes.
-        return _LiveUrlForm.standardHls;
+        return _LiveUrlForm.standardTs;
       }
       if (status >= 200 && status < 300) {
         _liveUrlFormCache[cacheKey] = form;
-        if (form != _LiveUrlForm.standardHls) {
+        if (form != _LiveUrlForm.standardTs) {
           debugPrint(
             'XtreamCodesService: Panel $serverUrl uses ${form.name} live URLs',
           );
@@ -501,8 +512,8 @@ class XtreamCodesService {
 
     // Every form got a definitive non-2xx answer — nothing works. Cache the
     // standard form so we don't re-probe all four on every fetch.
-    _liveUrlFormCache[cacheKey] = _LiveUrlForm.standardHls;
-    return _LiveUrlForm.standardHls;
+    _liveUrlFormCache[cacheKey] = _LiveUrlForm.standardTs;
+    return _LiveUrlForm.standardTs;
   }
 
   /// Fetch only the status code of a URL without downloading the body: some
@@ -825,7 +836,8 @@ class XtreamSeriesInfo {
   });
 }
 
-/// Live stream URL forms panels serve, in probe order. Standard panels route
-/// `/live/user/pass/id.m3u8`; HLS-off panels only serve raw .ts; some legacy
-/// panels only route the un-prefixed form.
-enum _LiveUrlForm { standardHls, standardTs, legacyHls, legacyTs }
+/// Live stream URL forms panels serve, in probe order — raw TS first (the
+/// full-quality original stream; a panel's HLS output can be a capped or
+/// multi-variant ladder), then HLS for TS-off panels, then the legacy
+/// un-prefixed forms some old panels only route.
+enum _LiveUrlForm { standardTs, standardHls, legacyTs, legacyHls }

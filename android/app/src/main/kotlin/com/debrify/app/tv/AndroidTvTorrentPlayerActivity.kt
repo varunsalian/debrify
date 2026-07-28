@@ -3813,6 +3813,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return super.dispatchKeyEvent(event)
         }
 
+        // IPTV: dedicated channel keys zap regardless of overlay state —
+        // live-TV muscle memory on remotes that have them. First press only
+        // (repeatCount gate, same as the LEFT/RIGHT zap path): a held key's
+        // auto-repeat would otherwise re-prepare ExoPlayer tens of times a
+        // second and hammer the panel with one stream open per repeat.
+        if (isIptvMode && iptvChannels.size > 1 &&
+            (keyCode == KeyEvent.KEYCODE_CHANNEL_UP ||
+                keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN)
+        ) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                zapIptvChannel(if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) 1 else -1)
+            }
+            return true
+        }
+
         // Handle IPTV guide overlay
         if (iptvGuideVisible) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -4026,10 +4041,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return true
         }
 
-        // Left/Right - seek
+        // Left/Right - seek (VOD) or channel zap (live IPTV)
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (focusInControls) {
                 return super.dispatchKeyEvent(event)
+            }
+            // Live channels: seeking a live stream is meaningless, so
+            // LEFT/RIGHT zap to the previous/next channel instead (the
+            // TiviMate grammar; the zap banner teaches it on every switch).
+            // On-demand items keep their seek behavior untouched.
+            if (isLiveIptvZapContext()) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    zapIptvChannel(1)
+                }
+                return true
             }
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
@@ -4045,6 +4070,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             if (focusInControls) {
                 return super.dispatchKeyEvent(event)
+            }
+            if (isLiveIptvZapContext()) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    zapIptvChannel(-1)
+                }
+                return true
             }
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
@@ -4104,6 +4135,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun showControlsMenu() {
         val overlay = controlsOverlay ?: return
         cancelScheduledHideControlsMenu()
+
+        // The IPTV zap banner sits above everything (added last to the
+        // content view) — clear it rather than let it cover the dock.
+        hideIptvZapBanner()
 
         // Hide subtitles when controls menu is shown
         subtitleOverlay.visibility = View.GONE
@@ -5212,6 +5247,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun showIptvGuide() {
+        // The banner is attached last to the content view (topmost) — it must
+        // never float over the guide.
+        hideIptvZapBanner()
         iptvGuideVisible = true
         iptvGuideOverlay?.animate()?.cancel() // cancel any pending hide animation
         iptvGuideOverlay?.visibility = View.VISIBLE
@@ -5283,15 +5321,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 // until the next programme. Without a retry deadline the
                 // stale rule (`stopMs > 0 && stopMs < now`) never re-arms
                 // and the entry stays blank all session. Reuse stopMs as
-                // "re-ask at": when the next programme starts, or in 5
-                // minutes. Dart's caches rate-limit the repeat asks.
-                val retryAt = System.currentTimeMillis() + 5 * 60 * 1000L
+                // "re-ask at": when the next programme starts, or in 60
+                // seconds — short, because the common cause is the guide
+                // finishing its download moments after the first ask, and a
+                // longer lock reads as "EPG doesn't work on TV". Dart's
+                // caches rate-limit the repeat asks.
+                val retryAt = System.currentTimeMillis() + 60 * 1000L
                 val nextStart = entry.epgNextStartMs
                 entry.epgNowStopMs =
                     if (nextStart > 0 && nextStart < retryAt) nextStart else retryAt
             }
             iptvChannelAdapter?.notifyEpgFor(entry)
-            if (entry.isCurrent) updateIptvGuideEpgHeader()
+            if (entry.isCurrent) {
+                updateIptvGuideEpgHeader()
+                // A visible zap banner for this channel paints the fresh data.
+                if (iptvZapBanner?.visibility == View.VISIBLE) {
+                    paintIptvZapBannerEpg(entry)
+                }
+            }
         }
     }
 
@@ -5450,11 +5497,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         includeSchedule: Boolean,
         callback: (Map<*, *>?) -> Unit,
     ) {
-        val failAsync = {
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                callback(null)
-            }
+        // Deliver exactly once, and ALWAYS: a MethodChannel whose engine died
+        // in the background never invokes its Result (the messenger is gone),
+        // which used to leave entry.epgLoading stuck true for the whole
+        // session — i.e. "EPG missing everywhere on TV" with playback fine.
+        // The watchdog turns that silence into a null answer so rows recover
+        // (and retry once the engine is back).
+        //
+        // 45s, NOT a snappy timeout: the Dart side's legitimate worst case is
+        // a queue wait behind its 3-slot fetch gate plus two 10s HTTP tries
+        // (data-table + typo fallback) — a shorter deadline would discard
+        // real answers from slow panels and report "no guide data" wrongly.
+        // The watchdog only exists for the dead-engine hang, where nothing
+        // ever arrives; slow-but-alive answers must win.
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val delivered = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun deliver(result: Map<*, *>?) {
+            if (delivered.compareAndSet(false, true)) callback(result)
         }
+        handler.postDelayed({ deliver(null) }, 45_000)
         try {
             val args = hashMapOf<String, Any?>(
                 "channelUrl" to channelUrl,
@@ -5462,7 +5523,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             )
             val channel = MainActivity.getAndroidTvPlayerChannel()
             if (channel == null) {
-                failAsync()
+                handler.post { deliver(null) }
                 return
             }
             channel.invokeMethod(
@@ -5470,22 +5531,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 args,
                 object : io.flutter.plugin.common.MethodChannel.Result {
                     override fun success(result: Any?) {
-                        callback(result as? Map<*, *>)
+                        deliver(result as? Map<*, *>)
                     }
 
                     override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
                         android.util.Log.e("AndroidTvPlayer", "requestIptvEpg error: $errorCode - $errorMessage")
-                        callback(null)
+                        deliver(null)
                     }
 
                     override fun notImplemented() {
-                        callback(null)
+                        deliver(null)
                     }
                 }
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "requestIptvEpg exception: ${e.message}", e)
-            failAsync()
+            handler.post { deliver(null) }
         }
     }
 
@@ -5560,11 +5621,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         entry.isCurrent = true
         currentIptvIndex = entry.index
 
-        // Show transition overlay
-        nextText.text = entry.name
-        nextSubtext.visibility = View.GONE
-        fadeInNextOverlay()
-
         // Clear subtitle identity/results when changing channels from the guide.
         resetSubtitleState()
 
@@ -5575,13 +5631,206 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         titleView.text = entry.name
         titleContainer.visibility = View.VISIBLE
 
-        // Hide overlay after a short delay (use managed handler to avoid leaks)
-        progressHandler.removeCallbacksAndMessages("iptv_overlay")
-        progressHandler.postDelayed({ hideNextOverlay() }, 1500)
+        // Channel-change feedback: the zap banner (name, now/next, key hints)
+        // replaces the old bare-name overlay for every IPTV switch.
+        showIptvZapBanner(entry)
 
         updateIptvGuideCurrentName()
         // Index moved — a previous episode may have (dis)appeared.
         updateIptvEpisodeControls()
+    }
+
+    /** True when LEFT/RIGHT should zap instead of seek: an IPTV session with
+     *  a live channel playing, at least one other channel to go to, and the
+     *  controls fully hidden — with the dock (or the sources badge) up,
+     *  LEFT/RIGHT belong to whatever the user is looking at, and a surprise
+     *  channel change under an open menu would read as a glitch. */
+    private fun isLiveIptvZapContext(): Boolean =
+        isIptvMode && !controlsMenuVisible && iptvChannels.size > 1 &&
+            iptvChannels.getOrNull(currentIptvIndex)?.isLive == true
+
+    /** Fullscreen channel zap: previous/next channel in guide order,
+     *  wrapping at the ends. */
+    private fun zapIptvChannel(delta: Int) {
+        if (iptvChannels.size < 2) return
+        val from = currentIptvIndex.coerceIn(0, iptvChannels.lastIndex)
+        val next = (from + delta + iptvChannels.size) % iptvChannels.size
+        switchToIptvChannel(iptvChannels[next])
+    }
+
+    // ── IPTV zap banner ──────────────────────────────────────────────────
+    // Fullscreen channel-change feedback: channel identity, what's airing
+    // now (with a progress bar) and next, plus the key hints that make
+    // zapping and the guide discoverable at all. Built in code and attached
+    // to the content view on first use; EPG fields ride the same
+    // ensureIptvChannelEpg flow the guide rows use, so a banner appearance
+    // also warms the guide's data.
+
+    private var iptvZapBanner: LinearLayout? = null
+    private var iptvZapBannerName: TextView? = null
+    private var iptvZapBannerMeta: TextView? = null
+    private var iptvZapBannerNow: TextView? = null
+    private var iptvZapBannerNext: TextView? = null
+    private var iptvZapBannerHint: TextView? = null
+    private var iptvZapBannerProgress: android.widget.ProgressBar? = null
+    private val iptvZapBannerHideToken = Any()
+
+    private fun ensureIptvZapBanner(): LinearLayout {
+        iptvZapBanner?.let { return it }
+        val accent = Color.parseColor("#00E5FF")
+
+        fun label(size: Float, alpha: Int, bold: Boolean = false) =
+            TextView(this).apply {
+                textSize = size
+                setTextColor(Color.argb(alpha, 255, 255, 255))
+                if (bold) typeface = Typeface.DEFAULT_BOLD
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }
+
+        val name = label(19f, 255, bold = true)
+        val meta = label(11.5f, 150)
+        val now = label(13.5f, 230).apply { visibility = View.GONE }
+        val next = label(12f, 155).apply { visibility = View.GONE }
+        val hint = label(10f, 115).apply { letterSpacing = 0.06f }
+        val bar = android.widget.ProgressBar(
+            this, null, android.R.attr.progressBarStyleHorizontal
+        ).apply {
+            max = 1000
+            progressTintList =
+                android.content.res.ColorStateList.valueOf(accent)
+            progressBackgroundTintList = android.content.res.ColorStateList
+                .valueOf(Color.argb(46, 255, 255, 255))
+            visibility = View.GONE
+        }
+
+        val banner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(15), dp(24), dp(14))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.argb(234, 11, 13, 23))
+                setStroke(dp(1), Color.argb(28, 255, 255, 255))
+            }
+            elevation = dp(8).toFloat()
+            visibility = View.GONE
+        }
+        fun add(view: View, topDp: Int, height: Int = ViewGroup.LayoutParams.WRAP_CONTENT) {
+            banner.addView(
+                view,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, height
+                ).apply { topMargin = dp(topDp) },
+            )
+        }
+        add(name, 0)
+        add(meta, 2)
+        add(now, 10)
+        add(bar, 7, dp(3))
+        add(next, 7)
+        add(hint, 12)
+
+        val root = findViewById<ViewGroup>(android.R.id.content)
+        root.addView(
+            banner,
+            android.widget.FrameLayout.LayoutParams(
+                dp(430), ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.BOTTOM or android.view.Gravity.START
+                leftMargin = dp(28)
+                bottomMargin = dp(28)
+            },
+        )
+
+        iptvZapBanner = banner
+        iptvZapBannerName = name
+        iptvZapBannerMeta = meta
+        iptvZapBannerNow = now
+        iptvZapBannerNext = next
+        iptvZapBannerHint = hint
+        iptvZapBannerProgress = bar
+        return banner
+    }
+
+    private fun showIptvZapBanner(entry: IptvChannelEntry) {
+        // Never over the guide: a zap from inside the guide updates the
+        // guide's own header instead, and the banner would otherwise paint
+        // on top of the list (it's the topmost child of the content view).
+        if (iptvGuideVisible) return
+        val banner = ensureIptvZapBanner()
+        iptvZapBannerName?.text = entry.name
+        val meta = buildList {
+            // "CH" reads wrong on an episode/movie list — plain position there.
+            add(
+                if (entry.isLive) "CH ${entry.index + 1}/${iptvChannels.size}"
+                else "${entry.index + 1} of ${iptvChannels.size}"
+            )
+            entry.group?.takeIf { it.isNotEmpty() }?.let { add(it) }
+        }.joinToString("   •   ")
+        iptvZapBannerMeta?.text = meta
+        // LEFT/RIGHT only zap on live channels — don't teach it on episode/
+        // movie lists, where those keys still seek.
+        iptvZapBannerHint?.text =
+            if (entry.isLive) "◀ ▶  Channel      ▲  Guide" else "▲  Guide"
+        paintIptvZapBannerEpg(entry) // whatever is already known paints now
+        // The same lazy fetch the guide rows use — a fresh answer repaints
+        // the banner via the isCurrent hook in ensureIptvChannelEpg.
+        ensureIptvChannelEpg(entry)
+
+        banner.animate().cancel()
+        banner.visibility = View.VISIBLE
+        banner.alpha = 0f
+        banner.animate().alpha(1f).setDuration(160).start()
+        progressHandler.removeCallbacksAndMessages(iptvZapBannerHideToken)
+        progressHandler.postAtTime(
+            { hideIptvZapBanner() },
+            iptvZapBannerHideToken,
+            android.os.SystemClock.uptimeMillis() + 4500,
+        )
+    }
+
+    private fun hideIptvZapBanner() {
+        val banner = iptvZapBanner ?: return
+        banner.animate().cancel()
+        banner.animate().alpha(0f).setDuration(180).withEndAction {
+            banner.visibility = View.GONE
+        }.start()
+    }
+
+    /** Paint the banner's now/next lines from [entry]'s EPG fields. */
+    private fun paintIptvZapBannerEpg(entry: IptvChannelEntry) {
+        val nowView = iptvZapBannerNow ?: return
+        val nextView = iptvZapBannerNext ?: return
+        val bar = iptvZapBannerProgress ?: return
+        val nowTitle = entry.epgNowTitle
+        if (entry.isLive && nowTitle != null) {
+            nowView.text =
+                "${formatEpgTime(entry.epgNowStartMs)} – " +
+                    "${formatEpgTime(entry.epgNowStopMs)}    $nowTitle"
+            nowView.visibility = View.VISIBLE
+            val total = entry.epgNowStopMs - entry.epgNowStartMs
+            if (total > 0) {
+                val frac = (System.currentTimeMillis() - entry.epgNowStartMs)
+                    .toDouble() / total
+                bar.progress = (frac.coerceIn(0.0, 1.0) * 1000).toInt()
+                bar.visibility = View.VISIBLE
+            } else {
+                bar.visibility = View.GONE
+            }
+        } else {
+            nowView.visibility = View.GONE
+            bar.visibility = View.GONE
+        }
+        val nextTitle = entry.epgNextTitle
+        if (entry.isLive && nextTitle != null) {
+            val at = if (entry.epgNextStartMs > 0) {
+                "${formatEpgTime(entry.epgNextStartMs)}  "
+            } else ""
+            nextView.text = "Next:  $at$nextTitle"
+            nextView.visibility = View.VISIBLE
+        } else {
+            nextView.visibility = View.GONE
+        }
     }
 
     /**
@@ -5619,6 +5868,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         titleView.text = entry.name
         titleOttContainer.visibility = View.GONE
         titleContainer.visibility = View.VISIBLE
+
+        // First tune on a live channel: the zap banner doubles as the "here's
+        // what's on" card and teaches the zap/guide keys — without it, EPG
+        // exists only inside a guide overlay nobody knows how to open.
+        if (entry.isLive) showIptvZapBanner(entry)
     }
 
     // ── IPTV episode navigation (series/VOD lists) ──────────────────────────

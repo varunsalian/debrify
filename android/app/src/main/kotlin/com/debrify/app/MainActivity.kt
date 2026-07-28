@@ -103,6 +103,11 @@ class MainActivity : FlutterActivity() {
     // Inline ExoPlayer for the ambient trailer backdrop on TV.
     private var tvTrailerPlayer: com.debrify.app.tv.TvTrailerTexturePlayer? = null
 
+    /** The player MethodChannel THIS instance registered into the static
+     *  registry — cleanup compares against it so a stale instance's teardown
+     *  can't clobber a newer engine's live channel. */
+    private var registeredTvPlayerChannel: MethodChannel? = null
+
     // Full-window layer UNDER the FlutterView hosting the trailer underlay
     // SurfaceView(s). See trailerUnderlayContainer().
     private var trailerUnderlayContainer: FrameLayout? = null
@@ -362,6 +367,26 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         ActivityTracker.currentActivity = this
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        super.cleanUpFlutterEngine(flutterEngine)
+        // The static player channel targets this engine's messenger. Once the
+        // engine detaches, invokeMethod on it goes into the void and its
+        // Result callback never fires — the native TV player's EPG bridge
+        // then hangs on every ask (with playback itself unaffected, so it
+        // presents as "EPG missing everywhere"). Null it so callers fail
+        // fast; a recreated MainActivity re-registers a live channel.
+        //
+        // ONLY when the registry still holds the channel THIS instance
+        // registered: Android doesn't order an old activity's teardown
+        // before a new instance's configureFlutterEngine, so a stale
+        // instance's cleanup must never clobber the fresh channel a newer
+        // engine just installed.
+        if (getAndroidTvPlayerChannel() === registeredTvPlayerChannel) {
+            setAndroidTvPlayerChannel(null)
+        }
+        registeredTvPlayerChannel = null
     }
 
     override fun onDestroy() {
@@ -809,6 +834,7 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             ANDROID_TV_CHANNEL
         )
+        registeredTvPlayerChannel = tvChannel
         setAndroidTvPlayerChannel(tvChannel)
         tvChannel.setMethodCallHandler { call, result ->
             android.util.Log.d("DebrifyTV", "MainActivity: Method channel received: ${call.method}")

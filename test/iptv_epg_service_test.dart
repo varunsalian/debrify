@@ -1,8 +1,140 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_epg_service.dart';
 
 void main() {
+  group('xtream panel quirks (real fetch against an in-test server)', () {
+    late HttpServer server;
+    late int port;
+
+    // Per-test behavior toggles for the fake panel.
+    var listingsAsMap = false;
+    var plainTitles = false;
+    var dataTableTypoOnly = false;
+    final seenActions = <String>[];
+
+    String epgText(String s) => plainTitles ? s : base64Encode(utf8.encode(s));
+
+    List<Map<String, dynamic>> listingsAroundNow() {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      const slot = 1800;
+      final start = (now ~/ slot) * slot;
+      return [
+        {
+          'id': '1',
+          'title': epgText('Current Show'),
+          'description': epgText('The one airing right now.'),
+          'start_timestamp': '$start',
+          'stop_timestamp': '${start + slot}',
+        },
+        {
+          'id': '2',
+          'title': epgText('Next Show'),
+          'description': epgText('The one after.'),
+          'start_timestamp': '${start + slot}',
+          'stop_timestamp': '${start + 2 * slot}',
+        },
+      ];
+    }
+
+    setUpAll(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      port = server.port;
+      server.listen((request) {
+        final action = request.uri.queryParameters['action'] ?? '';
+        seenActions.add(action);
+        Object? listings;
+        if (action == 'get_short_epg' ||
+            (action == 'get_simple_data_table' && !dataTableTypoOnly) ||
+            (action == 'get_simple_date_table' && dataTableTypoOnly)) {
+          final rows = listingsAroundNow();
+          // PHP assoc-array panels serve an OBJECT keyed by index.
+          listings = listingsAsMap
+              ? {for (var i = 0; i < rows.length; i++) '$i': rows[i]}
+              : rows;
+        } else {
+          listings = <Object>[];
+        }
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({'epg_listings': listings}));
+        request.response.close();
+      });
+    });
+
+    tearDownAll(() async {
+      await server.close(force: true);
+    });
+
+    // Unique stream ids per test keep the service's per-URL caches from
+    // leaking one test's answer into the next.
+    String channelUrl(int streamId) =>
+        'http://127.0.0.1:$port/live/user/pass/$streamId.ts';
+
+    test('base64 titles decode; now/next split around the current time',
+        () async {
+      listingsAsMap = false;
+      plainTitles = false;
+      final result = await IptvEpgService.instance.nowNext(channelUrl(101));
+      expect(result.now?.title, 'Current Show');
+      expect(result.now?.description, 'The one airing right now.');
+      expect(result.next?.title, 'Next Show');
+    });
+
+    test('plain-text titles survive the base64 heuristic', () async {
+      listingsAsMap = false;
+      plainTitles = true;
+      final result = await IptvEpgService.instance.nowNext(channelUrl(102));
+      expect(result.now?.title, 'Current Show');
+      expect(result.next?.title, 'Next Show');
+    });
+
+    test('map-shaped epg_listings (PHP assoc-array panels) parse fine',
+        () async {
+      listingsAsMap = true;
+      plainTitles = false;
+      final result = await IptvEpgService.instance.nowNext(channelUrl(103));
+      expect(result.now?.title, 'Current Show');
+      expect(result.next?.title, 'Next Show');
+    });
+
+    test('schedule falls back to the get_simple_date_table typo action',
+        () async {
+      listingsAsMap = false;
+      plainTitles = false;
+      dataTableTypoOnly = true;
+      seenActions.clear();
+      final listings = await IptvEpgService.instance.schedule(channelUrl(104));
+      expect(listings.map((p) => p.title), contains('Current Show'));
+      expect(seenActions, contains('get_simple_data_table'));
+      expect(seenActions, contains('get_simple_date_table'));
+      dataTableTypoOnly = false;
+    });
+  });
+
+  group('xmltv.php derivation', () {
+    test('recovers the guide URL from an Xtream channel URL', () {
+      expect(
+        IptvEpgService.xmltvUrlForChannelUrl(
+          'http://host:8080/live/us%40er/pw/55.ts',
+        ),
+        'http://host:8080/xmltv.php?username=us%40er&password=pw',
+      );
+    });
+
+    test('non-Xtream URLs derive nothing', () {
+      expect(
+        IptvEpgService.xmltvUrlForChannelUrl(
+          'https://cdn.example.com/a.m3u8',
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('stripFeedSuffix', () {
     test('strips an iptv-org feed suffix', () {
       expect(IptvEpgService.stripFeedSuffix('BBCOne.uk@SD'), 'BBCOne.uk');

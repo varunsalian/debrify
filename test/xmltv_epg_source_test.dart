@@ -55,8 +55,8 @@ void main() {
 
   test('parses, filters and windows a plain XMLTV file', () async {
     final index = (await parse(xml.codeUnits)).byId;
-    expect(index.keys, ['ESPN.us']);
-    final rows = index['ESPN.us']!;
+    expect(index.keys, ['espn.us']);
+    final rows = index['espn.us']!;
     // Out-of-window and other-channel programmes dropped.
     expect(rows.length, 3);
     // Sorted by start; first title wins over the second language.
@@ -73,14 +73,36 @@ void main() {
 
   test('parses the same file gzipped (magic-byte detection)', () async {
     final index = (await parse(gzip.encode(xml.codeUnits))).byId;
-    expect(index['ESPN.us']!.length, 3);
-    expect(index['ESPN.us']![0][2], 'NBA Finals');
+    expect(index['espn.us']!.length, 3);
+    expect(index['espn.us']![0][2], 'NBA Finals');
   });
 
   test('returns empty for a file with no matching channels', () async {
     final guide = await parse('<tv></tv>'.codeUnits);
     expect(guide.byId, isEmpty);
     expect(guide.nameToId, isEmpty);
+  });
+
+  test('tvg-id matching is case-insensitive (Kodi default)', () async {
+    // Playlist says "espn.US", the guide publishes "ESPN.us" — real
+    // playlist/guide pairs disagree on case all the time.
+    final guide = await parse(xml.codeUnits, ids: const {'espn.US'});
+    expect(guide.byId['espn.us']!.length, 3);
+    expect(guide.sawWantedChannel, isTrue);
+  });
+
+  test('a start time with no offset is read as UTC', () async {
+    const noOffset = '''
+<tv>
+  <programme start="20260726110000" stop="20260726120000" channel="ESPN.us">
+    <title>Offsetless</title>
+  </programme>
+</tv>
+''';
+    final index = (await parse(noOffset.codeUnits)).byId;
+    final rows = index['espn.us']!;
+    expect(rows[0][0], DateTime.utc(2026, 7, 26, 11).millisecondsSinceEpoch);
+    expect(rows[0][1], DateTime.utc(2026, 7, 26, 12).millisecondsSinceEpoch);
   });
 
   test('synthesizes missing stop from the next programme start', () async {
@@ -95,7 +117,7 @@ void main() {
 </tv>
 ''';
     final index = (await parse(noStops.codeUnits)).byId;
-    final rows = index['ESPN.us']!;
+    final rows = index['espn.us']!;
     expect(rows.length, 2);
     // First runs until Second starts.
     expect(rows[0][1], DateTime.utc(2026, 7, 26, 12, 30).millisecondsSinceEpoch);
@@ -123,14 +145,14 @@ void main() {
     test('matches a channel by name when its id is not asked for', () async {
       final guide =
           await parse(xml.codeUnits, ids: const {}, names: const {'espn'});
-      expect(guide.nameToId, {'espn': 'ESPN.us'});
-      expect(guide.byId['ESPN.us']!.length, 3);
+      expect(guide.nameToId, {'espn': 'espn.us'});
+      expect(guide.byId['espn.us']!.length, 3);
     });
 
     test('id and name matches coexist without duplicating rows', () async {
       final guide = await parse(xml.codeUnits, names: const {'espn'});
-      expect(guide.byId['ESPN.us']!.length, 3);
-      expect(guide.nameToId, {'espn': 'ESPN.us'});
+      expect(guide.byId['espn.us']!.length, 3);
+      expect(guide.nameToId, {'espn': 'espn.us'});
     });
 
     test('unwanted names are not collected', () async {

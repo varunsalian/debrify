@@ -434,11 +434,14 @@ class IptvSchedulePane extends StatelessWidget {
 
 /// Phone/desktop: the same schedule as a modal bottom sheet. A replay tap
 /// closes the sheet before [onPlayProgramme] runs, so the player doesn't
-/// stack on top of it.
+/// stack on top of it. Also the TV fallback when the two-pane layout (and
+/// its in-place schedule pane) isn't active — pass [isTelevision] so the
+/// rows keep their DPAD focus handling there.
 Future<void> showIptvScheduleSheet(
   BuildContext context,
   IptvChannel channel, {
   void Function(EpgProgramme programme)? onPlayProgramme,
+  bool isTelevision = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -490,7 +493,7 @@ Future<void> showIptvScheduleSheet(
             Expanded(
               child: EpgScheduleList(
                 channel: channel,
-                isTelevision: false,
+                isTelevision: isTelevision,
                 onPlayProgramme: onPlayProgramme == null
                     ? null
                     : (programme) {

@@ -152,8 +152,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   void _ensureFocusNodes() {
-    // 3 focus nodes per playlist (star button + refresh button + delete button)
-    final needed = _playlists.length * 3;
+    // 4 focus nodes per playlist (star + refresh + edit-EPG + delete)
+    final needed = _playlists.length * 4;
 
     while (_playlistFocusNodes.length > needed) {
       _playlistFocusNodes.removeLast().dispose();
@@ -528,7 +528,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           });
         } else {
           final row = removedIndex.clamp(0, _playlists.length - 1);
-          _focusAndReveal(_playlistFocusNodes[row * 3]);
+          _focusAndReveal(_playlistFocusNodes[row * 4]);
         }
       });
     }
@@ -602,9 +602,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     for (int i = 0; i < _playlists.length; i++) {
       final playlist = _playlists[i];
       final isDefault = _defaultPlaylistId == playlist.id;
-      final starFocusIndex = i * 3;
-      final refreshFocusIndex = i * 3 + 1;
-      final deleteFocusIndex = i * 3 + 2;
+      final starFocusIndex = i * 4;
+      final refreshFocusIndex = i * 4 + 1;
+      final editFocusIndex = i * 4 + 2;
+      final deleteFocusIndex = i * 4 + 3;
       // URL and Xtream Codes playlists can be re-fetched; local files cannot.
       final canRefresh = !playlist.isLocalFile;
 
@@ -621,12 +622,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             refreshFocusNode: refreshFocusIndex < _playlistFocusNodes.length
                 ? _playlistFocusNodes[refreshFocusIndex]
                 : null,
+            editFocusNode: editFocusIndex < _playlistFocusNodes.length
+                ? _playlistFocusNodes[editFocusIndex]
+                : null,
             deleteFocusNode: deleteFocusIndex < _playlistFocusNodes.length
                 ? _playlistFocusNodes[deleteFocusIndex]
                 : null,
             onSetDefault: () =>
                 _setDefaultPlaylist(isDefault ? null : playlist),
             onRefresh: canRefresh ? () => _refreshPlaylist(playlist) : null,
+            onEditEpg: () => _editPlaylistEpgUrl(playlist),
             onDelete: () => _removePlaylist(playlist),
           ),
         ),
@@ -634,6 +639,47 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
 
     return items;
+  }
+
+  /// Set or change a playlist's guide (EPG) URL after the fact — previously
+  /// only possible at URL-add time, which stranded file imports and Xtream
+  /// logins without one, and existing playlists forever. For Xtream logins
+  /// the entered URL overrides the panel's own xmltv.php.
+  Future<void> _editPlaylistEpgUrl(IptvPlaylist playlist) async {
+    final entered = await showDialog<String>(
+      context: context,
+      builder: (context) => Theme(
+        data: settingsPageTheme(context),
+        child: _EpgUrlDialog(playlist: playlist),
+      ),
+    );
+    if (entered == null) return; // cancelled
+
+    final trimmed = entered.trim();
+    final updated = IptvPlaylist(
+      id: playlist.id,
+      name: playlist.name,
+      url: playlist.url,
+      content: playlist.content,
+      serverUrl: playlist.serverUrl,
+      username: playlist.username,
+      password: playlist.password,
+      epgUrl: trimmed.isEmpty ? null : trimmed,
+      addedAt: playlist.addedAt,
+    );
+    final newPlaylists = [
+      for (final p in _playlists)
+        if (p.id == playlist.id) updated else p,
+    ];
+    await StorageService.setIptvPlaylists(newPlaylists);
+    if (!mounted) return;
+    setState(() => _playlists = newPlaylists);
+    _showSnackBar(
+      trimmed.isEmpty
+          ? 'EPG URL cleared for "${playlist.name}"'
+          : 'EPG URL saved for "${playlist.name}"',
+      isError: false,
+    );
   }
 
   Widget _buildUrlTabContent() {
@@ -1467,9 +1513,11 @@ class _FocusablePlaylistTile extends StatefulWidget {
     this.isRefreshing = false,
     this.starFocusNode,
     this.refreshFocusNode,
+    this.editFocusNode,
     this.deleteFocusNode,
     required this.onSetDefault,
     this.onRefresh,
+    required this.onEditEpg,
     required this.onDelete,
   });
 
@@ -1478,10 +1526,12 @@ class _FocusablePlaylistTile extends StatefulWidget {
   final bool isRefreshing;
   final FocusNode? starFocusNode;
   final FocusNode? refreshFocusNode;
+  final FocusNode? editFocusNode;
   final FocusNode? deleteFocusNode;
   final VoidCallback onSetDefault;
   // Null when the playlist cannot be refreshed (local-file playlists).
   final VoidCallback? onRefresh;
+  final VoidCallback onEditEpg;
   final VoidCallback onDelete;
 
   @override
@@ -1491,6 +1541,7 @@ class _FocusablePlaylistTile extends StatefulWidget {
 class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
   bool _starFocused = false;
   bool _refreshFocused = false;
+  bool _editFocused = false;
   bool _deleteFocused = false;
 
   @override
@@ -1498,6 +1549,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
     super.initState();
     widget.starFocusNode?.addListener(_onStarFocusChange);
     widget.refreshFocusNode?.addListener(_onRefreshFocusChange);
+    widget.editFocusNode?.addListener(_onEditFocusChange);
     widget.deleteFocusNode?.addListener(_onDeleteFocusChange);
   }
 
@@ -1512,6 +1564,10 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
       oldWidget.refreshFocusNode?.removeListener(_onRefreshFocusChange);
       widget.refreshFocusNode?.addListener(_onRefreshFocusChange);
     }
+    if (oldWidget.editFocusNode != widget.editFocusNode) {
+      oldWidget.editFocusNode?.removeListener(_onEditFocusChange);
+      widget.editFocusNode?.addListener(_onEditFocusChange);
+    }
     if (oldWidget.deleteFocusNode != widget.deleteFocusNode) {
       oldWidget.deleteFocusNode?.removeListener(_onDeleteFocusChange);
       widget.deleteFocusNode?.addListener(_onDeleteFocusChange);
@@ -1522,6 +1578,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
   void dispose() {
     widget.starFocusNode?.removeListener(_onStarFocusChange);
     widget.refreshFocusNode?.removeListener(_onRefreshFocusChange);
+    widget.editFocusNode?.removeListener(_onEditFocusChange);
     widget.deleteFocusNode?.removeListener(_onDeleteFocusChange);
     super.dispose();
   }
@@ -1538,6 +1595,14 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
     if (mounted) {
       final hasFocus = widget.refreshFocusNode?.hasFocus ?? false;
       setState(() => _refreshFocused = hasFocus);
+      if (hasFocus) _ensureVisible();
+    }
+  }
+
+  void _onEditFocusChange() {
+    if (mounted) {
+      final hasFocus = widget.editFocusNode?.hasFocus ?? false;
+      setState(() => _editFocused = hasFocus);
       if (hasFocus) _ensureVisible();
     }
   }
@@ -1562,7 +1627,8 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
 
   @override
   Widget build(BuildContext context) {
-    final isAnyFocused = _starFocused || _refreshFocused || _deleteFocused;
+    final isAnyFocused =
+        _starFocused || _refreshFocused || _editFocused || _deleteFocused;
     final canRefresh = widget.onRefresh != null;
 
     // Snap, don't tween — TV GPU rule.
@@ -1617,6 +1683,11 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
                   ),
               ],
             ),
+            if ((widget.playlist.epgUrl ?? '').isNotEmpty)
+              Text(
+                'Custom EPG URL set',
+                style: TextStyle(color: kSettingsDim, fontSize: 12),
+              ),
             if (widget.isDefault)
               const Text(
                 'Default playlist',
@@ -1634,9 +1705,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
               tooltip: widget.isDefault ? 'Remove default' : 'Set as default',
               onPressed: widget.onSetDefault,
               onRightArrow: () =>
-                  (canRefresh
-                          ? widget.refreshFocusNode
-                          : widget.deleteFocusNode)
+                  (canRefresh ? widget.refreshFocusNode : widget.editFocusNode)
                       ?.requestFocus(),
             ),
             if (canRefresh)
@@ -1647,20 +1716,109 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
                 isBusy: widget.isRefreshing,
                 onPressed: widget.onRefresh!,
                 onLeftArrow: () => widget.starFocusNode?.requestFocus(),
-                onRightArrow: () => widget.deleteFocusNode?.requestFocus(),
+                onRightArrow: () => widget.editFocusNode?.requestFocus(),
               ),
+            _FocusableIconButton(
+              focusNode: widget.editFocusNode,
+              icon: Icons.calendar_view_day_outlined,
+              tooltip: 'EPG URL',
+              onPressed: widget.onEditEpg,
+              onLeftArrow: () =>
+                  (canRefresh ? widget.refreshFocusNode : widget.starFocusNode)
+                      ?.requestFocus(),
+              onRightArrow: () => widget.deleteFocusNode?.requestFocus(),
+            ),
             _FocusableIconButton(
               focusNode: widget.deleteFocusNode,
               icon: Icons.delete_outline,
               tooltip: 'Remove playlist',
               onPressed: widget.onDelete,
-              onLeftArrow: () =>
-                  (canRefresh ? widget.refreshFocusNode : widget.starFocusNode)
-                      ?.requestFocus(),
+              onLeftArrow: () => widget.editFocusNode?.requestFocus(),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Set/change/clear a playlist's XMLTV guide URL. Mirrors the import-name
+/// dialog's TV idiom: the field is a non-editing shell on TV (OK starts
+/// editing), and the action buttons seed DPAD focus.
+class _EpgUrlDialog extends StatefulWidget {
+  const _EpgUrlDialog({required this.playlist});
+
+  final IptvPlaylist playlist;
+
+  @override
+  State<_EpgUrlDialog> createState() => _EpgUrlDialogState();
+}
+
+class _EpgUrlDialogState extends State<_EpgUrlDialog> {
+  late final TextEditingController _controller;
+  final FocusNode _fieldFocusNode = FocusNode(
+    debugLabel: 'iptv-epg-edit-field',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.playlist.epgUrl ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _fieldFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.of(context).pop(_controller.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final isXtream = widget.playlist.isXtreamCodes;
+    return AlertDialog(
+      title: const Text('EPG URL'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isXtream
+                ? 'Optional: overrides the guide this login\'s panel serves '
+                    'automatically (xmltv.php).'
+                : 'XMLTV guide for "${widget.playlist.name}". Overrides the '
+                    'playlist\'s own url-tvg header when both exist. Leave '
+                    'empty to clear.',
+            style: TextStyle(fontSize: 13, color: kSettingsDim),
+          ),
+          const SizedBox(height: 14),
+          TvTextField(
+            controller: _controller,
+            focusNode: _fieldFocusNode,
+            labelText: 'EPG URL (XMLTV)',
+            hintText: 'https://example.com/guide.xml.gz',
+            prefixIcon: const Icon(Icons.calendar_view_day_outlined),
+            autofocus: !PlatformUtil.isAndroidTvCached,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submit(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          style: _dialogButtonFocusStyle,
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: _dialogButtonFocusStyle,
+          autofocus: PlatformUtil.isAndroidTvCached,
+          onPressed: _submit,
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

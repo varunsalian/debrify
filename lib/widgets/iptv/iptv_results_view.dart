@@ -195,14 +195,23 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// keeps playing; phone/desktop use a bottom sheet and never set this.
   IptvChannel? _scheduleChannel;
 
+  /// Whether the last build used the TV two-pane layout. The in-place
+  /// schedule pane only exists there — on the classic fallback (narrow TV
+  /// canvas) RIGHT must open the bottom sheet instead, or it sets state
+  /// nothing renders (a silent dead key).
+  bool _tvTwoPaneActive = false;
+
   /// The schedule action for a row, or null when the channel can't have
   /// guide data (no RIGHT-key handling, no calendar icon).
   VoidCallback? _scheduleActionFor(IptvChannel channel) {
     if (!IptvEpgService.isEpgCapable(channel)) return null;
-    if (widget.isTelevision) return () => _openSchedulePane(channel);
+    if (widget.isTelevision && _tvTwoPaneActive) {
+      return () => _openSchedulePane(channel);
+    }
     return () => showIptvScheduleSheet(
           context,
           channel,
+          isTelevision: widget.isTelevision,
           onPlayProgramme: (programme) => _playCatchup(channel, programme),
         );
   }
@@ -541,13 +550,30 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
 
     _applyFilters();
+    // Kept for settings round-trips: an EPG-URL edit re-runs the guide
+    // context against this result without refetching the whole playlist.
+    _lastLoadResult = result;
     _updateEpgContext(playlist, result, ticket);
   }
 
+  /// The last successfully loaded parse result (same list instances the page
+  /// renders — a couple of references, not a copy).
+  IptvParseResult? _lastLoadResult;
+
   /// Activate (or clear) XMLTV guide data for the loaded playlist. Fire and
   /// forget: the list renders immediately, and rows re-render with their
-  /// schedule affordances if/when the guide lands. Xtream playlists skip
-  /// this entirely — their EPG rides on per-stream endpoints.
+  /// schedule affordances if/when the guide lands.
+  ///
+  /// Guide URL resolution, per playlist kind:
+  /// - Plain M3U: user-configured epgUrl > the header's url-tvg > (when the
+  ///   playlist is really an Xtream `get.php` export, i.e. its channel URLs
+  ///   carry credentials) the panel's own xmltv.php.
+  /// - Xtream (live view): user-configured epgUrl > the panel's xmltv.php.
+  ///   This layers ON TOP of the per-stream get_short_epg endpoints — the
+  ///   XMLTV index answers first, the endpoints cover anything it doesn't.
+  ///   It's the same source TiviMate reads, so panels whose per-stream EPG
+  ///   is broken/disabled (a real-world regular) still get a full guide.
+  /// - Everything else (Stremio/favorites/continue): no guide context.
   void _updateEpgContext(
     IptvPlaylist playlist,
     IptvParseResult result,
@@ -558,14 +584,40 @@ class IptvResultsViewState extends State<IptvResultsView>
         !playlist.isContinueWatching &&
         !playlist.isStremioAddon &&
         !playlist.isXtreamCodes;
-    if (!isPlainM3u) {
+    final isXtreamLive =
+        playlist.isXtreamCodes && _selectedContentType == 'live';
+    if (!isPlainM3u && !isXtreamLive) {
       service.clearM3uEpgContext();
       return;
     }
-    // A user-configured guide URL beats the playlist header's url-tvg.
+    // A user-configured guide URL beats every derived source.
     final manual = playlist.epgUrl?.trim();
     final hasManualUrl = manual != null && manual.isNotEmpty;
-    final epgUrl = hasManualUrl ? manual : result.epgUrl;
+    String? epgUrl;
+    if (hasManualUrl) {
+      epgUrl = manual;
+    } else if (isXtreamLive) {
+      epgUrl = IptvEpgService.xmltvUrlFor(
+        playlist.serverUrl!,
+        playlist.username ?? '',
+        playlist.password ?? '',
+      );
+    } else {
+      epgUrl = result.epgUrl;
+      if (epgUrl == null || epgUrl.trim().isEmpty) {
+        // No configured or declared guide — an Xtream-export M3U can still
+        // derive the panel's own xmltv.php from any channel's stream URL.
+        for (final channel in result.channels) {
+          if (!channel.isLive) continue;
+          final derived =
+              IptvEpgService.xmltvUrlForChannelUrl(channel.url);
+          if (derived != null) {
+            epgUrl = derived;
+            break;
+          }
+        }
+      }
+    }
     service
         .setM3uEpgContext(
           playlistKey: playlist.id,
@@ -888,12 +940,18 @@ class IptvResultsViewState extends State<IptvResultsView>
           await IptvEpgService.instance.catchupUrl(channel.url, programme);
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
-      // Stale: the playlist reloaded/switched, or (TV) the schedule pane
-      // this replay was picked from is gone — a player appearing over
+      // Stale: the playlist reloaded/switched, or (TV two-pane) the schedule
+      // pane this replay was picked from is gone — a player appearing over
       // whatever the user moved on to would read as the wrong programme
-      // launching itself.
+      // launching itself. The pane check only applies to the pane flow:
+      // the TV-classic fallback replays from the bottom SHEET, where
+      // _scheduleChannel is never set and the guard would kill every replay.
       if (ticket != _loadTicket) return;
-      if (widget.isTelevision && _scheduleChannel?.url != channel.url) return;
+      if (widget.isTelevision &&
+          _tvTwoPaneActive &&
+          _scheduleChannel?.url != channel.url) {
+        return;
+      }
       if (url == null) {
         messenger.showSnackBar(
           SnackBar(
@@ -1202,11 +1260,26 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   void _navigateToSettings() {
+    // Captured for the EPG-URL-edit case below: _loadSettings only reloads
+    // the playlist when the SELECTION changes, so an edit to the current
+    // playlist's guide URL would otherwise sit inert until a manual playlist
+    // switch — "EPG URL saved" with nothing happening.
+    final beforeId = _selectedPlaylist?.id;
+    final beforeEpgUrl = _selectedPlaylist?.epgUrl;
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const IptvSettingsPage()),
-    ).then((_) {
+    ).then((_) async {
       // Reload settings when returning
-      _loadSettings();
+      await _loadSettings();
+      if (!mounted) return;
+      final current = _selectedPlaylist;
+      final result = _lastLoadResult;
+      if (current != null &&
+          current.id == beforeId &&
+          current.epgUrl != beforeEpgUrl &&
+          result != null) {
+        _updateEpgContext(current, result, _loadTicket);
+      }
     });
   }
 
@@ -1242,7 +1315,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (widget.isTelevision) {
       return LayoutBuilder(
         builder: (context, c) {
-          if (c.maxWidth < 760 || c.maxHeight < 380) return _buildClassic();
+          _tvTwoPaneActive = c.maxWidth >= 760 && c.maxHeight >= 380;
+          if (!_tvTwoPaneActive) return _buildClassic();
           return _buildTvTwoPane(c);
         },
       );
