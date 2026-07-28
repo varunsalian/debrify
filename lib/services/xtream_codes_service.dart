@@ -772,6 +772,22 @@ class XtreamCodesService {
     return total > 0 ? total : null;
   }
 
+  /// Peek the in-memory cache: the fresh (within-TTL) result for this
+  /// account + content type, or null. Lets callers skip both the network AND
+  /// a disk-snapshot read for same-session revisits.
+  IptvParseResult? cachedResult(
+    String serverUrl,
+    String username,
+    String contentType,
+  ) {
+    final cached = _cache['$serverUrl:$username:$contentType'];
+    if (cached == null) return null;
+    if (DateTime.now().difference(cached.fetchedAt) >= _cacheDuration) {
+      return null;
+    }
+    return cached.result;
+  }
+
   /// Clear cache for a specific server or all
   void clearCache([String? serverUrl]) {
     if (serverUrl != null) {

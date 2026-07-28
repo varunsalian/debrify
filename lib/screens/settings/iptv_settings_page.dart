@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/iptv_playlist.dart';
+import '../../services/iptv_catalog_cache.dart';
 import '../../services/iptv_service.dart';
 import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
@@ -514,11 +515,17 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       setState(() => _defaultPlaylistId = null);
     }
 
-    // Clear cache for this playlist
+    // Clear caches for this playlist — both the in-memory fetch cache and
+    // the on-disk catalog snapshots.
     if (playlist.isXtreamCodes) {
       XtreamCodesService.instance.clearCache(playlist.serverUrl);
+      await IptvCatalogCache.instance.removeXtream(
+        playlist.serverUrl!,
+        playlist.username ?? '',
+      );
     } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
       IptvService.instance.clearCache(playlist.url);
+      await IptvCatalogCache.instance.removeUrl(playlist.url);
     }
 
     // Remove favorites and watch history that belonged to this playlist —
@@ -571,9 +578,18 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     setState(() => _refreshingIds.add(playlist.id));
     _showSnackBar('Refreshing "${playlist.name}"…', isError: false);
 
+    // Drop the disk snapshots too: Refresh doubles as the user's escape
+    // hatch from a stale catalog (expired login, provider emptied a
+    // category) — without a snapshot the IPTV page falls back to a real
+    // blocking fetch on next open, so a genuinely dead source finally shows
+    // its error instead of ghost rows served from disk.
     IptvParseResult result;
     if (playlist.isXtreamCodes) {
       XtreamCodesService.instance.clearCache(playlist.serverUrl);
+      await IptvCatalogCache.instance.removeXtream(
+        playlist.serverUrl!,
+        playlist.username ?? '',
+      );
       result = await XtreamCodesService.instance.fetchLiveStreams(
         playlist.serverUrl!,
         playlist.username!,
@@ -581,6 +597,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       );
     } else {
       IptvService.instance.clearCache(playlist.url);
+      await IptvCatalogCache.instance.removeUrl(playlist.url);
       result = await IptvService.instance.fetchPlaylist(
         playlist.url,
         forceRefresh: true,
@@ -712,8 +729,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       addedAt: playlist.addedAt,
     );
 
-    // Drop the stale fetch cache when the source changed so the next load
-    // doesn't serve the old channels.
+    // Drop the stale caches when the source changed so the next load doesn't
+    // serve the old channels — the in-memory fetch cache and the on-disk
+    // catalog snapshots (the new source's snapshots rebuild on next load).
     if (playlist.isXtreamCodes) {
       final credsChanged = playlist.serverUrl != updated.serverUrl ||
           playlist.username != updated.username ||
@@ -721,9 +739,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       if (credsChanged) {
         XtreamCodesService.instance.clearCache(playlist.serverUrl);
         XtreamCodesService.instance.clearCache(updated.serverUrl);
+        await IptvCatalogCache.instance.removeXtream(
+          playlist.serverUrl!,
+          playlist.username ?? '',
+        );
       }
     } else if (!playlist.isLocalFile && playlist.url != updated.url) {
       IptvService.instance.clearCache(playlist.url);
+      await IptvCatalogCache.instance.removeUrl(playlist.url);
     }
 
     final newPlaylists = [

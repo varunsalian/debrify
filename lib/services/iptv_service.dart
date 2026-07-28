@@ -160,6 +160,18 @@ class IptvService {
     return channels.where((c) => c.searchKey.contains(lowerQuery)).toList();
   }
 
+  /// Peek the in-memory cache: the fresh (within-TTL) result for this URL,
+  /// or null. Lets callers skip both the network AND a disk-snapshot read
+  /// for same-session revisits.
+  IptvParseResult? cachedResult(String url) {
+    final cached = _cache[url];
+    if (cached == null) return null;
+    if (DateTime.now().difference(cached.fetchedAt) >= _cacheDuration) {
+      return null;
+    }
+    return cached.result;
+  }
+
   /// Clear cache for a specific URL or all
   void clearCache([String? url]) {
     if (url != null) {
