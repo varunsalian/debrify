@@ -5448,7 +5448,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 item: item,
                 addon: addon,
                 isTelevision: widget.isTelevision,
-                showQuickPlay: !_pikpakOnly,
+                // PikPak quick-plays fine here: onResume → _onCatalogPlay →
+                // _playSelection → TorrentPlaybackService.playFromSelection
+                // already handles PikPak (same path the episode tiles use, which
+                // stay quick-play-enabled for PikPak-only). It queues an offline
+                // download and surfaces "still processing" if not ready — same
+                // behaviour as the tiles, so the hero button matches them.
+                showQuickPlay: true,
                 isTraktSource: isTraktSource,
                 heroTag: heroTag,
                 initialSeason: initialSeason,
