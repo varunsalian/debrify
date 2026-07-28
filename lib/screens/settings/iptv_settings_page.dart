@@ -42,9 +42,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   );
 
   // Xtream Codes controllers and focus nodes
+  final TextEditingController _xcNameController = TextEditingController();
   final TextEditingController _xcServerController = TextEditingController();
   final TextEditingController _xcUsernameController = TextEditingController();
   final TextEditingController _xcPasswordController = TextEditingController();
+  final FocusNode _xcNameFocusNode = FocusNode(debugLabel: 'iptv-xc-name');
   final FocusNode _xcServerFocusNode = FocusNode(debugLabel: 'iptv-xc-server');
   final FocusNode _xcUsernameFocusNode = FocusNode(
     debugLabel: 'iptv-xc-username',
@@ -135,9 +137,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _epgUrlInputFocusNode.dispose();
     _addButtonFocusNode.dispose();
     _importFileButtonFocusNode.dispose();
+    _xcNameController.dispose();
     _xcServerController.dispose();
     _xcUsernameController.dispose();
     _xcPasswordController.dispose();
+    _xcNameFocusNode.dispose();
     _xcServerFocusNode.dispose();
     _xcUsernameFocusNode.dispose();
     _xcPasswordFocusNode.dispose();
@@ -378,6 +382,39 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
   }
 
+  /// Normalize a user-entered Xtream server URL: add a scheme when missing,
+  /// strip a trailing get.php/player_api.php endpoint and any query, and drop a
+  /// trailing slash — keeping a base path so panels behind a path prefix still
+  /// work. Returns null when the input has no valid host. Shared by add and
+  /// edit so both accept the same pasted forms.
+  String? _normalizeXtreamServerUrl(String raw) {
+    var serverUrl = raw.trim();
+    if (serverUrl.isEmpty) return null;
+    if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
+      serverUrl = 'http://$serverUrl';
+    }
+    final serverUri = Uri.tryParse(serverUrl);
+    if (serverUri == null || serverUri.host.isEmpty) return null;
+    final pathSegments = serverUri.pathSegments
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (pathSegments.isNotEmpty && pathSegments.last.endsWith('.php')) {
+      pathSegments.removeLast();
+    }
+    serverUrl = Uri(
+      scheme: serverUri.scheme,
+      // Keep basic-auth credentials if the pasted URL carried them.
+      userInfo: serverUri.userInfo.isEmpty ? null : serverUri.userInfo,
+      host: serverUri.host,
+      port: serverUri.hasPort ? serverUri.port : null,
+      pathSegments: pathSegments,
+    ).toString();
+    if (serverUrl.endsWith('/')) {
+      serverUrl = serverUrl.substring(0, serverUrl.length - 1);
+    }
+    return serverUrl;
+  }
+
   Future<void> _addXtreamCodes() async {
     // Same double-submission guard as _addPlaylist (fields' onSubmitted).
     if (_isXcAdding) return;
@@ -398,35 +435,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       return;
     }
 
-    // Normalize the server URL: users often paste the full get.php or
-    // player_api.php URL their provider sent them. Strip the query and any
-    // trailing .php endpoint, but keep a base path — panels can be hosted
-    // under a path prefix (e.g. behind a reverse proxy).
-    var serverUrl = server;
-    if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
-      serverUrl = 'http://$serverUrl';
-    }
-    final serverUri = Uri.tryParse(serverUrl);
-    if (serverUri == null || serverUri.host.isEmpty) {
+    final serverUrl = _normalizeXtreamServerUrl(server);
+    if (serverUrl == null) {
       _showSnackBar('Please enter a valid server URL');
       return;
-    }
-    final pathSegments = serverUri.pathSegments
-        .where((s) => s.isNotEmpty)
-        .toList();
-    if (pathSegments.isNotEmpty && pathSegments.last.endsWith('.php')) {
-      pathSegments.removeLast();
-    }
-    serverUrl = Uri(
-      scheme: serverUri.scheme,
-      // Keep basic-auth credentials if the pasted URL carried them.
-      userInfo: serverUri.userInfo.isEmpty ? null : serverUri.userInfo,
-      host: serverUri.host,
-      port: serverUri.hasPort ? serverUri.port : null,
-      pathSegments: pathSegments,
-    ).toString();
-    if (serverUrl.endsWith('/')) {
-      serverUrl = serverUrl.substring(0, serverUrl.length - 1);
     }
 
     // Check for duplicate
@@ -454,10 +466,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       return;
     }
 
-    // Create playlist with XC fields
+    // Create playlist with XC fields. Honor a user-supplied name; fall back to
+    // the username@host label when the optional name field is left blank.
+    final customName = _xcNameController.text.trim();
     final playlist = IptvPlaylist(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: '$username@${Uri.parse(serverUrl).host}',
+      name: customName.isEmpty ? '$username@${Uri.parse(serverUrl).host}' : customName,
       url: '',
       serverUrl: serverUrl,
       username: username,
@@ -470,6 +484,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
     setState(() {
       _playlists = newPlaylists;
+      _xcNameController.clear();
       _xcServerController.clear();
       _xcUsernameController.clear();
       _xcPasswordController.clear();
@@ -631,7 +646,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             onSetDefault: () =>
                 _setDefaultPlaylist(isDefault ? null : playlist),
             onRefresh: canRefresh ? () => _refreshPlaylist(playlist) : null,
-            onEditEpg: () => _editPlaylistEpgUrl(playlist),
+            onEdit: () => _editPlaylist(playlist),
             onDelete: () => _removePlaylist(playlist),
           ),
         ),
@@ -641,32 +656,76 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     return items;
   }
 
-  /// Set or change a playlist's guide (EPG) URL after the fact — previously
-  /// only possible at URL-add time, which stranded file imports and Xtream
-  /// logins without one, and existing playlists forever. For Xtream logins
-  /// the entered URL overrides the panel's own xmltv.php.
-  Future<void> _editPlaylistEpgUrl(IptvPlaylist playlist) async {
-    final entered = await showDialog<String>(
+  /// Edit an existing playlist in place: rename it, change its guide (EPG) URL,
+  /// and — depending on type — its source URL (M3U URL playlists) or its
+  /// server/username/password (Xtream logins). The id and added-at are
+  /// preserved so favorites and watch history stay attached. When the source
+  /// actually changes, the stale fetch cache is cleared so the next load picks
+  /// up the new source; the user can Refresh to re-verify.
+  Future<void> _editPlaylist(IptvPlaylist playlist) async {
+    final result = await showDialog<_PlaylistEdit>(
       context: context,
       builder: (context) => Theme(
         data: settingsPageTheme(context),
-        child: _EpgUrlDialog(playlist: playlist),
+        child: _EditPlaylistDialog(
+          playlist: playlist,
+          // Exclude this playlist from the duplicate checks — keeping its own
+          // name/URL must not read as a collision.
+          existingNames: _playlists
+              .where((p) => p.id != playlist.id)
+              .map((p) => p.name)
+              .toSet(),
+          existingUrls: _playlists
+              .where((p) =>
+                  p.id != playlist.id && !p.isXtreamCodes && !p.isLocalFile)
+              .map((p) => p.url)
+              .toSet(),
+        ),
       ),
     );
-    if (entered == null) return; // cancelled
+    if (result == null) return; // cancelled
 
-    final trimmed = entered.trim();
+    // Normalize an edited Xtream server URL the same way add does.
+    String? newServerUrl = playlist.serverUrl;
+    if (playlist.isXtreamCodes) {
+      newServerUrl = _normalizeXtreamServerUrl(result.serverUrl ?? '');
+      if (newServerUrl == null) {
+        _showSnackBar('Please enter a valid server URL');
+        return;
+      }
+    }
+
+    final epg = (result.epgUrl ?? '').trim();
     final updated = IptvPlaylist(
       id: playlist.id,
-      name: playlist.name,
-      url: playlist.url,
+      name: result.name,
+      // URL playlists take the edited URL; Xtream/local keep their existing
+      // url field (empty / snapshot-bound respectively).
+      url: playlist.isXtreamCodes || playlist.isLocalFile
+          ? playlist.url
+          : result.url,
       content: playlist.content,
-      serverUrl: playlist.serverUrl,
-      username: playlist.username,
-      password: playlist.password,
-      epgUrl: trimmed.isEmpty ? null : trimmed,
+      serverUrl: playlist.isXtreamCodes ? newServerUrl : playlist.serverUrl,
+      username: playlist.isXtreamCodes ? result.username : playlist.username,
+      password: playlist.isXtreamCodes ? result.password : playlist.password,
+      epgUrl: epg.isEmpty ? null : epg,
       addedAt: playlist.addedAt,
     );
+
+    // Drop the stale fetch cache when the source changed so the next load
+    // doesn't serve the old channels.
+    if (playlist.isXtreamCodes) {
+      final credsChanged = playlist.serverUrl != updated.serverUrl ||
+          playlist.username != updated.username ||
+          playlist.password != updated.password;
+      if (credsChanged) {
+        XtreamCodesService.instance.clearCache(playlist.serverUrl);
+        XtreamCodesService.instance.clearCache(updated.serverUrl);
+      }
+    } else if (!playlist.isLocalFile && playlist.url != updated.url) {
+      IptvService.instance.clearCache(playlist.url);
+    }
+
     final newPlaylists = [
       for (final p in _playlists)
         if (p.id == playlist.id) updated else p,
@@ -674,12 +733,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     await StorageService.setIptvPlaylists(newPlaylists);
     if (!mounted) return;
     setState(() => _playlists = newPlaylists);
-    _showSnackBar(
-      trimmed.isEmpty
-          ? 'EPG URL cleared for "${playlist.name}"'
-          : 'EPG URL saved for "${playlist.name}"',
-      isError: false,
-    );
+    _showSnackBar('Updated "${updated.name}"', isError: false);
   }
 
   Widget _buildUrlTabContent() {
@@ -803,6 +857,25 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Widget _buildXcTabContent() {
     return Column(
       children: [
+        // Playlist name input (optional). Blank falls back to username@host.
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(1.9),
+          child: TvTextField(
+            controller: _xcNameController,
+            focusNode: _xcNameFocusNode,
+            labelText: 'Playlist Name (optional)',
+            hintText: 'e.g., My Provider',
+            prefixIcon: const Icon(Icons.label_outline),
+            textInputAction: TextInputAction.next,
+            onSubmitted: (_) => _focusAndReveal(_xcServerFocusNode),
+            // UP targets the SELECTED tab (geometric search from a full-width
+            // field center-lands on the middle tab).
+            onUpArrow: () => _focusAndReveal(_xcTabFocusNode),
+            onDownArrow: () => _focusAndReveal(_xcServerFocusNode),
+          ),
+        ),
+        const SizedBox(height: 12),
+
         // Server URL input
         FocusTraversalOrder(
           order: const NumericFocusOrder(2),
@@ -814,9 +887,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             prefixIcon: const Icon(Icons.dns),
             textInputAction: TextInputAction.next,
             onSubmitted: (_) => _focusAndReveal(_xcUsernameFocusNode),
-            // Explicit exits: UP targets the SELECTED tab (geometric search
-            // from a full-width field center-lands on the middle tab).
-            onUpArrow: () => _focusAndReveal(_xcTabFocusNode),
+            onUpArrow: () => _focusAndReveal(_xcNameFocusNode),
             onDownArrow: () => _focusAndReveal(_xcUsernameFocusNode),
           ),
         ),
@@ -932,16 +1003,17 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               onDownArrowFromFileTab: () =>
                   _focusContentAfterTabSwitch(_importFileButtonFocusNode),
               onDownArrowFromXcTab: () =>
-                  _focusContentAfterTabSwitch(_xcServerFocusNode),
+                  _focusContentAfterTabSwitch(_xcNameFocusNode),
             ),
             const SizedBox(height: 16),
 
             // Tab content (fixed height container). Sized for the tallest
-            // tab — From URL's three fields + button since the EPG URL field
-            // joined; at 260 the button overflowed the box (painted-but-
-            // unclipped in release, overlapping the section below).
+            // tab — Xtream Login's four fields + button since the optional
+            // name field joined (From URL has three fields + button); at 260
+            // the button overflowed the box (painted-but-unclipped in release,
+            // overlapping the section below).
             SizedBox(
-              height: 340,
+              height: 410,
               child: TabBarView(
                 controller: _tabController,
                 physics: const NeverScrollableScrollPhysics(),
@@ -1517,7 +1589,7 @@ class _FocusablePlaylistTile extends StatefulWidget {
     this.deleteFocusNode,
     required this.onSetDefault,
     this.onRefresh,
-    required this.onEditEpg,
+    required this.onEdit,
     required this.onDelete,
   });
 
@@ -1531,7 +1603,7 @@ class _FocusablePlaylistTile extends StatefulWidget {
   final VoidCallback onSetDefault;
   // Null when the playlist cannot be refreshed (local-file playlists).
   final VoidCallback? onRefresh;
-  final VoidCallback onEditEpg;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
@@ -1720,9 +1792,9 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
               ),
             _FocusableIconButton(
               focusNode: widget.editFocusNode,
-              icon: Icons.calendar_view_day_outlined,
-              tooltip: 'EPG URL',
-              onPressed: widget.onEditEpg,
+              icon: Icons.edit_outlined,
+              tooltip: 'Edit playlist',
+              onPressed: widget.onEdit,
               onLeftArrow: () =>
                   (canRefresh ? widget.refreshFocusNode : widget.starFocusNode)
                       ?.requestFocus(),
@@ -1742,80 +1814,335 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
   }
 }
 
-/// Set/change/clear a playlist's XMLTV guide URL. Mirrors the import-name
-/// dialog's TV idiom: the field is a non-editing shell on TV (OK starts
-/// editing), and the action buttons seed DPAD focus.
-class _EpgUrlDialog extends StatefulWidget {
-  const _EpgUrlDialog({required this.playlist});
+/// The edited values a [_EditPlaylistDialog] returns. Only the fields relevant
+/// to the playlist's type are populated; the caller rebuilds the playlist.
+class _PlaylistEdit {
+  const _PlaylistEdit({
+    required this.name,
+    required this.url,
+    required this.serverUrl,
+    required this.username,
+    required this.password,
+    required this.epgUrl,
+  });
 
-  final IptvPlaylist playlist;
-
-  @override
-  State<_EpgUrlDialog> createState() => _EpgUrlDialogState();
+  final String name;
+  final String url; // M3U URL playlists only
+  final String? serverUrl; // Xtream only
+  final String? username; // Xtream only
+  final String? password; // Xtream only
+  final String? epgUrl;
 }
 
-class _EpgUrlDialogState extends State<_EpgUrlDialog> {
-  late final TextEditingController _controller;
-  final FocusNode _fieldFocusNode = FocusNode(
-    debugLabel: 'iptv-epg-edit-field',
-  );
+/// Edit an existing playlist: rename, change the EPG URL, and — by type — the
+/// source URL (M3U URL playlists) or server/username/password (Xtream logins).
+///
+/// TV DPAD: each field is a shell with no explicit arrow wiring, so vertical
+/// moves fall through to the framework's directional traversal (the same way
+/// the single-field dialogs walk field↔buttons). The name field seeds focus so
+/// DOWN steps through the fields to the actions; OK on a field starts editing.
+class _EditPlaylistDialog extends StatefulWidget {
+  const _EditPlaylistDialog({
+    required this.playlist,
+    required this.existingNames,
+    required this.existingUrls,
+  });
+
+  final IptvPlaylist playlist;
+  final Set<String> existingNames;
+  final Set<String> existingUrls;
+
+  @override
+  State<_EditPlaylistDialog> createState() => _EditPlaylistDialogState();
+}
+
+class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _urlController;
+  late final TextEditingController _serverController;
+  late final TextEditingController _usernameController;
+  late final TextEditingController _passwordController;
+  late final TextEditingController _epgController;
+
+  // One shell node per field so DPAD can be wired field-to-field explicitly —
+  // this screen wires arrows rather than trusting directional traversal.
+  final FocusNode _nameFocusNode = FocusNode(debugLabel: 'iptv-edit-name');
+  final FocusNode _urlFocusNode = FocusNode(debugLabel: 'iptv-edit-url');
+  final FocusNode _serverFocusNode = FocusNode(debugLabel: 'iptv-edit-server');
+  final FocusNode _usernameFocusNode =
+      FocusNode(debugLabel: 'iptv-edit-username');
+  final FocusNode _passwordFocusNode =
+      FocusNode(debugLabel: 'iptv-edit-password');
+  final FocusNode _epgFocusNode = FocusNode(debugLabel: 'iptv-edit-epg');
+
+  bool get _isXtream => widget.playlist.isXtreamCodes;
+  bool get _isUrl =>
+      !widget.playlist.isXtreamCodes && !widget.playlist.isLocalFile;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.playlist.epgUrl ?? '');
+    final p = widget.playlist;
+    _nameController = TextEditingController(text: p.name);
+    _urlController = TextEditingController(text: p.url);
+    _serverController = TextEditingController(text: p.serverUrl ?? '');
+    _usernameController = TextEditingController(text: p.username ?? '');
+    _passwordController = TextEditingController(text: p.password ?? '');
+    _epgController = TextEditingController(text: p.epgUrl ?? '');
+    for (final c in [
+      _nameController,
+      _urlController,
+      _serverController,
+      _usernameController,
+      _passwordController,
+    ]) {
+      c.addListener(_revalidate);
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
-    _fieldFocusNode.dispose();
+    _nameController.dispose();
+    _urlController.dispose();
+    _serverController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _epgController.dispose();
+    _nameFocusNode.dispose();
+    _urlFocusNode.dispose();
+    _serverFocusNode.dispose();
+    _usernameFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _epgFocusNode.dispose();
     super.dispose();
   }
 
-  void _submit() => Navigator.of(context).pop(_controller.text);
+  void _revalidate() => setState(() {});
+
+  /// The blocking error for the current values, or null when saveable. Drives
+  /// both the Save button's enabled state and the inline field errors.
+  String? get _nameError {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return 'Please enter a name';
+    // Keeping this playlist's own name is always fine, even if another
+    // playlist already happens to share it (the add paths don't enforce
+    // unique names) — only block CHANGING to a name that collides.
+    if (name != widget.playlist.name.trim() &&
+        widget.existingNames.contains(name)) {
+      return 'A playlist with this name already exists';
+    }
+    return null;
+  }
+
+  String? get _urlError {
+    if (!_isUrl) return null;
+    final url = _urlController.text.trim();
+    if (url.isEmpty) return 'Please enter a playlist URL';
+    if (!IptvService.isValidPlaylistUrl(url)) {
+      return 'Please enter a valid HTTP/HTTPS URL';
+    }
+    if (url != widget.playlist.url.trim() &&
+        widget.existingUrls.contains(url)) {
+      return 'This playlist URL already exists';
+    }
+    return null;
+  }
+
+  String? get _serverError {
+    if (!_isXtream) return null;
+    return _serverController.text.trim().isEmpty
+        ? 'Please enter a server URL'
+        : null;
+  }
+
+  String? get _usernameError {
+    if (!_isXtream) return null;
+    return _usernameController.text.trim().isEmpty
+        ? 'Please enter a username'
+        : null;
+  }
+
+  String? get _passwordError {
+    if (!_isXtream) return null;
+    return _passwordController.text.trim().isEmpty
+        ? 'Please enter a password'
+        : null;
+  }
+
+  bool get _canSave =>
+      _nameError == null &&
+      _urlError == null &&
+      _serverError == null &&
+      _usernameError == null &&
+      _passwordError == null;
+
+  void _submit() {
+    if (!_canSave) {
+      // IME "done" unfocused the field; park DPAD back on the name field so TV
+      // users aren't stranded on the dialog scope with errors showing.
+      _nameFocusNode.requestFocus();
+      return;
+    }
+    Navigator.of(context).pop(
+      _PlaylistEdit(
+        name: _nameController.text.trim(),
+        url: _urlController.text.trim(),
+        serverUrl: _isXtream ? _serverController.text.trim() : null,
+        username: _isXtream ? _usernameController.text.trim() : null,
+        password: _isXtream ? _passwordController.text.trim() : null,
+        epgUrl: _epgController.text.trim(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isXtream = widget.playlist.isXtreamCodes;
+    // The field shells in the order they're shown, so each field's UP/DOWN can
+    // point at its real neighbour regardless of type. First-field UP and
+    // last-field DOWN stay null: those hops (field↔action-buttons) go through
+    // the framework's directional traversal, exactly like the single-field
+    // dialogs on this screen already do.
+    final sequence = <FocusNode>[
+      _nameFocusNode,
+      if (_isUrl) _urlFocusNode,
+      if (_isXtream) ...[
+        _serverFocusNode,
+        _usernameFocusNode,
+        _passwordFocusNode,
+      ],
+      _epgFocusNode,
+    ];
+    VoidCallback? up(FocusNode n) {
+      final i = sequence.indexOf(n);
+      return i > 0 ? () => sequence[i - 1].requestFocus() : null;
+    }
+
+    VoidCallback? down(FocusNode n) {
+      final i = sequence.indexOf(n);
+      return i >= 0 && i < sequence.length - 1
+          ? () => sequence[i + 1].requestFocus()
+          : null;
+    }
+
+    final fields = <Widget>[
+      TvTextField(
+        controller: _nameController,
+        focusNode: _nameFocusNode,
+        labelText: 'Playlist Name',
+        hintText: 'Enter a name for this playlist',
+        errorText: _nameError,
+        prefixIcon: const Icon(Icons.label_outline),
+        // Off-TV only: on TV the action buttons seed DPAD focus (see the
+        // Save/Cancel autofocus below), matching the import-name dialog — a
+        // field autofocus in TV passthrough mode pops the broken system IME.
+        autofocus: !PlatformUtil.isAndroidTvCached,
+        textInputAction: TextInputAction.next,
+        onUpArrow: up(_nameFocusNode),
+        onDownArrow: down(_nameFocusNode),
+      ),
+      if (_isUrl) ...[
+        const SizedBox(height: 12),
+        TvTextField(
+          controller: _urlController,
+          focusNode: _urlFocusNode,
+          labelText: 'Playlist URL',
+          hintText: 'https://example.com/playlist.m3u',
+          errorText: _urlError,
+          prefixIcon: const Icon(Icons.link),
+          textInputAction: TextInputAction.next,
+          onUpArrow: up(_urlFocusNode),
+          onDownArrow: down(_urlFocusNode),
+        ),
+      ],
+      if (_isXtream) ...[
+        const SizedBox(height: 12),
+        TvTextField(
+          controller: _serverController,
+          focusNode: _serverFocusNode,
+          labelText: 'Server URL',
+          hintText: 'http://example.com:8080',
+          errorText: _serverError,
+          prefixIcon: const Icon(Icons.dns),
+          textInputAction: TextInputAction.next,
+          onUpArrow: up(_serverFocusNode),
+          onDownArrow: down(_serverFocusNode),
+        ),
+        const SizedBox(height: 12),
+        TvTextField(
+          controller: _usernameController,
+          focusNode: _usernameFocusNode,
+          labelText: 'Username',
+          hintText: 'your username',
+          errorText: _usernameError,
+          prefixIcon: const Icon(Icons.person),
+          textInputAction: TextInputAction.next,
+          onUpArrow: up(_usernameFocusNode),
+          onDownArrow: down(_usernameFocusNode),
+        ),
+        const SizedBox(height: 12),
+        TvTextField(
+          controller: _passwordController,
+          focusNode: _passwordFocusNode,
+          labelText: 'Password',
+          hintText: 'your password',
+          errorText: _passwordError,
+          prefixIcon: const Icon(Icons.lock),
+          obscureText: true,
+          textInputAction: TextInputAction.next,
+          onUpArrow: up(_passwordFocusNode),
+          onDownArrow: down(_passwordFocusNode),
+        ),
+      ],
+      const SizedBox(height: 12),
+      TvTextField(
+        controller: _epgController,
+        focusNode: _epgFocusNode,
+        labelText: 'EPG URL (XMLTV, optional)',
+        hintText: 'https://example.com/guide.xml.gz',
+        prefixIcon: const Icon(Icons.calendar_view_day_outlined),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _submit(),
+        onUpArrow: up(_epgFocusNode),
+        onDownArrow: down(_epgFocusNode),
+      ),
+    ];
+
     return AlertDialog(
-      title: const Text('EPG URL'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isXtream
-                ? 'Optional: overrides the guide this login\'s panel serves '
-                    'automatically (xmltv.php).'
-                : 'XMLTV guide for "${widget.playlist.name}". Overrides the '
-                    'playlist\'s own url-tvg header when both exist. Leave '
-                    'empty to clear.',
-            style: TextStyle(fontSize: 13, color: kSettingsDim),
-          ),
-          const SizedBox(height: 14),
-          TvTextField(
-            controller: _controller,
-            focusNode: _fieldFocusNode,
-            labelText: 'EPG URL (XMLTV)',
-            hintText: 'https://example.com/guide.xml.gz',
-            prefixIcon: const Icon(Icons.calendar_view_day_outlined),
-            autofocus: !PlatformUtil.isAndroidTvCached,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _submit(),
-          ),
-        ],
+      title: const Text('Edit Playlist'),
+      // No fixed width — let AlertDialog size to the screen (a hard width
+      // overflows narrow phone dialogs). Scrollable so the taller Xtream form
+      // (four fields + EPG) never overflows vertically on short screens.
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_isXtream)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'Changing the server or credentials won\'t be re-checked '
+                  'here — use Refresh afterwards to verify the login.',
+                  style: TextStyle(fontSize: 12, color: kSettingsDim),
+                ),
+              ),
+            ...fields,
+          ],
+        ),
       ),
       actions: [
         TextButton(
           style: _dialogButtonFocusStyle,
+          // TV: seed DPAD focus on Cancel only when Save opens disabled, so
+          // focus is never stranded on the dialog scope.
+          autofocus: PlatformUtil.isAndroidTvCached && !_canSave,
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         FilledButton(
           style: _dialogButtonFocusStyle,
-          autofocus: PlatformUtil.isAndroidTvCached,
-          onPressed: _submit,
+          autofocus: PlatformUtil.isAndroidTvCached && _canSave,
+          onPressed: _canSave ? _submit : null,
           child: const Text('Save'),
         ),
       ],
