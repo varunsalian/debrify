@@ -2523,6 +2523,15 @@ class IptvResultsViewState extends State<IptvResultsView>
     const crossAxisSpacing = 12.0;
     final padRight = tvPane ? 24.0 : hPadding;
 
+    // Resolved ONCE per build, not per row: the getter probes channels with
+    // IptvEpgService.isEpgCapable, which parses a URL per probe (one for a
+    // capable list, up to ten when the leading channels aren't) — reading it
+    // from the item builder repeated that for every row the grid materialized.
+    // It is constant for the whole list anyway, and the grid gives every tile
+    // ONE height, so hoisting also makes the delegate and the rows agree by
+    // construction instead of by coincidence.
+    final epgRows = _epgRowsActive;
+
     final grid = LayoutBuilder(
       builder: (context, constraints) {
         // The delegate's own column math, replicated so rows can know
@@ -2552,7 +2561,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                 // (redesign) are taller again — now/next lives in the row.
                 mainAxisExtent: _showsPosterRows
                     ? kIptvPosterRowExtent
-                    : _epgRowsActive
+                    : epgRows
                         ? kIptvEpgRowExtent
                         : kIptvRowExtent,
                 mainAxisSpacing: 4,
@@ -2587,7 +2596,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                   scheduleOnRightKey: rightEdge,
                   progress: _progressByUrl[channel.url],
                   poster: _showsPosterRows,
-                  epg: _epgRowsActive,
+                  epg: epgRows,
                 );
               },
             ),

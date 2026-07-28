@@ -159,6 +159,23 @@ class IptvEpgService {
   /// arrowing over a guideless panel doesn't hammer it.
   final LinkedHashMap<String, _CachedNowNext> _nowNextCache = LinkedHashMap();
   static const _emptyNowNextTtl = Duration(minutes: 5);
+
+  /// How long a FAILED fetch (timeout, transport error, non-200 — including
+  /// giving up while queued for a slot) is remembered. Far shorter than
+  /// [_emptyNowNextTtl]: "the panel says this channel has no guide" is an
+  /// answer worth resting on, while "we never got to ask" is not — holding
+  /// the latter for minutes turns a busy moment into a guideless-looking
+  /// list.
+  ///
+  /// It bounds how long a channel STAYS blank, not how often a down panel is
+  /// asked: the cache is keyed per channel URL, so first visits miss it
+  /// either way (browsing a huge list is nothing but first visits). What
+  /// paces those is the caller side — the row's dwell and request budget.
+  ///
+  /// Chosen below the native TV player's own 60s guide retry so a transient
+  /// failure has expired by the time the player asks again, instead of being
+  /// answered from cache with the blank it just got.
+  static const _failedNowNextTtl = Duration(seconds: 45);
   static const _maxNowNextEntries = 400;
 
   final LinkedHashMap<String, _CachedSchedule> _scheduleCache = LinkedHashMap();
@@ -507,6 +524,31 @@ class IptvEpgService {
     return cached.value;
   }
 
+  /// Whether the cached now/next for [channelUrl] is a FAILURE placeholder
+  /// (the fetch never delivered an answer) rather than something the panel
+  /// actually said. Null when nothing is cached.
+  ///
+  /// Test seam: the two are deliberately indistinguishable to the UI — both
+  /// render as "no guide" — but they expire on very different schedules, and
+  /// getting that backwards is exactly the bug this distinction fixes.
+  @visibleForTesting
+  bool? debugNowNextIsFailure(String channelUrl) =>
+      _nowNextCache[channelUrl]?.failed;
+
+  /// Backdate a cached now/next entry so a test can cross a TTL boundary
+  /// without waiting on the clock. Preserves the entry's value and its
+  /// failure flag — only [_CachedNowNext.fetchedAt] moves.
+  @visibleForTesting
+  void debugAgeNowNext(String channelUrl, Duration by) {
+    final entry = _nowNextCache[channelUrl];
+    if (entry == null) return;
+    _nowNextCache[channelUrl] = _CachedNowNext(
+      entry.value,
+      failed: entry.failed,
+      at: entry.fetchedAt.subtract(by),
+    );
+  }
+
   /// Fetch (or serve cached) now/next for a channel. Returns an empty
   /// [EpgNowNext] when the panel has no data or the request fails.
   Future<EpgNowNext> nowNext(String channelUrl) {
@@ -567,6 +609,13 @@ class IptvEpgService {
     if (ref == null) return empty;
 
     final listings = await _fetchListings(ref, 'get_short_epg', '&limit=8');
+    // Never asked (timeout / transport error / non-200) is NOT "this channel
+    // has no guide": remember it only long enough to space out retries, or a
+    // momentarily busy panel reads as a guideless list for minutes.
+    if (listings == null) {
+      _storeNowNext(channelUrl, empty, failed: true);
+      return empty;
+    }
     final result = _pickNowNext(listings, DateTime.now());
     _storeNowNext(channelUrl, result);
     return result;
@@ -576,11 +625,13 @@ class IptvEpgService {
     final ref = _parseXtreamUrl(channelUrl);
     if (ref == null) return const [];
 
-    var listings = await _fetchListings(ref, 'get_simple_data_table', '');
+    var listings = await _fetchListings(ref, 'get_simple_data_table', '') ??
+        const <EpgProgramme>[];
     if (listings.isEmpty) {
       // Old panels shipped this endpoint under a typo'd action name;
       // production clients fall back to it when the real one is empty.
-      listings = await _fetchListings(ref, 'get_simple_date_table', '');
+      listings = await _fetchListings(ref, 'get_simple_date_table', '') ??
+          const <EpgProgramme>[];
     }
     // Panels differ wildly in horizon; some return a week of history. Keep
     // from a couple of hours back (context for "what did I just miss") to
@@ -611,21 +662,38 @@ class IptvEpgService {
     }
 
     // The schedule is a superset of now/next — reuse it so opening a
-    // schedule also freshens the rail card for free.
-    _storeNowNext(channelUrl, _pickNowNext(listings, now));
+    // schedule also freshens the rail card for free. But only when it
+    // actually resolves a programme: a panel serving a stale day (rows that
+    // all ended an hour ago survive the floor above) picks NOTHING for
+    // "now", and storing that would clobber the fresh, correct answer
+    // get_short_epg already gave the rail — the case the comment above
+    // promises to avoid.
+    final pick = _pickNowNext(listings, now);
+    if (!pick.isEmpty || _nowNextCache[channelUrl] == null) {
+      _storeNowNext(channelUrl, pick);
+    }
     return listings;
   }
 
-  void _storeNowNext(String channelUrl, EpgNowNext value) {
+  void _storeNowNext(
+    String channelUrl,
+    EpgNowNext value, {
+    bool failed = false,
+  }) {
     _nowNextCache.remove(channelUrl); // re-insert to refresh LRU order
-    _nowNextCache[channelUrl] = _CachedNowNext(value);
+    _nowNextCache[channelUrl] = _CachedNowNext(value, failed: failed);
     while (_nowNextCache.length > _maxNowNextEntries) {
       _nowNextCache.remove(_nowNextCache.keys.first);
     }
   }
 
   /// GET one of the per-stream EPG actions and decode its `epg_listings`.
-  Future<List<EpgProgramme>> _fetchListings(
+  ///
+  /// Returns null when the request FAILED (transport error, timeout — the
+  /// slot-wait ceiling included — or a non-200), and a list (possibly empty)
+  /// when the panel actually answered. Callers must keep the two apart: an
+  /// empty answer is data worth caching, a failure is not.
+  Future<List<EpgProgramme>?> _fetchListings(
     _XtreamRef ref,
     String action,
     String extraQuery,
@@ -649,9 +717,20 @@ class IptvEpgService {
           client.close();
         }
       });
-      if (response.statusCode != 200) return const [];
+      if (response.statusCode != 200) return null;
 
       final decoded = jsonDecode(response.body);
+      // An expired/blocked account answers 200 with an auth payload
+      // (`user_info`/`server_info`) instead of a guide. That is a request
+      // that failed, not a channel without programmes — reading it as the
+      // latter would remember every channel as guideless for the full empty
+      // TTL, and keep doing so after the user fixes their credentials.
+      // A reply that really is guide-shaped always carries the key, even
+      // when its value is null/false.
+      if (decoded is Map<String, dynamic> &&
+          !decoded.containsKey('epg_listings')) {
+        return null;
+      }
       var listings = decoded is Map<String, dynamic>
           ? decoded['epg_listings']
           : decoded; // some panels answer with a bare array
@@ -670,7 +749,7 @@ class IptvEpgService {
       return programmes;
     } catch (e) {
       debugPrint('IptvEpgService: $action failed for ${ref.server}: $e');
-      return const [];
+      return null;
     }
   }
 
@@ -808,7 +887,14 @@ class IptvEpgService {
 class _CachedNowNext {
   final EpgNowNext value;
   final DateTime fetchedAt;
-  _CachedNowNext(this.value) : fetchedAt = DateTime.now();
+
+  /// This entry records a fetch that never delivered an answer (transport
+  /// error, timeout, non-200) rather than a panel that answered "nothing".
+  /// It exists only to space out retries, so it expires far sooner.
+  final bool failed;
+
+  _CachedNowNext(this.value, {this.failed = false, DateTime? at})
+      : fetchedAt = at ?? DateTime.now();
 
   bool get isStale {
     final now = DateTime.now();
@@ -818,7 +904,10 @@ class _CachedNowNext {
     // Nothing airing (or no data): retry after a while.
     final upcoming = value.next;
     if (upcoming != null && upcoming.start.isBefore(now)) return true;
-    return now.difference(fetchedAt) >= IptvEpgService._emptyNowNextTtl;
+    return now.difference(fetchedAt) >=
+        (failed
+            ? IptvEpgService._failedNowNextTtl
+            : IptvEpgService._emptyNowNextTtl);
   }
 }
 

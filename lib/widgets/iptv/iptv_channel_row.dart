@@ -10,6 +10,7 @@ import '../../models/iptv_playlist.dart';
 import '../../services/iptv_epg_service.dart';
 import '../browse/brand_accent.dart';
 import '../home/home_theme.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 
 /// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)".
@@ -421,12 +422,27 @@ class _IptvChannelRowState extends State<IptvChannelRow>
 /// The in-row now/next block (redesign): what's airing right now, how far in
 /// it is, and what's up next — the guide readable without focusing anything.
 ///
-/// Follows [IptvRailEpgCard]'s fetch discipline exactly: paint synchronously
-/// from the service cache when possible; otherwise fetch only after the row
-/// has been mounted a beat (scrolling a big list must not fire a request per
-/// fly-by row — the service additionally throttles and coalesces). A slow
-/// ticker advances the progress bar and rolls past programme boundaries; the
-/// service cache is the staleness oracle (a null peek means "time to re-ask").
+/// Paints synchronously from whatever the service already knows (an XMLTV
+/// guide answers locally and instantly — the common case, and no network is
+/// involved for it at all). Only a channel with no local answer needs a
+/// per-stream request, and those are deliberately rationed:
+///
+/// - **Dwell gate.** A row must stay mounted [_fetchDwell] before it asks
+///   for anything, so channels flying past under a scroll never queue work
+///   (their timer dies with them).
+/// - **Politeness budget.** At most [_maxConcurrentRowFetches] rows may have
+///   a request outstanding at once, app-wide. A row that finds the budget
+///   full re-arms instead of queuing, so a screenful fills in progressively
+///   rather than firing two dozen requests the instant scrolling stops.
+///
+/// Both exist because a big Xtream list has no XMLTV fallback to lean on:
+/// without rationing, browsing a 50k-channel guide would fire one
+/// `get_short_epg` per channel seen — enough to jank the UI decoding replies
+/// and enough for a panel to rate-limit the account.
+///
+/// A slow ticker advances the progress bar and rolls past programme
+/// boundaries; the service cache is the staleness oracle (a null peek means
+/// "time to re-ask").
 class _RowEpg extends StatefulWidget {
   final IptvChannel channel;
 
@@ -441,10 +457,43 @@ class _RowEpg extends StatefulWidget {
 }
 
 class _RowEpgState extends State<_RowEpg> {
+  /// How long a row must sit still before it may ask the panel for guide
+  /// data — long enough that rows scrolled past never reach it. A remote
+  /// arrows through a list far slower than a finger flings one, and TV
+  /// hardware has the least headroom, so it waits longest.
+  static Duration get _fetchDwell => PlatformUtil.isAndroidTvCached
+      ? const Duration(milliseconds: 900)
+      : const Duration(milliseconds: 450);
+
+  /// First retry spacing when the budget below is full; successive misses
+  /// back off (doubling, capped) so a screenful waiting on a stalled panel
+  /// stops re-polling every second.
+  static const Duration _budgetRetry = Duration(milliseconds: 1200);
+  static const Duration _budgetRetryCap = Duration(seconds: 6);
+
+  /// App-wide ceiling on row-initiated guide requests in flight. This is a
+  /// UI-level politeness budget, distinct from the service's own transport
+  /// throttle: the rail card, the schedule pane and the player are never
+  /// gated by it, only the rows.
+  ///
+  /// Matched to the service's own transport concurrency (3) rather than set
+  /// above it: a row admitted beyond that just waits in the service's queue,
+  /// where it holds a UI slot while achieving nothing and can still time out
+  /// waiting. Equal means an admitted row goes straight to the wire.
+  static const int _maxConcurrentRowFetches = 3;
+  static int _rowFetchesInFlight = 0;
+
   EpgNowNext? _data;
   String? _forUrl;
   Timer? _fetchDebounce;
   Timer? _ticker;
+
+  /// Set while THIS row holds one of the budget slots, so the release path
+  /// can never double-decrement (dispose racing a completing fetch).
+  bool _holdsBudget = false;
+
+  /// Consecutive times this row found the budget full — drives the backoff.
+  int _budgetMisses = 0;
 
   @override
   void initState() {
@@ -480,7 +529,16 @@ class _RowEpgState extends State<_RowEpg> {
     IptvEpgService.instance.contextVersion.removeListener(_onEpgContextChanged);
     _fetchDebounce?.cancel();
     _ticker?.cancel();
+    // A row scrolled away mid-request must hand its slot back — the reply is
+    // still cached by the service, it just no longer has anyone to paint it.
+    _releaseBudget();
     super.dispose();
+  }
+
+  void _releaseBudget() {
+    if (!_holdsBudget) return;
+    _holdsBudget = false;
+    _rowFetchesInFlight--;
   }
 
   void _onEpgContextChanged() {
@@ -489,6 +547,7 @@ class _RowEpgState extends State<_RowEpg> {
 
   void _sync() {
     _fetchDebounce?.cancel();
+    _budgetMisses = 0; // a fresh subject deserves a fresh ladder
     final ch = widget.channel;
     _forUrl = ch.url;
     if (!IptvEpgService.isEpgCapable(ch)) {
@@ -504,17 +563,61 @@ class _RowEpgState extends State<_RowEpg> {
     _scheduleFetch();
   }
 
-  void _scheduleFetch() {
+  void _scheduleFetch([Duration? delay]) {
     _fetchDebounce?.cancel();
-    _fetchDebounce = Timer(const Duration(milliseconds: 350), _fetch);
+    _fetchDebounce = Timer(delay ?? _fetchDwell, _fetch);
+  }
+
+  /// Next budget retry: 1.2s, 2.4s, 4.8s, then capped. A whole screenful can
+  /// be waiting behind a stalled panel (a request can occupy a slot for tens
+  /// of seconds), and polling every 1.2s until it drains is pure wakeups on
+  /// hardware that can least afford them.
+  Duration _nextBudgetRetry() {
+    final ms = _budgetRetry.inMilliseconds * (1 << _budgetMisses.clamp(0, 3));
+    return ms >= _budgetRetryCap.inMilliseconds
+        ? _budgetRetryCap
+        : Duration(milliseconds: ms);
   }
 
   Future<void> _fetch() async {
     final url = _forUrl;
     if (url == null) return;
-    final result = await IptvEpgService.instance.nowNext(url);
-    if (!mounted || url != _forUrl) return;
-    if (!result.isEmpty) setState(() => _data = result);
+
+    // A guide already in memory (XMLTV) answers without touching the
+    // network, so it must never be held behind the request budget.
+    final local = IptvEpgService.instance.peekNowNext(url);
+    if (local != null) {
+      if (mounted) setState(() => _data = local);
+      return;
+    }
+
+    // Re-entrancy: this row may ALREADY be awaiting a reply. Cancelling the
+    // debounce can't recall a timer that has fired, so a ticker tick or a
+    // contextVersion bump lands here while the first call is still in its
+    // await. One bool can only hand one slot back, so a second increment
+    // would leak a slot permanently (four leaks = no row ever fetches
+    // again). Let the outstanding call finish and check back.
+    if (_holdsBudget) {
+      _budgetMisses++;
+      _scheduleFetch(_nextBudgetRetry());
+      return;
+    }
+
+    if (_rowFetchesInFlight >= _maxConcurrentRowFetches) {
+      _budgetMisses++;
+      _scheduleFetch(_nextBudgetRetry()); // come back when a slot frees
+      return;
+    }
+    _budgetMisses = 0;
+    _holdsBudget = true;
+    _rowFetchesInFlight++;
+    try {
+      final result = await IptvEpgService.instance.nowNext(url);
+      if (!mounted || url != _forUrl) return;
+      if (!result.isEmpty) setState(() => _data = result);
+    } finally {
+      _releaseBudget();
+    }
   }
 
   @override

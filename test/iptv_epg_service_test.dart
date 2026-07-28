@@ -14,6 +14,11 @@ void main() {
     var listingsAsMap = false;
     var plainTitles = false;
     var dataTableTypoOnly = false;
+    // Actions the panel answers with HTTP 500 (a request that fails, as
+    // opposed to one that succeeds with nothing to say).
+    var failingActions = <String>{};
+    // Panel is healthy but genuinely has no programmes for the channel.
+    var emptyGuide = false;
     final seenActions = <String>[];
 
     String epgText(String s) => plainTitles ? s : base64Encode(utf8.encode(s));
@@ -46,10 +51,25 @@ void main() {
       server.listen((request) {
         final action = request.uri.queryParameters['action'] ?? '';
         seenActions.add(action);
+        if (failingActions.contains(action)) {
+          request.response
+            ..statusCode = HttpStatus.internalServerError
+            ..write('panel exploded');
+          request.response.close();
+          return;
+        }
+        // The typo'd action stands in whenever the real one can't serve —
+        // because this panel only publishes it, OR because the real one is
+        // erroring. Keeping those independent lets a test prove the fallback
+        // fires on a FAILURE and not merely on an empty answer.
+        final typoServesRows = dataTableTypoOnly ||
+            failingActions.contains('get_simple_data_table');
         Object? listings;
-        if (action == 'get_short_epg' ||
+        if (emptyGuide) {
+          listings = <Object>[];
+        } else if (action == 'get_short_epg' ||
             (action == 'get_simple_data_table' && !dataTableTypoOnly) ||
-            (action == 'get_simple_date_table' && dataTableTypoOnly)) {
+            (action == 'get_simple_date_table' && typoServesRows)) {
           final rows = listingsAroundNow();
           // PHP assoc-array panels serve an OBJECT keyed by index.
           listings = listingsAsMap
@@ -67,6 +87,19 @@ void main() {
 
     tearDownAll(() async {
       await server.close(force: true);
+    });
+
+    // Reset the panel between tests. Doing this in setUp rather than at the
+    // end of each body matters: a failing expect throws past a trailing
+    // reset, leaving the shared server in (say) "500s on get_short_epg" mode
+    // so one real bug reads as several unrelated failures.
+    setUp(() {
+      listingsAsMap = false;
+      plainTitles = false;
+      dataTableTypoOnly = false;
+      emptyGuide = false;
+      failingActions = {};
+      seenActions.clear();
     });
 
     // Unique stream ids per test keep the service's per-URL caches from
@@ -111,7 +144,100 @@ void main() {
       expect(listings.map((p) => p.title), contains('Current Show'));
       expect(seenActions, contains('get_simple_data_table'));
       expect(seenActions, contains('get_simple_date_table'));
+    });
+
+    // A request that never delivered an answer must not be remembered as
+    // "this channel has no guide". Both render identically (no programme
+    // text), but they must expire on very different schedules — the test
+    // below this pair proves the consequence, these two prove the label.
+    test('a panel error is cached as a failure, not as "no guide"', () async {
+      failingActions = {'get_short_epg'};
+      final url = channelUrl(105);
+
+      final result = await IptvEpgService.instance.nowNext(url);
+
+      expect(result.isEmpty, isTrue, reason: 'nothing to show either way');
+      expect(IptvEpgService.instance.debugNowNextIsFailure(url), isTrue);
+    });
+
+    test('an unreachable panel is a failure, not "no guide"', () async {
+      // Port 1 has nothing listening: the connection is refused immediately,
+      // exercising the transport-exception path rather than a status code.
+      const url = 'http://127.0.0.1:1/live/user/pass/106.ts';
+
+      final result = await IptvEpgService.instance.nowNext(url);
+
+      expect(result.isEmpty, isTrue);
+      expect(IptvEpgService.instance.debugNowNextIsFailure(url), isTrue);
+    });
+
+    test('a panel that answers with no programmes is cached as data',
+        () async {
+      emptyGuide = true;
+      final url = channelUrl(107);
+
+      final result = await IptvEpgService.instance.nowNext(url);
+
+      expect(result.isEmpty, isTrue);
+      expect(
+        IptvEpgService.instance.debugNowNextIsFailure(url),
+        isFalse,
+        reason: 'the panel answered — rest on it, do not re-ask in seconds',
+      );
+    });
+
+    // The consequence, not the label: a failure must expire (and be re-asked)
+    // while a genuine empty of the same age is still rested on. Without this,
+    // collapsing the two TTLs back into one leaves the suite green.
+    test('a failure expires long before a genuine empty of the same age',
+        () async {
+      final failedUrl = channelUrl(109);
+      final emptyUrl = channelUrl(110);
+
+      failingActions = {'get_short_epg'};
+      await IptvEpgService.instance.nowNext(failedUrl);
+      failingActions = {};
+      emptyGuide = true;
+      await IptvEpgService.instance.nowNext(emptyUrl);
+      emptyGuide = false;
+
+      // Both entries are now 50s old: past the failure TTL (45s), far inside
+      // the empty one (5min).
+      const age = Duration(seconds: 50);
+      IptvEpgService.instance.debugAgeNowNext(failedUrl, age);
+      IptvEpgService.instance.debugAgeNowNext(emptyUrl, age);
+
+      seenActions.clear();
+      await IptvEpgService.instance.nowNext(emptyUrl);
+      expect(
+        seenActions,
+        isEmpty,
+        reason: 'the panel already said "nothing" — do not re-ask this soon',
+      );
+
+      final retried = await IptvEpgService.instance.nowNext(failedUrl);
+      expect(
+        seenActions,
+        contains('get_short_epg'),
+        reason: 'a failed fetch must be re-asked once its short TTL passes',
+      );
+      expect(retried.now?.title, 'Current Show',
+          reason: 'and the retry serves the real answer');
+    });
+
+    test('schedule falls back to the typo action when the real one ERRORS '
+        '(not merely when it is empty)', () async {
+      // The real action exists and would serve rows — it just 500s here, so
+      // only a failure can drive the fallback.
       dataTableTypoOnly = false;
+      failingActions = {'get_simple_data_table'};
+
+      final listings = await IptvEpgService.instance.schedule(channelUrl(108));
+
+      expect(listings.map((p) => p.title), contains('Current Show'));
+      expect(seenActions, contains('get_simple_data_table'),
+          reason: 'the real action must be attempted first');
+      expect(seenActions, contains('get_simple_date_table'));
     });
   });
 
