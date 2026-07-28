@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
@@ -5,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
+import '../../services/iptv_epg_service.dart';
 import '../browse/brand_accent.dart';
 import '../home/home_theme.dart';
 import '../../utils/tv_keys.dart';
@@ -19,6 +22,11 @@ const Color _liveDot = Color(0xFF34D399); // emerald — a calm "on air" cue
 /// next to the art they describe.
 const double kIptvRowExtent = 74;
 const double kIptvPosterRowExtent = 95;
+
+/// Row height for live channels when the rows carry their own EPG block
+/// (now-playing title, progress bar, up-next line) — the redesign's guide
+/// look. Taller than [kIptvRowExtent] because the block is three lines.
+const double kIptvEpgRowExtent = 100;
 
 /// Compact guide-style list row for an IPTV channel: a small logo chip, the
 /// channel name, and a "category • resolution" sub-line. Scales far better than
@@ -59,6 +67,12 @@ class IptvChannelRow extends StatefulWidget {
   /// poster inside a short tile would overflow.
   final bool poster;
 
+  /// Show the channel's now/next EPG block inside the row (redesign). Decided
+  /// by the list for the same reason as [poster]: the grid's tile height is
+  /// all-or-nothing ([kIptvEpgRowExtent]). Rows whose channel has no guide
+  /// data fall back to the classic "category • resolution" sub-line.
+  final bool epg;
+
   const IptvChannelRow({
     super.key,
     required this.channel,
@@ -72,6 +86,7 @@ class IptvChannelRow extends StatefulWidget {
     this.scheduleOnRightKey = false,
     this.progress,
     this.poster = false,
+    this.epg = false,
   });
 
   @override
@@ -224,7 +239,13 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                     ),
                   ],
                 ),
-                if (sub.isNotEmpty) ...[
+                if (widget.epg)
+                  // The EPG block owns the space under the name. It renders
+                  // the classic sub-line itself while it has nothing better —
+                  // so a channel without guide data looks exactly like before,
+                  // just with more air.
+                  _RowEpg(channel: ch, fallback: sub)
+                else if (sub.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
                     sub,
@@ -310,7 +331,13 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         return KeyEventResult.handled;
       },
       child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
+        onEnter: (_) {
+          setState(() => _hovered = true);
+          // Pointer platforms: hovering IS the "focus" that drives the
+          // two-pane preview stage (the stage's own dwell debounces
+          // fly-overs). TV never mouses, so the guard is just clarity.
+          if (!widget.isTelevision) widget.onFocused?.call();
+        },
         onExit: (_) => setState(() => _hovered = false),
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
@@ -387,6 +414,189 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         favorited: widget.isFavorited,
         onTap: () => widget.onFavoriteToggle!(!widget.isFavorited),
       ),
+    );
+  }
+}
+
+/// The in-row now/next block (redesign): what's airing right now, how far in
+/// it is, and what's up next — the guide readable without focusing anything.
+///
+/// Follows [IptvRailEpgCard]'s fetch discipline exactly: paint synchronously
+/// from the service cache when possible; otherwise fetch only after the row
+/// has been mounted a beat (scrolling a big list must not fire a request per
+/// fly-by row — the service additionally throttles and coalesces). A slow
+/// ticker advances the progress bar and rolls past programme boundaries; the
+/// service cache is the staleness oracle (a null peek means "time to re-ask").
+class _RowEpg extends StatefulWidget {
+  final IptvChannel channel;
+
+  /// The classic "category • resolution" sub-line, shown while there is no
+  /// guide data (not capable, still loading, or the guide has a gap).
+  final String fallback;
+
+  const _RowEpg({required this.channel, required this.fallback});
+
+  @override
+  State<_RowEpg> createState() => _RowEpgState();
+}
+
+class _RowEpgState extends State<_RowEpg> {
+  EpgNowNext? _data;
+  String? _forUrl;
+  Timer? _fetchDebounce;
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+    // An XMLTV guide finishing its first download changes what every built
+    // row can show (only built rows listen — the grid recycles the rest).
+    IptvEpgService.instance.contextVersion.addListener(_onEpgContextChanged);
+    _ticker = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!mounted) return;
+      final ch = widget.channel;
+      if (!IptvEpgService.isEpgCapable(ch)) return;
+      final cached = IptvEpgService.instance.peekNowNext(ch.url);
+      if (cached == null) {
+        // Cache invalidated itself (programme ended / retry window passed).
+        _scheduleFetch();
+      } else if (!identical(cached, _data)) {
+        setState(() => _data = cached);
+      } else if (cached.now != null) {
+        setState(() {}); // repaint the progress bar
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(_RowEpg oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.channel.url != widget.channel.url) _sync();
+  }
+
+  @override
+  void dispose() {
+    IptvEpgService.instance.contextVersion.removeListener(_onEpgContextChanged);
+    _fetchDebounce?.cancel();
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  void _onEpgContextChanged() {
+    if (mounted) _sync();
+  }
+
+  void _sync() {
+    _fetchDebounce?.cancel();
+    final ch = widget.channel;
+    _forUrl = ch.url;
+    if (!IptvEpgService.isEpgCapable(ch)) {
+      if (_data != null) setState(() => _data = null);
+      return;
+    }
+    final cached = IptvEpgService.instance.peekNowNext(ch.url);
+    if (cached != null) {
+      setState(() => _data = cached);
+      return;
+    }
+    if (_data != null) setState(() => _data = null);
+    _scheduleFetch();
+  }
+
+  void _scheduleFetch() {
+    _fetchDebounce?.cancel();
+    _fetchDebounce = Timer(const Duration(milliseconds: 350), _fetch);
+  }
+
+  Future<void> _fetch() async {
+    final url = _forUrl;
+    if (url == null) return;
+    final result = await IptvEpgService.instance.nowNext(url);
+    if (!mounted || url != _forUrl) return;
+    if (!result.isEmpty) setState(() => _data = result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = _data?.now;
+    final next = _data?.next;
+    if (now == null && next == null) {
+      // No guide data (yet): the classic sub-line keeps the row honest.
+      if (widget.fallback.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Text(
+          widget.fallback,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.52),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      );
+    }
+
+    final at = DateTime.now();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (now != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            now.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.74),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 5),
+          // Same bar the rail card draws, at row scale.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(1.5),
+            child: SizedBox(
+              height: 3,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: (now.progressAt(at) * 1000).round().clamp(0, 1000),
+                    child: const ColoredBox(color: HomeTheme.focusGold),
+                  ),
+                  Expanded(
+                    flex: 1000 -
+                        (now.progressAt(at) * 1000).round().clamp(0, 1000),
+                    child: ColoredBox(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (next != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            '${TimeOfDay.fromDateTime(next.start).format(context)}'
+            '  ·  ${next.title}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.42),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

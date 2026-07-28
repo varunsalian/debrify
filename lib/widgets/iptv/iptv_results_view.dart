@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart' show listEquals, mapEquals, setEquals;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, listEquals, mapEquals, setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
+import '../../utils/tv_keys.dart';
 import '../browse/brand_accent.dart';
 import '../browse/browse_results_focus.dart';
 import '../../models/playlist_view_mode.dart';
@@ -19,6 +23,7 @@ import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../../screens/iptv/iptv_global_search_page.dart';
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
@@ -31,6 +36,7 @@ import 'iptv_filters.dart';
 import 'iptv_channel_row.dart';
 import 'iptv_empty_state.dart';
 import 'iptv_epg_panel.dart';
+import 'iptv_source_rail.dart';
 
 /// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)"
 /// — pulled out of the rail's big title into its sub-line (the channel rows do
@@ -68,6 +74,18 @@ class IptvResultsViewState extends State<IptvResultsView>
   List<IptvPlaylist> _playlists = [];
   IptvPlaylist? _selectedPlaylist;
   bool _settingsLoaded = false;
+
+  /// The redesign flag ([StorageService.getIptvRedesignEnabled]): EPG rows,
+  /// the global-search entry points, the TV source rail, category counts.
+  /// Off = the exact pre-redesign page.
+  bool _redesignEnabled = false;
+
+  /// Desktop gets the full two-pane experience too (redesign): source rail,
+  /// embedded live preview, quiet filters — hover previews, click plays.
+  /// Phones/tablets deliberately keep the classic list: an autoplaying inline
+  /// stream on mobile costs data/battery and has no hover to drive it.
+  static final bool _isDesktop =
+      !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
   // Current playlist data
   List<IptvChannel> _allChannels = [];
@@ -159,6 +177,49 @@ class IptvResultsViewState extends State<IptvResultsView>
   final FocusNode _playlistFilterFocusNode = FocusNode(debugLabel: 'iptv-playlist-filter');
   final FocusNode _categoryFilterFocusNode = FocusNode(debugLabel: 'iptv-category-filter');
   final FocusNode _contentTypeFocusNode = FocusNode(debugLabel: 'iptv-content-type-filter');
+  final FocusNode _globalSearchFocusNode =
+      FocusNode(debugLabel: 'iptv-global-search-chip');
+
+  /// Per-category channel counts for the current catalog (redesign labels).
+  /// Memoized against the list instance AND its length — progressive Stremio
+  /// loads append to one list, so identity alone would freeze the counts at
+  /// the first batch.
+  List<IptvChannel>? _categoryCountsSource;
+  int _categoryCountsLength = -1;
+  Map<String, int> _categoryCountsCache = const {};
+  Map<String, int> get _categoryCounts {
+    if (!identical(_categoryCountsSource, _allChannels) ||
+        _categoryCountsLength != _allChannels.length) {
+      final counts = <String, int>{};
+      for (final channel in _allChannels) {
+        final group = channel.group;
+        if (group != null && group.isNotEmpty) {
+          counts[group] = (counts[group] ?? 0) + 1;
+        }
+      }
+      _categoryCountsSource = _allChannels;
+      _categoryCountsLength = _allChannels.length;
+      _categoryCountsCache = counts;
+    }
+    return _categoryCountsCache;
+  }
+
+  /// Whether the current list draws EPG rows (now/next inside each row).
+  /// Poster lists never do; otherwise sampled from the first few channels —
+  /// Xtream capability is homogeneous (URL parse), but XMLTV matching is
+  /// per-channel, and a single unmatched channel at position 0 must not veto
+  /// the whole list. Rows without data fall back gracefully; the grid needs
+  /// one tile height for everything either way.
+  bool get _epgRowsActive {
+    if (!_redesignEnabled || _showsPosterRows) return false;
+    final channels = _filteredChannels;
+    if (channels.isEmpty) return false;
+    final sample = channels.length < 10 ? channels.length : 10;
+    for (var i = 0; i < sample; i++) {
+      if (IptvEpgService.isEpgCapable(channels[i])) return true;
+    }
+    return false;
+  }
 
   // TV preview stage (the two-pane layout's left rail). Notifiers, not
   // setState: a DPAD move over the channel list must repaint the rail alone,
@@ -317,6 +378,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _loadSettings({bool forceReload = false}) async {
+    final redesignEnabled = await StorageService.getIptvRedesignEnabled();
     var playlists = await StorageService.getIptvPlaylists();
     var defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
 
@@ -394,6 +456,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     setState(() {
       _playlists = playlists;
       _settingsLoaded = true;
+      _redesignEnabled = redesignEnabled;
       _selectedPlaylist = newSelectedPlaylist;
     });
 
@@ -441,6 +504,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     _playlistFilterFocusNode.dispose();
     _categoryFilterFocusNode.dispose();
     _contentTypeFocusNode.dispose();
+    _globalSearchFocusNode.dispose();
     _previewShown.dispose();
     _previewShowing.dispose();
     _previewEpoch.dispose();
@@ -1427,7 +1491,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         ),
       );
       // Same parked preview re-arm discipline as _playChannelInner.
-      if (mounted && widget.isTelevision) {
+      if (mounted && (widget.isTelevision || _tvTwoPaneActive)) {
         _previewRearmPending = true;
       }
       if (!widget.isTelevision && mounted) {
@@ -1523,7 +1587,10 @@ class IptvResultsViewState extends State<IptvResultsView>
     // (the fresh backdrop's dwell can open a stream UNDER the real player).
     // Park the re-arm; it completes on app resume (native path) or on the
     // next row focus (in-app fallback, whose route is awaited to the pop).
-    if (mounted && widget.isTelevision) {
+    // Desktop two-pane parks it too — push() can hand off to an EXTERNAL
+    // player app and return while it's still playing, so the next hover
+    // (a sign the user is back in the app) is the safe re-arm point.
+    if (mounted && (widget.isTelevision || _tvTwoPaneActive)) {
       _previewRearmPending = true;
     }
     // Off TV, push() is awaited to the pop — the position just written is
@@ -1691,6 +1758,36 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (focused) _clearPreview();
   }
 
+  /// Open the cross-source global search page. The preview is emptied first
+  /// for the same reason [_openSeriesDetail] empties it: playback launched
+  /// from the covered route must never race a backdrop left running
+  /// underneath. On return, freshly watched items land in the shelf/bars.
+  void _openGlobalSearch() {
+    _clearPreview();
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (_) =>
+            IptvGlobalSearchPage(isTelevision: widget.isTelevision),
+      ),
+    )
+        .then((_) {
+      if (mounted) _refreshAfterPlayback();
+    });
+  }
+
+  /// The source rail's overflow chip: the full playlist picker sheet, for
+  /// when there are more sources than the rail has room to show.
+  Future<void> _openPlaylistPickerFromRail() async {
+    final result = await showIptvPlaylistPicker(
+      context,
+      playlists: _playlists,
+      selectedPlaylist: _selectedPlaylist,
+      onAddPlaylist: _navigateToSettings,
+    );
+    if (result != null) _onPlaylistChanged(result);
+  }
+
   void _navigateToSettings() {
     // Captured for the EPG-URL-edit case below: _loadSettings only reloads
     // the playlist when the SELECTION changes, so an edit to the current
@@ -1742,10 +1839,12 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     // TV: two-pane — a live preview stage on the left (the focused channel
     // plays embedded after a short dwell; OK still launches the full player),
-    // quiet filters + the channel guide on the right. Falls back to the
-    // classic single-column layout on an implausibly narrow canvas.
+    // quiet filters + the channel guide on the right. Desktop (redesign) gets
+    // the same layout with pointer semantics: hovering a row retunes the
+    // preview, clicking plays. Falls back to the classic single-column
+    // layout on an implausibly narrow canvas; phones/tablets keep classic.
     final Widget body;
-    if (widget.isTelevision) {
+    if (widget.isTelevision || (_redesignEnabled && _isDesktop)) {
       body = LayoutBuilder(
         builder: (context, c) {
           _tvTwoPaneActive = c.maxWidth >= 760 && c.maxHeight >= 380;
@@ -1844,6 +1943,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           selectedPlaylist: _selectedPlaylist,
           categories: _categories,
           selectedCategory: _selectedCategory,
+          categoryCounts: _redesignEnabled ? _categoryCounts : null,
           channelCount: _filteredChannels.length,
           isLoading: _isLoading,
           isLoadingMore: _isLoadingMore,
@@ -1858,6 +1958,9 @@ class IptvResultsViewState extends State<IptvResultsView>
           contentTypeFocusNode: _contentTypeFocusNode,
           onUpArrowPressed: widget.onUpArrowFromFilters,
           onDownArrowPressed: _focusFirstChannel,
+          onGlobalSearch: _redesignEnabled ? _openGlobalSearch : null,
+          globalSearchFocusNode:
+              _redesignEnabled ? _globalSearchFocusNode : null,
         ),
 
         // Content
@@ -1871,11 +1974,36 @@ class IptvResultsViewState extends State<IptvResultsView>
   // ── TV two-pane ──────────────────────────────────────────────────────────
 
   Widget _buildTvTwoPane(BoxConstraints c) {
-    final railW = (c.maxWidth * 0.40).clamp(320.0, 470.0);
+    // Wide desktop windows get the rail inline-expanded (persistent labeled
+    // list, no overlay to dismiss); TV and narrow windows keep the compact
+    // icon rail. The preview's share is computed from the width that
+    // actually remains for the two panes.
+    final inlineRail =
+        _redesignEnabled && !widget.isTelevision && c.maxWidth >= 1200;
+    final double sourceRailW = !_redesignEnabled
+        ? 0.0
+        : inlineRail
+            ? kIptvSourceRailExpandedWidth
+            : kIptvSourceRailWidth;
+    final paneW = c.maxWidth - sourceRailW;
+    final railW = (paneW * 0.40).clamp(320.0, 470.0);
     final scheduleChannel = _scheduleChannel;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_redesignEnabled)
+          IptvSourceRail(
+            playlists: _playlists,
+            selectedId: _selectedPlaylist?.id,
+            isTelevision: widget.isTelevision,
+            inlineExpanded: inlineRail,
+            onSelect: (playlist) => _onPlaylistChanged(playlist),
+            onManage: _navigateToSettings,
+            onOverflow: _openPlaylistPickerFromRail,
+            // RIGHT from a rail chip lands on the quiet filter row's first
+            // chip (the search pill — it holds _playlistFilterFocusNode).
+            onRight: () => _playlistFilterFocusNode.requestFocus(),
+          ),
         SizedBox(width: railW, child: _buildPreviewRail()),
         Expanded(
           // An open schedule covers the guide column in place — the preview
@@ -1921,41 +2049,55 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// (playlist • [Live/Movies] • category • count) instead of boxed pills.
   Widget _buildQuietFilters() {
     return SeeAllFilterBar(
-      isTelevision: true,
+      isTelevision: widget.isTelevision,
       quiet: true,
       buildChips: () => [
-        StremioDropdown<String>(
-          label: 'playlist',
-          value: _selectedPlaylist?.id ?? '',
-          quiet: true,
-          quietAccent: true,
-          isTelevision: true,
-          focusNode: _playlistFilterFocusNode,
-          onUpArrowPressed: widget.onUpArrowFromFilters,
-          onDownArrowPressed: _focusFirstChannel,
-          options: [
-            for (final p in _playlists) StremioDropdownOption(p.id, p.name),
-            const StremioDropdownOption(_kAddPlaylistSentinel, '＋ Add playlist'),
-          ],
-          onSelected: (id) {
-            if (id == _kAddPlaylistSentinel) {
-              _navigateToSettings();
-              return;
-            }
-            for (final p in _playlists) {
-              if (p.id == id) {
-                _onPlaylistChanged(p);
+        // Redesign: the source rail owns playlist switching, so the row's
+        // first chip becomes the global-search pill instead of the playlist
+        // dropdown. It inherits _playlistFilterFocusNode on purpose — every
+        // existing wire into "the first filter" (down-from-search-field,
+        // revalidate focus repair, focusFirstFilter) keeps working unchanged.
+        if (_redesignEnabled)
+          _QuietSearchChip(
+            focusNode: _playlistFilterFocusNode,
+            onPressed: _openGlobalSearch,
+            onUpArrowPressed: widget.onUpArrowFromFilters,
+            onDownArrowPressed: _focusFirstChannel,
+          )
+        else
+          StremioDropdown<String>(
+            label: 'playlist',
+            value: _selectedPlaylist?.id ?? '',
+            quiet: true,
+            quietAccent: true,
+            isTelevision: widget.isTelevision,
+            focusNode: _playlistFilterFocusNode,
+            onUpArrowPressed: widget.onUpArrowFromFilters,
+            onDownArrowPressed: _focusFirstChannel,
+            options: [
+              for (final p in _playlists) StremioDropdownOption(p.id, p.name),
+              const StremioDropdownOption(
+                  _kAddPlaylistSentinel, '＋ Add playlist'),
+            ],
+            onSelected: (id) {
+              if (id == _kAddPlaylistSentinel) {
+                _navigateToSettings();
                 return;
               }
-            }
-          },
-        ),
+              for (final p in _playlists) {
+                if (p.id == id) {
+                  _onPlaylistChanged(p);
+                  return;
+                }
+              }
+            },
+          ),
         if (_selectedPlaylist?.isXtreamCodes ?? false)
           StremioDropdown<String>(
             label: 'type',
             value: _selectedContentType,
             quiet: true,
-            isTelevision: true,
+            isTelevision: widget.isTelevision,
             focusNode: _contentTypeFocusNode,
             onUpArrowPressed: widget.onUpArrowFromFilters,
             onDownArrowPressed: _focusFirstChannel,
@@ -1971,13 +2113,22 @@ class IptvResultsViewState extends State<IptvResultsView>
             label: 'category',
             value: _selectedCategory ?? '',
             quiet: true,
-            isTelevision: true,
+            isTelevision: widget.isTelevision,
             focusNode: _categoryFilterFocusNode,
             onUpArrowPressed: widget.onUpArrowFromFilters,
             onDownArrowPressed: _focusFirstChannel,
             options: [
-              const StremioDropdownOption('', 'All'),
-              for (final cat in _categories) StremioDropdownOption(cat, cat),
+              StremioDropdownOption(
+                  '',
+                  _redesignEnabled
+                      ? 'All · ${_allChannels.length}'
+                      : 'All'),
+              for (final cat in _categories)
+                StremioDropdownOption(
+                    cat,
+                    _redesignEnabled
+                        ? '$cat · ${_categoryCounts[cat] ?? 0}'
+                        : cat),
             ],
             onSelected: (v) => _onCategoryChanged(v.isEmpty ? null : v),
           ),
@@ -2101,7 +2252,8 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   Widget _buildPreviewRail() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 12, 16),
+      // The source rail supplies the left inset when it's present.
+      padding: EdgeInsets.fromLTRB(_redesignEnabled ? 14 : 24, 16, 12, 16),
       child: ValueListenableBuilder<int>(
         valueListenable: _previewEpoch,
         builder: (context, epoch, _) => ValueListenableBuilder<IptvChannel?>(
@@ -2112,9 +2264,25 @@ class IptvResultsViewState extends State<IptvResultsView>
               _buildPreviewStage(ch, epoch),
               const SizedBox(height: 16),
               Expanded(child: _IptvRailInfo(channel: ch)),
-              _IptvRailHints(
-                showGuide: ch != null && IptvEpgService.isEpgCapable(ch),
-              ),
+              // Remote-key hints are TV language; the pointer world gets one
+              // quiet line instead.
+              if (widget.isTelevision)
+                _IptvRailHints(
+                  showGuide: ch != null && IptvEpgService.isEpgCapable(ch),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Hover a channel to preview  ·  Click to watch',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -2380,9 +2548,13 @@ class IptvResultsViewState extends State<IptvResultsView>
                 // A grid has one tile height for every row, so the taller
                 // poster rows are all-or-nothing per view. On-demand lists are
                 // homogeneous in practice (the type dropdown splits live from
-                // movies, and both virtual shelves are single-kind).
-                mainAxisExtent:
-                    _showsPosterRows ? kIptvPosterRowExtent : kIptvRowExtent,
+                // movies, and both virtual shelves are single-kind). EPG rows
+                // (redesign) are taller again — now/next lives in the row.
+                mainAxisExtent: _showsPosterRows
+                    ? kIptvPosterRowExtent
+                    : _epgRowsActive
+                        ? kIptvEpgRowExtent
+                        : kIptvRowExtent,
                 mainAxisSpacing: 4,
                 crossAxisSpacing: crossAxisSpacing,
               ),
@@ -2415,6 +2587,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                   scheduleOnRightKey: rightEdge,
                   progress: _progressByUrl[channel.url],
                   poster: _showsPosterRows,
+                  epg: _epgRowsActive,
                 );
               },
             ),
@@ -2464,6 +2637,110 @@ class IptvResultsViewState extends State<IptvResultsView>
         ),
         Expanded(child: grid),
       ],
+    );
+  }
+}
+
+/// The quiet filter row's global-search pill (redesign): same bare-segment
+/// language as the quiet dropdowns beside it, opens the cross-source search
+/// page. Carries the row's "first filter" focus node — see the call site.
+class _QuietSearchChip extends StatefulWidget {
+  final FocusNode focusNode;
+  final VoidCallback onPressed;
+  final VoidCallback? onUpArrowPressed;
+  final VoidCallback? onDownArrowPressed;
+
+  const _QuietSearchChip({
+    required this.focusNode,
+    required this.onPressed,
+    this.onUpArrowPressed,
+    this.onDownArrowPressed,
+  });
+
+  @override
+  State<_QuietSearchChip> createState() => _QuietSearchChipState();
+}
+
+class _QuietSearchChipState extends State<_QuietSearchChip> {
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (mounted) setState(() => _focused = widget.focusNode.hasFocus);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (isActivateKey(event.logicalKey)) {
+          widget.onPressed();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.onUpArrowPressed != null) {
+          widget.onUpArrowPressed!();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+            widget.onDownArrowPressed != null) {
+          widget.onDownArrowPressed!();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
+          decoration: BoxDecoration(
+            color: _focused
+                ? kSeeAllAccent.withValues(alpha: 0.30)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            // Constant thickness — only the color changes on focus, so the
+            // row never reflows on DPAD moves (quiet-chip house rule).
+            border: Border.all(
+              width: 1.2,
+              color: _focused
+                  ? kSeeAllAccent2.withValues(alpha: 0.45)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.travel_explore_rounded,
+                size: 14,
+                color: _focused ? Colors.white : kSeeAllAccent2,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'Search all',
+                style: TextStyle(
+                  color: _focused ? Colors.white : kSeeAllAccent2,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -407,6 +407,20 @@ class StorageService {
     tvKeyboardEnabledCached = enabled;
   }
 
+  /// The IPTV page redesign: EPG now/next inside the channel rows, the
+  /// cross-source global search page, the TV source rail, and category counts.
+  /// On by default; can be turned off per-device via [setIptvRedesignEnabled]
+  /// to get the exact pre-redesign page back.
+  static Future<bool> getIptvRedesignEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('iptv_redesign_enabled') ?? true;
+  }
+
+  static Future<void> setIptvRedesignEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('iptv_redesign_enabled', enabled);
+  }
+
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,
   /// purple Discover theme, 1-click marketplace) instead of the classic two-tab
   /// Addons screen. On by default; can be turned off per-device via

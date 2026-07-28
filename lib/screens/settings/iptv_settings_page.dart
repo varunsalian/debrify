@@ -72,6 +72,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   List<IptvPlaylist> _playlists = [];
   String? _defaultPlaylistId;
+  bool _redesignEnabled = true;
   bool _loading = true;
   bool _isAdding = false;
   // Ids of playlists currently being refreshed (re-fetched from source)
@@ -173,12 +174,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _loadSettings() async {
     final playlists = await StorageService.getIptvPlaylists();
     final defaultId = await StorageService.getIptvDefaultPlaylist();
+    final redesignEnabled = await StorageService.getIptvRedesignEnabled();
 
     if (!mounted) return;
 
     setState(() {
       _playlists = playlists;
       _defaultPlaylistId = defaultId;
+      _redesignEnabled = redesignEnabled;
       _loading = false;
     });
     _ensureFocusNodes();
@@ -1092,6 +1095,26 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               )
             else
               Card(child: Column(children: _buildPlaylistsList())),
+            const SizedBox(height: 24),
+
+            // Experience
+            const SettingsSectionLabel('Experience'),
+            const SizedBox(height: 6),
+            Card(
+              child: SwitchListTile(
+                title: const Text('IPTV redesign'),
+                subtitle: const Text(
+                  'Programme guide inside channel rows, search across every '
+                  'source, and the TV source rail. Turn off for the classic '
+                  'IPTV page.',
+                ),
+                value: _redesignEnabled,
+                onChanged: (enabled) async {
+                  await StorageService.setIptvRedesignEnabled(enabled);
+                  if (mounted) setState(() => _redesignEnabled = enabled);
+                },
+              ),
+            ),
             const SizedBox(height: 24),
 
             // Default Playlist Info
