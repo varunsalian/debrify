@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
@@ -66,6 +68,39 @@ class XtreamCodesService {
     } catch (e) {
       debugPrint('XtreamCodesService: Optional request failed ($url): $e');
       return null;
+    }
+  }
+
+  /// GET with retry on transient network failures. Stream lists — VOD
+  /// especially — can run to tens of MB, and some panels/CDNs drop the
+  /// connection mid-transfer or stall under load; a plain http.get throws away
+  /// the whole download on the first hiccup ("Connection closed while
+  /// receiving data"). Retrying with exponential backoff recovers the common
+  /// transient case. A non-2xx status is the server's real answer, so it
+  /// returns immediately without burning a retry.
+  Future<http.Response> _getWithRetry(
+    String url, {
+    required Duration timeout,
+    int attempts = 3,
+  }) async {
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await http
+            .get(Uri.parse(url), headers: _headers)
+            .timeout(timeout);
+      } catch (e) {
+        final transient = e is TimeoutException ||
+            e is SocketException ||
+            e is http.ClientException;
+        if (!transient || attempt >= attempts) rethrow;
+        final backoff = Duration(milliseconds: 500 * (1 << (attempt - 1)));
+        debugPrint(
+          'XtreamCodesService: transient fetch failure '
+          '(attempt $attempt/$attempts) for $url: $e — '
+          'retrying in ${backoff.inMilliseconds}ms',
+        );
+        await Future<void>.delayed(backoff);
+      }
     }
   }
 
@@ -245,9 +280,10 @@ class XtreamCodesService {
         '$base&action=$categoriesAction',
         const Duration(seconds: 30),
       );
-      final streamsResponse = await http
-          .get(Uri.parse('$base&action=$streamsAction'), headers: _headers)
-          .timeout(const Duration(seconds: 60));
+      final streamsResponse = await _getWithRetry(
+        '$base&action=$streamsAction',
+        timeout: const Duration(seconds: 90),
+      );
       final categoriesResponse = await categoriesFuture;
 
       if (streamsResponse.statusCode != 200) {
@@ -567,15 +603,11 @@ class XtreamCodesService {
 
     try {
       final base = _baseUrl(serverUrl, username, password);
-      final response = await http
-          .get(
-            Uri.parse(
-              '$base&action=get_series_info&series_id='
-              '${Uri.encodeQueryComponent(seriesId)}',
-            ),
-            headers: _headers,
-          )
-          .timeout(const Duration(seconds: 30));
+      final response = await _getWithRetry(
+        '$base&action=get_series_info&series_id='
+        '${Uri.encodeQueryComponent(seriesId)}',
+        timeout: const Duration(seconds: 30),
+      );
       if (response.statusCode != 200) return null;
 
       final body = response.body;
