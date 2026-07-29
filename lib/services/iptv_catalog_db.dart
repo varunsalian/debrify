@@ -92,6 +92,17 @@ class IptvCatalogDb {
   }
 
   static void _createSchema(Database db) {
+    // Defensive cleanup: a previous build shipped an FTS5 `channels_fts` index
+    // (plus these triggers) that crashed on devices whose bundled SQLite lacks
+    // the trigram tokenizer. Drop any leftovers so their triggers can't fire on
+    // ingest and break catalog writes. Wrapped so a missing or corrupt object
+    // can never abort schema setup; a clean database no-ops through it.
+    try {
+      db.execute('DROP TRIGGER IF EXISTS channels_fts_ai');
+      db.execute('DROP TRIGGER IF EXISTS channels_fts_ad');
+      db.execute('DROP TABLE IF EXISTS channels_fts');
+    } catch (_) {}
+
     db.execute('''
       CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,
