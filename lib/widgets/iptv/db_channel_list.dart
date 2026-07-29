@@ -30,6 +30,7 @@ class DbChannelList extends ListBase<IptvChannel> {
     this.search,
     this.onPageLoaded,
     this.onEvicted,
+    this.instanceCache,
   }) : _length = snapshot.count(group: group, search: search);
 
   static const int pageSize = 60;
@@ -38,9 +39,26 @@ class DbChannelList extends ListBase<IptvChannel> {
   /// of whether the catalog has 5k or 500k rows.
   static const int maxResidentPages = 16;
 
+  /// Cap on the shared cross-facade instance cache (see [instanceCache]).
+  /// Only needs to cover what's on screen across a filter recompute, plus
+  /// margin — a few pages. Bounds memory to a few hundred channel objects no
+  /// matter the catalog size.
+  static const int maxCachedInstances = 300;
+
   final CatalogSnapshot snapshot;
   final String? group;
   final String? search;
+
+  /// Shared across every facade the view builds for one catalog generation
+  /// (unfiltered, and each filter/search recompute), keyed by catalog
+  /// position. Reusing the same [IptvChannel] instance for a given position
+  /// across recomputes keeps its ObjectKey stable, so a row that survives a
+  /// filter change is NOT torn down and rebuilt (no EPG re-resolve, no focus
+  /// node / image churn) — the cost that made search feel laggy on a big
+  /// catalog. Positions are unique within a generation, so distinct rows
+  /// never collide (duplicate-URL rows keep distinct instances). Null = no
+  /// caching (fresh instances every fault).
+  final LinkedHashMap<int, IptvChannel>? instanceCache;
 
   /// Fired (synchronously, during a fault) with each freshly loaded page —
   /// the view uses it to kick off the async progress-bar lookup for those
@@ -78,12 +96,17 @@ class DbChannelList extends ListBase<IptvChannel> {
     final pageIndex = index ~/ pageSize;
     var page = _pages.remove(pageIndex);
     if (page == null) {
-      page = _effective.page(
+      final entries = _effective.pageEntries(
         offset: pageIndex * pageSize,
         limit: pageSize,
         group: group,
         search: search,
       );
+      final cache = instanceCache;
+      page = [
+        for (final e in entries)
+          if (cache == null) e.channel else _cachedInstance(cache, e),
+      ];
       for (var i = 0; i < page.length; i++) {
         _indexOfInstance[page[i]] = pageIndex * pageSize + i;
       }
@@ -109,6 +132,26 @@ class DbChannelList extends ListBase<IptvChannel> {
       return _missingRow;
     }
     return page[offsetInPage];
+  }
+
+  /// Reuse the cached instance for this catalog position, or cache the fresh
+  /// one. LRU: a hit moves to the most-recent end; overflow evicts the
+  /// eldest. Within one generation a position always maps to identical row
+  /// data, so a hit is always safe to reuse.
+  static IptvChannel _cachedInstance(
+    LinkedHashMap<int, IptvChannel> cache,
+    ({int position, IptvChannel channel}) entry,
+  ) {
+    final hit = cache.remove(entry.position);
+    if (hit != null) {
+      cache[entry.position] = hit; // touch
+      return hit;
+    }
+    cache[entry.position] = entry.channel;
+    while (cache.length > maxCachedInstances) {
+      cache.remove(cache.keys.first);
+    }
+    return entry.channel;
   }
 
   /// The filtered index of a currently-resident instance, or null if its

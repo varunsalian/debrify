@@ -743,12 +743,40 @@ class CatalogSnapshot {
     String? search,
     bool? live,
   }) {
+    return [
+      for (final e in pageEntries(
+        offset: offset,
+        limit: limit,
+        group: group,
+        search: search,
+        live: live,
+      ))
+        e.channel,
+    ];
+  }
+
+  /// Like [page] but pairs each row with its catalog position. The paging
+  /// facade keys its instance cache on that position — it's unique within a
+  /// generation, so re-faulting the same catalog row across filter
+  /// recomputes returns the SAME [IptvChannel] instance (stable ObjectKeys →
+  /// no row rebuild), and two duplicate-URL rows still get distinct instances
+  /// (distinct positions), never a shared focus node.
+  List<({int position, IptvChannel channel})> pageEntries({
+    required int offset,
+    required int limit,
+    String? group,
+    String? search,
+    bool? live,
+  }) {
     final rows = _db.select(
       'SELECT * ${_where(group: group, search: search, live: live)} '
       'ORDER BY position LIMIT ? OFFSET ?',
       [..._args(group: group, search: search), limit, offset],
     );
-    return [for (final row in rows) _channelFromRow(row)];
+    return [
+      for (final row in rows)
+        (position: row['position'] as int, channel: _channelFromRow(row)),
+    ];
   }
 
   /// Distinct groups with counts, in first-appearance (catalog) order — the

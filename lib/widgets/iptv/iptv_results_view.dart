@@ -109,6 +109,18 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// [_categoryCounts] scan, which would page the whole facade).
   Map<String, int> _dbGroupCounts = const {};
 
+  /// Shared instance cache for the DB facades of the CURRENT catalog
+  /// generation (see [DbChannelList.instanceCache]): reused so a filter /
+  /// search recompute keeps identity for rows that stay on screen, instead
+  /// of minting new instances that tear down and rebuild every visible row
+  /// (EPG re-resolve, focus/image churn — what made search feel laggy).
+  final LinkedHashMap<int, IptvChannel> _dbInstanceCache = LinkedHashMap();
+
+  /// `<catalogKey>#<generation>` the [_dbInstanceCache] currently holds —
+  /// cleared when either changes (a different playlist, or a refresh's new
+  /// generation, whose rows can carry changed data).
+  String? _dbInstanceCacheKey;
+
   /// Line shown under the loading spinner for named one-time work (the
   /// legacy-snapshot → DB upgrade).
   String? _loadingStatus;
@@ -568,6 +580,9 @@ class IptvResultsViewState extends State<IptvResultsView>
       _dbSnapshot = null;
       _dbGroupCounts = const {};
       _loadingStatus = null;
+      // The outgoing catalog's instances are no use to the incoming one.
+      _dbInstanceCache.clear();
+      _dbInstanceCacheKey = null;
       // Positions belong to the outgoing playlist's URLs.
       _progressByUrl = {};
       // An open schedule belongs to the outgoing playlist too.
@@ -897,7 +912,20 @@ class IptvResultsViewState extends State<IptvResultsView>
       search: search,
       onPageLoaded: (page) => _loadPageProgress(ticket, page),
       onEvicted: _retireEvictedInstances,
+      instanceCache: _instanceCacheFor(snap),
     );
+  }
+
+  /// The shared instance cache for [snap]'s generation, cleared when the
+  /// catalog or generation changes so a stale instance (old data) can never
+  /// be reused.
+  LinkedHashMap<int, IptvChannel> _instanceCacheFor(CatalogSnapshot snap) {
+    final key = '${snap.catalogKey}#${snap.generation}';
+    if (_dbInstanceCacheKey != key) {
+      _dbInstanceCache.clear();
+      _dbInstanceCacheKey = key;
+    }
+    return _dbInstanceCache;
   }
 
   /// Progress bars for a freshly faulted page — the DB-mode replacement for
