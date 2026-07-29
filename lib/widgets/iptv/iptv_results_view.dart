@@ -117,6 +117,13 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// ingested within it presents without a background revalidate.
   static const Duration _dbCatalogTtl = Duration(minutes: 30);
 
+  /// Set when a playlist switch was made from the TV source rail: once the
+  /// new catalog presents, DPAD focus moves into the content pane. Moving
+  /// focus off the rail is what collapses its expanded overlay (the rail
+  /// stays open only while one of its chips holds focus), so this is how
+  /// "pick a source → the picker collapses and the list takes over" works.
+  bool _focusContentAfterLoad = false;
+
   // Content type for Xtream Codes playlists
   String _selectedContentType = 'live';
 
@@ -717,6 +724,11 @@ class IptvResultsViewState extends State<IptvResultsView>
         _isLoadingMore = false;
         _errorMessage = result.error;
       });
+      // A rail-initiated switch that errored must still leave the rail: the
+      // error (with its Retry) lives in the content pane, and stranding
+      // focus on the collapsing rail would trap DPAD. Falls back to the
+      // in-pane filter row (channels are empty here).
+      _consumeContentFocusRequest();
       return;
     }
 
@@ -805,6 +817,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // context against this result without refetching the whole playlist.
     _lastLoadResult = result;
     _updateEpgContext(playlist, result, ticket);
+    _consumeContentFocusRequest();
   }
 
   /// Bind a DB-backed catalog to the view: [_allChannels] and
@@ -869,6 +882,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
     _lastLoadResult = displayed;
     _updateEpgContext(playlist, displayed, ticket);
+    _consumeContentFocusRequest();
   }
 
   DbChannelList _makeDbList(
@@ -1609,6 +1623,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         now.difference(last) < const Duration(milliseconds: 300)) {
       return;
     }
+    final wasFirstBatch = firstBatch;
     _lastProgressiveApply = now;
     setState(() {
       _isLoading = false; // first batch swaps the spinner for real rows
@@ -1617,6 +1632,9 @@ class IptvResultsViewState extends State<IptvResultsView>
       _categories = categories;
     });
     _applyFilters();
+    // A Stremio source picked from the rail: hand focus to the content pane
+    // once its first batch of rows is on screen (later batches keep focus).
+    if (wasFirstBatch) _consumeContentFocusRequest();
   }
 
   /// Look up saved positions for the loaded list. Live channels can't have
@@ -1810,11 +1828,25 @@ class IptvResultsViewState extends State<IptvResultsView>
     });
   }
 
-  void _onPlaylistChanged(IptvPlaylist? playlist) {
-    if (playlist == null || playlist == _selectedPlaylist) return;
+  void _onPlaylistChanged(IptvPlaylist? playlist, {bool focusContent = false}) {
+    if (playlist == null) return;
+    if (playlist == _selectedPlaylist) {
+      // Re-picking the current source shouldn't reload, but from the rail it
+      // still means "take me to the list" — collapse the rail and focus the
+      // already-loaded content instead of a dead OK press.
+      if (focusContent) {
+        _focusContentAfterLoad = true;
+        _consumeContentFocusRequest();
+      }
+      return;
+    }
 
     // A pending content-type load belongs to the outgoing playlist.
     _contentTypeDebounce?.cancel();
+    // Honored by the present paths once the new list is on screen. Only the
+    // rail/picker set it — a dropdown or programmatic switch keeps focus
+    // where it was.
+    _focusContentAfterLoad = focusContent;
     setState(() {
       _selectedPlaylist = playlist;
       _selectedCategory = null;
@@ -1824,6 +1856,26 @@ class IptvResultsViewState extends State<IptvResultsView>
     });
 
     _loadPlaylist(playlist);
+  }
+
+  /// Move DPAD focus into the content pane after a rail-initiated playlist
+  /// switch, which collapses the source rail's overlay. Post-frame so the
+  /// grid's first row (and its lazily-created focus node) exists; falls back
+  /// to the in-pane filter row when the new catalog is empty or errored, so
+  /// focus never strands on the collapsing rail.
+  void _consumeContentFocusRequest() {
+    if (!_focusContentAfterLoad) return;
+    _focusContentAfterLoad = false;
+    if (!widget.isTelevision) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_filteredChannels.isNotEmpty) {
+        _focusNodeFor(_filteredChannels.first).requestFocus();
+      } else {
+        _playlistFilterFocusNode.requestFocus();
+      }
+    });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   Timer? _contentTypeDebounce;
@@ -2297,7 +2349,11 @@ class IptvResultsViewState extends State<IptvResultsView>
       selectedPlaylist: _selectedPlaylist,
       onAddPlaylist: _navigateToSettings,
     );
-    if (result != null) _onPlaylistChanged(result);
+    // The picker sheet is dismissed by its own selection; on TV, land DPAD
+    // focus on the list rather than back on the (now-collapsed) rail.
+    if (result != null) {
+      _onPlaylistChanged(result, focusContent: widget.isTelevision);
+    }
   }
 
   void _navigateToSettings() {
@@ -2509,7 +2565,14 @@ class IptvResultsViewState extends State<IptvResultsView>
             selectedId: _selectedPlaylist?.id,
             isTelevision: widget.isTelevision,
             inlineExpanded: inlineRail,
-            onSelect: (playlist) => _onPlaylistChanged(playlist),
+            // On TV, picking a source collapses the rail's overlay and hands
+            // focus to the list — the standard sidebar → content flow. (On
+            // desktop the rail is an inline column / hover overlay that the
+            // pointer already dismisses, so leave focus alone.)
+            onSelect: (playlist) => _onPlaylistChanged(
+              playlist,
+              focusContent: widget.isTelevision,
+            ),
             onManage: _navigateToSettings,
             onOverflow: _openPlaylistPickerFromRail,
             // RIGHT from a rail chip lands on the quiet filter row's first
