@@ -43,7 +43,21 @@ String _dayLabel(DateTime day) {
 /// guide data — the rail simply looks like it did before EPG existed.
 class IptvRailEpgCard extends StatefulWidget {
   final IptvChannel? channel;
-  const IptvRailEpgCard({super.key, required this.channel});
+
+  /// Compact "now" treatment for the TV focus-stage overlay. The standard
+  /// desktop rail keeps its fuller now/next presentation.
+  final bool stageOverlay;
+
+  /// Tightens spacing and limits text to one line when the lower stage section
+  /// is short. Programme descriptions remain visible.
+  final bool dense;
+
+  const IptvRailEpgCard({
+    super.key,
+    required this.channel,
+    this.stageOverlay = false,
+    this.dense = false,
+  });
 
   @override
   State<IptvRailEpgCard> createState() => _IptvRailEpgCardState();
@@ -152,6 +166,98 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
     final next = data.next;
     final at = DateTime.now();
 
+    if (widget.stageOverlay) {
+      if (now == null) {
+        if (next == null) return const SizedBox.shrink();
+        return Row(
+          children: [
+            const _EpgTag('NEXT', dim: true),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                next.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.78),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _clock(context, next.start),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.48),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        );
+      }
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _EpgTag('NOW'),
+              const Spacer(),
+              Text(
+                '${_clock(context, now.start)} – ${_clock(context, now.stop)}',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.52),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: widget.dense ? 3 : 7),
+          Text(
+            now.title,
+            maxLines: widget.dense ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: widget.dense ? 14 : 16,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
+            ),
+          ),
+          if (now.description.isNotEmpty) ...[
+            SizedBox(height: widget.dense ? 3 : 6),
+            if (widget.dense)
+              _OverflowMarqueeText(
+                text: now.description,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.58),
+                  fontSize: 10.5,
+                  height: 1.2,
+                ),
+              )
+            else
+              Text(
+                now.description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.58),
+                  fontSize: 11.5,
+                  height: 1.35,
+                ),
+              ),
+          ],
+          SizedBox(height: widget.dense ? 5 : 9),
+          _EpgProgressBar(progress: now.progressAt(at)),
+        ],
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,6 +363,120 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
     if (left < 60) return '$left min left';
     final h = left ~/ 60, m = left % 60;
     return m == 0 ? '${h}h left' : '${h}h ${m}m left';
+  }
+}
+
+/// A restrained one-line marquee for the compact TV stage. It stays still when
+/// the full description fits, waits before moving, pauses at the end, then
+/// resets to the beginning before repeating in the same direction.
+class _OverflowMarqueeText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+
+  const _OverflowMarqueeText({
+    required this.text,
+    required this.style,
+  });
+
+  @override
+  State<_OverflowMarqueeText> createState() => _OverflowMarqueeTextState();
+}
+
+class _OverflowMarqueeTextState extends State<_OverflowMarqueeText> {
+  static const _initialPause = Duration(milliseconds: 1400);
+  static const _edgePause = Duration(milliseconds: 1100);
+  static const _pixelsPerSecond = 34.0;
+
+  final ScrollController _controller = ScrollController();
+  Timer? _pause;
+  int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _restart();
+  }
+
+  @override
+  void didUpdateWidget(_OverflowMarqueeText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text ||
+        oldWidget.style != widget.style) {
+      _restart();
+    }
+  }
+
+  void _restart() {
+    _generation++;
+    _pause?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_controller.hasClients) _controller.jumpTo(0);
+      _schedule(_initialPause, _generation);
+    });
+  }
+
+  void _schedule(Duration delay, int generation) {
+    _pause?.cancel();
+    _pause = Timer(delay, () => _scroll(generation));
+  }
+
+  Future<void> _scroll(int generation) async {
+    if (!mounted ||
+        generation != _generation ||
+        !_controller.hasClients ||
+        (MediaQuery.maybeOf(context)?.disableAnimations ?? false)) {
+      return;
+    }
+    final max = _controller.position.maxScrollExtent;
+    if (max <= 0.5) return;
+    final distance = (_controller.offset - max).abs();
+    final milliseconds =
+        (distance / _pixelsPerSecond * 1000).round().clamp(700, 14000);
+    try {
+      await _controller.animateTo(
+        max,
+        duration: Duration(milliseconds: milliseconds),
+        curve: Curves.linear,
+      );
+    } catch (_) {
+      return;
+    }
+    if (!mounted || generation != _generation) return;
+    _pause = Timer(_edgePause, () {
+      if (!mounted ||
+          generation != _generation ||
+          !_controller.hasClients) {
+        return;
+      }
+      _controller.jumpTo(0);
+      _schedule(_initialPause, generation);
+    });
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _pause?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        child: Text(
+          widget.text,
+          maxLines: 1,
+          softWrap: false,
+          style: widget.style,
+        ),
+      ),
+    );
   }
 }
 

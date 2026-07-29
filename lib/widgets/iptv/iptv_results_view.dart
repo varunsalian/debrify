@@ -2555,14 +2555,18 @@ class IptvResultsViewState extends State<IptvResultsView>
   Widget _buildTvTwoPane(BoxConstraints c) {
     // Every source (Favorites, Continue watching, and each playlist) lives in
     // the header's Sources dropdown now — no left rail eating horizontal space.
-    // The preview takes its share of the full width; the guide gets the rest.
+    // TV uses a wider focus stage; desktop keeps the compact preview rail so a
+    // resizable window never gives up too much guide space.
     final paneW = c.maxWidth;
-    final railW = (paneW * 0.40).clamp(320.0, 470.0);
+    final stageShare = paneW >= 1200 ? 0.44 : 0.40;
+    final stageW = widget.isTelevision
+        ? (paneW * stageShare).clamp(340.0, 760.0)
+        : (paneW * 0.40).clamp(320.0, 470.0);
     final scheduleChannel = _scheduleChannel;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(width: railW, child: _buildPreviewRail()),
+        SizedBox(width: stageW, child: _buildPreviewRail()),
         Expanded(
           // An open schedule covers the guide column in place — the preview
           // rail keeps playing, and BACK restores the list exactly as it
@@ -2811,25 +2815,21 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   Widget _buildPreviewRail() {
     return Padding(
-      // The source rail supplies the left inset when it's present.
       padding: EdgeInsets.fromLTRB(_redesignEnabled ? 14 : 24, 16, 12, 16),
       child: ValueListenableBuilder<int>(
         valueListenable: _previewEpoch,
         builder: (context, epoch, _) => ValueListenableBuilder<IptvChannel?>(
           valueListenable: _previewShown,
-          builder: (context, ch, _) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildPreviewStage(ch, epoch),
-              const SizedBox(height: 16),
-              Expanded(child: _IptvRailInfo(channel: ch)),
-              // Remote-key hints are TV language; the pointer world gets one
-              // quiet line instead.
-              if (widget.isTelevision)
-                _IptvRailHints(
-                  showGuide: ch != null && IptvEpgService.isEpgCapable(ch),
-                )
-              else
+          builder: (context, ch, _) {
+            if (widget.isTelevision) {
+              return _buildTvFocusStage(ch, epoch);
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildPreviewStage(ch, epoch),
+                const SizedBox(height: 16),
+                Expanded(child: _IptvRailInfo(channel: ch)),
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
@@ -2842,8 +2842,33 @@ class IptvResultsViewState extends State<IptvResultsView>
                     ),
                   ),
                 ),
-            ],
-          ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Television's preview-first composition: a true 16:9 video surface in the
+  /// upper section, with identity, EPG and key hints on a separate lower
+  /// surface. Keeping chrome outside the video avoids cover-cropping a normal
+  /// broadcast into a tall stage.
+  Widget _buildTvFocusStage(IptvChannel? ch, int epoch) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: ColoredBox(
+        color: const Color(0xFF0B0914),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildPreviewStage(ch, epoch),
+            Expanded(
+              child: ch == null
+                  ? const SizedBox.shrink()
+                  : _IptvFocusStageInfo(channel: ch),
+            ),
+          ],
         ),
       ),
     );
@@ -2853,7 +2878,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -3668,6 +3693,144 @@ class _TuningBarsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TuningBarsPainter oldDelegate) => false;
+}
+
+/// TV focus-stage identity and programme overlay. The solid lower stop keeps
+/// text legible on bright channels without a blur/filter pass.
+class _IptvFocusStageInfo extends StatelessWidget {
+  final IptvChannel channel;
+
+  const _IptvFocusStageInfo({required this.channel});
+
+  @override
+  Widget build(BuildContext context) {
+    final brand = brandAccentFor(channel.name);
+    final resMatch = _railResExp.firstMatch(channel.name);
+    final resolution = resMatch?.group(1)?.toLowerCase();
+    final displayName = resMatch == null
+        ? channel.name
+        : channel.name
+            .replaceRange(resMatch.start, resMatch.end, '')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+    final group = channel.group?.trim();
+    final subParts = <String>[
+      if (group != null && group.isNotEmpty) group,
+      if (resolution != null) resolution,
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final dense = constraints.maxHeight < 250;
+        final logoSize = dense ? 32.0 : 44.0;
+        return ColoredBox(
+          color: const Color(0xFF0B0914),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              dense ? 18 : 24,
+              dense ? 8 : 18,
+              dense ? 18 : 24,
+              dense ? 7 : 18,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: logoSize,
+                      height: logoSize,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                        color: Color.alphaBlend(
+                          brand.withValues(alpha: 0.18),
+                          const Color(0xFF171B19),
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: (channel.logoUrl != null &&
+                                channel.logoUrl!.isNotEmpty)
+                            ? CachedNetworkImage(
+                                imageUrl: channel.logoUrl!,
+                                fit: BoxFit.contain,
+                                memCacheHeight: 96,
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
+                                errorWidget: (_, __, ___) => Icon(
+                                  Icons.live_tv_rounded,
+                                  size: dense ? 16 : 20,
+                                  color: brand.withValues(alpha: 0.85),
+                                ),
+                              )
+                            : Icon(
+                                Icons.live_tv_rounded,
+                                size: dense ? 16 : 20,
+                                color: brand.withValues(alpha: 0.85),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: dense ? 15 : 19,
+                              fontWeight: FontWeight.w800,
+                              height: 1.1,
+                            ),
+                          ),
+                          if (subParts.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              subParts.join('  •  '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.52),
+                                fontSize: dense ? 10.5 : 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: dense ? 5 : 13),
+                Container(
+                  width: double.infinity,
+                  height: 1,
+                  color: Colors.white.withValues(alpha: 0.13),
+                ),
+                SizedBox(height: dense ? 5 : 12),
+                IptvRailEpgCard(
+                  channel: channel,
+                  stageOverlay: true,
+                  dense: dense,
+                ),
+                const Spacer(),
+                _IptvRailHints(
+                  showGuide: IptvEpgService.isEpgCapable(channel),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Identity block under the stage: logo chip, channel name (resolution pulled
