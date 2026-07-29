@@ -38,10 +38,7 @@ class IptvCatalogDb {
   IptvCatalogDb._();
 
   static const _dbFileName = 'iptv_catalog.db';
-  // v2: added the `channels_fts` FTS5 index (+ sync triggers) so catalog
-  // search is an index lookup instead of a `LIKE '%term%'` full scan on the
-  // UI isolate. Bumping this triggers a one-time backfill in [open].
-  static const _schemaVersion = 2;
+  static const _schemaVersion = 1;
 
   /// Tests point this at a temp directory; production resolves the app
   /// documents directory once in [open].
@@ -72,39 +69,9 @@ class IptvCatalogDb {
         (await getApplicationDocumentsDirectory()).path;
     final path = p.join(dir, _dbFileName);
     final db = _openConnection(path);
-    // The on-disk version tells a fresh DB (null) from a pre-FTS one (v1).
-    final priorVersion = _readSchemaVersion(db);
     _createSchema(db);
-    if (priorVersion == null) {
-      // Brand-new DB: schema is current, nothing to backfill.
-      _writeSchemaVersion(db, _schemaVersion);
-    } else if (priorVersion < 2) {
-      // Pre-FTS catalog rows exist; the triggers only fire on future writes,
-      // so the index must be backfilled once from the current rows. `rebuild`
-      // trigram-tokenizes every stored row — potentially 100k+ across catalogs
-      // and generations — so it runs on a WORKER isolate rather than freezing
-      // the UI while the splash awaits open(). The version is stamped only
-      // after it succeeds, so a failure is retried next launch.
-      await compute(_rebuildFtsIndexJob, path);
-      _writeSchemaVersion(db, _schemaVersion);
-    }
     _db = db;
     _path = path;
-  }
-
-  /// The schema version recorded on disk, or null when the database is fresh
-  /// (no `meta` table / no row yet). Read before [_createSchema] rewrites it.
-  static int? _readSchemaVersion(Database db) {
-    try {
-      final rows = db.select(
-        "SELECT value FROM meta WHERE key = 'schema_version'",
-      );
-      if (rows.isEmpty) return null;
-      return int.tryParse(rows.first['value'] as String);
-    } catch (_) {
-      // meta table doesn't exist yet — brand-new database.
-      return null;
-    }
   }
 
   @visibleForTesting
@@ -175,39 +142,6 @@ class IptvCatalogDb {
       CREATE INDEX IF NOT EXISTS idx_channels_url
       ON channels(catalog_key, generation, url)
     ''');
-    // Full-text search over the same haystack `search_key` holds (lowercased
-    // name + group). External-content FTS5 keyed to `channels.id` — the index
-    // only, no duplicated text. The `trigram` tokenizer is deliberate: it
-    // makes a MATCH behave like the old `LIKE '%term%'` — a case-insensitive
-    // SUBSTRING match, mid-word included — but served from the index instead
-    // of a full catalog scan on the UI isolate (that scan was the "Search all"
-    // freeze). Substrings under 3 chars can't use a trigram index and fall
-    // back to a scan, but those are the rare early-keystroke queries. The
-    // triggers keep the index in lockstep with the generation rewrites: every
-    // row INSERT indexes it, every DELETE (the old-generation prune) de-indexes
-    // it, so a MATCH plus the catalog_key+generation filter is always
-    // scoped-correct. Rows are only inserted or deleted, never updated, so no
-    // update trigger.
-    db.execute('''
-      CREATE VIRTUAL TABLE IF NOT EXISTS channels_fts USING fts5(
-        search_key,
-        content='channels',
-        content_rowid='id',
-        tokenize="trigram"
-      )
-    ''');
-    db.execute('''
-      CREATE TRIGGER IF NOT EXISTS channels_fts_ai AFTER INSERT ON channels BEGIN
-        INSERT INTO channels_fts(rowid, search_key)
-        VALUES (new.id, new.search_key);
-      END
-    ''');
-    db.execute('''
-      CREATE TRIGGER IF NOT EXISTS channels_fts_ad AFTER DELETE ON channels BEGIN
-        INSERT INTO channels_fts(channels_fts, rowid, search_key)
-        VALUES ('delete', old.id, old.search_key);
-      END
-    ''');
     // XMLTV guide storage (one guide per md5(epgUrl) key): programme rows
     // queried per (guide, channel) at row-paint time, plus one metadata row
     // holding freshness and the name→id resolutions the parser made.
@@ -232,29 +166,10 @@ class IptvCatalogDb {
         name_to_id_json TEXT
       )
     ''');
-    // NB: schema_version is NOT stamped here — [open] writes it only AFTER any
-    // one-time FTS backfill succeeds, so a failed/interrupted migration is
-    // retried on the next launch instead of being marked done.
-  }
-
-  static void _writeSchemaVersion(Database db, int version) {
     db.execute(
       "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
-      ['$version'],
+      ['$_schemaVersion'],
     );
-  }
-
-  /// Worker-isolate entry ([compute]): rebuilds the whole FTS index from the
-  /// current channel rows. Only the one-time v1→v2 backfill uses it, off the
-  /// UI isolate so trigram-tokenizing a six-figure row set never blocks a
-  /// frame. Opens its own connection (handles can't cross isolates).
-  static void _rebuildFtsIndexJob(String dbPath) {
-    withConnection(dbPath, (db) {
-      // The UI connection already created channels_fts before dispatching this;
-      // recreate defensively (IF NOT EXISTS) in case of WAL visibility skew.
-      _createSchema(db);
-      db.execute("INSERT INTO channels_fts(channels_fts) VALUES('rebuild')");
-    });
   }
 
   // ── Ingest (worker isolate) ──────────────────────────────────────────────
@@ -711,44 +626,6 @@ class IptvCatalogDb {
     } catch (_) {}
     return const [];
   }
-
-  // ── Worker-side snapshot access ──────────────────────────────────────────
-  //
-  // A CatalogSnapshot binds to a live [Database], which can't cross isolates.
-  // A worker (e.g. the global-search isolate) opens its OWN connection from
-  // [path] via [withConnection] and pins snapshots to it with [snapshotOn].
-
-  /// Runs [body] with a throwaway connection opened on [dbPath], disposing it
-  /// afterward. For worker isolates that were handed [IptvCatalogDb.path].
-  static T withConnection<T>(String dbPath, T Function(Database db) body) {
-    final db = _openConnection(dbPath);
-    try {
-      return body(db);
-    } finally {
-      db.dispose();
-    }
-  }
-
-  /// A snapshot pinned to an explicit (catalogKey, generation) on [db] — for
-  /// worker-side readers whose caller already resolved the generation on the
-  /// UI connection. Only the fields the read path uses are populated; catalog
-  /// metadata (channelCount, categories, epg, …) is left at defaults because
-  /// search/count/page never touch it.
-  static CatalogSnapshot snapshotOn(
-    Database db,
-    String catalogKey,
-    int generation,
-  ) =>
-      CatalogSnapshot._(
-        db: db,
-        catalogKey: catalogKey,
-        generation: generation,
-        channelCount: 0,
-        contentDigest: '',
-        categories: const [],
-        epgUrl: null,
-        ingestedAt: 0,
-      );
 }
 
 /// A read view pinned to one committed generation of one catalog.
@@ -801,136 +678,45 @@ class CatalogSnapshot {
 
   List<Object?> _args({
     String? group,
+    String? search,
     int? beforePosition,
   }) =>
       [
         catalogKey,
         generation,
         if (group != null) group,
+        if (search != null && search.isNotEmpty)
+          '%${_escapeLike(search.toLowerCase())}%',
         if (beforePosition != null) beforePosition,
       ];
 
   String _where({
     String? group,
+    String? search,
     bool? live,
     int? beforePosition,
   }) {
     final buf = StringBuffer(_base);
     if (group != null) buf.write(' AND grp = ?');
+    if (search != null && search.isNotEmpty) {
+      buf.write(" AND search_key LIKE ? ESCAPE '\\'");
+    }
     if (live != null) buf.write(live ? ' AND $_isLiveSql' : ' AND NOT $_isLiveSql');
     if (beforePosition != null) buf.write(' AND position < ?');
     return buf.toString();
   }
 
   /// LIKE special characters in user input must match literally — searching
-  /// for "100%" should not match everything. Used by the short-substring LIKE
-  /// fallback and the name-prefix "lead" bucket in [searchPage].
+  /// for "100%" should not match everything.
   static String _escapeLike(String term) => term
       .replaceAll(r'\', r'\\')
       .replaceAll('%', r'\%')
       .replaceAll('_', r'\_');
 
-  /// Wraps text as a single FTS5 string literal (`"..."`, inner quotes
-  /// doubled). Under the trigram tokenizer a quoted phrase matches as a
-  /// contiguous, case-insensitive substring — exactly what `LIKE '%text%'`
-  /// did — and the quoting keeps `%`, `_`, `*`, `-`, `:` etc. literal so a
-  /// channel name can't be read as an FTS operator.
-  static String _ftsLiteral(String text) =>
-      '"${text.toLowerCase().replaceAll('"', '""')}"';
-
-  /// Trigram indexes 3-character windows, so a substring shorter than this
-  /// can't use the index. Those (very common: "uk", "hd", "4k") fall back to
-  /// a `LIKE '%x%'` predicate instead.
-  static const _ftsMinChars = 3;
-
-  /// Splits the substrings a search must AND-match into the FTS-indexable ones
-  /// (≥ [_ftsMinChars], joined into one MATCH expression) and the short ones
-  /// that need a LIKE scan. Returns null when nothing survives trimming — the
-  /// caller then yields no rows rather than matching everything.
-  static ({String? ftsMatch, List<String> likeTerms})? _planSearch(
-    List<String> substrings,
-  ) {
-    final fts = <String>[];
-    final short = <String>[];
-    for (final s in substrings) {
-      final t = s.trim().toLowerCase();
-      if (t.isEmpty) continue;
-      (t.length >= _ftsMinChars ? fts : short).add(t);
-    }
-    if (fts.isEmpty && short.isEmpty) return null;
-    return (
-      ftsMatch: fts.isEmpty ? null : fts.map(_ftsLiteral).join(' '),
-      likeTerms: short,
-    );
-  }
-
-  /// Builds the `FROM … WHERE …` core for a planned search plus its args. When
-  /// the plan has an FTS part the query is driven off the index (join back to
-  /// the row); otherwise it's a plain channels scan (all substrings were too
-  /// short to index). `search_key` is the only column ambiguous across the
-  /// join, so it alone is qualified via [col]; everything else is unambiguous.
-  (String, List<Object?>) _searchCore(
-    ({String? ftsMatch, List<String> likeTerms}) plan, {
-    String? group,
-    bool? live,
-    int? beforePosition,
-    bool? namePrefixLead,
-    String? namePrefixTerm,
-  }) {
-    final col = plan.ftsMatch != null ? 'c.' : '';
-    final buf = StringBuffer();
-    final args = <Object?>[];
-    if (plan.ftsMatch != null) {
-      buf.write('FROM channels_fts f JOIN channels c ON c.id = f.rowid '
-          'WHERE f.search_key MATCH ? AND catalog_key = ? AND generation = ?');
-      args..add(plan.ftsMatch)..add(catalogKey)..add(generation);
-    } else {
-      buf.write(_base);
-      args..add(catalogKey)..add(generation);
-    }
-    for (final t in plan.likeTerms) {
-      buf.write(" AND ${col}search_key LIKE ? ESCAPE '\\'");
-      args.add('%${_escapeLike(t)}%');
-    }
-    if (group != null) {
-      buf.write(' AND grp = ?');
-      args.add(group);
-    }
-    if (live != null) {
-      buf.write(live ? ' AND $_isLiveSql' : ' AND NOT $_isLiveSql');
-    }
-    if (beforePosition != null) {
-      buf.write(' AND position < ?');
-      args.add(beforePosition);
-    }
-    if (namePrefixLead != null && namePrefixTerm != null) {
-      buf.write(namePrefixLead
-          ? " AND ${col}search_key LIKE ? ESCAPE '\\'"
-          : " AND NOT (${col}search_key LIKE ? ESCAPE '\\')");
-      args.add('${_escapeLike(namePrefixTerm)}%');
-    }
-    return (buf.toString(), args);
-  }
-
   int count({String? group, String? search, bool? live, int? beforePosition}) {
-    // The filter box treats the whole query as one substring (spaces and all),
-    // preserving the old single `LIKE '%query%'`.
-    if (search != null && search.isNotEmpty) {
-      final plan = _planSearch([search]);
-      // A query that is only whitespace matches nothing — never fall through
-      // to an unfiltered count.
-      if (plan == null) return 0;
-      final (core, args) = _searchCore(plan,
-          group: group, live: live, beforePosition: beforePosition);
-      try {
-        return _db.select('SELECT COUNT(*) AS c $core', args).first['c'] as int;
-      } on SqliteException {
-        return 0;
-      }
-    }
     final rows = _db.select(
-      'SELECT COUNT(*) AS c ${_where(group: group, live: live, beforePosition: beforePosition)}',
-      _args(group: group, beforePosition: beforePosition),
+      'SELECT COUNT(*) AS c ${_where(group: group, search: search, live: live, beforePosition: beforePosition)}',
+      _args(group: group, search: search, beforePosition: beforePosition),
     );
     return rows.first['c'] as int;
   }
@@ -982,32 +768,10 @@ class CatalogSnapshot {
     String? search,
     bool? live,
   }) {
-    if (search != null && search.isNotEmpty) {
-      final plan = _planSearch([search]);
-      if (plan == null) return const [];
-      // With the FTS join `*` would pull in channels_fts's column too — select
-      // the channel row explicitly. Plain scans keep bare `*`.
-      final usesFts = plan.ftsMatch != null;
-      final columns = usesFts ? 'c.*' : '*';
-      final order = usesFts ? 'ORDER BY c.position' : 'ORDER BY position';
-      final (core, args) = _searchCore(plan, group: group, live: live);
-      try {
-        final rows = _db.select(
-          'SELECT $columns $core $order LIMIT ? OFFSET ?',
-          [...args, limit, offset],
-        );
-        return [
-          for (final row in rows)
-            (position: row['position'] as int, channel: _channelFromRow(row)),
-        ];
-      } on SqliteException {
-        return const [];
-      }
-    }
     final rows = _db.select(
-      'SELECT * ${_where(group: group, live: live)} '
+      'SELECT * ${_where(group: group, search: search, live: live)} '
       'ORDER BY position LIMIT ? OFFSET ?',
-      [..._args(group: group), limit, offset],
+      [..._args(group: group, search: search), limit, offset],
     );
     return [
       for (final row in rows)
@@ -1032,32 +796,57 @@ class CatalogSnapshot {
 
   // ── Multi-term search (global search) ────────────────────────────────────
   //
-  // The cross-source search page uses AND-of-terms semantics with name-prefix
-  // hits leading. Each term is one substring the row must contain: terms ≥3
-  // chars go through the FTS index, shorter ones (e.g. "uk", "hd") are a LIKE
-  // predicate ANDed on top. The name-prefix "lead" split stays a genuine
-  // prefix LIKE on `search_key` (which starts with the lowercased name),
-  // applied to the already-narrowed rows. Driving off the index is what keeps
-  // this off the UI-isolate full scan the old `LIKE '%term%'` forced.
+  // The cross-source search page uses AND-of-terms semantics with
+  // name-prefix hits leading — these queries reproduce its exact rules in
+  // SQL. `search_key` starts with the lowercased name, so a name-prefix test
+  // is a prefix LIKE on the column.
 
-  /// The first non-empty term, lowercased — the one the name-prefix "lead"
-  /// bucket keys on. Empty only when every term is blank (never, once the plan
-  /// is non-null).
-  static String _firstTerm(List<String> terms) => terms
-      .map((t) => t.trim().toLowerCase())
-      .firstWhere((t) => t.isNotEmpty, orElse: () => '');
+  String _termsWhere(
+    List<String> terms, {
+    bool? live,
+    bool? namePrefixLead,
+  }) {
+    final buf = StringBuffer(_base);
+    for (var i = 0; i < terms.length; i++) {
+      buf.write(" AND search_key LIKE ? ESCAPE '\\'");
+    }
+    if (live != null) {
+      // Exactly IptvChannel.isLive: an explicit content type decides;
+      // otherwise the M3U duration heuristic (-1 or absent = live).
+      const isLiveSql = '(CASE WHEN content_type IS NOT NULL '
+          "THEN content_type = 'live' "
+          'ELSE (duration IS NULL OR duration = -1) END)';
+      buf.write(live ? ' AND $isLiveSql' : ' AND NOT $isLiveSql');
+    }
+    if (namePrefixLead != null) {
+      buf.write(namePrefixLead
+          ? " AND search_key LIKE ? ESCAPE '\\'"
+          : " AND NOT (search_key LIKE ? ESCAPE '\\')");
+    }
+    return buf.toString();
+  }
+
+  List<Object?> _termsArgs(
+    List<String> terms, {
+    bool? namePrefixLead,
+  }) =>
+      [
+        catalogKey,
+        generation,
+        for (final term in terms) '%${_escapeLike(term.toLowerCase())}%',
+        if (namePrefixLead != null)
+          '${_escapeLike(terms.first.toLowerCase())}%',
+      ];
 
   /// Matches for AND-of-[terms] (optionally restricted to live / non-live
   /// rows, for 'mixed' M3U catalogs).
   int searchCount(List<String> terms, {bool? live}) {
-    final plan = _planSearch(terms);
-    if (plan == null) return 0;
-    final (core, args) = _searchCore(plan, live: live);
-    try {
-      return _db.select('SELECT COUNT(*) AS c $core', args).first['c'] as int;
-    } on SqliteException {
-      return 0;
-    }
+    if (terms.isEmpty) return 0;
+    final rows = _db.select(
+      'SELECT COUNT(*) AS c ${_termsWhere(terms, live: live)}',
+      _termsArgs(terms),
+    );
+    return rows.first['c'] as int;
   }
 
   /// Up to [limit] matches in catalog order. [namePrefixLead] true returns
@@ -1069,24 +858,13 @@ class CatalogSnapshot {
     bool? namePrefixLead,
     required int limit,
   }) {
-    if (limit <= 0) return const [];
-    final plan = _planSearch(terms);
-    if (plan == null) return const [];
-    final columns = plan.ftsMatch != null ? 'c.*' : '*';
-    final order = plan.ftsMatch != null ? 'c.position' : 'position';
-    final (core, args) = _searchCore(plan,
-        live: live,
-        namePrefixLead: namePrefixLead,
-        namePrefixTerm: namePrefixLead == null ? null : _firstTerm(terms));
-    try {
-      final rows = _db.select(
-        'SELECT $columns $core ORDER BY $order LIMIT ?',
-        [...args, limit],
-      );
-      return [for (final row in rows) _channelFromRow(row)];
-    } on SqliteException {
-      return const [];
-    }
+    if (terms.isEmpty || limit <= 0) return const [];
+    final rows = _db.select(
+      'SELECT * ${_termsWhere(terms, live: live, namePrefixLead: namePrefixLead)} '
+      'ORDER BY position LIMIT ?',
+      [..._termsArgs(terms, namePrefixLead: namePrefixLead), limit],
+    );
+    return [for (final row in rows) _channelFromRow(row)];
   }
 
   static IptvChannel _channelFromRow(Row row) {

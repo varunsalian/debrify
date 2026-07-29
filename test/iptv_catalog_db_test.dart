@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
-import 'package:sqlite3/sqlite3.dart';
 
 IptvChannel _ch(
   int i, {
@@ -154,103 +153,6 @@ void main() {
     expect(snap.count(search: '0% h'), 1);
     expect(snap.count(search: '_'), 0,
         reason: '"_" must not match arbitrary characters');
-  });
-
-  test('short (<3 char) queries still match via the LIKE fallback', () {
-    // Trigram indexes 3-char windows, so "uk"/"hd"/"4k"/"us" can't use the
-    // index — extremely common IPTV searches that must keep working.
-    IptvCatalogDb.ingest(
-      dbPath: IptvCatalogDb.path,
-      catalogKey: 'k',
-      channels: [
-        _ch(0, name: 'BBC One HD', group: 'UK'),
-        _ch(1, name: 'CNN', group: 'News US'),
-        _ch(2, name: 'ESPN 4K', group: 'US'),
-      ],
-    );
-    final snap = IptvCatalogDb.snapshot('k')!;
-    expect(snap.count(search: 'uk'), 1, reason: '2-char group substring');
-    expect(snap.count(search: 'hd'), 1);
-    expect(snap.count(search: '4k'), 1);
-    expect(snap.count(search: 'us'), 2, reason: 'both US-group channels');
-    expect(snap.count(search: 'zz'), 0);
-    // Global search takes the same fallback.
-    expect(snap.searchCount(['hd']), 1);
-    expect(snap.searchCount(['4k']), 1);
-  });
-
-  test('global search mixes an indexed term with a short LIKE term', () {
-    IptvCatalogDb.ingest(
-      dbPath: IptvCatalogDb.path,
-      catalogKey: 'k',
-      channels: [
-        _ch(0, name: 'Sky Sports F1', group: 'UK'),
-        _ch(1, name: 'Sky Sports F1', group: 'US'),
-        _ch(2, name: 'BT Sport', group: 'UK'),
-      ],
-    );
-    final snap = IptvCatalogDb.snapshot('k')!;
-    // 'sports' (>=3, FTS) AND 'uk' (<3, LIKE) — only the UK Sky Sports row.
-    expect(snap.searchCount(['sports', 'uk']), 1);
-    final hit = snap
-        .searchPage(['sports', 'uk'], namePrefixLead: false, limit: 10)
-        .single;
-    expect(hit.name, 'Sky Sports F1');
-    expect(hit.group, 'UK');
-  });
-
-  test('the FTS index tracks generations: search never leaks the old one', () {
-    IptvCatalogDb.ingest(
-      dbPath: IptvCatalogDb.path,
-      catalogKey: 'k',
-      channels: [_ch(0, name: 'Sky News'), _ch(1, name: 'Sky Sports')],
-    );
-    IptvCatalogDb.ingest(
-      dbPath: IptvCatalogDb.path,
-      catalogKey: 'k',
-      channels: [_ch(2, name: 'Sky One')],
-    );
-    // The current snapshot sees only its own generation, not the retained
-    // previous one — even though both generations' rows sit in the shared FTS.
-    final fresh = IptvCatalogDb.snapshot('k')!;
-    expect(fresh.searchCount(['sky']), 1, reason: 'only "Sky One" this gen');
-    expect(fresh.count(search: 'sky'), 1);
-
-    // A third ingest sweeps generation 1; its FTS rows must go with it via the
-    // delete trigger, or a stale index would keep matching swept channels.
-    IptvCatalogDb.ingest(
-      dbPath: IptvCatalogDb.path,
-      catalogKey: 'k',
-      channels: [_ch(3, name: 'BBC')],
-    );
-    final newest = IptvCatalogDb.snapshot('k')!;
-    expect(newest.searchCount(['sky']), 0, reason: 'no Sky rows survive');
-    expect(newest.searchCount(['bbc']), 1);
-  });
-
-  test('opening a pre-FTS (v1) database backfills the search index', () async {
-    IptvCatalogDb.ingest(
-      dbPath: IptvCatalogDb.path,
-      catalogKey: 'k',
-      channels: [_ch(0, name: 'Sky Sports'), _ch(1, name: 'BBC One')],
-    );
-    final dbFile = IptvCatalogDb.path;
-    IptvCatalogDb.debugClose();
-
-    // Roll the on-disk database back to the v1 shape: rows present, but no FTS
-    // table/triggers and schema_version = 1, exactly like an updating user.
-    final raw = sqlite3.open(dbFile);
-    raw.execute('DROP TRIGGER IF EXISTS channels_fts_ai');
-    raw.execute('DROP TRIGGER IF EXISTS channels_fts_ad');
-    raw.execute('DROP TABLE IF EXISTS channels_fts');
-    raw.execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'");
-    raw.dispose();
-
-    await IptvCatalogDb.open();
-    final snap = IptvCatalogDb.snapshot('k')!;
-    expect(snap.count(search: 'sport'), 1,
-        reason: 'rebuild indexed the pre-existing rows');
-    expect(snap.searchCount(['bbc']), 1);
   });
 
   test('re-ingest swaps generations atomically and staleness is visible', () {

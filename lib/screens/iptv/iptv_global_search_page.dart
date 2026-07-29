@@ -68,10 +68,6 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
   Timer? _debounce;
   IptvGlobalSearchResults? _results;
 
-  /// Monotonic search id — a search may resolve on a worker isolate, so a
-  /// slower earlier run must not overwrite a newer one's results.
-  int _searchSeq = 0;
-
   /// Flat render list + one focus node per hit, in DPAD order.
   List<_Row> _rows = const [];
   final List<FocusNode> _hitNodes = [];
@@ -121,16 +117,10 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
     });
   }
 
-  Future<void> _runSearch() async {
+  void _runSearch() {
     final index = _index;
     if (index == null || _query.isEmpty) return;
-    final query = _query;
-    final seq = ++_searchSeq;
-    final results = await index.searchAsync(query);
-    // Drop stale results: a newer search started, the field moved on, or the
-    // page went away while the worker ran.
-    if (!mounted || seq != _searchSeq || query != _query) return;
-    _applyResults(results);
+    _applyResults(index.search(_query));
   }
 
   void _applyResults(IptvGlobalSearchResults? results) {
