@@ -112,12 +112,28 @@ class MainActivity : FlutterActivity() {
     // SurfaceView(s). See trailerUnderlayContainer().
     private var trailerUnderlayContainer: FrameLayout? = null
 
-    private fun isTelevision(): Boolean = try {
-        (getSystemService(UI_MODE_SERVICE) as UiModeManager)
-            .currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
-    } catch (e: Exception) {
-        false
+    /** True on Android TV, computed once. UI_MODE_TYPE_TELEVISION alone misses
+     *  some Google TV / Chromecast / Fire builds that report a non-TV UI mode,
+     *  dropping them onto the system IME and its broken DPAD typing
+     *  (flutter#177360); FEATURE_LEANBACK is present ONLY on TV devices, so it's
+     *  a safe widener. The two probes are independent — a throw in the UI-mode
+     *  cast must not skip the Leanback fallback (the whole point of widening). */
+    private val televisionDetected: Boolean by lazy {
+        val uiIsTv = try {
+            (getSystemService(UI_MODE_SERVICE) as? UiModeManager)?.currentModeType ==
+                Configuration.UI_MODE_TYPE_TELEVISION
+        } catch (e: Exception) {
+            false
+        }
+        val leanback = try {
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        } catch (e: Exception) {
+            false
+        }
+        uiIsTv || leanback
     }
+
+    private fun isTelevision(): Boolean = televisionDetected
 
     /** The Dart-owned setting (Settings → Home Page → Native Trailer Surface),
      *  read from the shared_preferences plugin's store. Must be checked here
@@ -785,13 +801,10 @@ class MainActivity : FlutterActivity() {
 					}
 				}
 				"isTelevision" -> {
-					try {
-						val uiModeManager = getSystemService(UI_MODE_SERVICE) as UiModeManager
-						val isTv = uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
-						result.success(isTv)
-					} catch (e: Exception) {
-						result.success(false)
-					}
+					// Single source of truth — includes the Leanback fallback so a
+					// device that reports a non-TV UI mode still gets the Debrify
+					// keyboard instead of the broken system IME (flutter#177360).
+					result.success(isTelevision())
 				}
 				"getDeviceName" -> {
 					try {
