@@ -45,11 +45,13 @@ class EpgProgramme {
   }
 
   Map<String, dynamic> toBridgeMap() => {
-        'title': title,
-        'description': description,
-        'startMs': start.millisecondsSinceEpoch,
-        'stopMs': stop.millisecondsSinceEpoch,
-      };
+    'title': title,
+    'description': description,
+    'startMs': start.millisecondsSinceEpoch,
+    'stopMs': stop.millisecondsSinceEpoch,
+    'hasArchive': hasArchive,
+    if (rawStart != null) 'rawStart': rawStart,
+  };
 }
 
 /// The focused channel's current and upcoming programme. Either side can be
@@ -282,10 +284,7 @@ class IptvEpgService {
       // the two filter sets come back.
       final sets = await compute(
         _buildEpgFilterSetsJob,
-        _EpgFilterSetsJob(
-          dbPath: IptvCatalogDb.path,
-          catalogKey: dbCatalogKey,
-        ),
+        _EpgFilterSetsJob(dbPath: IptvCatalogDb.path, catalogKey: dbCatalogKey),
       );
       if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
       ids = sets.ids;
@@ -578,8 +577,9 @@ class IptvEpgService {
   static String catchupStart(EpgProgramme programme) {
     final raw = programme.rawStart?.trim();
     if (raw != null) {
-      final match = RegExp(r'^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})')
-          .firstMatch(raw);
+      final match = RegExp(
+        r'^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})',
+      ).firstMatch(raw);
       if (match != null) {
         return '${match.group(1)}:${match.group(2)}-${match.group(3)}';
       }
@@ -608,14 +608,14 @@ class IptvEpgService {
     final pass = Uri.encodeComponent(ref.password);
 
     String urlFor(_CatchupForm form) => switch (form) {
-          _CatchupForm.pathTs =>
-            '${ref.server}/timeshift/$user/$pass/$minutes/$start/${ref.streamId}.ts',
-          _CatchupForm.pathM3u8 =>
-            '${ref.server}/timeshift/$user/$pass/$minutes/$start/${ref.streamId}.m3u8',
-          _CatchupForm.php =>
-            '${ref.server}/streaming/timeshift.php?username=$user&password=$pass'
-                '&stream=${ref.streamId}&start=$start&duration=$minutes',
-        };
+      _CatchupForm.pathTs =>
+        '${ref.server}/timeshift/$user/$pass/$minutes/$start/${ref.streamId}.ts',
+      _CatchupForm.pathM3u8 =>
+        '${ref.server}/timeshift/$user/$pass/$minutes/$start/${ref.streamId}.m3u8',
+      _CatchupForm.php =>
+        '${ref.server}/streaming/timeshift.php?username=$user&password=$pass'
+            '&stream=${ref.streamId}&start=$start&duration=$minutes',
+    };
 
     final cached = _catchupFormCache[ref.server];
     if (cached != null) return urlFor(cached);
@@ -649,8 +649,9 @@ class IptvEpgService {
     try {
       final request = http.Request('GET', Uri.parse(url));
       request.headers['User-Agent'] = kIptvDefaultUserAgent;
-      final response =
-          await client.send(request).timeout(const Duration(seconds: 10));
+      final response = await client
+          .send(request)
+          .timeout(const Duration(seconds: 10));
       await response.stream.listen((_) {}).cancel();
       return response.statusCode;
     } on TimeoutException {
@@ -677,8 +678,7 @@ class IptvEpgService {
   /// URL-only variant for callers without an [IptvChannel] (the native
   /// player's bridge sends bare URLs).
   static bool isEpgCapableUrl(String url) =>
-      _parseXtreamUrl(url) != null ||
-      instance._xmltvProgrammesFor(url) != null;
+      _parseXtreamUrl(url) != null || instance._xmltvProgrammesFor(url) != null;
 
   /// The panel's whole-account XMLTV guide URL (`xmltv.php`) recovered from a
   /// live-stream URL, or null when [channelUrl] doesn't carry Xtream
@@ -816,12 +816,14 @@ class IptvEpgService {
     final ref = _parseXtreamUrl(channelUrl);
     if (ref == null) return const [];
 
-    var listings = await _fetchListings(ref, 'get_simple_data_table', '') ??
+    var listings =
+        await _fetchListings(ref, 'get_simple_data_table', '') ??
         const <EpgProgramme>[];
     if (listings.isEmpty) {
       // Old panels shipped this endpoint under a typo'd action name;
       // production clients fall back to it when the real one is empty.
-      listings = await _fetchListings(ref, 'get_simple_date_table', '') ??
+      listings =
+          await _fetchListings(ref, 'get_simple_date_table', '') ??
           const <EpgProgramme>[];
     }
     // Panels differ wildly in horizon; some return a week of history. Keep
@@ -891,7 +893,8 @@ class IptvEpgService {
   ) async {
     final user = Uri.encodeQueryComponent(ref.username);
     final pass = Uri.encodeQueryComponent(ref.password);
-    final url = '${ref.server}/player_api.php?username=$user&password=$pass'
+    final url =
+        '${ref.server}/player_api.php?username=$user&password=$pass'
         '&action=$action&stream_id=${ref.streamId}$extraQuery';
     try {
       final response = await _withFetchSlot(() async {
@@ -946,7 +949,10 @@ class IptvEpgService {
 
   static EpgProgramme? _parseProgramme(Map<dynamic, dynamic> item) {
     final start = _parseTime(item['start_timestamp'], item['start']);
-    final stop = _parseTime(item['stop_timestamp'], item['end'] ?? item['stop']);
+    final stop = _parseTime(
+      item['stop_timestamp'],
+      item['end'] ?? item['stop'],
+    );
     if (start == null || stop == null || !stop.isAfter(start)) return null;
 
     final title = _decodeXtreamText(item['title']);
@@ -1007,8 +1013,8 @@ class IptvEpgService {
     // C0 controls (except the newlines multiline descriptions carry) and the
     // C1 range mean this was readable text that merely looked like base64.
     bool looksBinary(Iterable<int> runes) => runes.any(
-          (r) => (r < 0x20 && r != 0x0a && r != 0x0d) || (r >= 0x7f && r <= 0x9f),
-        );
+      (r) => (r < 0x20 && r != 0x0a && r != 0x0d) || (r >= 0x7f && r <= 0x9f),
+    );
     try {
       final decoded = utf8.decode(bytes).trim();
       if (decoded.isEmpty || looksBinary(decoded.runes)) return raw;
@@ -1130,7 +1136,7 @@ class _CachedNowNext {
   final bool failed;
 
   _CachedNowNext(this.value, {this.failed = false, DateTime? at})
-      : fetchedAt = at ?? DateTime.now();
+    : fetchedAt = at ?? DateTime.now();
 
   bool get isStale {
     final now = DateTime.now();

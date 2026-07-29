@@ -103,6 +103,18 @@
             tools:visibility="visible" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/iptv_channel_favorite"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
+        android:layout_marginStart="6dp"
+        android:gravity="center"
+        android:text="★"
+        android:textColor="#FFFFD36A"
+        android:textSize="14sp"
+        android:visibility="gone"
+        tools:visibility="visible" />
+
     <!-- LIVE Badge -->
     <LinearLayout
         android:id="@+id/iptv_channel_live_badge"

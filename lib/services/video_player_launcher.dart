@@ -224,6 +224,13 @@ class VideoPlayerLaunchArgs {
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
+  final String? iptvSourceId;
+  final String? iptvSourceName;
+  final String? iptvSelectedCategory;
+  final String? iptvContentType;
+  final List<Map<String, dynamic>>? iptvSources;
+  final Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
+  iptvBrowseProvider;
   // Stremio sources for in-player source switching
   final List<Torrent>? stremioSources;
   final int? stremioCurrentSourceIndex;
@@ -304,6 +311,12 @@ class VideoPlayerLaunchArgs {
     this.contentEpisode,
     this.iptvChannels,
     this.iptvStartIndex,
+    this.iptvSourceId,
+    this.iptvSourceName,
+    this.iptvSelectedCategory,
+    this.iptvContentType,
+    this.iptvSources,
+    this.iptvBrowseProvider,
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
@@ -498,10 +511,13 @@ class VideoPlayerLauncher {
 
         // Video format (Kotlin Android TV player) — only if no local state, so
         // we never clobber a real resume position.
-        final resumeId =
-            resumeIdForEntry(playlist[i], fallbackTitle: effectiveTitle);
-        final existingState =
-            await StorageService.getVideoPlaybackState(videoTitle: resumeId);
+        final resumeId = resumeIdForEntry(
+          playlist[i],
+          fallbackTitle: effectiveTitle,
+        );
+        final existingState = await StorageService.getVideoPlaybackState(
+          videoTitle: resumeId,
+        );
         if (existingState == null) {
           await StorageService.saveVideoPlaybackState(
             videoTitle: resumeId,
@@ -623,6 +639,12 @@ class VideoPlayerLauncher {
           contentEpisode: args.contentEpisode,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
+          iptvSourceId: args.iptvSourceId,
+          iptvSourceName: args.iptvSourceName,
+          iptvSelectedCategory: args.iptvSelectedCategory,
+          iptvContentType: args.iptvContentType,
+          iptvSources: args.iptvSources,
+          iptvBrowseProvider: args.iptvBrowseProvider,
           stremioSources: args.stremioSources,
           stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
           resolveStremioSource: args.resolveStremioSource,
@@ -706,6 +728,12 @@ class VideoPlayerLauncher {
           contentEpisode: args.contentEpisode,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
+          iptvSourceId: args.iptvSourceId,
+          iptvSourceName: args.iptvSourceName,
+          iptvSelectedCategory: args.iptvSelectedCategory,
+          iptvContentType: args.iptvContentType,
+          iptvSources: args.iptvSources,
+          iptvBrowseProvider: args.iptvBrowseProvider,
           stremioSources: args.stremioSources,
           stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
           resolveStremioSource: args.resolveStremioSource,
@@ -1731,32 +1759,41 @@ class VideoPlayerLauncher {
       // list back. Returning null (search failed) keeps the native button up
       // for a retry.
       final seriesFetcher = args.seriesSourceFetcher;
-      Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
-          moreSourcesProviderForTv;
+      Future<Map<String, dynamic>?> Function(
+        String, {
+        int? season,
+        int? episode,
+      })?
+      moreSourcesProviderForTv;
       if (seriesFetcher != null && currentStremioSources.isNotEmpty) {
-        moreSourcesProviderForTv = (String mode, {int? season, int? episode}) async {
-          // season/episode = what the native player is CURRENTLY on (a pack
-          // playlist auto-advances without relaunching); the fetcher falls
-          // back to the launch episode when absent.
-          final fetched =
-              await seriesFetcher.fetch(mode, season: season, episode: episode);
-          if (fetched == null) return null;
-          currentStremioSources = SeriesSourceFetcher.mergeSources(
-            currentStremioSources,
-            fetched,
-          );
-          debugPrint(
-            'VideoPlayerLauncher: load-more "$mode" → ${fetched.length} fetched, '
-            '${currentStremioSources.length} total sources',
-          );
-          return {
-            'stremioSources':
-                currentStremioSources.map((t) => t.toJson()).toList(),
-            'packsFetched': seriesFetcher.packsFetched,
-            'episodesFetched': seriesFetcher.episodesFetched,
-            'movieFetched': seriesFetcher.movieFetched,
-          };
-        };
+        moreSourcesProviderForTv =
+            (String mode, {int? season, int? episode}) async {
+              // season/episode = what the native player is CURRENTLY on (a pack
+              // playlist auto-advances without relaunching); the fetcher falls
+              // back to the launch episode when absent.
+              final fetched = await seriesFetcher.fetch(
+                mode,
+                season: season,
+                episode: episode,
+              );
+              if (fetched == null) return null;
+              currentStremioSources = SeriesSourceFetcher.mergeSources(
+                currentStremioSources,
+                fetched,
+              );
+              debugPrint(
+                'VideoPlayerLauncher: load-more "$mode" → ${fetched.length} fetched, '
+                '${currentStremioSources.length} total sources',
+              );
+              return {
+                'stremioSources': currentStremioSources
+                    .map((t) => t.toJson())
+                    .toList(),
+                'packsFetched': seriesFetcher.packsFetched,
+                'episodesFetched': seriesFetcher.episodesFetched,
+                'movieFetched': seriesFetcher.movieFetched,
+              };
+            };
       }
 
       // Build Stremio TV channel switch wrapper that updates mutable sources holder
@@ -1956,6 +1993,7 @@ class VideoPlayerLauncher {
         for (final c in channels)
           if (!c.isLive) c.url,
       ]);
+      final favoriteUrls = await StorageService.getIptvFavoriteChannelUrls();
 
       // Per-series audio memory: Xtream series episodes carry a series identity
       // (series_id + series_playlist_id) in their attributes. The native player
@@ -1973,9 +2011,21 @@ class VideoPlayerLauncher {
         }
       }
       if (seriesAudioKey != null) {
-        preferredAudioLang =
-            await StorageService.getIptvSeriesAudioLanguage(seriesAudioKey);
+        preferredAudioLang = await StorageService.getIptvSeriesAudioLanguage(
+          seriesAudioKey,
+        );
       }
+
+      final activeChannel = channels.isEmpty
+          ? null
+          : channels[startIndex.clamp(0, channels.length - 1)];
+      final inferredContentType = activeChannel == null
+          ? 'live'
+          : activeChannel.attributes['series_id']?.isNotEmpty == true
+          ? 'episodes'
+          : activeChannel.isLive
+          ? 'live'
+          : 'vod';
 
       final payload = <String, dynamic>{
         'mode': 'iptv',
@@ -1983,17 +2033,39 @@ class VideoPlayerLauncher {
         'title': args.title,
         'subtitle': args.subtitle ?? 'IPTV',
         'startIndex': startIndex,
+        if (args.iptvSourceId != null) 'sourceId': args.iptvSourceId,
+        if (args.iptvSourceName != null) 'sourceName': args.iptvSourceName,
+        if (args.iptvSelectedCategory != null)
+          'selectedCategory': args.iptvSelectedCategory,
+        'contentType': args.iptvContentType ?? inferredContentType,
+        if (args.iptvSources != null) 'sources': args.iptvSources,
         'channels': [
           for (final c in channels)
             {
               ...c.toJson(),
+              if (c.attributes['source_playlist_id']?.isNotEmpty == true)
+                'sourceId': c.attributes['source_playlist_id']
+              else if (c.attributes['series_playlist_id']?.isNotEmpty == true)
+                'sourceId': c.attributes['series_playlist_id'],
+              if (c.attributes['series_id']?.isNotEmpty == true)
+                'seriesId': c.attributes['series_id'],
+              if (c.attributes['series_name']?.isNotEmpty == true)
+                'seriesName': c.attributes['series_name'],
+              if (int.tryParse(c.attributes['season'] ?? '') != null)
+                'season': int.parse(c.attributes['season']!),
+              if (int.tryParse(c.attributes['episode'] ?? '') != null)
+                'episode': int.parse(c.attributes['episode']!),
+              if (c.attributes['has_next_episode'] != null)
+                'hasNextEpisode': c.attributes['has_next_episode'] == 'true',
+              'isFavorite': favoriteUrls.contains(c.url),
               if ((resumePositions[c.url] ?? 0) > 0)
                 'resumePositionMs': resumePositions[c.url],
             },
         ],
         'categories': categories,
         if (seriesAudioKey != null) 'seriesAudioKey': seriesAudioKey,
-        if (preferredAudioLang != null) 'preferredAudioLang': preferredAudioLang,
+        if (preferredAudioLang != null)
+          'preferredAudioLang': preferredAudioLang,
       };
 
       // Hide auto-launch overlay before launching player
@@ -2005,6 +2077,7 @@ class VideoPlayerLauncher {
         onFinished: () async {
           debugPrint('VideoPlayerLauncher: IPTV Android TV playback finished');
         },
+        onRequestIptvBrowse: args.iptvBrowseProvider,
       );
 
       return launched;
@@ -2884,8 +2957,7 @@ class VideoPlayerLauncher {
 
     // Premiumize cloud-browser lazy resolution: re-fetch a fresh direct link by
     // cloud item id (items saved from the cloud browser have no infohash).
-    if (entry.premiumizeItemId != null &&
-        entry.premiumizeItemId!.isNotEmpty) {
+    if (entry.premiumizeItemId != null && entry.premiumizeItemId!.isNotEmpty) {
       final apiKey = await StorageService.getPremiumizeApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing Premiumize API key');
@@ -3442,10 +3514,10 @@ class _AndroidTvPlaybackPayloadBuilder {
           updatedAt: resumeInfo.updatedAt,
           resumeId: resumeId,
           provider: entry.provider,
-          traktProgressPercent: (episodeInfo.seriesInfo.season != null &&
+          traktProgressPercent:
+              (episodeInfo.seriesInfo.season != null &&
                   episodeInfo.seriesInfo.episode != null)
-              ? traktProgress[
-                  '${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}']
+              ? traktProgress['${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}']
               : null,
         ),
       );
