@@ -118,6 +118,14 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   );
   bool _favHoldFired = false;
 
+  /// Whether this row received the OK/select KEY-DOWN that a key-up belongs
+  /// to. The favoritable path plays on key-UP (to tell a quick press from a
+  /// hold), so without this a key-up that lands here after focus moved
+  /// mid-press — e.g. selecting a source collapses the rail onto this row
+  /// while OK is still held — would read as a tap and auto-play a channel
+  /// the user never pressed.
+  bool _sawSelectDown = false;
+
   @override
   void initState() {
     super.initState();
@@ -273,6 +281,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       focusNode: widget.focusNode,
       onFocusChange: (f) {
         setState(() => _focused = f);
+        if (!f) {
+          // Focus left mid-press — disarm so a later stray key-up can't play.
+          _sawSelectDown = false;
+          _favHoldFired = false;
+          _holdController.reset();
+        }
         if (f) {
           widget.onFocused?.call();
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -317,15 +331,20 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         }
 
         if (event is KeyDownEvent) {
+          _sawSelectDown = true;
           _favHoldFired = false;
           _holdController.forward(from: 0); // fills the heart over 500ms
           return KeyEventResult.handled;
         }
         if (event is KeyUpEvent) {
-          // Released before the fill completed → treat as a tap (play).
-          if (!_favHoldFired) widget.onTap();
+          // A press this row actually started, released before the hold
+          // completed → tap (play). A key-up with no matching key-down
+          // (focus arrived mid-press) is swallowed, never played.
+          final wasPress = _sawSelectDown && !_favHoldFired;
+          _sawSelectDown = false;
           _holdController.reset();
           _favHoldFired = false;
+          if (wasPress) widget.onTap();
           return KeyEventResult.handled;
         }
         // Swallow auto-repeat while the key is held.
