@@ -38,7 +38,6 @@ import 'iptv_filters.dart';
 import 'iptv_channel_row.dart';
 import 'iptv_empty_state.dart';
 import 'iptv_epg_panel.dart';
-import 'iptv_source_rail.dart';
 
 /// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)"
 /// — pulled out of the rail's big title into its sub-line (the channel rows do
@@ -2368,22 +2367,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     });
   }
 
-  /// The source rail's overflow chip: the full playlist picker sheet, for
-  /// when there are more sources than the rail has room to show.
-  Future<void> _openPlaylistPickerFromRail() async {
-    final result = await showIptvPlaylistPicker(
-      context,
-      playlists: _playlists,
-      selectedPlaylist: _selectedPlaylist,
-      onAddPlaylist: _navigateToSettings,
-    );
-    // The picker sheet is dismissed by its own selection; on TV, land DPAD
-    // focus on the list rather than back on the (now-collapsed) rail.
-    if (result != null) {
-      _onPlaylistChanged(result, focusContent: widget.isTelevision);
-    }
-  }
-
   void _navigateToSettings() {
     // Captured for the EPG-URL-edit case below: _loadSettings only reloads
     // the playlist when the SELECTION changes, so an edit to the current
@@ -2570,43 +2553,15 @@ class IptvResultsViewState extends State<IptvResultsView>
   // ── TV two-pane ──────────────────────────────────────────────────────────
 
   Widget _buildTvTwoPane(BoxConstraints c) {
-    // Wide desktop windows get the rail inline-expanded (persistent labeled
-    // list, no overlay to dismiss); TV and narrow windows keep the compact
-    // icon rail. The preview's share is computed from the width that
-    // actually remains for the two panes.
-    final inlineRail =
-        _redesignEnabled && !widget.isTelevision && c.maxWidth >= 1200;
-    final double sourceRailW = !_redesignEnabled
-        ? 0.0
-        : inlineRail
-            ? kIptvSourceRailExpandedWidth
-            : kIptvSourceRailWidth;
-    final paneW = c.maxWidth - sourceRailW;
+    // Every source (Favorites, Continue watching, and each playlist) lives in
+    // the header's Sources dropdown now — no left rail eating horizontal space.
+    // The preview takes its share of the full width; the guide gets the rest.
+    final paneW = c.maxWidth;
     final railW = (paneW * 0.40).clamp(320.0, 470.0);
     final scheduleChannel = _scheduleChannel;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_redesignEnabled)
-          IptvSourceRail(
-            playlists: _playlists,
-            selectedId: _selectedPlaylist?.id,
-            isTelevision: widget.isTelevision,
-            inlineExpanded: inlineRail,
-            // On TV, picking a source collapses the rail's overlay and hands
-            // focus to the list — the standard sidebar → content flow. (On
-            // desktop the rail is an inline column / hover overlay that the
-            // pointer already dismisses, so leave focus alone.)
-            onSelect: (playlist) => _onPlaylistChanged(
-              playlist,
-              focusContent: widget.isTelevision,
-            ),
-            onManage: _navigateToSettings,
-            onOverflow: _openPlaylistPickerFromRail,
-            // RIGHT from a rail chip lands on the quiet filter row's first
-            // chip (the search pill — it holds _playlistFilterFocusNode).
-            onRight: () => _playlistFilterFocusNode.requestFocus(),
-          ),
         SizedBox(width: railW, child: _buildPreviewRail()),
         Expanded(
           // An open schedule covers the guide column in place — the preview
@@ -2649,51 +2604,52 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   /// The Discover-style quiet filter line: bare dot-separated text segments
-  /// (playlist • [Live/Movies] • category • count) instead of boxed pills.
+  /// (source • [Live/Movies] • category • count) instead of boxed pills.
   Widget _buildQuietFilters() {
     return SeeAllFilterBar(
       isTelevision: widget.isTelevision,
       quiet: true,
       buildChips: () => [
-        // Redesign: the source rail owns playlist switching, so the row's
-        // first chip becomes the global-search pill instead of the playlist
-        // dropdown. It inherits _playlistFilterFocusNode on purpose — every
-        // existing wire into "the first filter" (down-from-search-field,
-        // revalidate focus repair, focusFirstFilter) keeps working unchanged.
+        // The Sources dropdown — EVERY source in one place: Favorites,
+        // Continue watching, and each playlist. Replaces the old left rail;
+        // sits to the left of Search all. Holds _playlistFilterFocusNode so
+        // every wire into "the first filter" (down-from-search-field,
+        // revalidate focus repair, focusFirstFilter) keeps working.
+        StremioDropdown<String>(
+          value: _selectedPlaylist?.id ?? '',
+          quiet: true,
+          quietAccent: true,
+          isTelevision: widget.isTelevision,
+          focusNode: _playlistFilterFocusNode,
+          onUpArrowPressed: widget.onUpArrowFromFilters,
+          onDownArrowPressed: _focusFirstChannel,
+          options: [
+            for (final p in _playlists) StremioDropdownOption(p.id, p.name),
+            const StremioDropdownOption(
+                _kAddPlaylistSentinel, '＋ Add playlist'),
+          ],
+          onSelected: (id) {
+            if (id == _kAddPlaylistSentinel) {
+              _navigateToSettings();
+              return;
+            }
+            for (final p in _playlists) {
+              if (p.id == id) {
+                _onPlaylistChanged(p);
+                return;
+              }
+            }
+          },
+        ),
+        // Redesign adds the global-search entry point beside the sources
+        // dropdown. Its own focus node — the sources dropdown took the
+        // "first filter" node above.
         if (_redesignEnabled)
           _QuietSearchChip(
-            focusNode: _playlistFilterFocusNode,
+            focusNode: _globalSearchFocusNode,
             onPressed: _openGlobalSearch,
             onUpArrowPressed: widget.onUpArrowFromFilters,
             onDownArrowPressed: _focusFirstChannel,
-          )
-        else
-          StremioDropdown<String>(
-            label: 'playlist',
-            value: _selectedPlaylist?.id ?? '',
-            quiet: true,
-            quietAccent: true,
-            isTelevision: widget.isTelevision,
-            focusNode: _playlistFilterFocusNode,
-            onUpArrowPressed: widget.onUpArrowFromFilters,
-            onDownArrowPressed: _focusFirstChannel,
-            options: [
-              for (final p in _playlists) StremioDropdownOption(p.id, p.name),
-              const StremioDropdownOption(
-                  _kAddPlaylistSentinel, '＋ Add playlist'),
-            ],
-            onSelected: (id) {
-              if (id == _kAddPlaylistSentinel) {
-                _navigateToSettings();
-                return;
-              }
-              for (final p in _playlists) {
-                if (p.id == id) {
-                  _onPlaylistChanged(p);
-                  return;
-                }
-              }
-            },
           ),
         if (_selectedPlaylist?.isXtreamCodes ?? false)
           StremioDropdown<String>(
