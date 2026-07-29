@@ -3020,6 +3020,13 @@ class StorageService {
     return '${uri.scheme}://${uri.host}$port/${segments.join('/')}$query';
   }
 
+  /// How long this scan may hold the isolate before yielding. Per-row cost
+  /// here is far cheaper and far more uniform than the EPG service's scan
+  /// (a host substring test, then a canonicalization only for the few rows
+  /// that pass it), which is why the two aren't sharing a constant — but the
+  /// budget is expressed the same way so neither can drift into blocking.
+  static const _iptvScanYieldBudget = Duration(milliseconds: 8);
+
   /// Rewrite stored favorite URLs to the current format when a fetched
   /// channel matches an existing favorite canonically but not literally
   /// (e.g. favorites saved before the Xtream /live/ URL fix). Keeps the
@@ -3051,9 +3058,20 @@ class StorageService {
         if (Uri.tryParse(key)?.host.isNotEmpty ?? false) Uri.parse(key).host,
     };
 
-    var changed = false;
+    // Collect the renames against LOCALS only. The scan below yields to the
+    // event loop (a 50k-channel playlist would otherwise block input on the
+    // way in), and the whole point of yielding is to let other code run —
+    // including someone starring a channel, which is its own
+    // read-modify-write of this same key. Holding the decoded map across a
+    // yield and writing it back at the end would silently discard their star.
+    final renames = <String, String>{}; // stored key → current URL
+    final chunk = Stopwatch()..start();
     for (final channel in channels) {
       if (storedByCanonical.isEmpty) break;
+      if (chunk.elapsedMicroseconds >= _iptvScanYieldBudget.inMicroseconds) {
+        await Future<void>.delayed(Duration.zero);
+        chunk.reset();
+      }
       if (!favoriteHosts.any(channel.url.contains)) continue;
       // Consume the mapping so a second canonically-equal channel can't
       // re-move (and null out) an already-migrated entry.
@@ -3061,16 +3079,31 @@ class StorageService {
         canonicalIptvChannelKey(channel.url),
       );
       if (storedKey != null && storedKey != channel.url) {
-        final metadata = favorites.remove(storedKey);
-        if (metadata != null) {
-          favorites[channel.url] = metadata;
-          changed = true;
-        }
+        renames[storedKey] = channel.url;
       }
     }
+    if (renames.isEmpty) return;
 
+    // Re-read and rewrite with NO suspension point in between, so this is
+    // atomic with respect to concurrent writers again.
+    final latestJson = prefs.getString(_iptvFavoriteChannelsKey);
+    if (latestJson == null) return;
+    Map<String, dynamic> latest;
+    try {
+      latest = jsonDecode(latestJson) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    var changed = false;
+    for (final entry in renames.entries) {
+      final metadata = latest.remove(entry.key);
+      if (metadata != null) {
+        latest[entry.value] = metadata;
+        changed = true;
+      }
+    }
     if (changed) {
-      await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(favorites));
+      await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(latest));
     }
   }
 

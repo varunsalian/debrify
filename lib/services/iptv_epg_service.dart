@@ -211,6 +211,18 @@ class IptvEpgService {
   /// finish last and pair current rows with an outdated URL→id map.
   int _m3uContextGeneration = 0;
 
+  /// How long a full-list scan may hold the isolate before yielding to the
+  /// event loop.
+  ///
+  /// Deliberately a TIME budget, not a row count: per-row cost here swings by
+  /// ~30× with the alphabet. `normalizeChannelName`'s unicode regex leaves
+  /// Dart's one-byte-string fast path the moment a name carries anything
+  /// above U+00FF, and the huge multi-country panels this scan exists for are
+  /// exactly the ones full of Cyrillic, Arabic and `ᴴᴰ`/`⁴ᴷ` decorations. A
+  /// fixed row count that felt fine on an ASCII playlist was seconds per
+  /// chunk on those.
+  static const _scanYieldBudget = Duration(milliseconds: 8);
+
   /// Bumped whenever the XMLTV context changes. Guide data arrives long
   /// after rows and the rail painted (a first download can take minutes);
   /// listeners re-check capability instead of waiting for a focus move.
@@ -232,11 +244,27 @@ class IptvEpgService {
     final url = epgUrl?.trim();
     if (url == null || url.isEmpty) return M3uEpgStatus.inactive;
 
+    // Claimed BEFORE the (now yielding) scan rather than after it: the loop
+    // below hands control back to the event loop periodically, so a newer
+    // context can start mid-scan. Claiming first means the newer one always
+    // wins, instead of whichever happened to reach the claim last.
+    final generation = ++_m3uContextGeneration;
+
     final urlToId = <String, String>{};
     final ids = <String>{};
     final urlToNames = <String, List<String>>{};
     final wantedNames = <String>{};
+    final chunk = Stopwatch()..start();
     for (final channel in channels) {
+      // A 50k-channel playlist normalizes two names per row here; doing that
+      // in one go blocked input long enough for Android to offer to kill the
+      // app. Hand the loop back whenever this chunk has had its slice — the
+      // scan takes marginally longer, the UI never stops answering.
+      if (chunk.elapsedMicroseconds >= _scanYieldBudget.inMicroseconds) {
+        await Future<void>.delayed(Duration.zero);
+        if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
+        chunk.reset();
+      }
       if (!channel.isLive) continue;
       final id = channel.tvgId?.trim();
       if (id != null && id.isNotEmpty) {
@@ -264,10 +292,9 @@ class IptvEpgService {
     }
     if (ids.isEmpty && wantedNames.isEmpty) return M3uEpgStatus.inactive;
 
-    // Claim the context before the (potentially long) load so any newer
-    // claim — a playlist switch OR a reload of this same playlist — wins
-    // and this result gets dropped.
-    final generation = ++_m3uContextGeneration;
+    // The claim above also covers the (potentially long) load below: any
+    // newer claim — a playlist switch OR a reload of this same playlist —
+    // wins and this result gets dropped.
     final guide = await XmltvEpgSource.load(
       epgUrl: url,
       tvgIds: ids,
@@ -283,21 +310,39 @@ class IptvEpgService {
           : M3uEpgStatus.noMatch;
     }
 
+    // Materializing the guide is the same shape of problem as the scan above:
+    // one EpgProgramme and two DateTimes per programme row, and a big panel's
+    // guide runs to six figures of rows. Build it under the same time budget
+    // rather than in one synchronous comprehension, or the freeze just moves
+    // twelve lines down.
+    final index = <String, List<EpgProgramme>>{};
+    chunk.reset();
+    for (final entry in guide.byId.entries) {
+      final programmes = <EpgProgramme>[];
+      for (final row in entry.value) {
+        programmes.add(
+          EpgProgramme(
+            title: row[2] as String,
+            description: row[3] as String,
+            start: DateTime.fromMillisecondsSinceEpoch(row[0] as int),
+            stop: DateTime.fromMillisecondsSinceEpoch(row[1] as int),
+          ),
+        );
+      }
+      index[entry.key] = programmes;
+      if (chunk.elapsedMicroseconds >= _scanYieldBudget.inMicroseconds) {
+        await Future<void>.delayed(Duration.zero);
+        // Nothing has been published yet, so a superseded build simply drops
+        // its half-built index — the newer claim owns the context.
+        if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
+        chunk.reset();
+      }
+    }
+
     _m3uUrlToTvgId = urlToId;
     _m3uUrlToNames = urlToNames;
     _xmltvNameToId = guide.nameToId;
-    _xmltvIndex = {
-      for (final entry in guide.byId.entries)
-        entry.key: [
-          for (final row in entry.value)
-            EpgProgramme(
-              title: row[2] as String,
-              description: row[3] as String,
-              start: DateTime.fromMillisecondsSinceEpoch(row[0] as int),
-              stop: DateTime.fromMillisecondsSinceEpoch(row[1] as int),
-            ),
-        ],
-    };
+    _xmltvIndex = index;
     contextVersion.value++;
     return M3uEpgStatus.matched;
   }

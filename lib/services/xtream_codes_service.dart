@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
@@ -104,27 +105,91 @@ class XtreamCodesService {
     }
   }
 
-  // Stream lists from large providers can be tens of MB; decode those off the
-  // UI isolate so the app doesn't freeze.
-  static const _computeDecodeThreshold = 100 * 1024;
+  // Stream lists from large providers can be tens of MB; decode AND build
+  // those off the UI isolate so the app doesn't freeze.
+  @visibleForTesting
+  static const computeDecodeThreshold = 100 * 1024;
 
-  /// Safely decode a JSON response body as a List, returning a user-friendly error
-  /// if the server returns non-JSON or non-array data.
-  Future<(List<dynamic>?, String?)> _decodeJsonList(
+  /// Number of fetches that took the isolate path. Test seam: which side of
+  /// [computeDecodeThreshold] a payload landed on is otherwise invisible, and
+  /// "the isolate is exercised" is exactly what a big-payload test must prove.
+  @visibleForTesting
+  static int isolateBuilds = 0;
+
+  /// Builds that ran on THIS isolate. Statics aren't shared across isolates,
+  /// so after a hop the caller's copy stays put while the worker's own copy
+  /// is incremented and discarded — which makes "the work really happened
+  /// somewhere else" observable without timing anything.
+  @visibleForTesting
+  static int buildsOnThisIsolate = 0;
+
+  /// How many panels have a remembered live-URL dialect. Test seam: "a
+  /// non-answer must not be cached" is otherwise unobservable, and it is a
+  /// bug that has already been introduced once.
+  @visibleForTesting
+  int get cachedLiveUrlFormCount => _liveUrlFormCache.length;
+
+  /// First `"stream_id": 123` or `"stream_id": "123"` in a raw panel
+  /// response — enough to seed the live-URL-form probe without decoding the
+  /// payload first. Both alternatives are fully anchored so a non-numeric id
+  /// (`"12ab"`) doesn't match a truncated prefix and send the probe after a
+  /// stream that doesn't exist.
+  static final RegExp _sampleStreamIdExp =
+      RegExp(r'"stream_id"\s*:\s*(?:"(\d+)"|(\d+))');
+
+  /// How much of a raw streams payload the id probe scans.
+  ///
+  /// Bounded so a body with no id at all can't drag tens of MB through a
+  /// regex on this thread — but generously, because the failure mode on the
+  /// other side is far worse than a millisecond: no id means no probe, no
+  /// probe means the default dialect, and a legacy panel handed the default
+  /// serves every one of its channels under a URL that 404s. 8KB (one screen
+  /// of records) was too tight — a single fat first record, which panels do
+  /// emit, pushed the id out of range.
+  @visibleForTesting
+  static const streamIdProbeWindow = 1024 * 1024;
+
+  /// The charset a response declared, or null when it declared none.
+  /// Extracted here (a header, not a payload — costs nothing) so the isolate
+  /// can reproduce `Response.body`'s decoding without carrying the headers.
+  @visibleForTesting
+  static String? charsetOf(http.Response response) {
+    final contentType = response.headers['content-type'];
+    if (contentType == null) return null;
+    return _charsetExp.firstMatch(contentType)?.group(1);
+  }
+
+  static final RegExp _charsetExp =
+      RegExp(r'charset\s*=\s*"?([^\s";]+)"?', caseSensitive: false);
+
+  /// Resolve a declared charset the way package:http does: unknown or absent
+  /// falls back to latin1.
+  static Encoding encodingForCharset(String? charset) {
+    if (charset == null) return latin1;
+    return Encoding.getByName(charset) ?? latin1;
+  }
+
+  /// Decode a panel response as a JSON list, synchronously. Used inside the
+  /// channel-building isolate, where the decode is already off the UI thread
+  /// and [compute] would be a pointless second hop.
+  @visibleForTesting
+  static (List<dynamic>?, String?) decodeJsonListSync(
     String body,
     String label,
-  ) async {
+  ) {
     dynamic decoded;
     try {
-      decoded = body.length > _computeDecodeThreshold
-          ? await compute(jsonDecode, body)
-          : jsonDecode(body);
+      decoded = jsonDecode(body);
     } catch (_) {
-      // Server returned non-JSON (e.g. plain-text error message)
       final preview = body.length > 200 ? body.substring(0, 200) : body;
       return (null, 'Server returned invalid response for $label: $preview');
     }
+    return _asJsonList(decoded, label);
+  }
 
+  /// Shape check shared by every decode entry point, so callers can never
+  /// disagree about what counts as a usable answer.
+  static (List<dynamic>?, String?) _asJsonList(dynamic decoded, String label) {
     if (decoded is List<dynamic>) {
       return (decoded, null);
     }
@@ -295,48 +360,20 @@ class XtreamCodesService {
         );
       }
 
-      final (streamsData, streamsError) = await _decodeJsonList(
-        streamsResponse.body,
-        'streams',
-      );
-      if (streamsError != null) {
-        return IptvParseResult(
-          channels: [],
-          categories: [],
-          error: streamsError,
-        );
-      }
-
-      // Build category ID -> name map; degrade to ungrouped channels (with a
-      // user-visible warning) when categories are unavailable.
-      String? warning;
-      final categoryMap = <String, String>{};
-      final categoryNames = <String>[];
-      if (categoriesResponse == null || categoriesResponse.statusCode != 200) {
-        warning =
-            'Could not load $label categories — showing channels ungrouped';
-      } else {
-        final (categoriesData, catError) = await _decodeJsonList(
-          categoriesResponse.body,
-          'categories',
-        );
-        if (categoriesData == null) {
-          warning =
-              'Could not load $label categories — showing channels ungrouped';
-          debugPrint(
-            'XtreamCodesService: Ignoring $label categories: $catError',
-          );
-        } else {
-          for (final cat in categoriesData) {
-            final id = cat['category_id']?.toString() ?? '';
-            final name = cat['category_name']?.toString() ?? '';
-            if (id.isNotEmpty && name.isNotEmpty) {
-              categoryMap[id] = name;
-              categoryNames.add(name);
-            }
-          }
-        }
-      }
+      // `Response.body` is never read here: it is a getter that UTF-8 decodes
+      // bodyBytes on the calling thread, and for a tens-of-MB panel that
+      // decode is itself hundreds of milliseconds of the freeze this function
+      // exists to remove. Only the raw bytes are touched; the decode rides
+      // along to the worker inside the job.
+      final streamsBytes = streamsResponse.bodyBytes;
+      // One local for "the categories response we can actually use", so the
+      // bytes and the charset can never be derived from disagreeing
+      // conditions.
+      final usableCategories =
+          (categoriesResponse == null || categoriesResponse.statusCode != 200)
+              ? null
+              : categoriesResponse;
+      final categoriesBytes = usableCategories?.bodyBytes;
 
       final encodedUser = Uri.encodeComponent(username);
       final encodedPass = Uri.encodeComponent(password);
@@ -345,12 +382,25 @@ class XtreamCodesService {
       // (see _liveUrlFormCache for why TS beats HLS); some panels only route
       // the legacy un-prefixed form or only one output format — probe once
       // per server and remember.
+      //
+      // The probe needs one stream id, and the decode that would yield it is
+      // exactly the work being moved off this thread — so read a sample
+      // straight out of the raw body instead, over a bounded window (see
+      // [streamIdProbeWindow]).
       var liveUrlForm = _LiveUrlForm.standardTs;
-      if (isLive && streamsData!.isNotEmpty) {
-        final sampleId = streamsData
-            .map((s) => s['stream_id']?.toString() ?? '')
-            .firstWhere((id) => id.isNotEmpty, orElse: () => '');
-        if (sampleId.isNotEmpty) {
+      if (isLive) {
+        // latin1 regardless of the declared charset: every byte the pattern
+        // can match (`"stream_id"`, digits, punctuation) is ASCII, latin1 maps
+        // all 256 byte values so it can never throw on a truncated multi-byte
+        // sequence, and 8KB is far too small to matter either way.
+        final head = latin1.decode(
+          streamsBytes.length > streamIdProbeWindow
+              ? Uint8List.sublistView(streamsBytes, 0, streamIdProbeWindow)
+              : streamsBytes,
+        );
+        final match = _sampleStreamIdExp.firstMatch(head);
+        final sampleId = match?.group(1) ?? match?.group(2);
+        if (sampleId != null && sampleId.isNotEmpty) {
           liveUrlForm = await _detectLiveUrlForm(
             serverUrl,
             encodedUser,
@@ -360,114 +410,42 @@ class XtreamCodesService {
         }
       }
 
-      // Convert streams to IptvChannel
-      final channels = <IptvChannel>[];
-      for (final stream in streamsData!) {
-        final name = stream['name']?.toString() ?? '';
-        if (name.isEmpty) continue;
+      // Decode AND build in one isolate hop (see [_buildXtreamStreams]).
+      // Small panels skip the isolate: spawning one costs more than the work.
+      final job = _StreamsJob(
+        // fromList copies once (a memcpy — cheap next to a UTF-8 decode) and
+        // the transfer to the worker is then zero-copy. The source lists are
+        // not neutered, so the small-payload path below can materialize the
+        // very same job on this isolate.
+        streamsBytes: TransferableTypedData.fromList([streamsBytes]),
+        categoriesBytes: categoriesBytes == null
+            ? null
+            : TransferableTypedData.fromList([categoriesBytes]),
+        streamsCharset: charsetOf(streamsResponse),
+        categoriesCharset:
+            usableCategories == null ? null : charsetOf(usableCategories),
+        serverUrl: serverUrl,
+        encodedUser: encodedUser,
+        encodedPass: encodedPass,
+        contentType: contentType,
+        label: label,
+        liveUrlForm: liveUrlForm,
+      );
+      // Both bodies are decoded by the job, so both count toward the
+      // threshold — a small channel list with a huge category list is still
+      // real work to keep off this thread.
+      final useIsolate =
+          streamsBytes.length + (categoriesBytes?.length ?? 0) >
+              computeDecodeThreshold;
+      if (useIsolate) isolateBuilds++;
+      final built = useIsolate
+          ? await compute(_buildXtreamStreams, job)
+          : _buildXtreamStreams(job);
 
-        final categoryId = stream['category_id']?.toString() ?? '';
-        final group = categoryMap[categoryId];
-
-        // Series entries are shows, not streams: keyed by series_id, no
-        // playable URL (episodes come from get_series_info on drill-in).
-        // The sentinel URL keeps every URL-keyed pathway (focus maps, search,
-        // dedupe) working; play/tap handlers branch on contentType before it
-        // could ever reach a player.
-        if (isSeries) {
-          final seriesId = stream['series_id']?.toString() ?? '';
-          if (seriesId.isEmpty) continue;
-          final backdrops = stream['backdrop_path'];
-          final backdrop = backdrops is List && backdrops.isNotEmpty
-              ? backdrops.first?.toString()
-              : null;
-          // Panels disagree on the release-date key — resolve the known
-          // spellings in order (same alias set other mature clients use).
-          final releaseDate = (stream['releaseDate'] ??
-                  stream['release_date'] ??
-                  stream['releasedate'])
-              ?.toString();
-          channels.add(
-            IptvChannel(
-              name: name,
-              url: 'xtream-series://$seriesId',
-              // `cover` is the canonical series art; some panels send
-              // `stream_icon` instead (the live/VOD field).
-              logoUrl:
-                  (stream['cover'] ?? stream['stream_icon'])?.toString(),
-              group: group,
-              duration: null, // not live
-              contentType: 'series',
-              attributes: {
-                'series_id': seriesId,
-                if ((stream['plot']?.toString() ?? '').isNotEmpty)
-                  'plot': stream['plot'].toString(),
-                if ((stream['genre']?.toString() ?? '').isNotEmpty)
-                  'genre': stream['genre'].toString(),
-                if (releaseDate != null && releaseDate.isNotEmpty)
-                  'releaseDate': releaseDate,
-                if ((stream['rating']?.toString() ?? '').isNotEmpty)
-                  'rating': stream['rating'].toString(),
-                if (backdrop != null && backdrop.isNotEmpty)
-                  'backdrop': backdrop,
-              },
-            ),
-          );
-          continue;
-        }
-
-        final streamId = stream['stream_id']?.toString() ?? '';
-        if (streamId.isEmpty) continue;
-
-        if (isLive) {
-          channels.add(
-            IptvChannel(
-              name: name,
-              url: _liveUrl(
-                serverUrl,
-                encodedUser,
-                encodedPass,
-                streamId,
-                liveUrlForm,
-              ),
-              logoUrl: stream['stream_icon']?.toString(),
-              group: group,
-              duration: -1, // live
-              contentType: 'live',
-              attributes: {
-                if (stream['epg_channel_id'] != null)
-                  'tvg-id': stream['epg_channel_id'].toString(),
-                'stream_id': streamId,
-                // Catchup: whether the panel records this channel, and for
-                // how many days back the archive reaches.
-                if (stream['tv_archive'] != null)
-                  'tv_archive': stream['tv_archive'].toString(),
-                if (stream['tv_archive_duration'] != null)
-                  'tv_archive_duration':
-                      stream['tv_archive_duration'].toString(),
-              },
-            ),
-          );
-        } else {
-          final extension = stream['container_extension']?.toString() ?? 'mp4';
-          channels.add(
-            IptvChannel(
-              name: name,
-              url:
-                  '$serverUrl/movie/$encodedUser/$encodedPass/$streamId.$extension',
-              logoUrl: stream['stream_icon']?.toString(),
-              group: group,
-              duration: null, // not live
-              contentType: 'vod',
-              attributes: {
-                if (stream['rating'] != null)
-                  'rating': stream['rating'].toString(),
-                'stream_id': streamId,
-              },
-            ),
-          );
-        }
-      }
+      if (built.hasError) return built;
+      final channels = built.channels;
+      final categoryNames = built.categories;
+      final warning = built.warning;
 
       debugPrint(
         'XtreamCodesService: Fetched ${channels.length} $label channels, ${categoryNames.length} categories',
@@ -496,21 +474,18 @@ class XtreamCodesService {
   }
 
   /// Build a live stream URL in the given panel-specific form.
+  ///
+  /// Delegates to the top-level [_liveUrlFor] so the isolate that builds
+  /// channels can use the exact same construction — a second copy of this
+  /// would be a URL-format bug waiting to happen.
   String _liveUrl(
     String serverUrl,
     String encodedUser,
     String encodedPass,
     String streamId,
     _LiveUrlForm form,
-  ) {
-    final creds = '$encodedUser/$encodedPass/$streamId';
-    return switch (form) {
-      _LiveUrlForm.standardTs => '$serverUrl/live/$creds.ts',
-      _LiveUrlForm.standardHls => '$serverUrl/live/$creds.m3u8',
-      _LiveUrlForm.legacyTs => '$serverUrl/$creds.ts',
-      _LiveUrlForm.legacyHls => '$serverUrl/$creds.m3u8',
-    };
-  }
+  ) =>
+      _liveUrlFor(serverUrl, encodedUser, encodedPass, streamId, form);
 
   /// Probe which live URL form this panel serves, in order of preference:
   /// standard /live/ raw TS, standard /live/ HLS (TS-off panels), then the
@@ -546,9 +521,12 @@ class XtreamCodesService {
       }
     }
 
-    // Every form got a definitive non-2xx answer — nothing works. Cache the
-    // standard form so we don't re-probe all four on every fetch.
-    _liveUrlFormCache[cacheKey] = _LiveUrlForm.standardTs;
+    // Every form got a definitive non-2xx answer — which teaches us nothing
+    // about the panel's dialect, and can equally mean the sampled stream id
+    // was bad (a truncated or malformed payload can still yield a plausible
+    // id). Caching "standard" here would freeze that non-answer in for the
+    // session and hand a later, healthy fetch the wrong URL form, so take the
+    // re-probe cost instead.
     return _LiveUrlForm.standardTs;
   }
 
@@ -613,7 +591,7 @@ class XtreamCodesService {
       final body = response.body;
       dynamic decoded;
       try {
-        decoded = body.length > _computeDecodeThreshold
+        decoded = body.length > computeDecodeThreshold
             ? await compute(jsonDecode, body)
             : jsonDecode(body);
       } catch (_) {
@@ -889,3 +867,235 @@ class XtreamSeriesInfo {
 /// multi-variant ladder), then HLS for TS-off panels, then the legacy
 /// un-prefixed forms some old panels only route.
 enum _LiveUrlForm { standardTs, standardHls, legacyTs, legacyHls }
+
+/// Build a live stream URL in the given panel-specific form. Top-level so
+/// both the service and the channel-building isolate share one definition.
+String _liveUrlFor(
+  String serverUrl,
+  String encodedUser,
+  String encodedPass,
+  String streamId,
+  _LiveUrlForm form,
+) {
+  final creds = '$encodedUser/$encodedPass/$streamId';
+  return switch (form) {
+    _LiveUrlForm.standardTs => '$serverUrl/live/$creds.ts',
+    _LiveUrlForm.standardHls => '$serverUrl/live/$creds.m3u8',
+    _LiveUrlForm.legacyTs => '$serverUrl/$creds.ts',
+    _LiveUrlForm.legacyHls => '$serverUrl/$creds.m3u8',
+  };
+}
+
+/// Everything [_buildXtreamStreams] needs to turn raw panel responses into
+/// channels. Deliberately all plain values: this crosses an isolate boundary.
+///
+/// The bodies travel as RAW BYTES, not strings. `Response.body` UTF-8 decodes
+/// tens of MB on whichever thread reads it, and that decode has to happen
+/// before a string could be handed over — so passing strings left the single
+/// largest remaining block on the UI thread even though the parse itself had
+/// already moved off it. [TransferableTypedData] hands the buffer over
+/// (one memcpy on send, zero copy on receive) and the decode happens on the
+/// worker, where it belongs.
+class _StreamsJob {
+  final TransferableTypedData streamsBytes;
+
+  /// Null when the categories request itself failed — the build then reports
+  /// the "ungrouped" warning without needing to know why.
+  final TransferableTypedData? categoriesBytes;
+  final String serverUrl;
+  final String encodedUser;
+  final String encodedPass;
+  final String contentType;
+  final String label;
+  final _LiveUrlForm liveUrlForm;
+
+  /// The charset each body declared, so the worker decodes byte-for-byte
+  /// identically to what `Response.body` would have produced on this thread.
+  /// Null means "not declared", which package:http resolves to latin1 — the
+  /// fallback is replicated rather than corrected, because silently switching
+  /// a panel's channel names to a different encoding is a separate change
+  /// from moving the decode off the UI thread.
+  final String? streamsCharset;
+  final String? categoriesCharset;
+
+  const _StreamsJob({
+    required this.streamsBytes,
+    required this.categoriesBytes,
+    required this.serverUrl,
+    required this.encodedUser,
+    required this.encodedPass,
+    required this.contentType,
+    required this.label,
+    required this.liveUrlForm,
+    required this.streamsCharset,
+    required this.categoriesCharset,
+  });
+}
+
+/// Decode both panel responses AND build every [IptvChannel] in one pass.
+///
+/// This is the whole point of the isolate: decoding alone off the UI thread
+/// still handed back tens of thousands of decoded maps (a copy the receiving
+/// thread pays for) and then built the channels on the UI thread anyway. A
+/// 55k-channel panel spent seconds of that on the main isolate — long enough
+/// for Android to declare the app unresponsive and offer to kill it. Doing
+/// both here means only the finished (and more compact) channel list crosses
+/// back, once.
+IptvParseResult _buildXtreamStreams(_StreamsJob job) {
+  XtreamCodesService.buildsOnThisIsolate++;
+  final isLive = job.contentType == 'live';
+  final isSeries = job.contentType == 'series';
+
+  // The expensive UTF-8 pass now happens HERE, on the worker.
+  final streamsBody = XtreamCodesService.encodingForCharset(job.streamsCharset)
+      .decode(job.streamsBytes.materialize().asUint8List());
+
+  final (streamsData, streamsError) =
+      XtreamCodesService.decodeJsonListSync(streamsBody, 'streams');
+  if (streamsError != null) {
+    return IptvParseResult(channels: [], categories: [], error: streamsError);
+  }
+
+  // Category id → name; channels degrade to ungrouped (with a user-visible
+  // warning) when the panel couldn't serve them.
+  String? warning;
+  final categoryMap = <String, String>{};
+  final categoryNames = <String>[];
+  final categoriesBytes = job.categoriesBytes;
+  if (categoriesBytes == null) {
+    warning =
+        'Could not load ${job.label} categories — showing channels ungrouped';
+  } else {
+    final categoriesBody =
+        XtreamCodesService.encodingForCharset(job.categoriesCharset)
+            .decode(categoriesBytes.materialize().asUint8List());
+    final (categoriesData, catError) =
+        XtreamCodesService.decodeJsonListSync(categoriesBody, 'categories');
+    if (categoriesData == null) {
+      warning =
+          'Could not load ${job.label} categories — showing channels ungrouped';
+      debugPrint(
+        'XtreamCodesService: Ignoring ${job.label} categories: $catError',
+      );
+    } else {
+      for (final cat in categoriesData) {
+        final id = cat['category_id']?.toString() ?? '';
+        final name = cat['category_name']?.toString() ?? '';
+        if (id.isNotEmpty && name.isNotEmpty) {
+          categoryMap[id] = name;
+          categoryNames.add(name);
+        }
+      }
+    }
+  }
+
+  final channels = <IptvChannel>[];
+  for (final stream in streamsData!) {
+    final name = stream['name']?.toString() ?? '';
+    if (name.isEmpty) continue;
+
+    final categoryId = stream['category_id']?.toString() ?? '';
+    final group = categoryMap[categoryId];
+
+    // Series entries are shows, not streams: keyed by series_id, no playable
+    // URL (episodes come from get_series_info on drill-in). The sentinel URL
+    // keeps every URL-keyed pathway (focus maps, search, dedupe) working;
+    // play/tap handlers branch on contentType before it could ever reach a
+    // player.
+    if (isSeries) {
+      final seriesId = stream['series_id']?.toString() ?? '';
+      if (seriesId.isEmpty) continue;
+      final backdrops = stream['backdrop_path'];
+      final backdrop = backdrops is List && backdrops.isNotEmpty
+          ? backdrops.first?.toString()
+          : null;
+      // Panels disagree on the release-date key — resolve the known
+      // spellings in order (same alias set other mature clients use).
+      final releaseDate = (stream['releaseDate'] ??
+              stream['release_date'] ??
+              stream['releasedate'])
+          ?.toString();
+      channels.add(
+        IptvChannel(
+          name: name,
+          url: 'xtream-series://$seriesId',
+          // `cover` is the canonical series art; some panels send
+          // `stream_icon` instead (the live/VOD field).
+          logoUrl: (stream['cover'] ?? stream['stream_icon'])?.toString(),
+          group: group,
+          duration: null, // not live
+          contentType: 'series',
+          attributes: {
+            'series_id': seriesId,
+            if ((stream['plot']?.toString() ?? '').isNotEmpty)
+              'plot': stream['plot'].toString(),
+            if ((stream['genre']?.toString() ?? '').isNotEmpty)
+              'genre': stream['genre'].toString(),
+            if (releaseDate != null && releaseDate.isNotEmpty)
+              'releaseDate': releaseDate,
+            if ((stream['rating']?.toString() ?? '').isNotEmpty)
+              'rating': stream['rating'].toString(),
+            if (backdrop != null && backdrop.isNotEmpty) 'backdrop': backdrop,
+          },
+        ),
+      );
+      continue;
+    }
+
+    final streamId = stream['stream_id']?.toString() ?? '';
+    if (streamId.isEmpty) continue;
+
+    if (isLive) {
+      channels.add(
+        IptvChannel(
+          name: name,
+          url: _liveUrlFor(
+            job.serverUrl,
+            job.encodedUser,
+            job.encodedPass,
+            streamId,
+            job.liveUrlForm,
+          ),
+          logoUrl: stream['stream_icon']?.toString(),
+          group: group,
+          duration: -1, // live
+          contentType: 'live',
+          attributes: {
+            if (stream['epg_channel_id'] != null)
+              'tvg-id': stream['epg_channel_id'].toString(),
+            'stream_id': streamId,
+            // Catchup: whether the panel records this channel, and for how
+            // many days back the archive reaches.
+            if (stream['tv_archive'] != null)
+              'tv_archive': stream['tv_archive'].toString(),
+            if (stream['tv_archive_duration'] != null)
+              'tv_archive_duration': stream['tv_archive_duration'].toString(),
+          },
+        ),
+      );
+    } else {
+      final extension = stream['container_extension']?.toString() ?? 'mp4';
+      channels.add(
+        IptvChannel(
+          name: name,
+          url: '${job.serverUrl}/movie/${job.encodedUser}/${job.encodedPass}/'
+              '$streamId.$extension',
+          logoUrl: stream['stream_icon']?.toString(),
+          group: group,
+          duration: null, // not live
+          contentType: 'vod',
+          attributes: {
+            if (stream['rating'] != null) 'rating': stream['rating'].toString(),
+            'stream_id': streamId,
+          },
+        ),
+      );
+    }
+  }
+
+  return IptvParseResult(
+    channels: channels,
+    categories: categoryNames,
+    warning: warning,
+  );
+}
