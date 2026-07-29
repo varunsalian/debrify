@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -9,9 +10,18 @@ class DebrifyTvDatabase {
 
   static final DebrifyTvDatabase instance = DebrifyTvDatabase._();
 
+  /// Tests inject an in-memory database here (sqflite_common_ffi) so store
+  /// logic runs against the real schema without path_provider.
+  @visibleForTesting
+  static Database? debugDatabaseOverride;
+
   Database? _db;
 
   Future<Database> get database async {
+    final override = debugDatabaseOverride;
+    if (override != null) {
+      return override;
+    }
     if (_db != null) {
       return _db!;
     }
@@ -21,7 +31,7 @@ class DebrifyTvDatabase {
 
     _db = await openDatabase(
       dbPath,
-      version: 2,
+      version: 3,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -93,6 +103,8 @@ class DebrifyTvDatabase {
             FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
           )
         ''');
+
+        await createIptvStoreTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -125,6 +137,10 @@ class DebrifyTvDatabase {
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_channels_channel_number ON tv_channels(channel_number)',
           );
         }
+
+        if (oldVersion < 3) {
+          await createIptvStoreTables(db);
+        }
       },
     );
 
@@ -139,5 +155,65 @@ class DebrifyTvDatabase {
   Future<T> runTxn<T>(Future<T> Function(Transaction txn) action) async {
     final db = await database;
     return db.transaction(action, exclusive: false);
+  }
+
+  /// IPTV favorites / watch history / video resume tables (schema v3), used
+  /// by IptvMediaStore. `IF NOT EXISTS` so it's safe from both onCreate and
+  /// onUpgrade, and callable directly by tests on an in-memory database.
+  static Future<void> createIptvStoreTables(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS iptv_favorites (
+        url TEXT PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT '',
+        logo_url TEXT NOT NULL DEFAULT '',
+        channel_group TEXT NOT NULL DEFAULT '',
+        playlist_id TEXT NOT NULL DEFAULT '',
+        http_headers_json TEXT,
+        added_at INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_iptv_favorites_playlist
+      ON iptv_favorites(playlist_id)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS iptv_watch_history (
+        url TEXT PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT '',
+        logo_url TEXT NOT NULL DEFAULT '',
+        channel_group TEXT NOT NULL DEFAULT '',
+        playlist_id TEXT NOT NULL DEFAULT '',
+        http_headers_json TEXT,
+        series_id TEXT,
+        series_name TEXT,
+        season INTEGER,
+        episode INTEGER,
+        has_next INTEGER,
+        last_played_at INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_iptv_watch_history_last_played
+      ON iptv_watch_history(last_played_at)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_iptv_watch_history_playlist
+      ON iptv_watch_history(playlist_id)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS video_resume (
+        resume_key TEXT PRIMARY KEY,
+        position_ms INTEGER NOT NULL DEFAULT 0,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        speed REAL NOT NULL DEFAULT 1.0,
+        aspect TEXT NOT NULL DEFAULT 'contain',
+        updated_at INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
   }
 }

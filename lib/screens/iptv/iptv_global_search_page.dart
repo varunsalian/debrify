@@ -215,23 +215,10 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
       var channels = <IptvChannel>[channel];
       var startIndex = 0;
       if (channel.isLive) {
-        final live = hit.source.contentType == 'mixed'
-            ? [
-                for (final c in hit.source.channels)
-                  if (c.isLive) c,
-              ]
-            : hit.source.channels;
-        var idx = live.indexOf(channel);
-        if (idx >= 0) {
-          channels = live;
-          startIndex = idx;
-          if (channels.length > _kMaxPlayerChannels) {
-            final lo = (startIndex - _kMaxPlayerChannels ~/ 2)
-                .clamp(0, channels.length - _kMaxPlayerChannels);
-            channels = channels.sublist(lo, lo + _kMaxPlayerChannels);
-            startIndex -= lo;
-          }
-        }
+        final (window, idx) =
+            hit.source.liveZapWindow(channel, _kMaxPlayerChannels);
+        channels = window;
+        startIndex = idx;
       }
 
       await VideoPlayerLauncher.push(
@@ -546,7 +533,7 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${source.channels.length}',
+                  '${source.channelCount}',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.35),
                     fontSize: 11.5,

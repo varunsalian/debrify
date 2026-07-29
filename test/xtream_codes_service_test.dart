@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:debrify/services/iptv_catalog_cache.dart';
+import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/xtream_codes_service.dart';
 
 /// End-to-end coverage of the Xtream stream fetch against a fake panel.
@@ -587,6 +590,101 @@ void main() {
       );
       expect(list, isNull);
       expect(error, contains('Forbidden'));
+    });
+  });
+
+  group('DB-catalog mode (worker ingests, UI gets a receipt)', () {
+    late HttpServer server;
+    late String base;
+    late Directory dir;
+
+    setUpAll(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      base = 'http://127.0.0.1:${server.port}';
+      server.listen((request) {
+        final action = request.uri.queryParameters['action'] ?? '';
+        if (request.uri.path != '/player_api.php') {
+          // Live-URL probe: standard TS answers.
+          request.response.statusCode =
+              request.uri.path.startsWith('/live/') &&
+                      request.uri.path.endsWith('.ts')
+                  ? HttpStatus.ok
+                  : HttpStatus.notFound;
+          request.response.close();
+          return;
+        }
+        request.response.headers.contentType = ContentType.json;
+        if (action.endsWith('_categories')) {
+          request.response.write(jsonEncode([
+            {'category_id': '1', 'category_name': 'Sports'},
+          ]));
+        } else {
+          request.response.write(jsonEncode([
+            {'name': 'Sky Sports F1', 'stream_id': 42, 'category_id': '1'},
+            {'name': 'BBC One', 'stream_id': 43, 'category_id': ''},
+          ]));
+        }
+        request.response.close();
+      });
+    });
+
+    tearDownAll(() async => server.close(force: true));
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      dir = await Directory.systemTemp.createTemp('xtream_ingest');
+      IptvCatalogDb.debugDirectoryOverride = dir.path;
+      await IptvCatalogDb.open();
+      XtreamCodesService.instance.clearCache();
+    });
+
+    tearDown(() async {
+      IptvCatalogDb.debugClose();
+      IptvCatalogDb.debugDirectoryOverride = null;
+      await dir.delete(recursive: true);
+    });
+
+    test('a fetch lands in the DB and returns a receipt, not a list',
+        () async {
+      final result = await XtreamCodesService.instance
+          .fetchLiveStreams(base, 'user', 'pass');
+
+      expect(result.hasError, isFalse);
+      expect(result.channels, isEmpty,
+          reason: 'the object graph must not cross back to this isolate');
+      expect(result.isEmpty, isFalse,
+          reason: 'an ingested catalog is not an empty result');
+      final receipt = result.ingest!;
+      expect(receipt.channelCount, 2);
+      expect(receipt.catalogKey,
+          IptvCatalogCache.keyForXtream(base, 'user', 'live'));
+
+      final snap = IptvCatalogDb.snapshot(receipt.catalogKey)!;
+      expect(snap.channelCount, 2);
+      expect(snap.contentDigest, receipt.contentDigest);
+      expect(snap.categories, ['Sports']);
+      final rows = snap.page(offset: 0, limit: 10);
+      expect(rows.first.name, 'Sky Sports F1');
+      expect(rows.first.url, '$base/live/user/pass/42.ts');
+      expect(rows.first.group, 'Sports');
+
+      expect(
+        XtreamCodesService.instance.cachedResult(base, 'user', 'live'),
+        isNull,
+        reason: 'DB mode must not also hold the catalog on the service heap',
+      );
+    });
+
+    test('flag off restores the legacy list pipeline untouched', () async {
+      SharedPreferences.setMockInitialValues(
+          {'iptv_db_catalog_enabled': false});
+
+      final result = await XtreamCodesService.instance
+          .fetchLiveStreams(base, 'u2', 'p2');
+
+      expect(result.ingest, isNull);
+      expect(result.channels.length, 2);
+      expect(IptvCatalogDb.snapshot('xc|$base|u2|live'), isNull);
     });
   });
 }

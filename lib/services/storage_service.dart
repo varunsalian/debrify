@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
+import 'iptv_media_store.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/webdav_item.dart';
@@ -208,8 +209,6 @@ class StorageService {
 
   static const String _debrifyTvFavoriteChannelsKey =
       'debrify_tv_favorite_channels_v1';
-  static const String _iptvFavoriteChannelsKey = 'iptv_favorite_channels_v1';
-  static const String _iptvWatchHistoryKey = 'iptv_watch_history_v1';
 
   // Stremio TV settings
   static const String _stremioTvRotationMinutesKey =
@@ -419,6 +418,20 @@ class StorageService {
   static Future<void> setIptvRedesignEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('iptv_redesign_enabled', enabled);
+  }
+
+  /// Store big IPTV catalogs in iptv_catalog.db and page the UI from SQL
+  /// (constant memory regardless of playlist size) instead of holding every
+  /// channel on the heap. On by default; off restores the legacy
+  /// in-memory/snapshot pipeline unchanged.
+  static Future<bool> getIptvDbCatalogEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('iptv_db_catalog_enabled') ?? true;
+  }
+
+  static Future<void> setIptvDbCatalogEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('iptv_db_catalog_enabled', enabled);
   }
 
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,
@@ -1834,7 +1847,10 @@ class StorageService {
   static Future<void> clearAllPlaybackData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_playbackStateKey);
+    // Resume lives in the DB now; the prefs key only still exists for users
+    // who wipe before the one-time import has run.
     await prefs.remove(_videoResumeKey);
+    await IptvMediaStore.clearVideoResume();
     debugPrint('StorageService: cleared playback state and video resume data');
   }
 
@@ -1952,44 +1968,16 @@ class StorageService {
     }
   }
 
-  // Internal helper for services needing shared prefs quickly
-  static Future<SharedPreferences> _getPrefs() async {
-    return await SharedPreferences.getInstance();
-  }
-
-  // Video resume map helpers (legacy - keeping for backward compatibility)
-  static Future<Map<String, dynamic>> _getVideoResumeMap() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_videoResumeKey);
-    if (raw == null || raw.isEmpty) return {};
-    try {
-      final decoded = await decodeJsonAsync(raw);
-      if (decoded is Map<String, dynamic>) return decoded;
-      return {};
-    } catch (_) {
-      return {};
-    }
-  }
-
-  static Future<void> _saveVideoResumeMap(Map<String, dynamic> map) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_videoResumeKey, jsonEncode(map));
-  }
-
-  static Future<Map<String, dynamic>?> getVideoResume(String key) async {
-    final map = await _getVideoResumeMap();
-    final entry = map[key];
-    if (entry is Map<String, dynamic>) return entry;
-    return null;
+  // Video resume — one row per item in debrify_tv.db (see IptvMediaStore).
+  static Future<Map<String, dynamic>?> getVideoResume(String key) {
+    return IptvMediaStore.videoResume(key);
   }
 
   static Future<void> upsertVideoResume(
     String key,
     Map<String, dynamic> entry,
-  ) async {
-    final map = await _getVideoResumeMap();
-    map[key] = entry;
-    await _saveVideoResumeMap(map);
+  ) {
+    return IptvMediaStore.upsertVideoResume(key, entry);
   }
 
   /// Save audio and subtitle preferences for series content
@@ -2979,132 +2967,24 @@ class StorageService {
   // IPTV Channel Favorites
   // ==========================================================================
 
-  /// Canonical comparison key for an IPTV channel URL. Xtream Codes stream
-  /// URL formats have changed over time (optional /live/ prefix,
-  /// percent-encoded credentials, .m3u8 vs .ts extension), so favorites are
-  /// matched on a format-insensitive key rather than the raw string.
+  /// Canonical comparison key for an IPTV channel URL (see
+  /// [IptvMediaStore.canonicalChannelKey]).
   static String canonicalIptvChannelKey(String url) {
-    // Stremio-addon channel keys (stremio-tv://addon/meta) are already
-    // stable synthetic identities — never normalize them (Uri would
-    // lowercase the addon-id "host" and decode the meta id).
-    if (url.startsWith('stremio-tv://')) return url;
-    final uri = Uri.tryParse(url);
-    if (uri == null || uri.host.isEmpty) return url;
-    // pathSegments are percent-decoded, which normalizes credential encoding.
-    final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
-    // Drop the /live/ prefix only for URLs shaped like Xtream live streams
-    // (.../live/<user>/<pass>/<numeric id>.<ext>) — not arbitrary /live/
-    // paths, which belong to ordinary playlists where the segment is
-    // significant.
-    final xtreamLeaf = RegExp(r'^\d+\.\w+$');
-    var isXtreamLive = false;
-    if (segments.length >= 4 &&
-        segments[segments.length - 4] == 'live' &&
-        xtreamLeaf.hasMatch(segments.last)) {
-      segments.removeAt(segments.length - 4);
-      isXtreamLive = true;
-    } else if (segments.length == 3 && xtreamLeaf.hasMatch(segments.last)) {
-      // Legacy un-prefixed form: /<user>/<pass>/<numeric id>.<ext>.
-      isXtreamLive = true;
-    }
-    // For Xtream live URLs the extension is presentation, not identity: the
-    // same channel is served as .m3u8 on HLS panels and .ts on HLS-off ones
-    // (VOD /movie/ URLs keep theirs — the container is real there).
-    if (isXtreamLive) {
-      final leaf = segments.last;
-      segments[segments.length - 1] = leaf.substring(0, leaf.indexOf('.'));
-    }
-    final port = uri.hasPort ? ':${uri.port}' : '';
-    // Keep the query: distinct channels can differ only by query params.
-    final query = uri.hasQuery ? '?${uri.query}' : '';
-    return '${uri.scheme}://${uri.host}$port/${segments.join('/')}$query';
+    return IptvMediaStore.canonicalChannelKey(url);
   }
-
-  /// How long this scan may hold the isolate before yielding. Per-row cost
-  /// here is far cheaper and far more uniform than the EPG service's scan
-  /// (a host substring test, then a canonicalization only for the few rows
-  /// that pass it), which is why the two aren't sharing a constant — but the
-  /// budget is expressed the same way so neither can drift into blocking.
-  static const _iptvScanYieldBudget = Duration(milliseconds: 8);
 
   /// Rewrite stored favorite URLs to the current format when a fetched
   /// channel matches an existing favorite canonically but not literally
   /// (e.g. favorites saved before the Xtream /live/ URL fix). Keeps the
   /// Home favorites row playing working URLs.
-  static Future<void> reconcileIptvFavoriteUrls(
-    List<IptvChannel> channels,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
-    if (favoritesJson == null) return;
+  static Future<void> reconcileIptvFavoriteUrls(List<IptvChannel> channels) {
+    return IptvMediaStore.reconcileFavoriteUrls(channels);
+  }
 
-    Map<String, dynamic> favorites;
-    try {
-      favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
-    } catch (_) {
-      return;
-    }
-    if (favorites.isEmpty) return;
-
-    final storedByCanonical = <String, String>{
-      for (final key in favorites.keys) canonicalIptvChannelKey(key): key,
-    };
-
-    // Cheap pre-filter: a channel can only match a favorite on the same
-    // host, and canonicalizing tens of thousands of URLs on the UI isolate
-    // is not free.
-    final favoriteHosts = <String>{
-      for (final key in favorites.keys)
-        if (Uri.tryParse(key)?.host.isNotEmpty ?? false) Uri.parse(key).host,
-    };
-
-    // Collect the renames against LOCALS only. The scan below yields to the
-    // event loop (a 50k-channel playlist would otherwise block input on the
-    // way in), and the whole point of yielding is to let other code run —
-    // including someone starring a channel, which is its own
-    // read-modify-write of this same key. Holding the decoded map across a
-    // yield and writing it back at the end would silently discard their star.
-    final renames = <String, String>{}; // stored key → current URL
-    final chunk = Stopwatch()..start();
-    for (final channel in channels) {
-      if (storedByCanonical.isEmpty) break;
-      if (chunk.elapsedMicroseconds >= _iptvScanYieldBudget.inMicroseconds) {
-        await Future<void>.delayed(Duration.zero);
-        chunk.reset();
-      }
-      if (!favoriteHosts.any(channel.url.contains)) continue;
-      // Consume the mapping so a second canonically-equal channel can't
-      // re-move (and null out) an already-migrated entry.
-      final storedKey = storedByCanonical.remove(
-        canonicalIptvChannelKey(channel.url),
-      );
-      if (storedKey != null && storedKey != channel.url) {
-        renames[storedKey] = channel.url;
-      }
-    }
-    if (renames.isEmpty) return;
-
-    // Re-read and rewrite with NO suspension point in between, so this is
-    // atomic with respect to concurrent writers again.
-    final latestJson = prefs.getString(_iptvFavoriteChannelsKey);
-    if (latestJson == null) return;
-    Map<String, dynamic> latest;
-    try {
-      latest = jsonDecode(latestJson) as Map<String, dynamic>;
-    } catch (_) {
-      return;
-    }
-    var changed = false;
-    for (final entry in renames.entries) {
-      final metadata = latest.remove(entry.key);
-      if (metadata != null) {
-        latest[entry.value] = metadata;
-        changed = true;
-      }
-    }
-    if (changed) {
-      await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(latest));
-    }
+  /// DB-catalog variant: the fresh URLs come from the catalog rows on a
+  /// worker isolate instead of a channel list.
+  static Future<void> reconcileIptvFavoriteUrlsForCatalog(String catalogKey) {
+    return IptvMediaStore.reconcileFavoriteUrlsForCatalog(catalogKey);
   }
 
   /// Set favorite status for an IPTV channel
@@ -3116,42 +2996,16 @@ class StorageService {
     String? group,
     String? playlistId,
     Map<String, String>? httpHeaders,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
-
-    Map<String, dynamic> favorites = {};
-    if (favoritesJson != null) {
-      try {
-        favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
-      } catch (_) {}
-    }
-
-    // Match older stored URL formats too, so toggling can't leave stale
-    // duplicates behind.
-    final canonical = canonicalIptvChannelKey(channelUrl);
-    favorites.removeWhere(
-      (key, _) => canonicalIptvChannelKey(key) == canonical,
+  }) {
+    return IptvMediaStore.setChannelFavorited(
+      channelUrl,
+      isFavorited,
+      channelName: channelName,
+      logoUrl: logoUrl,
+      group: group,
+      playlistId: playlistId,
+      httpHeaders: httpHeaders,
     );
-
-    if (isFavorited) {
-      // Store channel metadata along with the favorite status
-      favorites[channelUrl] = {
-        'name': channelName ?? '',
-        'logoUrl': logoUrl ?? '',
-        'group': group ?? '',
-        'playlistId': playlistId ?? '',
-        // The favorites view rebuilds channels from this metadata alone (no
-        // re-fetch), so a channel that needs a specific UA/Referer has to
-        // carry it here or it would play from the playlist but not from
-        // Favorites. Omitted when empty — most channels declare none.
-        if (httpHeaders != null && httpHeaders.isNotEmpty)
-          'httpHeaders': httpHeaders,
-        'addedAt': DateTime.now().millisecondsSinceEpoch,
-      };
-    }
-
-    await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(favorites));
   }
 
   /// Per-channel HTTP headers stored with a favorite (see
@@ -3168,51 +3022,13 @@ class StorageService {
   }
 
   /// Remove all IPTV favorites that belong to a specific playlist
-  static Future<void> removeIptvFavoritesByPlaylistId(String playlistId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
-
-    if (favoritesJson == null) return;
-
-    try {
-      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
-
-      // Remove entries that belong to the deleted playlist
-      favorites.removeWhere((url, metadata) {
-        if (metadata is Map<String, dynamic>) {
-          return metadata['playlistId'] == playlistId;
-        }
-        return false;
-      });
-
-      await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(favorites));
-    } catch (e) {
-      debugPrint('Error removing IPTV favorites for playlist $playlistId: $e');
-    }
+  static Future<void> removeIptvFavoritesByPlaylistId(String playlistId) {
+    return IptvMediaStore.removeFavoritesByPlaylistId(playlistId);
   }
 
   /// Get all favorite IPTV channel URLs with metadata
-  static Future<Map<String, Map<String, dynamic>>>
-  getIptvFavoriteChannels() async {
-    final prefs = await SharedPreferences.getInstance();
-    final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
-
-    if (favoritesJson == null) return {};
-
-    try {
-      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
-      return favorites.map(
-        (key, value) => MapEntry(
-          key,
-          value is Map<String, dynamic>
-              ? value
-              : {'name': '', 'logoUrl': '', 'group': ''},
-        ),
-      );
-    } catch (e) {
-      debugPrint('Error reading IPTV channel favorites: $e');
-      return {};
-    }
+  static Future<Map<String, Map<String, dynamic>>> getIptvFavoriteChannels() {
+    return IptvMediaStore.favoriteChannels();
   }
 
   /// Get all favorite IPTV channel URLs
@@ -3222,11 +3038,6 @@ class StorageService {
   }
 
   // ── IPTV watch history (backs the virtual "Continue watching" playlist) ──
-
-  /// How many watched on-demand items to remember. A panel can list tens of
-  /// thousands of movies, and this backs a short "pick up where you left off"
-  /// shelf — not an archive.
-  static const int _iptvWatchHistoryMax = 100;
 
   /// A watched item counts as in-progress between these fractions: below the
   /// floor nothing meaningful was watched (a mis-click, or a few seconds of
@@ -3241,7 +3052,7 @@ class StorageService {
   /// is read.
   ///
   /// The playback position is deliberately NOT stored here. Both players
-  /// already write it to the shared `video_resume_v1` map keyed by stream URL,
+  /// already write it to the shared video-resume store keyed by stream URL,
   /// and copying it would hand the shelf a second, staler truth to disagree
   /// with; [getIptvContinueWatching] joins the two at read time instead.
   static Future<void> recordIptvWatch(
@@ -3260,50 +3071,20 @@ class StorageService {
     int? season,
     int? episode,
     bool? hasNextEpisode,
-  }) async {
-    if (channelUrl.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-
-    Map<String, dynamic> history = {};
-    final raw = prefs.getString(_iptvWatchHistoryKey);
-    if (raw != null) {
-      try {
-        history = jsonDecode(raw) as Map<String, dynamic>;
-      } catch (_) {}
-    }
-
-    // Re-watching moves an item to the front rather than duplicating it.
-    history.remove(channelUrl);
-    history[channelUrl] = {
-      'name': channelName ?? '',
-      'logoUrl': logoUrl ?? '',
-      'group': group ?? '',
-      'playlistId': playlistId ?? '',
-      // Rebuilt rows never re-parse the playlist, so a stream that needs a
-      // specific UA/Referer has to carry it here — exactly as favorites do.
-      if (httpHeaders != null && httpHeaders.isNotEmpty)
-        'httpHeaders': httpHeaders,
-      if (seriesId != null && seriesId.isNotEmpty) 'seriesId': seriesId,
-      if (seriesName != null && seriesName.isNotEmpty) 'seriesName': seriesName,
-      if (season != null) 'season': season,
-      if (episode != null) 'episode': episode,
-      if (hasNextEpisode != null) 'hasNext': hasNextEpisode,
-      'lastPlayedAt': DateTime.now().millisecondsSinceEpoch,
-    };
-
-    if (history.length > _iptvWatchHistoryMax) {
-      final byOldest = history.entries.toList()
-        ..sort(
-          (a, b) => _iptvWatchTimestamp(a.value).compareTo(
-            _iptvWatchTimestamp(b.value),
-          ),
-        );
-      for (final entry in byOldest.take(history.length - _iptvWatchHistoryMax)) {
-        history.remove(entry.key);
-      }
-    }
-
-    await prefs.setString(_iptvWatchHistoryKey, jsonEncode(history));
+  }) {
+    return IptvMediaStore.recordWatch(
+      channelUrl,
+      channelName: channelName,
+      logoUrl: logoUrl,
+      group: group,
+      playlistId: playlistId,
+      httpHeaders: httpHeaders,
+      seriesId: seriesId,
+      seriesName: seriesName,
+      season: season,
+      episode: episode,
+      hasNextEpisode: hasNextEpisode,
+    );
   }
 
   static int _iptvWatchTimestamp(dynamic meta) {
@@ -3315,31 +3096,13 @@ class StorageService {
   }
 
   /// All remembered on-demand IPTV items (url → metadata).
-  static Future<Map<String, Map<String, dynamic>>>
-  getIptvWatchHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_iptvWatchHistoryKey);
-    if (raw == null) return {};
-
-    try {
-      final history = jsonDecode(raw) as Map<String, dynamic>;
-      return history.map(
-        (key, value) => MapEntry(
-          key,
-          value is Map<String, dynamic>
-              ? value
-              : <String, dynamic>{'name': '', 'logoUrl': '', 'group': ''},
-        ),
-      );
-    } catch (e) {
-      debugPrint('Error reading IPTV watch history: $e');
-      return {};
-    }
+  static Future<Map<String, Map<String, dynamic>>> getIptvWatchHistory() {
+    return IptvMediaStore.watchHistory();
   }
 
   /// Watched-but-unfinished IPTV items, most recent first. Joins the metadata
-  /// captured at play time with the position the players persist to
-  /// `video_resume_v1` (both keyed by stream URL), so an item only appears
+  /// captured at play time with the position the players persist to the
+  /// video-resume store (both keyed by stream URL), so an item only appears
   /// once it has real progress behind it.
   ///
   /// Each entry is the stored metadata plus `url`, `positionMs`, `durationMs`
@@ -3348,7 +3111,8 @@ class StorageService {
     final history = await getIptvWatchHistory();
     if (history.isEmpty) return [];
 
-    final resumeMap = await _getVideoResumeMap();
+    // History is capped at 100 entries, so this is a small batched lookup.
+    final resumeMap = await IptvMediaStore.resumeEntries(history.keys);
 
     // Series identity for grouping: <playlistId>::<seriesId>. Same shape the
     // shelf and per-series audio use.
@@ -3364,7 +3128,7 @@ class StorageService {
     final seriesLatest = <String, int>{};
     for (final entry in history.entries) {
       final resume = resumeMap[entry.key];
-      if (resume is! Map) continue;
+      if (resume == null) continue;
       final positionMs = (resume['positionMs'] as num?)?.toInt() ?? 0;
       final durationMs = (resume['durationMs'] as num?)?.toInt() ?? 0;
       if (durationMs <= 0) continue;
@@ -3425,16 +3189,15 @@ class StorageService {
     final wanted = urls.toSet();
     if (wanted.isEmpty) return {};
 
-    final resumeMap = await _getVideoResumeMap();
+    final resumeMap = await IptvMediaStore.resumeEntries(wanted);
     final states =
         <String, ({int positionMs, int durationMs, double fraction})>{};
-    for (final url in wanted) {
-      final resume = resumeMap[url];
-      if (resume is! Map) continue;
+    for (final entry in resumeMap.entries) {
+      final resume = entry.value;
       final positionMs = (resume['positionMs'] as num?)?.toInt() ?? 0;
       final durationMs = (resume['durationMs'] as num?)?.toInt() ?? 0;
       if (durationMs <= 0) continue;
-      states[url] = (
+      states[entry.key] = (
         positionMs: positionMs,
         durationMs: durationMs,
         fraction: (positionMs / durationMs).clamp(0.0, 1.0),
@@ -3474,25 +3237,8 @@ class StorageService {
   /// Remove all watch history that belongs to a deleted playlist — mirrors
   /// [removeIptvFavoritesByPlaylistId] so a removed provider leaves nothing
   /// behind pointing at URLs that no longer authenticate.
-  static Future<void> removeIptvWatchHistoryByPlaylistId(
-    String playlistId,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_iptvWatchHistoryKey);
-    if (raw == null) return;
-
-    try {
-      final history = jsonDecode(raw) as Map<String, dynamic>;
-      history.removeWhere((url, metadata) {
-        if (metadata is Map<String, dynamic>) {
-          return metadata['playlistId'] == playlistId;
-        }
-        return false;
-      });
-      await prefs.setString(_iptvWatchHistoryKey, jsonEncode(history));
-    } catch (e) {
-      debugPrint('Error removing IPTV watch history for $playlistId: $e');
-    }
+  static Future<void> removeIptvWatchHistoryByPlaylistId(String playlistId) {
+    return IptvMediaStore.removeWatchHistoryByPlaylistId(playlistId);
   }
 
   /// Build progress map for playlist items

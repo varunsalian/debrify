@@ -5,6 +5,9 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
+import 'iptv_catalog_cache.dart';
+import 'iptv_catalog_db.dart';
+import 'storage_service.dart';
 
 /// Result of Xtream Codes authentication
 class XcAuthResult {
@@ -314,8 +317,15 @@ class XtreamCodesService {
     final label = isLive ? 'live' : (isSeries ? 'series' : 'VOD');
     final cacheKey = '$serverUrl:$username:$contentType';
 
+    // DB-catalog mode: the worker ingests straight into iptv_catalog.db and
+    // the service's in-memory result cache is bypassed entirely — holding
+    // three 55k-object catalogs on the heap is exactly what this mode
+    // removes. Freshness policy moves to the caller (snapshot.ingestedAt).
+    final ingestToDb =
+        IptvCatalogDb.isOpen && await StorageService.getIptvDbCatalogEnabled();
+
     // Check cache
-    if (_cache.containsKey(cacheKey)) {
+    if (!ingestToDb && _cache.containsKey(cacheKey)) {
       final cached = _cache[cacheKey]!;
       if (DateTime.now().difference(cached.fetchedAt) < _cacheDuration) {
         debugPrint(
@@ -430,6 +440,10 @@ class XtreamCodesService {
         contentType: contentType,
         label: label,
         liveUrlForm: liveUrlForm,
+        ingestDbPath: ingestToDb ? IptvCatalogDb.path : null,
+        ingestCatalogKey: ingestToDb
+            ? IptvCatalogCache.keyForXtream(serverUrl, username, contentType)
+            : null,
       );
       // Both bodies are decoded by the job, so both count toward the
       // threshold — a small channel list with a huge category list is still
@@ -448,8 +462,15 @@ class XtreamCodesService {
       final warning = built.warning;
 
       debugPrint(
-        'XtreamCodesService: Fetched ${channels.length} $label channels, ${categoryNames.length} categories',
+        'XtreamCodesService: Fetched '
+        '${built.ingest?.channelCount ?? channels.length} $label channels, '
+        '${categoryNames.length} categories'
+        '${built.ingest != null ? ' (ingested to catalog DB)' : ''}',
       );
+
+      // An ingested result IS the cache — rows are on disk, the receipt is
+      // all the caller needs, and nothing big should linger on this heap.
+      if (built.ingest != null) return built;
 
       // Cache without the warning so it surfaces once per fresh fetch rather
       // than on every cached load for the next 30 minutes.
@@ -918,6 +939,13 @@ class _StreamsJob {
   final String? streamsCharset;
   final String? categoriesCharset;
 
+  /// When set, the worker writes the finished channel list into the catalog
+  /// DB at this path under [ingestCatalogKey] and returns a receipt instead
+  /// of the list — the 55k-object graph then never crosses back to the UI
+  /// isolate at all.
+  final String? ingestDbPath;
+  final String? ingestCatalogKey;
+
   const _StreamsJob({
     required this.streamsBytes,
     required this.categoriesBytes,
@@ -929,6 +957,8 @@ class _StreamsJob {
     required this.liveUrlForm,
     required this.streamsCharset,
     required this.categoriesCharset,
+    this.ingestDbPath,
+    this.ingestCatalogKey,
   });
 }
 
@@ -1091,6 +1121,32 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
         ),
       );
     }
+  }
+
+  // DB-catalog mode: write the rows here on the worker and hand back only a
+  // receipt. An EMPTY list is deliberately NOT ingested — a flaky panel
+  // returning nothing must not wipe a previously good stored catalog (the
+  // same rule the snapshot cache's "never cache an empty catalog" enforces);
+  // the empty result flows back as-is and reads as empty, exactly like today.
+  final ingestDbPath = job.ingestDbPath;
+  final ingestCatalogKey = job.ingestCatalogKey;
+  if (ingestDbPath != null && ingestCatalogKey != null && channels.isNotEmpty) {
+    final digest = IptvCatalogDb.ingest(
+      dbPath: ingestDbPath,
+      catalogKey: ingestCatalogKey,
+      channels: channels,
+      categories: categoryNames,
+    );
+    return IptvParseResult(
+      channels: const [],
+      categories: categoryNames,
+      warning: warning,
+      ingest: CatalogIngestReceipt(
+        catalogKey: ingestCatalogKey,
+        channelCount: channels.length,
+        contentDigest: digest,
+      ),
+    );
   }
 
   return IptvParseResult(

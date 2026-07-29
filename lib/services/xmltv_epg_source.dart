@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:xml/xml_events.dart';
 
+import 'iptv_catalog_db.dart';
+
 /// The filtered guide for one playlist: programmes per XMLTV channel id,
 /// plus the name→id resolutions the parser made for channels that matched by
 /// display-name rather than tvg-id (Kodi-style fallback — see
@@ -18,6 +20,8 @@ import 'package:xml/xml_events.dart';
 /// (download/parse failure).
 class XmltvGuide {
   /// XMLTV channel id → sorted `[startMs, stopMs, title, desc]` rows.
+  /// EMPTY in DB mode — the rows live in iptv_catalog.db under [guideKey]
+  /// and never cross back to the UI heap.
   final Map<String, List<List<Object?>>> byId;
 
   /// Normalized display-name → XMLTV channel id, only for names the caller
@@ -27,14 +31,25 @@ class XmltvGuide {
   /// Whether any `<channel>` element paired with the playlist at all (by id
   /// or name). Distinguishes "the pairing works but no programmes survived
   /// the time window" from "ids and names genuinely don't line up" when
-  /// [byId] comes back empty.
+  /// nothing matched.
   final bool sawWantedChannel;
+
+  /// DB mode: the epg_programmes key the rows were written under.
+  final String? guideKey;
+
+  /// Matched channel count. In legacy mode this mirrors byId.length; in DB
+  /// mode it's the only place the number lives.
+  final int channelCount;
 
   const XmltvGuide({
     required this.byId,
     required this.nameToId,
     this.sawWantedChannel = false,
-  });
+    this.guideKey,
+    int? channelCount,
+  }) : channelCount = channelCount ?? byId.length;
+
+  bool get isEmpty => channelCount == 0;
 }
 
 /// Loads an XMLTV guide for one playlist: streams the (often multi-hundred-MB,
@@ -105,10 +120,11 @@ class XmltvEpgSource {
     required String epgUrl,
     required Set<String> tvgIds,
     required Set<String> channelNames,
+    String? dbPath,
   }) {
     if (tvgIds.isEmpty && channelNames.isEmpty) return Future.value(null);
     // In-flight coalescing keys on the exact request (URL + id/name sets);
-    // the disk snapshot below keys on the URL alone.
+    // the stored guide below keys on the URL alone.
     final ids = tvgIds.toList()..sort();
     final names = channelNames.toList()..sort();
     final key = md5
@@ -116,7 +132,8 @@ class XmltvEpgSource {
         .toString();
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
-    final future = _load(epgUrl, tvgIds, channelNames).whenComplete(() {
+    final future =
+        _load(epgUrl, tvgIds, channelNames, dbPath).whenComplete(() {
       _inFlight.remove(key);
     });
     _inFlight[key] = future;
@@ -127,16 +144,21 @@ class XmltvEpgSource {
     String epgUrl,
     Set<String> tvgIds,
     Set<String> channelNames,
+    String? dbPath,
   ) async {
-    // One snapshot per guide URL, overwritten in place — keying on the id
+    // One stored guide per URL, overwritten in place — keying on the id
     // set too would mint a new multi-MB orphan on every channel-list churn
     // AND force a full guide re-download for a one-channel change. The
-    // trade-off: channels added to the playlist since the snapshot was
-    // written have no guide data until the next TTL refresh.
-    final cacheFile = await _cacheFileFor(
-      md5.convert(utf8.encode(epgUrl)).toString(),
-    );
+    // trade-off: channels added to the playlist since the guide was
+    // written have no data until the next TTL refresh.
+    final guideKey = md5.convert(utf8.encode(epgUrl)).toString();
+    final cacheFile = await _cacheFileFor(guideKey);
     _sweepCache(keep: cacheFile.path); // fire-and-forget housekeeping
+
+    if (dbPath != null) {
+      return _loadDbMode(epgUrl, tvgIds, channelNames, dbPath, guideKey,
+          cacheFile);
+    }
 
     // Fresh snapshot → done, no network at all.
     final cached = await _readSnapshot(cacheFile);
@@ -179,13 +201,121 @@ class XmltvEpgSource {
     return guide;
   }
 
+  /// DB mode: programme rows live in iptv_catalog.db, freshness in its
+  /// epg_guides row, and the returned [XmltvGuide] is always light (empty
+  /// byId + the guideKey to query under). Legacy JSON snapshots are imported
+  /// once — preserving their original fetch time so a stale file doesn't
+  /// masquerade as fresh — then deleted.
+  static Future<XmltvGuide?> _loadDbMode(
+    String epgUrl,
+    Set<String> tvgIds,
+    Set<String> channelNames,
+    String dbPath,
+    String guideKey,
+    File legacyFile,
+  ) async {
+    var info = IptvCatalogDb.epgGuideInfo(guideKey);
+
+    // One-time import of the legacy snapshot file.
+    if (info == null && await legacyFile.exists()) {
+      final cached = await _readSnapshot(legacyFile);
+      final guide = cached?.guide;
+      if (guide != null && guide.byId.isNotEmpty) {
+        try {
+          final byId = guide.byId;
+          final nameToId = guide.nameToId;
+          final sawWanted = guide.sawWantedChannel;
+          final fetchedAtMs = cached!.fetchedAt.millisecondsSinceEpoch;
+          await Isolate.run(() => IptvCatalogDb.ingestEpgGuide(
+                dbPath: dbPath,
+                guideKey: guideKey,
+                epgUrl: epgUrl,
+                byId: byId,
+                nameToId: nameToId,
+                sawWanted: sawWanted,
+                fetchedAtMs: fetchedAtMs,
+              ));
+          info = IptvCatalogDb.epgGuideInfo(guideKey);
+        } catch (e) {
+          debugPrint('XmltvEpgSource: legacy guide import failed: $e');
+        }
+      }
+      // Imported or useless either way — the file's job is done.
+      try {
+        await legacyFile.delete();
+      } catch (_) {}
+    }
+
+    XmltvGuide? stored() {
+      final snapshot = info;
+      if (snapshot == null) return null;
+      return XmltvGuide(
+        byId: const {},
+        nameToId: snapshot.nameToId,
+        sawWantedChannel: snapshot.sawWanted,
+        guideKey: guideKey,
+        channelCount: snapshot.channelCount,
+      );
+    }
+
+    bool freshEnough() {
+      final snapshot = info;
+      if (snapshot == null) return false;
+      final ttl = snapshot.channelCount == 0 ? _emptyCacheTtl : _cacheTtl;
+      return DateTime.now().millisecondsSinceEpoch - snapshot.fetchedAt <
+          ttl.inMilliseconds;
+    }
+
+    if (freshEnough()) return stored();
+
+    final lastFailure = _lastFailureAt[epgUrl];
+    if (lastFailure != null &&
+        DateTime.now().difference(lastFailure) < _failureBackoff) {
+      return stored();
+    }
+
+    final guide = await _downloadAndParse(
+      epgUrl,
+      tvgIds,
+      channelNames,
+      dbPath: dbPath,
+      guideKey: guideKey,
+    );
+    if (guide == null) {
+      _lastFailureAt[epgUrl] = DateTime.now();
+      debugPrint('XmltvEpgSource: falling back to stored guide: $epgUrl');
+      return stored();
+    }
+    _lastFailureAt.remove(epgUrl);
+    if (guide.isEmpty) {
+      // Empty parse: existing rows (they outlive their TTL usefully) win;
+      // the parser deliberately wrote nothing, so they're intact.
+      final fallback = stored();
+      if (fallback != null && fallback.channelCount > 0) {
+        debugPrint(
+            'XmltvEpgSource: empty parse, keeping stored guide: $epgUrl');
+        return fallback;
+      }
+      IptvCatalogDb.markEpgGuideEmpty(
+        guideKey: guideKey,
+        epgUrl: epgUrl,
+        sawWanted: guide.sawWantedChannel,
+      );
+      return guide;
+    }
+    // The parser ingested + stamped inside its isolate; the guide is light.
+    return guide;
+  }
+
   // ── Download ──────────────────────────────────────────────────────────────
 
   static Future<XmltvGuide?> _downloadAndParse(
     String epgUrl,
     Set<String> tvgIds,
-    Set<String> channelNames,
-  ) async {
+    Set<String> channelNames, {
+    String? dbPath,
+    String? guideKey,
+  }) async {
     final client = http.Client();
     File? tempFile;
     try {
@@ -229,20 +359,33 @@ class XmltvEpgSource {
       }
 
       // The heavy part runs off the UI isolate. Everything captured is
-      // sendable (strings, ints, set copies).
+      // sendable (strings, ints, set copies). In DB mode the isolate ALSO
+      // writes the finished index into iptv_catalog.db itself — the rows die
+      // with the isolate instead of crossing back to this heap.
       final path = tempFile.path;
       final ids = Set<String>.of(tvgIds);
       final names = Set<String>.of(channelNames);
       final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final guide =
-          await Isolate.run(() => parseXmltvFile(path, ids, names, nowMs));
-      if (guide.byId.isEmpty) {
+      final capturedDbPath = dbPath;
+      final capturedGuideKey = guideKey;
+      final capturedUrl = epgUrl;
+      final guide = await Isolate.run(() => parseXmltvFile(
+            path,
+            ids,
+            names,
+            nowMs,
+            dbPath: capturedDbPath,
+            guideKey: capturedGuideKey,
+            epgUrl: capturedUrl,
+          ));
+      if (guide.isEmpty) {
         // Parsed fine, matched nothing — a real answer (the caller tells the
         // user WHY there's no guide), distinct from a null failure.
         debugPrint('XmltvEpgSource: no matching programmes in $epgUrl');
       } else {
         debugPrint(
-          'XmltvEpgSource: indexed ${guide.byId.length} channels from $epgUrl',
+          'XmltvEpgSource: indexed ${guide.channelCount} channels from '
+          '$epgUrl${guide.guideKey != null ? ' (to catalog DB)' : ''}',
         );
       }
       return guide;
@@ -278,8 +421,11 @@ class XmltvEpgSource {
     String path,
     Set<String> tvgIds,
     Set<String> wantedNames,
-    int nowMs,
-  ) async {
+    int nowMs, {
+    String? dbPath,
+    String? guideKey,
+    String? epgUrl,
+  }) async {
     final file = File(path);
     final raf = await file.open();
     List<int> magic;
@@ -472,6 +618,29 @@ class XmltvEpgSource {
         rows.removeRange(_maxProgrammesPerChannel, rows.length);
       }
     }
+
+    // DB mode: write the index here, on this worker isolate, and return a
+    // light guide. An EMPTY index deliberately writes nothing — the caller
+    // treats "matched nothing" against existing stored rows (a transient
+    // provider hiccup must not wipe a still-useful guide).
+    if (dbPath != null && guideKey != null && index.isNotEmpty) {
+      IptvCatalogDb.ingestEpgGuide(
+        dbPath: dbPath,
+        guideKey: guideKey,
+        epgUrl: epgUrl ?? '',
+        byId: index,
+        nameToId: nameToId,
+        sawWanted: sawWantedChannel,
+      );
+      return XmltvGuide(
+        byId: const {},
+        nameToId: nameToId,
+        sawWantedChannel: sawWantedChannel,
+        guideKey: guideKey,
+        channelCount: index.length,
+      );
+    }
+
     return XmltvGuide(
       byId: index,
       nameToId: nameToId,

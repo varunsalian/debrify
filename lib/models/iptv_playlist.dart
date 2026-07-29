@@ -180,14 +180,39 @@ class IptvParseResult {
   /// over this.
   final String? epgUrl;
 
+  /// Set when the parse worker wrote this catalog straight into the catalog
+  /// DB instead of returning the channel list — [channels] is then empty by
+  /// design and consumers read via `IptvCatalogDb.snapshot(ingest.catalogKey)`.
+  final CatalogIngestReceipt? ingest;
+
   const IptvParseResult({
     required this.channels,
     required this.categories,
     this.error,
     this.warning,
     this.epgUrl,
+    this.ingest,
   });
 
   bool get hasError => error != null;
-  bool get isEmpty => channels.isEmpty;
+
+  /// "Nothing came back" — an ingested catalog with rows in the DB is not
+  /// empty even though [channels] is.
+  bool get isEmpty =>
+      channels.isEmpty && (ingest == null || ingest!.channelCount == 0);
+}
+
+/// Proof that a parse worker ingested a catalog into `iptv_catalog.db`:
+/// where it lives, how many rows, and the content digest (used by the
+/// revalidate path to decide "Up to date" vs a real refresh).
+class CatalogIngestReceipt {
+  final String catalogKey;
+  final int channelCount;
+  final String contentDigest;
+
+  const CatalogIngestReceipt({
+    required this.catalogKey,
+    required this.channelCount,
+    required this.contentDigest,
+  });
 }

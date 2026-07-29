@@ -45,14 +45,23 @@ class IptvCatalogCache {
   Directory? _dir;
   int _writeSeq = 0;
 
-  static String _keyForXtream(
+  /// Public because catalog identity is shared with [IptvCatalogDb]: the DB
+  /// stores catalogs under these exact strings, so eligibility and
+  /// invalidation stay in lockstep with the legacy snapshot cache.
+  static String keyForXtream(
     String serverUrl,
     String username,
     String contentType,
   ) =>
       'xc|$serverUrl|$username|$contentType';
 
-  static String _keyForUrl(String url) => 'm3u|$url';
+  static String keyForUrl(String url) => 'm3u|$url';
+
+  /// All keys an Xtream login can be stored under (one per content type).
+  static List<String> xtreamKeys(String serverUrl, String username) => [
+        for (final type in _xtreamContentTypes)
+          keyForXtream(serverUrl, username, type),
+      ];
 
   /// The cache key for this playlist + content type, or null when the source
   /// isn't disk-cacheable.
@@ -64,14 +73,14 @@ class IptvCatalogCache {
       return null;
     }
     if (playlist.isXtreamCodes) {
-      return _keyForXtream(
+      return keyForXtream(
         playlist.serverUrl!,
         playlist.username ?? '',
         contentType,
       );
     }
     if (playlist.url.isEmpty) return null;
-    return _keyForUrl(playlist.url);
+    return keyForUrl(playlist.url);
   }
 
   Future<Directory> _cacheDir() async {
@@ -160,14 +169,16 @@ class IptvCatalogCache {
   /// playlist was removed).
   Future<void> removeXtream(String serverUrl, String username) async {
     for (final type in _xtreamContentTypes) {
-      await _remove(_keyForXtream(serverUrl, username, type));
+      await remove(keyForXtream(serverUrl, username, type));
     }
   }
 
   /// Drop the snapshot for an M3U URL playlist.
-  Future<void> removeUrl(String url) => _remove(_keyForUrl(url));
+  Future<void> removeUrl(String url) => remove(keyForUrl(url));
 
-  Future<void> _remove(String key) async {
+  /// Drop one snapshot by key — the DB migration deletes the legacy file
+  /// this way after a successful import.
+  Future<void> remove(String key) async {
     try {
       final file = _fileFor(await _cacheDir(), key);
       if (await file.exists()) await file.delete();

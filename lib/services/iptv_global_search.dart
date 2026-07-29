@@ -1,12 +1,14 @@
 import '../models/iptv_playlist.dart';
 import 'iptv_catalog_cache.dart';
+import 'iptv_catalog_db.dart';
 import 'iptv_service.dart';
 import 'storage_service.dart';
 import 'xtream_codes_service.dart';
 
-/// One searchable catalog: a stored playlist × content type, with the channel
-/// list it resolves to. Kept whole (not flattened) so a hit can hand the
-/// player its source's full channel list as zapping context.
+/// One searchable catalog: a stored playlist × content type. Backed either by
+/// a materialized channel list (local files, legacy caches) or by a catalog-DB
+/// [CatalogSnapshot] — the DB shape searches with SQL and never holds the
+/// catalog on the heap.
 class IptvGlobalSearchSource {
   final IptvPlaylist playlist;
 
@@ -16,11 +18,53 @@ class IptvGlobalSearchSource {
   final String contentType;
   final List<IptvChannel> channels;
 
+  /// Set for DB-backed sources; [channels] is then empty.
+  final CatalogSnapshot? snapshot;
+
   const IptvGlobalSearchSource({
     required this.playlist,
     required this.contentType,
     required this.channels,
+    this.snapshot,
   });
+
+  int get channelCount => snapshot?.channelCount ?? channels.length;
+
+  /// The live-channel zapping window around [channel] for a player launch,
+  /// as (channels, startIndex). Falls back to just the channel itself when
+  /// it can't be located.
+  (List<IptvChannel>, int) liveZapWindow(IptvChannel channel, int maxSize) {
+    final snap = snapshot;
+    if (snap == null) {
+      final live = contentType == 'mixed'
+          ? [
+              for (final c in channels)
+                if (c.isLive) c,
+            ]
+          : channels;
+      var idx = live.indexOf(channel);
+      if (idx < 0) return ([channel], 0);
+      var window = live;
+      if (window.length > maxSize) {
+        final lo = (idx - maxSize ~/ 2).clamp(0, window.length - maxSize);
+        window = window.sublist(lo, lo + maxSize);
+        idx -= lo;
+      }
+      return (window, idx);
+    }
+    // DB source: locate the hit's catalog position, then materialize only
+    // the window around it (live rows only for mixed catalogs).
+    final live = contentType == 'mixed' ? true : null;
+    final position = snap.positionOf(url: channel.url, name: channel.name);
+    if (position == null) return ([channel], 0);
+    final before = snap.count(live: live, beforePosition: position);
+    final total = snap.count(live: live);
+    final lo =
+        total > maxSize ? (before - maxSize ~/ 2).clamp(0, total - maxSize) : 0;
+    final window = snap.page(offset: lo, limit: maxSize, live: live);
+    if (window.isEmpty) return ([channel], 0);
+    return (window, (before - lo).clamp(0, window.length - 1));
+  }
 }
 
 /// A single search result: the channel plus enough context to act on it —
@@ -96,7 +140,7 @@ class IptvGlobalSearchIndex {
   int get itemCount {
     var n = 0;
     for (final s in sources) {
-      n += s.channels.length;
+      n += s.channelCount;
     }
     return n;
   }
@@ -106,11 +150,34 @@ class IptvGlobalSearchIndex {
     final sources = <IptvGlobalSearchSource>[];
     final unindexed = <String>[];
 
+    // Catalog-DB rows are the primary index when the mode is on — they
+    // survive across sessions and never materialize on this heap.
+    final dbEnabled = await StorageService.getIptvDbCatalogEnabled();
+    if (dbEnabled) await IptvCatalogDb.open();
+
+    CatalogSnapshot? dbSnapshot(IptvPlaylist playlist, String type) {
+      if (!dbEnabled) return null;
+      final key = IptvCatalogCache.keyForPlaylist(playlist, type);
+      if (key == null) return null;
+      final snap = IptvCatalogDb.snapshot(key);
+      return (snap != null && snap.channelCount > 0) ? snap : null;
+    }
+
     for (final playlist in playlists) {
       if (playlist.isXtreamCodes) {
         final server = playlist.serverUrl!;
         final user = playlist.username ?? '';
         for (final type in _xtreamTypes) {
+          final snap = dbSnapshot(playlist, type);
+          if (snap != null) {
+            sources.add(IptvGlobalSearchSource(
+              playlist: playlist,
+              contentType: type,
+              channels: const [],
+              snapshot: snap,
+            ));
+            continue;
+          }
           // Same-session memory cache first (free), then the disk snapshot.
           var channels = XtreamCodesService.instance
               .cachedResult(server, user, type)
@@ -149,6 +216,16 @@ class IptvGlobalSearchIndex {
           unindexed.add(playlist.name);
         }
       } else if (playlist.url.isNotEmpty && !playlist.isStremioAddon) {
+        final snap = dbSnapshot(playlist, 'live');
+        if (snap != null) {
+          sources.add(IptvGlobalSearchSource(
+            playlist: playlist,
+            contentType: 'mixed',
+            channels: const [],
+            snapshot: snap,
+          ));
+          continue;
+        }
         var channels = IptvService.instance.cachedResult(playlist.url)?.channels;
         if (channels == null) {
           final key = IptvCatalogCache.keyForPlaylist(playlist, 'live');
@@ -203,6 +280,52 @@ class IptvGlobalSearchIndex {
     final totals = {'live': 0, 'vod': 0, 'series': 0};
 
     for (final source in sources) {
+      final snap = source.snapshot;
+      if (snap != null) {
+        // DB-backed source: the same rules in SQL — totals from COUNT, lead
+        // (name-prefix) hits filled first, remaining capacity from the rest,
+        // all in catalog order. Nothing materializes beyond the hits.
+        void collect(String section, bool? live) {
+          totals[section] = totals[section]! + snap.searchCount(terms, live: live);
+          final sectionLead = lead[section]!;
+          final sectionRest = rest[section]!;
+          final leadRoom = sectionCap - sectionLead.length;
+          for (final channel in snap.searchPage(
+            terms,
+            live: live,
+            namePrefixLead: true,
+            limit: leadRoom,
+          )) {
+            sectionLead.add(IptvGlobalSearchHit(
+              channel: channel,
+              source: source,
+              section: section,
+            ));
+          }
+          final restRoom =
+              sectionCap - sectionLead.length - sectionRest.length;
+          for (final channel in snap.searchPage(
+            terms,
+            live: live,
+            namePrefixLead: false,
+            limit: restRoom,
+          )) {
+            sectionRest.add(IptvGlobalSearchHit(
+              channel: channel,
+              source: source,
+              section: section,
+            ));
+          }
+        }
+
+        if (source.contentType == 'mixed') {
+          collect('live', true);
+          collect('vod', false);
+        } else {
+          collect(source.contentType, null);
+        }
+        continue;
+      }
       for (final channel in source.channels) {
         final key = channel.searchKey;
         var matches = true;

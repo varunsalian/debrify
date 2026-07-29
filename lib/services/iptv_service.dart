@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
 import '../utils/m3u_parser.dart';
+import 'iptv_catalog_cache.dart';
+import 'iptv_catalog_db.dart';
+import 'storage_service.dart';
 
 /// Service for fetching and managing IPTV M3U playlists
 class IptvService {
@@ -32,8 +35,14 @@ class IptvService {
 
   /// Fetch and parse an M3U playlist from URL
   Future<IptvParseResult> fetchPlaylist(String url, {bool forceRefresh = false}) async {
+    // DB-catalog mode: the parse worker ingests straight into
+    // iptv_catalog.db and this service's in-memory cache is bypassed —
+    // freshness policy moves to the caller (snapshot.ingestedAt).
+    final ingestToDb =
+        IptvCatalogDb.isOpen && await StorageService.getIptvDbCatalogEnabled();
+
     // Check cache
-    if (!forceRefresh && _cache.containsKey(url)) {
+    if (!ingestToDb && !forceRefresh && _cache.containsKey(url)) {
       final cached = _cache[url]!;
       if (DateTime.now().difference(cached.fetchedAt) < _cacheDuration) {
         debugPrint('IptvService: Using cached playlist for $url');
@@ -97,16 +106,27 @@ class IptvService {
 
       final content = M3uParser.decodeBytes(builder.takeBytes());
 
-      final result = await _parse(content);
-
-      // Cache the result
-      _cache[url] = _CachedPlaylist(
-        result: result,
-        fetchedAt: DateTime.now(),
+      final result = await _parse(
+        content,
+        ingestCatalogKey: ingestToDb ? IptvCatalogCache.keyForUrl(url) : null,
       );
-      _evictCache();
 
-      debugPrint('IptvService: Parsed ${result.channels.length} channels, ${result.categories.length} categories');
+      // An ingested result IS the cache — the rows are on disk and nothing
+      // big should linger on this heap.
+      if (result.ingest == null) {
+        _cache[url] = _CachedPlaylist(
+          result: result,
+          fetchedAt: DateTime.now(),
+        );
+        _evictCache();
+      }
+
+      debugPrint(
+        'IptvService: Parsed '
+        '${result.ingest?.channelCount ?? result.channels.length} channels, '
+        '${result.categories.length} categories'
+        '${result.ingest != null ? ' (ingested to catalog DB)' : ''}',
+      );
 
       return result;
     } catch (e) {
@@ -205,12 +225,66 @@ class IptvService {
     return result;
   }
 
-  /// Parse large playlists off the UI isolate to avoid freezing the app
-  Future<IptvParseResult> _parse(String content) async {
+  /// Parse large playlists off the UI isolate to avoid freezing the app.
+  /// With [ingestCatalogKey] set, the worker also writes the catalog into
+  /// the DB and returns a receipt instead of the channel list.
+  Future<IptvParseResult> _parse(
+    String content, {
+    String? ingestCatalogKey,
+  }) async {
+    if (ingestCatalogKey != null) {
+      final job = _M3uIngestJob(
+        content: content,
+        dbPath: IptvCatalogDb.path,
+        catalogKey: ingestCatalogKey,
+      );
+      return content.length > 100 * 1024
+          ? await compute(_parseAndIngestM3u, job)
+          : _parseAndIngestM3u(job);
+    }
     return content.length > 100 * 1024
         ? await compute(M3uParser.parse, content)
         : M3uParser.parse(content);
   }
+}
+
+class _M3uIngestJob {
+  final String content;
+  final String dbPath;
+  final String catalogKey;
+
+  const _M3uIngestJob({
+    required this.content,
+    required this.dbPath,
+    required this.catalogKey,
+  });
+}
+
+/// Worker entry: parse AND ingest in one hop, so the channel objects never
+/// cross back to the UI isolate. An empty or failed parse is returned as-is
+/// and deliberately NOT ingested — a transient bad fetch must not wipe a
+/// previously good stored catalog.
+IptvParseResult _parseAndIngestM3u(_M3uIngestJob job) {
+  final result = M3uParser.parse(job.content);
+  if (result.hasError || result.channels.isEmpty) return result;
+  final digest = IptvCatalogDb.ingest(
+    dbPath: job.dbPath,
+    catalogKey: job.catalogKey,
+    channels: result.channels,
+    categories: result.categories,
+    epgUrl: result.epgUrl,
+  );
+  return IptvParseResult(
+    channels: const [],
+    categories: result.categories,
+    warning: result.warning,
+    epgUrl: result.epgUrl,
+    ingest: CatalogIngestReceipt(
+      catalogKey: job.catalogKey,
+      channelCount: result.channels.length,
+      contentDigest: digest,
+    ),
+  );
 }
 
 class _CachedPlaylist {

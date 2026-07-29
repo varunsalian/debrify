@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_catalog_cache.dart';
+import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_service.dart';
 import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
@@ -270,7 +271,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _ensureFocusNodes();
 
     _showSnackBar(
-      'Added "$name" (${result.channels.length} channels)',
+      // DB-catalog mode returns an ingest receipt with empty channels — the
+      // count lives on the receipt.
+      'Added "$name" '
+      '(${result.ingest?.channelCount ?? result.channels.length} channels)',
       isError: false,
     );
   }
@@ -518,17 +522,26 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       setState(() => _defaultPlaylistId = null);
     }
 
-    // Clear caches for this playlist — both the in-memory fetch cache and
-    // the on-disk catalog snapshots.
+    // Clear caches for this playlist — the in-memory fetch cache, the
+    // on-disk catalog snapshots, and the catalog DB rows.
     if (playlist.isXtreamCodes) {
       XtreamCodesService.instance.clearCache(playlist.serverUrl);
       await IptvCatalogCache.instance.removeXtream(
         playlist.serverUrl!,
         playlist.username ?? '',
       );
+      await IptvCatalogDb.removeCatalogsByKeys(
+        IptvCatalogCache.xtreamKeys(
+          playlist.serverUrl!,
+          playlist.username ?? '',
+        ),
+      );
     } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
       IptvService.instance.clearCache(playlist.url);
       await IptvCatalogCache.instance.removeUrl(playlist.url);
+      await IptvCatalogDb.removeCatalogsByKeys(
+        [IptvCatalogCache.keyForUrl(playlist.url)],
+      );
     }
 
     // Remove favorites and watch history that belonged to this playlist —
@@ -593,6 +606,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         playlist.serverUrl!,
         playlist.username ?? '',
       );
+      await IptvCatalogDb.removeCatalogsByKeys(
+        IptvCatalogCache.xtreamKeys(
+          playlist.serverUrl!,
+          playlist.username ?? '',
+        ),
+      );
       result = await XtreamCodesService.instance.fetchLiveStreams(
         playlist.serverUrl!,
         playlist.username!,
@@ -601,6 +620,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     } else {
       IptvService.instance.clearCache(playlist.url);
       await IptvCatalogCache.instance.removeUrl(playlist.url);
+      await IptvCatalogDb.removeCatalogsByKeys(
+        [IptvCatalogCache.keyForUrl(playlist.url)],
+      );
       result = await IptvService.instance.fetchPlaylist(
         playlist.url,
         forceRefresh: true,
@@ -614,8 +636,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _showSnackBar('Failed to refresh "${playlist.name}": ${result.error}');
     } else {
       final suffix = result.warning != null ? ' (${result.warning})' : '';
+      final count = result.ingest?.channelCount ?? result.channels.length;
       _showSnackBar(
-        'Updated "${playlist.name}" — ${result.channels.length} channels$suffix',
+        'Updated "${playlist.name}" — $count channels$suffix',
         isError: false,
       );
     }
@@ -746,10 +769,19 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           playlist.serverUrl!,
           playlist.username ?? '',
         );
+        await IptvCatalogDb.removeCatalogsByKeys(
+          IptvCatalogCache.xtreamKeys(
+            playlist.serverUrl!,
+            playlist.username ?? '',
+          ),
+        );
       }
     } else if (!playlist.isLocalFile && playlist.url != updated.url) {
       IptvService.instance.clearCache(playlist.url);
       await IptvCatalogCache.instance.removeUrl(playlist.url);
+      await IptvCatalogDb.removeCatalogsByKeys(
+        [IptvCatalogCache.keyForUrl(playlist.url)],
+      );
     }
 
     final newPlaylists = [

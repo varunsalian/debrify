@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/iptv_playlist.dart';
+import 'iptv_catalog_db.dart';
 import 'xmltv_epg_source.dart';
 
 /// One programme in a channel's guide.
@@ -205,6 +206,19 @@ class IptvEpgService {
   Map<String, String> _xmltvNameToId = const {};
   Map<String, List<EpgProgramme>>? _xmltvIndex;
 
+  // DB-mode XMLTV context: programme rows live in iptv_catalog.db under
+  // [_xmltvGuideKey], and a channel URL resolves to its tvg identity through
+  // the catalog rows ([_epgDbCatalogKey]) instead of the whole-playlist url
+  // maps above — nothing here scales with playlist size.
+  String? _xmltvGuideKey;
+  String? _epgDbCatalogKey;
+
+  /// url → resolved tvg identity, so a row repainting every guide tick
+  /// doesn't re-run the catalog lookup. Small LRU; null results are cached
+  /// too (a miss is just as repeatable). Cleared with the context.
+  final LinkedHashMap<String, _EpgBinding?> _bindingCache = LinkedHashMap();
+  static const _maxBindingEntries = 600;
+
   /// Guards the claim-then-await in [setM3uEpgContext]. A playlist-key
   /// comparison couldn't: two overlapping loads of the SAME playlist
   /// (refresh) would pass a key-equality check, letting the older download
@@ -239,10 +253,16 @@ class IptvEpgService {
     required String playlistKey,
     required String? epgUrl,
     required List<IptvChannel> channels,
+    // The catalog-DB key the channels are stored under, when the caller is
+    // DB-backed. Switches the guide to DB storage: programme rows written by
+    // the parse isolate, per-URL bindings resolved from catalog rows — the
+    // url→id maps below are then never retained.
+    String? dbCatalogKey,
   }) async {
     clearM3uEpgContext();
     final url = epgUrl?.trim();
     if (url == null || url.isEmpty) return M3uEpgStatus.inactive;
+    final dbMode = dbCatalogKey != null && IptvCatalogDb.isOpen;
 
     // Claimed BEFORE the (now yielding) scan rather than after it: the loop
     // below hands control back to the event loop periodically, so a newer
@@ -251,43 +271,64 @@ class IptvEpgService {
     final generation = ++_m3uContextGeneration;
 
     final urlToId = <String, String>{};
-    final ids = <String>{};
+    var ids = <String>{};
     final urlToNames = <String, List<String>>{};
-    final wantedNames = <String>{};
-    final chunk = Stopwatch()..start();
-    for (final channel in channels) {
-      // A 50k-channel playlist normalizes two names per row here; doing that
-      // in one go blocked input long enough for Android to offer to kill the
-      // app. Hand the loop back whenever this chunk has had its slice — the
-      // scan takes marginally longer, the UI never stops answering.
-      if (chunk.elapsedMicroseconds >= _scanYieldBudget.inMicroseconds) {
-        await Future<void>.delayed(Duration.zero);
-        if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
-        chunk.reset();
-      }
-      if (!channel.isLive) continue;
-      final id = channel.tvgId?.trim();
-      if (id != null && id.isNotEmpty) {
-        urlToId[channel.url] = id;
-        ids.add(id);
-        // iptv-org-style playlists suffix a feed onto the id (BBCOne.uk@SD)
-        // while guides typically publish the bare id (BBCOne.uk). Admit both
-        // forms into the parser's filter; lookup tries exact first.
-        final bare = stripFeedSuffix(id);
-        if (bare != id) ids.add(bare);
-      }
-      // Name candidates for every channel — ids stay authoritative, names
-      // only ever fill gaps (no tvg-id, or ids the guide doesn't use).
-      final candidates = <String>[];
-      for (final raw in [channel.tvgName, channel.name]) {
-        final norm = XmltvEpgSource.normalizeChannelName(raw ?? '');
-        if (norm.isNotEmpty && !candidates.contains(norm)) {
-          candidates.add(norm);
+    var wantedNames = <String>{};
+    if (dbMode) {
+      // The whole-catalog scan (two unicode-regex normalizations per row)
+      // runs on a WORKER against the catalog rows — even a yielding version
+      // of it saturates the UI isolate for tens of seconds on a 50k-channel
+      // playlist, which reads as DPAD lag right after the page opens. Only
+      // the two filter sets come back.
+      final sets = await compute(
+        _buildEpgFilterSetsJob,
+        _EpgFilterSetsJob(
+          dbPath: IptvCatalogDb.path,
+          catalogKey: dbCatalogKey,
+        ),
+      );
+      if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
+      ids = sets.ids;
+      wantedNames = sets.names;
+    } else {
+      final chunk = Stopwatch()..start();
+      for (final channel in channels) {
+        // A 50k-channel playlist normalizes two names per row here; doing
+        // that in one go blocked input long enough for Android to offer to
+        // kill the app. Hand the loop back whenever this chunk has had its
+        // slice — the scan takes marginally longer, the UI never stops
+        // answering.
+        if (chunk.elapsedMicroseconds >= _scanYieldBudget.inMicroseconds) {
+          await Future<void>.delayed(Duration.zero);
+          if (generation != _m3uContextGeneration) {
+            return M3uEpgStatus.inactive;
+          }
+          chunk.reset();
         }
-      }
-      if (candidates.isNotEmpty) {
-        urlToNames[channel.url] = candidates;
-        wantedNames.addAll(candidates);
+        if (!channel.isLive) continue;
+        final id = channel.tvgId?.trim();
+        if (id != null && id.isNotEmpty) {
+          urlToId[channel.url] = id;
+          ids.add(id);
+          // iptv-org-style playlists suffix a feed onto the id (BBCOne.uk@SD)
+          // while guides typically publish the bare id (BBCOne.uk). Admit
+          // both forms into the parser's filter; lookup tries exact first.
+          final bare = stripFeedSuffix(id);
+          if (bare != id) ids.add(bare);
+        }
+        // Name candidates for every channel — ids stay authoritative, names
+        // only ever fill gaps (no tvg-id, or ids the guide doesn't use).
+        final candidates = <String>[];
+        for (final raw in [channel.tvgName, channel.name]) {
+          final norm = XmltvEpgSource.normalizeChannelName(raw ?? '');
+          if (norm.isNotEmpty && !candidates.contains(norm)) {
+            candidates.add(norm);
+          }
+        }
+        if (candidates.isNotEmpty) {
+          urlToNames[channel.url] = candidates;
+          wantedNames.addAll(candidates);
+        }
       }
     }
     if (ids.isEmpty && wantedNames.isEmpty) return M3uEpgStatus.inactive;
@@ -299,15 +340,26 @@ class IptvEpgService {
       epgUrl: url,
       tvgIds: ids,
       channelNames: wantedNames,
+      dbPath: dbMode ? IptvCatalogDb.path : null,
     );
     if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
     if (guide == null) return M3uEpgStatus.failed;
-    if (guide.byId.isEmpty) {
+    if (guide.isEmpty) {
       // Blame accurately: if <channel> elements did pair with the playlist,
       // the problem is the guide's programme data, not the ids/names.
       return guide.sawWantedChannel
           ? M3uEpgStatus.noProgrammes
           : M3uEpgStatus.noMatch;
+    }
+
+    // DB mode: publish only the keys — programme rows stay in the DB and
+    // bindings resolve per URL. No index materialization at all.
+    if (dbMode && guide.guideKey != null) {
+      _xmltvGuideKey = guide.guideKey;
+      _epgDbCatalogKey = dbCatalogKey;
+      _xmltvNameToId = guide.nameToId;
+      contextVersion.value++;
+      return M3uEpgStatus.matched;
     }
 
     // Materializing the guide is the same shape of problem as the scan above:
@@ -316,7 +368,7 @@ class IptvEpgService {
     // rather than in one synchronous comprehension, or the freeze just moves
     // twelve lines down.
     final index = <String, List<EpgProgramme>>{};
-    chunk.reset();
+    final chunk = Stopwatch()..start();
     for (final entry in guide.byId.entries) {
       final programmes = <EpgProgramme>[];
       for (final row in entry.value) {
@@ -347,15 +399,34 @@ class IptvEpgService {
     return M3uEpgStatus.matched;
   }
 
+  /// Publish a DB-mode XMLTV context directly — tests exercise the
+  /// row-paint lookup path (binding resolution + programme queries) without
+  /// standing up a guide download.
+  @visibleForTesting
+  void debugSetDbXmltvContext({
+    required String guideKey,
+    required String catalogKey,
+    Map<String, String> nameToId = const {},
+  }) {
+    clearM3uEpgContext();
+    _xmltvGuideKey = guideKey;
+    _epgDbCatalogKey = catalogKey;
+    _xmltvNameToId = nameToId;
+    contextVersion.value++;
+  }
+
   /// Drop the active XMLTV context (playlist switched away).
   void clearM3uEpgContext() {
-    final hadIndex = _xmltvIndex != null;
+    final hadContext = _xmltvIndex != null || _xmltvGuideKey != null;
     _m3uContextGeneration++;
     _m3uUrlToTvgId = const {};
     _m3uUrlToNames = const {};
     _xmltvNameToId = const {};
     _xmltvIndex = null;
-    if (hadIndex) contextVersion.value++;
+    _xmltvGuideKey = null;
+    _epgDbCatalogKey = null;
+    _bindingCache.clear();
+    if (hadContext) contextVersion.value++;
   }
 
   /// The active XMLTV programme list for a channel URL, or null when the
@@ -366,6 +437,8 @@ class IptvEpgService {
   /// the parser canonicalizes the index's keys the same way, giving the
   /// case-insensitive matching Kodi defaults to.
   List<EpgProgramme>? _xmltvProgrammesFor(String channelUrl) {
+    final guideKey = _xmltvGuideKey;
+    if (guideKey != null) return _dbXmltvProgrammesFor(guideKey, channelUrl);
     final index = _xmltvIndex;
     if (index == null) return null;
     List<EpgProgramme>? programmes;
@@ -386,6 +459,79 @@ class IptvEpgService {
       }
     }
     return (programmes == null || programmes.isEmpty) ? null : programmes;
+  }
+
+  /// DB-mode lookup: resolve the URL's tvg identity from the catalog rows
+  /// (cached), then read programme rows for it — same pass order as the
+  /// in-memory path (exact id → bare id → tvg-name → name), each pass one
+  /// indexed sub-millisecond query over ≤80 rows.
+  List<EpgProgramme>? _dbXmltvProgrammesFor(
+    String guideKey,
+    String channelUrl,
+  ) {
+    if (!IptvCatalogDb.isOpen) return null;
+    final binding = _bindingFor(channelUrl);
+    if (binding == null) return null;
+
+    List<List<Object?>> rows = const [];
+    final tvgId = binding.tvgId;
+    if (tvgId != null) {
+      rows = IptvCatalogDb.epgProgrammes(guideKey, tvgId);
+      if (rows.isEmpty) {
+        final bare = stripFeedSuffix(tvgId);
+        if (bare != tvgId) rows = IptvCatalogDb.epgProgrammes(guideKey, bare);
+      }
+    }
+    if (rows.isEmpty) {
+      for (final name in binding.names) {
+        final id = _xmltvNameToId[name];
+        if (id == null) continue;
+        rows = IptvCatalogDb.epgProgrammes(guideKey, id);
+        if (rows.isNotEmpty) break;
+      }
+    }
+    if (rows.isEmpty) return null;
+    return [
+      for (final row in rows)
+        EpgProgramme(
+          title: row[2] as String,
+          description: row[3] as String,
+          start: DateTime.fromMillisecondsSinceEpoch(row[0] as int),
+          stop: DateTime.fromMillisecondsSinceEpoch(row[1] as int),
+        ),
+    ];
+  }
+
+  _EpgBinding? _bindingFor(String channelUrl) {
+    final catalogKey = _epgDbCatalogKey;
+    if (catalogKey == null) return null;
+    if (_bindingCache.containsKey(channelUrl)) {
+      final hit = _bindingCache.remove(channelUrl);
+      _bindingCache[channelUrl] = hit; // re-insert = most recently used
+      return hit;
+    }
+    final identity = IptvCatalogDb.channelTvgIdentity(
+      catalogKey: catalogKey,
+      url: channelUrl,
+    );
+    _EpgBinding? binding;
+    if (identity != null) {
+      final names = <String>[];
+      for (final raw in [identity.attributes['tvg-name'], identity.name]) {
+        final norm = XmltvEpgSource.normalizeChannelName(raw ?? '');
+        if (norm.isNotEmpty && !names.contains(norm)) names.add(norm);
+      }
+      final id = identity.attributes['tvg-id']?.trim();
+      binding = _EpgBinding(
+        tvgId: (id != null && id.isNotEmpty) ? id.toLowerCase() : null,
+        names: names,
+      );
+    }
+    _bindingCache[channelUrl] = binding; // misses cached too
+    while (_bindingCache.length > _maxBindingEntries) {
+      _bindingCache.remove(_bindingCache.keys.first);
+    }
+    return binding;
   }
 
   /// `BBCOne.uk@SD` → `BBCOne.uk`. iptv-org playlists append the feed
@@ -927,6 +1073,51 @@ class IptvEpgService {
         : '${uri.scheme}://${uri.host}';
     return _XtreamRef(server, user, pass, streamId);
   }
+}
+
+/// A channel URL's resolved tvg identity in DB mode: the lowercased tvg-id
+/// (if any) and the normalized name candidates in Kodi pass order.
+class _EpgBinding {
+  final String? tvgId;
+  final List<String> names;
+  const _EpgBinding({required this.tvgId, required this.names});
+}
+
+class _EpgFilterSetsJob {
+  final String dbPath;
+  final String catalogKey;
+  const _EpgFilterSetsJob({required this.dbPath, required this.catalogKey});
+}
+
+class _EpgFilterSets {
+  final Set<String> ids;
+  final Set<String> names;
+  const _EpgFilterSets({required this.ids, required this.names});
+}
+
+/// compute() entry: build the XMLTV parser's tvg-id / normalized-name filter
+/// sets by reading the catalog rows directly — the exact logic of the
+/// legacy in-view scan, minus the UI isolate.
+_EpgFilterSets _buildEpgFilterSetsJob(_EpgFilterSetsJob job) {
+  final rows = IptvCatalogDb.liveTvgRows(
+    dbPath: job.dbPath,
+    catalogKey: job.catalogKey,
+  );
+  final ids = <String>{};
+  final names = <String>{};
+  for (final row in rows) {
+    final id = row.tvgId?.trim();
+    if (id != null && id.isNotEmpty) {
+      ids.add(id);
+      final bare = IptvEpgService.stripFeedSuffix(id);
+      if (bare != id) ids.add(bare);
+    }
+    for (final raw in [row.tvgName, row.name]) {
+      final norm = XmltvEpgSource.normalizeChannelName(raw ?? '');
+      if (norm.isNotEmpty) names.add(norm);
+    }
+  }
+  return _EpgFilterSets(ids: ids, names: names);
 }
 
 class _CachedNowNext {

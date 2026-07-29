@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/services/iptv_catalog_db.dart';
+import 'package:debrify/services/iptv_epg_service.dart';
 import 'package:debrify/services/xmltv_epg_source.dart';
 
 void main() {
@@ -244,6 +247,148 @@ void main() {
           await parse(multi.codeUnits, ids: const {}, names: const {'bbc1'});
       expect(guide.nameToId, {'bbc1': 'x.uk'});
       expect(guide.byId['x.uk']!.length, 1);
+    });
+  });
+
+  group('DB mode (rows written by the parse worker, served per lookup)', () {
+    late Directory dbDir;
+
+    setUp(() async {
+      dbDir = await Directory.systemTemp.createTemp('xmltv_db_test');
+      IptvCatalogDb.debugDirectoryOverride = dbDir.path;
+      await IptvCatalogDb.open();
+    });
+
+    tearDown(() async {
+      IptvEpgService.instance.clearM3uEpgContext();
+      IptvCatalogDb.debugClose();
+      IptvCatalogDb.debugDirectoryOverride = null;
+      await dbDir.delete(recursive: true);
+    });
+
+    Future<XmltvGuide> parseToDb(List<int> bytes) async {
+      final dir = await Directory.systemTemp.createTemp('xmltv_test');
+      final file = File('${dir.path}/guide.xml');
+      await file.writeAsBytes(bytes);
+      try {
+        return await XmltvEpgSource.parseXmltvFile(
+          file.path,
+          const {'ESPN.us'},
+          const {},
+          nowMs,
+          dbPath: IptvCatalogDb.path,
+          guideKey: 'guide-1',
+          epgUrl: 'http://h/xmltv.php',
+        );
+      } finally {
+        await dir.delete(recursive: true);
+      }
+    }
+
+    test('the guide lands in the DB and the return value is light', () async {
+      final guide = await parseToDb(xml.codeUnits);
+
+      expect(guide.byId, isEmpty,
+          reason: 'programme rows must not cross back to the caller');
+      expect(guide.guideKey, 'guide-1');
+      expect(guide.channelCount, 1);
+      expect(guide.isEmpty, isFalse);
+
+      final info = IptvCatalogDb.epgGuideInfo('guide-1')!;
+      expect(info.channelCount, 1);
+      final rows = IptvCatalogDb.epgProgrammes('guide-1', 'espn.us');
+      expect(rows.length, 3);
+      expect(rows.first[2], 'NBA Finals');
+    });
+
+    test('an empty parse writes NOTHING (stale rows survive a bad refresh)',
+        () async {
+      await parseToDb(xml.codeUnits); // good rows in place
+      const unrelated = '''
+<tv>
+  <programme start="20260726110000 +0000" stop="20260726120000 +0000" channel="Other.uk">
+    <title>Not wanted</title>
+  </programme>
+</tv>
+''';
+      final guide = await parseToDb(unrelated.codeUnits);
+      expect(guide.isEmpty, isTrue);
+      expect(IptvCatalogDb.epgProgrammes('guide-1', 'espn.us').length, 3,
+          reason: 'the previous guide must be intact');
+    });
+
+    test('peekNowNext answers from DB rows via the catalog binding', () async {
+      // Non-Xtream-shaped URL on purpose: capability and now/next must come
+      // from the XMLTV binding alone, with no per-stream-endpoint fallback
+      // muddying the assertion.
+      const url = 'http://cdn.example.com/espn.m3u8';
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'cat',
+        channels: [
+          IptvChannel(
+            name: 'ESPN HD',
+            url: url,
+            duration: -1,
+            attributes: const {'tvg-id': 'ESPN.us'},
+          ),
+        ],
+      );
+
+      // peekNowNext computes "now" from the wall clock, so anchor the
+      // programme window around the real current time.
+      String stamp(DateTime t) =>
+          '${t.year.toString().padLeft(4, '0')}'
+          '${t.month.toString().padLeft(2, '0')}'
+          '${t.day.toString().padLeft(2, '0')}'
+          '${t.hour.toString().padLeft(2, '0')}'
+          '${t.minute.toString().padLeft(2, '0')}00 +0000';
+      final realNow = DateTime.now().toUtc();
+      final liveXml = '''
+<tv>
+  <channel id="ESPN.us"><display-name>ESPN</display-name></channel>
+  <programme start="${stamp(realNow.subtract(const Duration(hours: 1)))}" stop="${stamp(realNow.add(const Duration(hours: 1)))}" channel="ESPN.us">
+    <title>Airing Right Now</title>
+  </programme>
+  <programme start="${stamp(realNow.add(const Duration(hours: 1)))}" stop="${stamp(realNow.add(const Duration(hours: 2)))}" channel="ESPN.us">
+    <title>Coming Up</title>
+  </programme>
+</tv>
+''';
+      final dir = await Directory.systemTemp.createTemp('xmltv_test');
+      final file = File('${dir.path}/guide.xml');
+      await file.writeAsBytes(liveXml.codeUnits);
+      try {
+        await XmltvEpgSource.parseXmltvFile(
+          file.path,
+          const {'ESPN.us'},
+          const {},
+          realNow.millisecondsSinceEpoch,
+          dbPath: IptvCatalogDb.path,
+          guideKey: 'guide-live',
+          epgUrl: 'http://h/xmltv.php',
+        );
+      } finally {
+        await dir.delete(recursive: true);
+      }
+
+      IptvEpgService.instance.debugSetDbXmltvContext(
+        guideKey: 'guide-live',
+        catalogKey: 'cat',
+      );
+
+      final pick = IptvEpgService.instance.peekNowNext(url);
+      expect(pick, isNotNull);
+      expect(pick!.now?.title, 'Airing Right Now');
+      expect(pick.next?.title, 'Coming Up');
+
+      expect(IptvEpgService.isEpgCapableUrl(url), isTrue,
+          reason: 'XMLTV coverage via the DB counts as capability');
+      expect(
+        IptvEpgService.isEpgCapableUrl('http://cdn.example.com/other.m3u8'),
+        isFalse,
+        reason: 'a URL with no catalog binding has no guide',
+      );
     });
   });
 }
