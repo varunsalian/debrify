@@ -1417,6 +1417,60 @@ class StorageService {
     await prefs.setString(_episodeTraktProgressKey, jsonEncode(all));
   }
 
+  // Kept separate from both local playback state and Trakt. This is a
+  // replace-on-launch snapshot of Simkl's remote truth, so marking an episode
+  // unwatched on Simkl can clear the player tick without mutating local
+  // history.
+  static const String _episodeSimklProgressKey = 'episode_simkl_progress_v1';
+
+  static String _episodeSimklKeyFor(String imdbId) =>
+      'imdb_${imdbId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
+  /// Cross-device Simkl progress per episode (percent, 0–100), keyed by the
+  /// show's IMDb id. Episode keys are "season_episode".
+  static Future<Map<String, double>> getEpisodeSimklProgress({
+    required String imdbId,
+  }) async {
+    if (imdbId.isEmpty) return {};
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_episodeSimklProgressKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = await decodeJsonAsync(raw);
+      if (decoded is! Map) return {};
+      final series = decoded[_episodeSimklKeyFor(imdbId)];
+      if (series is! Map) return {};
+      final out = <String, double>{};
+      series.forEach((k, v) {
+        final p = (v as num?)?.toDouble();
+        if (p != null) out[k.toString()] = p;
+      });
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Replace the stored Simkl per-episode snapshot for [imdbId].
+  /// [percents] is keyed by "season_episode".
+  static Future<void> saveEpisodeSimklProgress({
+    required String imdbId,
+    required Map<String, double> percents,
+  }) async {
+    if (imdbId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_episodeSimklProgressKey);
+    Map<String, dynamic> all = {};
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = await decodeJsonAsync(raw);
+        if (decoded is Map<String, dynamic>) all = decoded;
+      } catch (_) {}
+    }
+    all[_episodeSimklKeyFor(imdbId)] = percents;
+    await prefs.setString(_episodeSimklProgressKey, jsonEncode(all));
+  }
+
   /// Get episode progress by IMDB ID (scans playback state for matching imdbId)
   /// Also checks single-file video entries and parses season/episode from title.
   static Future<Map<String, Map<String, dynamic>>> getEpisodeProgressByImdbId(
@@ -3135,7 +3189,8 @@ class StorageService {
       final progress = positionMs / durationMs;
       if (progress < _iptvWatchStartedFraction) continue;
 
-      final sortAt = (resume['updatedAt'] as num?)?.toInt() ??
+      final sortAt =
+          (resume['updatedAt'] as num?)?.toInt() ??
           _iptvWatchTimestamp(entry.value);
       final seriesKey = seriesKeyOf(entry.value);
       if (seriesKey != null) {
@@ -3169,22 +3224,23 @@ class StorageService {
         continue;
       }
       final seriesKey = item['_seriesKey'] as String?;
-      final keep = seriesKey != null &&
+      final keep =
+          seriesKey != null &&
           item['hasNext'] == true &&
           (item['sortAt'] as int) == seriesLatest[seriesKey];
       if (keep) items.add(item);
     }
 
-    items.sort(
-      (a, b) => (b['sortAt'] as int).compareTo(a['sortAt'] as int),
-    );
+    items.sort((a, b) => (b['sortAt'] as int).compareTo(a['sortAt'] as int));
     return items;
   }
 
   /// Stored position/duration for whichever of [urls] the players have
   /// progress for. Reads the resume map once — callers are typically a list of
   /// thousands of rows.
-  static Future<Map<String, ({int positionMs, int durationMs, double fraction})>>
+  static Future<
+    Map<String, ({int positionMs, int durationMs, double fraction})>
+  >
   _iptvResumeStates(Iterable<String> urls) async {
     final wanted = urls.toSet();
     if (wanted.isEmpty) return {};

@@ -6,6 +6,7 @@ import '../models/series_playlist.dart';
 import '../services/episode_info_service.dart';
 import '../services/storage_service.dart';
 import '../services/tvmaze_service.dart';
+import '../utils/episode_progress_merge.dart';
 import 'tvmaze_search_dialog.dart';
 
 /// Palette for the series playlist sheet.
@@ -66,12 +67,17 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   final Set<int> _expandedDense = {};
   final ScrollController _scrollController = ScrollController();
   Map<String, dynamic>? _lastPlayedEpisode;
-  Map<String, Set<int>> _finishedEpisodes = {}; // Map of season -> Set of episode numbers
-  Map<String, Map<String, dynamic>> _episodeProgress = {}; // Map of "season_episode" -> progress data
+  Map<String, Set<int>> _finishedEpisodes =
+      {}; // Map of season -> Set of episode numbers
+  Map<String, Map<String, dynamic>> _episodeProgress =
+      {}; // Map of "season_episode" -> progress data
   // Trakt cross-device progress ("season_episode" -> percent 0-100). Shown as a
   // bar only when there's no local resume for that episode (local wins the bar
   // because it's ms-precise; Trakt fills in episodes watched on other devices).
   Map<String, double> _traktEpisodeProgress = {};
+  // Simkl's launch-time snapshot, kept separate from local state so a remote
+  // mark-unwatched can clear on the next launch without deleting local history.
+  Map<String, double> _simklEpisodeProgress = {};
 
   // Top padding on the episode grid; part of the scroll-centering math.
   static const double _gridTopPadding = 4.0;
@@ -117,7 +123,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         // Find the episode with the matching original index
         final currentEpisode = widget.seriesPlaylist.allEpisodes.firstWhere(
           (episode) => episode.originalIndex == widget.currentEpisodeIndex,
-          orElse: () => widget.seriesPlaylist.allEpisodes.first, // Fallback to first episode
+          orElse: () => widget
+              .seriesPlaylist
+              .allEpisodes
+              .first, // Fallback to first episode
         );
 
         if (currentEpisode.seriesInfo.season != null) {
@@ -161,7 +170,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   }
 
   void _startBackgroundEpisodeInfoLoading() {
-    if (widget.seriesPlaylist.isSeries && widget.seriesPlaylist.seriesTitle != null && _tvmazeAvailable) {
+    if (widget.seriesPlaylist.isSeries &&
+        widget.seriesPlaylist.seriesTitle != null &&
+        _tvmazeAvailable) {
       _loadEpisodeInfoInBackground();
     }
   }
@@ -169,9 +180,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Future<int?> _getOverrideShowId() async {
     // Check if there's a saved mapping for this playlist item
     if (widget.playlistItem != null) {
-      final mapping = await StorageService.getTVMazeSeriesMapping(widget.playlistItem!);
+      final mapping = await StorageService.getTVMazeSeriesMapping(
+        widget.playlistItem!,
+      );
       if (mapping != null && mapping['tvmazeShowId'] != null) {
-        debugPrint('Using saved TVMaze mapping: Show ID ${mapping['tvmazeShowId']} (${mapping['showName']})');
+        debugPrint(
+          'Using saved TVMaze mapping: Show ID ${mapping['tvmazeShowId']} (${mapping['showName']})',
+        );
         return mapping['tvmazeShowId'] as int;
       }
     }
@@ -191,12 +206,15 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     List<Map<String, dynamic>> allEpisodes = [];
 
     // Try to get show ID from: 1) SeriesPlaylist, 2) saved mapping, 3) IMDB lookup
-    int? showId = widget.seriesPlaylist.tvmazeShowId ?? await _getOverrideShowId();
+    int? showId =
+        widget.seriesPlaylist.tvmazeShowId ?? await _getOverrideShowId();
 
     // If no show ID yet but we have IMDB ID, do IMDB lookup
     if (showId == null && widget.seriesPlaylist.imdbId != null) {
       try {
-        final showInfo = await TVMazeService.lookupByImdbId(widget.seriesPlaylist.imdbId!);
+        final showInfo = await TVMazeService.lookupByImdbId(
+          widget.seriesPlaylist.imdbId!,
+        );
         if (showInfo != null && showInfo['id'] != null) {
           showId = showInfo['id'] as int;
           // Store for future use
@@ -217,8 +235,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
     // Process each episode using pre-fetched list or fallback to title search
     for (final episode in selectedSeason.episodes) {
-      if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
-        final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
+      if (episode.seriesInfo.season != null &&
+          episode.seriesInfo.episode != null) {
+        final episodeKey =
+            '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
         if (!_loadingEpisodes.contains(episodeKey)) {
           _loadingEpisodes.add(episodeKey);
           _loadEpisodeInfo(episode, allEpisodes);
@@ -227,15 +247,20 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     }
   }
 
-  Future<void> _loadEpisodeInfo(SeriesEpisode episode, List<Map<String, dynamic>> prefetchedEpisodes) async {
-    if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+  Future<void> _loadEpisodeInfo(
+    SeriesEpisode episode,
+    List<Map<String, dynamic>> prefetchedEpisodes,
+  ) async {
+    if (episode.seriesInfo.season != null &&
+        episode.seriesInfo.episode != null) {
       try {
         Map<String, dynamic>? episodeData;
 
         if (prefetchedEpisodes.isNotEmpty) {
           // Use pre-fetched episodes list (no API call)
           for (final ep in prefetchedEpisodes) {
-            if (ep['season'] == episode.seriesInfo.season && ep['number'] == episode.seriesInfo.episode) {
+            if (ep['season'] == episode.seriesInfo.season &&
+                ep['number'] == episode.seriesInfo.episode) {
               episodeData = ep;
               break;
             }
@@ -257,7 +282,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       } catch (e) {
         debugPrint('Error loading episode info: $e');
       } finally {
-        final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
+        final episodeKey =
+            '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
         _loadingEpisodes.remove(episodeKey);
       }
     }
@@ -282,7 +308,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   /// Load finished episodes for the entire series
   Future<void> _loadFinishedEpisodes() async {
     try {
-      if (widget.seriesPlaylist.isSeries && widget.seriesPlaylist.seriesTitle != null) {
+      if (widget.seriesPlaylist.isSeries &&
+          widget.seriesPlaylist.seriesTitle != null) {
         final allFinishedEpisodes = await StorageService.getFinishedEpisodes(
           seriesTitle: widget.seriesPlaylist.seriesTitle!,
         );
@@ -300,7 +327,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   /// Load episode progress for the entire series
   Future<void> _loadEpisodeProgress() async {
     try {
-      if (widget.seriesPlaylist.isSeries && widget.seriesPlaylist.seriesTitle != null) {
+      if (widget.seriesPlaylist.isSeries &&
+          widget.seriesPlaylist.seriesTitle != null) {
         final imdbId = widget.imdbId;
         final results = await Future.wait([
           StorageService.getEpisodeProgress(
@@ -309,12 +337,15 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           (imdbId != null && imdbId.isNotEmpty)
               ? StorageService.getEpisodeTraktProgress(imdbId: imdbId)
               : Future.value(const <String, double>{}),
+          (imdbId != null && imdbId.isNotEmpty)
+              ? StorageService.getEpisodeSimklProgress(imdbId: imdbId)
+              : Future.value(const <String, double>{}),
         ]);
         if (mounted) {
           setState(() {
-            _episodeProgress =
-                results[0] as Map<String, Map<String, dynamic>>;
+            _episodeProgress = results[0] as Map<String, Map<String, dynamic>>;
             _traktEpisodeProgress = results[1] as Map<String, double>;
+            _simklEpisodeProgress = results[2] as Map<String, double>;
           });
         }
       }
@@ -346,7 +377,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
     if (selectedShow != null && mounted) {
       // 1. Get OLD mapping (before it's overwritten)
-      final oldMapping = await StorageService.getTVMazeSeriesMapping(widget.playlistItem!);
+      final oldMapping = await StorageService.getTVMazeSeriesMapping(
+        widget.playlistItem!,
+      );
       final oldShowId = oldMapping?['tvmazeShowId'] as int?;
 
       // 2. Clear old show ID cache if it exists
@@ -357,8 +390,12 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       }
 
       // 3. Clear series name cache (existing logic)
-      await EpisodeInfoService.clearSeriesCache(widget.seriesPlaylist.seriesTitle ?? '');
-      await TVMazeService.clearSeriesCache(widget.seriesPlaylist.seriesTitle ?? '');
+      await EpisodeInfoService.clearSeriesCache(
+        widget.seriesPlaylist.seriesTitle ?? '',
+      );
+      await TVMazeService.clearSeriesCache(
+        widget.seriesPlaylist.seriesTitle ?? '',
+      );
 
       // 4. Save new mapping
       await StorageService.saveTVMazeSeriesMapping(
@@ -411,7 +448,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Metadata fixed! Using "${selectedShow['name']}" from TVMaze'),
+            content: Text(
+              'Metadata fixed! Using "${selectedShow['name']}" from TVMaze',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -458,7 +497,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       );
 
       // Also update the in-memory playlist item for immediate UI update
-      final provider = (widget.playlistItem!['provider'] as String?) ?? 'realdebrid';
+      final provider =
+          (widget.playlistItem!['provider'] as String?) ?? 'realdebrid';
       bool updated = false;
 
       if (provider.toLowerCase() == 'realdebrid') {
@@ -486,7 +526,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           }
         }
       } else if (provider.toLowerCase() == 'pikpak') {
-        final pikpakCollectionId = widget.playlistItem!['pikpakFileId'] as String?;
+        final pikpakCollectionId =
+            widget.playlistItem!['pikpakFileId'] as String?;
         if (pikpakCollectionId != null) {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
@@ -495,8 +536,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         }
       } else if (provider.toLowerCase() == 'premiumize') {
         final premiumizeHash = widget.playlistItem!['torrent_hash'] as String?;
-        final premiumizeItemId =
-            widget.playlistItem!['premiumizeItemId']?.toString();
+        final premiumizeItemId = widget.playlistItem!['premiumizeItemId']
+            ?.toString();
         if (premiumizeHash != null && premiumizeHash.isNotEmpty) {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
@@ -519,9 +560,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       }
 
       if (updated) {
-        debugPrint('✅ Successfully updated playlist poster in memory and persistent storage');
+        debugPrint(
+          '✅ Successfully updated playlist poster in memory and persistent storage',
+        );
       } else {
-        debugPrint('⚠️ Updated persistent storage but in-memory update failed - poster will still persist on restart');
+        debugPrint(
+          '⚠️ Updated persistent storage but in-memory update failed - poster will still persist on restart',
+        );
       }
     } catch (e) {
       debugPrint('❌ Error updating playlist poster: $e');
@@ -543,7 +588,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     if (!_scrollController.hasClients) return;
 
     final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
-    final episodeIndexInSeason = selectedSeason?.episodes.indexWhere(
+    final episodeIndexInSeason =
+        selectedSeason?.episodes.indexWhere(
           (episode) => episode.originalIndex == widget.currentEpisodeIndex,
         ) ??
         -1;
@@ -560,8 +606,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         _lastRowExtent + _lastRowSpacing + (_denseView ? _denseRowDivider : 0);
     final viewport = _scrollController.position.viewportDimension;
     final target =
-        _gridTopPadding + rowIndex * rowStride - (viewport - _lastRowExtent) / 2;
-    final offset = target.clamp(0.0, _scrollController.position.maxScrollExtent);
+        _gridTopPadding +
+        rowIndex * rowStride -
+        (viewport - _lastRowExtent) / 2;
+    final offset = target.clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
 
     if (animate) {
       _scrollController.animateTo(
@@ -608,13 +659,15 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   }
 
   double _progressFor(SeriesEpisode episode) {
-    if (episode.seriesInfo.season == null || episode.seriesInfo.episode == null) {
+    if (episode.seriesInfo.season == null ||
+        episode.seriesInfo.episode == null) {
       return 0.0;
     }
-    final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
-    // FURTHEST-WATCHED WINS: show whichever of the local position and the Trakt
-    // cross-device percent is further along, so the bar never regresses when
-    // you've watched more locally than the (once-per-launch) Trakt snapshot.
+    final episodeKey =
+        '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
+    // FURTHEST-WATCHED WINS across local, Trakt, and Simkl, matching the merged
+    // details page. Tracker snapshots can fill episodes watched elsewhere but
+    // never regress a deeper local position.
     double local = 0.0;
     final progressData = _episodeProgress[episodeKey];
     if (progressData != null) {
@@ -623,20 +676,40 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       if (durationMs > 0) local = (positionMs / durationMs).clamp(0.0, 1.0);
     }
     final traktPercent = _traktEpisodeProgress[episodeKey];
-    final trakt =
-        traktPercent != null ? (traktPercent / 100).clamp(0.0, 1.0) : 0.0;
-    // Active rewatch: Trakt says finished but there's a real in-progress local
-    // position — show the live local bar, not the finished state.
-    if (trakt >= 0.95 && local > 0 && local < 0.95) return local;
-    return local >= trakt ? local : trakt;
+    final simklPercent = _simklEpisodeProgress[episodeKey];
+    final tracker =
+        (furthestEpisodeTrackerPercent([traktPercent, simklPercent]) ?? 0.0) /
+        100;
+    // Active rewatch: a tracker says finished but there's a real in-progress
+    // local position — show the live local bar rather than a completed card.
+    if (tracker >= 0.95 && local > 0 && local < 0.95) return local;
+    return local >= tracker ? local : tracker;
   }
 
   bool _isFinished(SeriesEpisode episode) {
-    return episode.seriesInfo.season != null &&
-        episode.seriesInfo.episode != null &&
-        _finishedEpisodes[episode.seriesInfo.season.toString()]
-                ?.contains(episode.seriesInfo.episode) ==
-            true;
+    final season = episode.seriesInfo.season;
+    final number = episode.seriesInfo.episode;
+    if (season == null || number == null) return false;
+    if (_finishedEpisodes[season.toString()]?.contains(number) == true) {
+      return true;
+    }
+    final key = '${season}_$number';
+    final trakt = _traktEpisodeProgress[key] ?? 0.0;
+    final simkl = _simklEpisodeProgress[key] ?? 0.0;
+    if (trakt < 95.0 && simkl < 95.0) return false;
+
+    // A real local partial means the user has started a rewatch; match the
+    // progress-bar rule and show that active state instead of a remote tick.
+    final progressData = _episodeProgress[key];
+    if (progressData != null) {
+      final positionMs = progressData['positionMs'] as int? ?? 0;
+      final durationMs = progressData['durationMs'] as int? ?? 0;
+      if (durationMs > 0) {
+        final local = positionMs / durationMs;
+        if (local > 0 && local < 0.95) return false;
+      }
+    }
+    return true;
   }
 
   bool _isLastPlayed(SeriesEpisode episode) {
@@ -646,9 +719,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   }
 
   void _onEpisodeTap(SeriesEpisode episode) {
-    if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+    if (episode.seriesInfo.season != null &&
+        episode.seriesInfo.episode != null) {
       Navigator.of(context).pop();
-      widget.onEpisodeSelected(episode.seriesInfo.season!, episode.seriesInfo.episode!);
+      widget.onEpisodeSelected(
+        episode.seriesInfo.season!,
+        episode.seriesInfo.episode!,
+      );
     }
   }
 
@@ -704,7 +781,12 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                               ),
                             ),
                           )
-                        : _buildEpisodeGrid(context, episodes, contentWidth, hPad),
+                        : _buildEpisodeGrid(
+                            context,
+                            episodes,
+                            contentWidth,
+                            hPad,
+                          ),
                   ),
                 ],
               ),
@@ -829,11 +911,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         ),
         if (seasons.length > 1) ...[
           const SizedBox(width: 3),
-          const Icon(
-            Icons.expand_more,
-            color: _BrowserColors.accent,
-            size: 20,
-          ),
+          const Icon(Icons.expand_more, color: _BrowserColors.accent, size: 20),
         ],
       ],
     );
@@ -860,7 +938,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
               Text(
                 _seasonLabel(season.seasonNumber),
                 style: TextStyle(
-                  color: isSelected ? _BrowserColors.accent : _BrowserColors.ink,
+                  color: isSelected
+                      ? _BrowserColors.accent
+                      : _BrowserColors.ink,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
@@ -958,7 +1038,11 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           value: 'fix_metadata',
           child: Row(
             children: [
-              Icon(Icons.build_outlined, color: _BrowserColors.inkDim, size: 17),
+              Icon(
+                Icons.build_outlined,
+                color: _BrowserColors.inkDim,
+                size: 17,
+              ),
               SizedBox(width: 10),
               Text(
                 'Fix metadata',
@@ -972,11 +1056,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           ),
         ),
       ],
-      child: _buildIconButtonShell(child: const Icon(
-        Icons.more_horiz,
-        color: _BrowserColors.inkDim,
-        size: 18,
-      )),
+      child: _buildIconButtonShell(
+        child: const Icon(
+          Icons.more_horiz,
+          color: _BrowserColors.inkDim,
+          size: 18,
+        ),
+      ),
     );
   }
 
@@ -1002,7 +1088,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     );
   }
 
-  Widget _buildIconButtonShell({required Widget child, bool withBackground = true}) {
+  Widget _buildIconButtonShell({
+    required Widget child,
+    bool withBackground = true,
+  }) {
     return Container(
       width: 36,
       height: 36,
@@ -1025,9 +1114,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     // and budget the row height for exactly that. The GridView subtree is
     // wrapped in a matching clamp below so text never outgrows its cell.
     const maxTextScale = 1.6;
-    final textScale =
-        (MediaQuery.textScalerOf(context).scale(14.0) / 14.0)
-            .clamp(1.0, maxTextScale);
+    final textScale = (MediaQuery.textScalerOf(context).scale(14.0) / 14.0)
+        .clamp(1.0, maxTextScale);
 
     final int columns;
     final double rowExtent;
@@ -1235,8 +1323,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     required double progress,
     required bool isFinished,
   }) {
-    final gradientColors =
-        _BrowserColors.thumbGradients[index % _BrowserColors.thumbGradients.length];
+    final gradientColors = _BrowserColors
+        .thumbGradients[index % _BrowserColors.thumbGradients.length];
     final placeholder = Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1284,7 +1372,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                 right: 5,
                 bottom: progress > 0 && !isFinished ? 8 : 5,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.72),
                     borderRadius: BorderRadius.circular(5),
@@ -1331,76 +1422,92 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     final tags = <Widget>[];
 
     if (isCurrent) {
-      tags.add(const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.play_arrow_rounded, color: _BrowserColors.accent, size: 15),
-          SizedBox(width: 2),
-          Text(
-            'Now playing',
-            style: TextStyle(
-              color: _BrowserColors.accent,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ));
-    } else if (isFinished) {
-      tags.add(const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_rounded, color: _BrowserColors.done, size: 14),
-          SizedBox(width: 3),
-          Text(
-            'Watched',
-            style: TextStyle(
-              color: _BrowserColors.done,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ));
-    } else if (progress > 0.01) {
-      tags.add(Text.rich(
-        TextSpan(
-          text: 'Resume · ',
-          style: const TextStyle(
-            color: _BrowserColors.inkDim,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
+      tags.add(
+        const Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            TextSpan(
-              text: '${(progress * 100).round()}%',
-              style: const TextStyle(
-                color: _BrowserColors.ink,
-                fontWeight: FontWeight.w700,
-                fontFeatures: [FontFeature.tabularFigures()],
+            Icon(
+              Icons.play_arrow_rounded,
+              color: _BrowserColors.accent,
+              size: 15,
+            ),
+            SizedBox(width: 2),
+            Text(
+              'Now playing',
+              style: TextStyle(
+                color: _BrowserColors.accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
         ),
-      ));
-    }
-
-    if (isLastPlayed && !isCurrent) {
-      tags.add(const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.replay_rounded, color: _BrowserColors.inkFaint, size: 13),
-          SizedBox(width: 3),
-          Text(
-            'Last watched',
-            style: TextStyle(
-              color: _BrowserColors.inkFaint,
+      );
+    } else if (isFinished) {
+      tags.add(
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_rounded, color: _BrowserColors.done, size: 14),
+            SizedBox(width: 3),
+            Text(
+              'Watched',
+              style: TextStyle(
+                color: _BrowserColors.done,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (progress > 0.01) {
+      tags.add(
+        Text.rich(
+          TextSpan(
+            text: 'Resume · ',
+            style: const TextStyle(
+              color: _BrowserColors.inkDim,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
+            children: [
+              TextSpan(
+                text: '${(progress * 100).round()}%',
+                style: const TextStyle(
+                  color: _BrowserColors.ink,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
-        ],
-      ));
+        ),
+      );
+    }
+
+    if (isLastPlayed && !isCurrent) {
+      tags.add(
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.replay_rounded,
+              color: _BrowserColors.inkFaint,
+              size: 13,
+            ),
+            SizedBox(width: 3),
+            Text(
+              'Last watched',
+              style: TextStyle(
+                color: _BrowserColors.inkFaint,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     if (tags.isEmpty) {
@@ -1559,8 +1666,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   }) {
     const w = 54.0;
     const h = 32.0;
-    final gradientColors =
-        _BrowserColors.thumbGradients[index % _BrowserColors.thumbGradients.length];
+    final gradientColors = _BrowserColors
+        .thumbGradients[index % _BrowserColors.thumbGradients.length];
     final placeholder = Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1600,16 +1707,22 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
               Container(
                 color: Colors.black.withValues(alpha: 0.35),
                 child: const Center(
-                  child: Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 20),
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
               )
             else if (isFinished)
               Container(
                 color: Colors.black.withValues(alpha: 0.45),
                 child: const Center(
-                  child: Icon(Icons.check_rounded,
-                      color: _BrowserColors.done, size: 18),
+                  child: Icon(
+                    Icons.check_rounded,
+                    color: _BrowserColors.done,
+                    size: 18,
+                  ),
                 ),
               )
             else if (progress > 0)
@@ -1666,7 +1779,11 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.play_arrow_rounded, color: Colors.white, size: 16),
+                      Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
                       SizedBox(width: 4),
                       Text(
                         'Play',

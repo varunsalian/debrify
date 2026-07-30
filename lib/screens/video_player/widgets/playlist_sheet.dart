@@ -22,7 +22,7 @@ class PlaylistSheet {
   /// - [currentIndex]: Currently playing index
   /// - [seriesPlaylist]: Optional series playlist metadata
   /// - [playlistItemData]: Additional playlist item data
-  /// - [imdbId]: Show IMDb id, used to look up per-episode Trakt progress
+  /// - [imdbId]: Show IMDb id, used to look up per-episode tracker progress
   /// - [onSelect]: Callback when episode/movie is selected (index, allowResume)
   /// - [viewMode]: Optional view mode to determine collection organization
   static Future<void> show(
@@ -52,7 +52,10 @@ class PlaylistSheet {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [VideoPlayerColors.darkerBackground, VideoPlayerColors.darkBackground],
+                colors: [
+                  VideoPlayerColors.darkerBackground,
+                  VideoPlayerColors.darkBackground,
+                ],
               ),
             ),
             child: seriesPlaylist != null && seriesPlaylist.isSeries
@@ -66,27 +69,37 @@ class PlaylistSheet {
                       final originalIndex = seriesPlaylist
                           .findOriginalIndexBySeasonEpisode(season, episode);
                       if (originalIndex != -1) {
-                        // Check if this episode has saved progress — local
-                        // resume, or Trakt cross-device progress (so an episode
-                        // watched partway on another device resumes here too).
+                        // Check if this episode has saved progress — local,
+                        // Trakt, or Simkl — so a partially watched episode from
+                        // another device resumes when selected here.
                         final title =
                             seriesPlaylist.seriesTitle ?? 'Unknown Series';
                         final playbackState =
                             await StorageService.getSeriesPlaybackState(
-                          seriesTitle: title,
-                          season: season,
-                          episode: episode,
+                              seriesTitle: title,
+                              season: season,
+                              episode: episode,
+                            );
+                        final trackerMaps = imdbId != null && imdbId.isNotEmpty
+                            ? await Future.wait([
+                                StorageService.getEpisodeTraktProgress(
+                                  imdbId: imdbId,
+                                ),
+                                StorageService.getEpisodeSimklProgress(
+                                  imdbId: imdbId,
+                                ),
+                              ])
+                            : const <Map<String, double>>[];
+                        final episodeKey = '${season}_$episode';
+                        final hasTracker = trackerMaps.any(
+                          (progress) => (progress[episodeKey] ?? 0) > 0,
                         );
-                        final traktMap = imdbId != null && imdbId.isNotEmpty
-                            ? await StorageService.getEpisodeTraktProgress(
-                                imdbId: imdbId)
-                            : const <String, double>{};
-                        final hasTrakt =
-                            (traktMap['${season}_$episode'] ?? 0) > 0;
 
                         // Allow resuming if the episode has saved progress
-                        await onSelect(originalIndex,
-                            allowResume: playbackState != null || hasTrakt);
+                        await onSelect(
+                          originalIndex,
+                          allowResume: playbackState != null || hasTracker,
+                        );
                       } else {
                         // Show error message to user
                         if (context.mounted) {
@@ -97,7 +110,8 @@ class PlaylistSheet {
                                 style: const TextStyle(color: Colors.white),
                               ),
                               backgroundColor: VideoPlayerColors.errorRed,
-                              duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
+                              duration: VideoPlayerTimingConstants
+                                  .controlsAutoHideDuration,
                             ),
                           );
                         }
@@ -109,10 +123,16 @@ class PlaylistSheet {
                       // Log playlist entries before creating MovieCollection
                       String collectionType = viewMode == PlaylistViewMode.raw
                           ? "folder"
-                          : (viewMode == PlaylistViewMode.sorted ? "sorted A-Z" : "main/extras");
-                      debugPrint('🔍 PlaylistSheet: Creating $collectionType collection from ${playlist.length} entries');
+                          : (viewMode == PlaylistViewMode.sorted
+                                ? "sorted A-Z"
+                                : "main/extras");
+                      debugPrint(
+                        '🔍 PlaylistSheet: Creating $collectionType collection from ${playlist.length} entries',
+                      );
                       for (int i = 0; i < playlist.length && i < 5; i++) {
-                        debugPrint('  Entry[$i]: title="${playlist[i].title}", relativePath="${playlist[i].relativePath}"');
+                        debugPrint(
+                          '  Entry[$i]: title="${playlist[i].title}", relativePath="${playlist[i].relativePath}"',
+                        );
                       }
 
                       // Create MovieCollection based on view mode:

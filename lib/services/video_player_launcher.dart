@@ -29,6 +29,7 @@ import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/alldebrid_service.dart';
+import '../utils/episode_progress_merge.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
 import '../services/movie_metadata_service.dart';
@@ -532,6 +533,47 @@ class VideoPlayerLauncher {
     }
   }
 
+  /// Refresh the player-only Simkl episode snapshot for [imdbId]. Unlike the
+  /// legacy Trakt seed above, this never writes remote completion into local
+  /// finished/resume state: every player surface reads this dedicated snapshot
+  /// and merges it with local + Trakt at display/resume time.
+  static Future<void> _seedSimklEpisodeProgress(String imdbId) async {
+    try {
+      final simkl = SimklService.instance;
+      if (!await simkl.isAuthenticated()) {
+        await StorageService.saveEpisodeSimklProgress(
+          imdbId: imdbId,
+          percents: const {},
+        );
+        return;
+      }
+
+      final results = await Future.wait([
+        simkl.fetchWatchedShowEpisodes(imdbId),
+        simkl.fetchEpisodePlaybackProgress(imdbId),
+      ]);
+      final watchedSet = results[0] as Set<String>;
+      final playbackMap = results[1] as Map<String, double>;
+
+      final percents = buildEpisodeTrackerSnapshot(
+        watched: watchedSet,
+        playback: playbackMap,
+      );
+      await StorageService.saveEpisodeSimklProgress(
+        imdbId: imdbId,
+        percents: percents,
+      );
+    } catch (e) {
+      // A failed refresh should not show a stale remote tick from an older
+      // launch. Local and Trakt state remain available.
+      await StorageService.saveEpisodeSimklProgress(
+        imdbId: imdbId,
+        percents: const {},
+      );
+      debugPrint('VideoPlayerLauncher: Simkl episode seed failed: $e');
+    }
+  }
+
   /// [onPlayerHandoff] (optional) fires exactly once, at the moment a player
   /// surface actually takes over the screen: synchronously before the in-app
   /// player route is pushed, or — for external activities (Android TV native
@@ -787,20 +829,25 @@ class VideoPlayerLauncher {
       );
     }
 
-    // Seed the local finished-episodes store from Trakt so the in-player
-    // playlist shows Trakt-watched episodes. Runs for every series launch (all
-    // entry points), not just Home's bound-source path. Guarded to non-movie
-    // multi-file playlists — a non-series playlist simply parses no season/
-    // episode and writes nothing, so this also covers series with a null
-    // contentType (matching the old unconditional Home behavior).
+    // Refresh both trackers' per-episode snapshots before either player is
+    // launched. Trakt retains its legacy local-finished seed; Simkl stays in a
+    // dedicated replaceable store so remote "unwatched" changes cannot leave
+    // stale local completion behind.
     if (args.contentType != 'movie' &&
         args.contentImdbId != null &&
         (args.playlist?.length ?? 0) > 1) {
-      await _seedTraktWatchedEpisodes(
-        args.playlist!,
-        args.contentImdbId!,
-        args.contentTitle ?? args.title,
-      );
+      await Future.wait([
+        _seedTraktWatchedEpisodes(
+          args.playlist!,
+          args.contentImdbId!,
+          args.contentTitle ?? args.title,
+        ),
+        _seedSimklEpisodeProgress(args.contentImdbId!),
+      ]);
+    } else if (args.contentType == 'series' && args.contentImdbId != null) {
+      // Single-episode launches may grow into a pack through source switching,
+      // so have the Simkl snapshot ready for that in-session playlist too.
+      await _seedSimklEpisodeProgress(args.contentImdbId!);
     }
 
     AnalyticsService.trackInBackground('playback_started', <String, Object?>{
@@ -1695,6 +1742,23 @@ class VideoPlayerLauncher {
             }
           }
 
+          final sourceTrackerMaps = args.contentImdbId != null
+              ? await Future.wait([
+                  StorageService.getEpisodeTraktProgress(
+                    imdbId: args.contentImdbId!,
+                  ),
+                  StorageService.getEpisodeSimklProgress(
+                    imdbId: args.contentImdbId!,
+                  ),
+                ])
+              : const <Map<String, double>>[];
+          final sourceTraktProgress = sourceTrackerMaps.isNotEmpty
+              ? sourceTrackerMaps[0]
+              : const <String, double>{};
+          final sourceSimklProgress = sourceTrackerMaps.length > 1
+              ? sourceTrackerMaps[1]
+              : const <String, double>{};
+
           // Convert PlaylistEntry list to Android TV PlaybackItem maps
           final items = <Map<String, dynamic>>[];
           for (int i = 0; i < playlistEntries.length; i++) {
@@ -1702,6 +1766,17 @@ class VideoPlayerLauncher {
             // Match by originalIndex to handle reordering
             final episode = episodeByIndex[i];
             final epInfo = episode?.episodeInfo;
+            final season = episode?.seriesInfo.season;
+            final episodeNumber = episode?.seriesInfo.episode;
+            final episodeKey = season != null && episodeNumber != null
+                ? '${season}_$episodeNumber'
+                : null;
+            final trackerPercent = episodeKey != null
+                ? furthestEpisodeTrackerPercent([
+                    sourceTraktProgress[episodeKey],
+                    sourceSimklProgress[episodeKey],
+                  ])
+                : null;
             items.add({
               'id': '${entry.title}_$i',
               // Mirror the resolver's own resumeId keying ('${title}_$i') so
@@ -1713,10 +1788,8 @@ class VideoPlayerLauncher {
               if (entry.hdVideoUrl != null) 'hdVideoUrl': entry.hdVideoUrl,
               if (entry.audioUrl != null) 'audioUrl': entry.audioUrl,
               'index': i,
-              if (episode?.seriesInfo.season != null)
-                'season': episode!.seriesInfo.season,
-              if (episode?.seriesInfo.episode != null)
-                'episode': episode!.seriesInfo.episode,
+              if (season != null) 'season': season,
+              if (episodeNumber != null) 'episode': episodeNumber,
               if (epInfo?.poster != null) 'artwork': epInfo!.poster,
               if (epInfo?.plot != null) 'description': epInfo!.plot,
               if (epInfo?.rating != null) 'rating': epInfo!.rating,
@@ -1725,6 +1798,8 @@ class VideoPlayerLauncher {
               'durationMs': 0,
               'updatedAt': 0,
               if (entry.provider != null) 'provider': entry.provider,
+              if (trackerPercent != null)
+                'traktProgressPercent': trackerPercent,
             });
           }
           debugPrint(
@@ -3165,9 +3240,9 @@ class _AndroidTvPlaybackItem {
   final int updatedAt;
   final String? resumeId;
   final String? provider;
-  // Trakt cross-device progress for this episode (0-100), or null. Display-only
-  // fallback for the playlist bar + a resume source when there's no local
-  // position; the player converts it to ms once it knows the real duration.
+  // Cross-device progress for this episode (0-100), or null. The legacy field
+  // name is retained for the Kotlin payload, but the value is the furthest of
+  // Trakt and Simkl.
   final double? traktProgressPercent;
 
   const _AndroidTvPlaybackItem({
@@ -3423,14 +3498,21 @@ class _AndroidTvPlaybackPayloadBuilder {
     final seriesPlaylist = await _buildSeriesPlaylist(playlistEntries);
     final contentType = _determineContentType(seriesPlaylist, playlistEntries);
     final perItemStates = await _fetchPerItemPlaybackState(playlistEntries);
-    // Trakt cross-device per-episode progress ("season_episode" → 0-100), for
-    // the playlist bars + resuming any episode from Trakt (see the Kotlin
-    // player). Display-only fallback — local resume still wins. Keyed by the
-    // show's IMDb id (same id the seed wrote under).
-    final traktProgress = args.contentImdbId != null
-        ? await StorageService.getEpisodeTraktProgress(
-            imdbId: args.contentImdbId!,
-          )
+    // Cross-device per-episode progress ("season_episode" → 0-100) for playlist
+    // bars and in-session episode resume. The native payload retains its legacy
+    // `traktProgressPercent` field name, but each value is the furthest of Trakt
+    // and Simkl.
+    final trackerProgressMaps = args.contentImdbId != null
+        ? await Future.wait([
+            StorageService.getEpisodeTraktProgress(imdbId: args.contentImdbId!),
+            StorageService.getEpisodeSimklProgress(imdbId: args.contentImdbId!),
+          ])
+        : const <Map<String, double>>[];
+    final traktProgress = trackerProgressMaps.isNotEmpty
+        ? trackerProgressMaps[0]
+        : const <String, double>{};
+    final simklProgress = trackerProgressMaps.length > 1
+        ? trackerProgressMaps[1]
         : const <String, double>{};
     final startIndex = await _determineStartIndex(
       contentType,
@@ -3517,7 +3599,10 @@ class _AndroidTvPlaybackPayloadBuilder {
           traktProgressPercent:
               (episodeInfo.seriesInfo.season != null &&
                   episodeInfo.seriesInfo.episode != null)
-              ? traktProgress['${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}']
+              ? furthestEpisodeTrackerPercent([
+                  traktProgress['${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}'],
+                  simklProgress['${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}'],
+                ])
               : null,
         ),
       );
