@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/iptv_playlist.dart';
 import 'iptv_catalog_cache.dart';
 import 'iptv_catalog_db.dart';
@@ -248,45 +250,109 @@ class IptvGlobalSearchIndex {
     return IptvGlobalSearchIndex(sources: sources, unindexed: unindexed);
   }
 
+  static List<String> _tokenize(String query) => query
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((t) => t.isNotEmpty)
+      .toList();
+
+  static const IptvGlobalSearchResults _empty = IptvGlobalSearchResults(
+    live: [], vod: [], series: [],
+    liveTotal: 0, vodTotal: 0, seriesTotal: 0,
+  );
+
   /// AND-semantics substring search over every indexed channel's precomputed
   /// [IptvChannel.searchKey] (lowercased name + group). Within each section,
   /// hits whose channel NAME starts with the first term lead; source order
-  /// (and catalog order within a source) breaks ties. One flat synchronous
-  /// pass — a six-figure item count stays comfortably within a debounce tick.
+  /// (and catalog order within a source) breaks ties.
+  ///
+  /// This runs the scan on the UI isolate. Prefer [searchAsync], which does the
+  /// exact same work on a worker so a six-figure catalog never blocks a frame;
+  /// this is kept as the shared algorithm and a synchronous fallback.
   IptvGlobalSearchResults search(String query) {
-    final terms = query
-        .toLowerCase()
-        .split(RegExp(r'\s+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    if (terms.isEmpty) {
-      return const IptvGlobalSearchResults(
-        live: [], vod: [], series: [],
-        liveTotal: 0, vodTotal: 0, seriesTotal: 0,
-      );
-    }
+    final terms = _tokenize(query);
+    if (terms.isEmpty) return _empty;
+    return _reassemble(_run(
+      [
+        for (var i = 0; i < sources.length; i++)
+          _Searchable(i, sources[i].contentType, sources[i].snapshot,
+              sources[i].channels),
+      ],
+      terms,
+    ));
+  }
 
+  /// Same result as [search], but the whole scan runs on a WORKER isolate, so
+  /// typing/searching never blocks the UI — no matter the catalog size. Uses
+  /// only ordinary SQL (`LIKE`) via the worker's own connection; no optional
+  /// SQLite feature, nothing that can be missing on a device.
+  Future<IptvGlobalSearchResults> searchAsync(String query) async {
+    final terms = _tokenize(query);
+    if (terms.isEmpty) return _empty;
+    final hasDb = sources.any((s) => s.snapshot != null);
+    final job = _SearchJob(
+      query: query,
+      dbPath: hasDb ? IptvCatalogDb.path : null,
+      sources: [
+        for (var i = 0; i < sources.length; i++)
+          _JobSource(
+            index: i,
+            contentType: sources[i].contentType,
+            catalogKey: sources[i].snapshot?.catalogKey,
+            generation: sources[i].snapshot?.generation,
+            channels:
+                sources[i].snapshot == null ? sources[i].channels : const [],
+          ),
+      ],
+    );
+    final raw = await compute(_iptvGlobalSearchWorker, job);
+    return _reassemble(raw);
+  }
+
+  /// Rebuilds hits that point at THIS index's live source objects (the worker
+  /// only sent back source indices — it can't ship a CatalogSnapshot).
+  IptvGlobalSearchResults _reassemble(_RawResults raw) {
+    IptvGlobalSearchHit hit(_RawHit r) => IptvGlobalSearchHit(
+          channel: r.channel,
+          source: sources[r.sourceIndex],
+          section: r.section,
+        );
+    return IptvGlobalSearchResults(
+      live: [for (final r in raw.live) hit(r)],
+      vod: [for (final r in raw.vod) hit(r)],
+      series: [for (final r in raw.series) hit(r)],
+      liveTotal: raw.liveTotal,
+      vodTotal: raw.vodTotal,
+      seriesTotal: raw.seriesTotal,
+    );
+  }
+
+  /// The bucketing core, shared by the inline and worker paths. Produces raw
+  /// hits keyed by source index (sendable); the caller reassembles them into
+  /// [IptvGlobalSearchHit]s against its live source objects.
+  static _RawResults _run(List<_Searchable> items, List<String> terms) {
     // Two buckets per section: name-prefix matches lead, the rest follow.
     final lead = {
-      'live': <IptvGlobalSearchHit>[],
-      'vod': <IptvGlobalSearchHit>[],
-      'series': <IptvGlobalSearchHit>[],
+      'live': <_RawHit>[],
+      'vod': <_RawHit>[],
+      'series': <_RawHit>[],
     };
     final rest = {
-      'live': <IptvGlobalSearchHit>[],
-      'vod': <IptvGlobalSearchHit>[],
-      'series': <IptvGlobalSearchHit>[],
+      'live': <_RawHit>[],
+      'vod': <_RawHit>[],
+      'series': <_RawHit>[],
     };
     final totals = {'live': 0, 'vod': 0, 'series': 0};
 
-    for (final source in sources) {
-      final snap = source.snapshot;
+    for (final item in items) {
+      final snap = item.snapshot;
       if (snap != null) {
         // DB-backed source: the same rules in SQL — totals from COUNT, lead
         // (name-prefix) hits filled first, remaining capacity from the rest,
         // all in catalog order. Nothing materializes beyond the hits.
         void collect(String section, bool? live) {
-          totals[section] = totals[section]! + snap.searchCount(terms, live: live);
+          totals[section] =
+              totals[section]! + snap.searchCount(terms, live: live);
           final sectionLead = lead[section]!;
           final sectionRest = rest[section]!;
           final leadRoom = sectionCap - sectionLead.length;
@@ -296,11 +362,7 @@ class IptvGlobalSearchIndex {
             namePrefixLead: true,
             limit: leadRoom,
           )) {
-            sectionLead.add(IptvGlobalSearchHit(
-              channel: channel,
-              source: source,
-              section: section,
-            ));
+            sectionLead.add(_RawHit(item.index, channel, section));
           }
           final restRoom =
               sectionCap - sectionLead.length - sectionRest.length;
@@ -310,23 +372,19 @@ class IptvGlobalSearchIndex {
             namePrefixLead: false,
             limit: restRoom,
           )) {
-            sectionRest.add(IptvGlobalSearchHit(
-              channel: channel,
-              source: source,
-              section: section,
-            ));
+            sectionRest.add(_RawHit(item.index, channel, section));
           }
         }
 
-        if (source.contentType == 'mixed') {
+        if (item.contentType == 'mixed') {
           collect('live', true);
           collect('vod', false);
         } else {
-          collect(source.contentType, null);
+          collect(item.contentType, null);
         }
         continue;
       }
-      for (final channel in source.channels) {
+      for (final channel in item.channels) {
         final key = channel.searchKey;
         var matches = true;
         for (final term in terms) {
@@ -337,9 +395,9 @@ class IptvGlobalSearchIndex {
         }
         if (!matches) continue;
 
-        final section = source.contentType == 'mixed'
+        final section = item.contentType == 'mixed'
             ? (channel.isLive ? 'live' : 'vod')
-            : source.contentType;
+            : item.contentType;
         totals[section] = totals[section]! + 1;
 
         // A section keeps accepting name-prefix matches until the LEAD
@@ -349,11 +407,7 @@ class IptvGlobalSearchIndex {
         final sectionLead = lead[section]!;
         final sectionRest = rest[section]!;
         final isLead = channel.name.toLowerCase().startsWith(terms.first);
-        final hit = IptvGlobalSearchHit(
-          channel: channel,
-          source: source,
-          section: section,
-        );
+        final hit = _RawHit(item.index, channel, section);
         if (isLead) {
           if (sectionLead.length < sectionCap) sectionLead.add(hit);
         } else {
@@ -364,9 +418,9 @@ class IptvGlobalSearchIndex {
       }
     }
 
-    List<IptvGlobalSearchHit> merge(String s) =>
+    List<_RawHit> merge(String s) =>
         [...lead[s]!, ...rest[s]!].take(sectionCap).toList();
-    return IptvGlobalSearchResults(
+    return _RawResults(
       live: merge('live'),
       vod: merge('vod'),
       series: merge('series'),
@@ -375,4 +429,105 @@ class IptvGlobalSearchIndex {
       seriesTotal: totals['series']!,
     );
   }
+}
+
+// ── Isolate plumbing ────────────────────────────────────────────────────────
+
+/// A hit as computed on a worker: the source is named by its index into the
+/// index's `sources` list (the worker can't send back a CatalogSnapshot), plus
+/// the channel and section. Sendable across isolates.
+class _RawHit {
+  final int sourceIndex;
+  final IptvChannel channel;
+  final String section;
+  const _RawHit(this.sourceIndex, this.channel, this.section);
+}
+
+class _RawResults {
+  final List<_RawHit> live;
+  final List<_RawHit> vod;
+  final List<_RawHit> series;
+  final int liveTotal;
+  final int vodTotal;
+  final int seriesTotal;
+  const _RawResults({
+    required this.live,
+    required this.vod,
+    required this.series,
+    required this.liveTotal,
+    required this.vodTotal,
+    required this.seriesTotal,
+  });
+}
+
+/// One source to search, resolved to whatever the current isolate can use: a
+/// live snapshot (UI isolate) or one the worker pinned on its own connection.
+class _Searchable {
+  final int index;
+  final String contentType;
+  final CatalogSnapshot? snapshot;
+  final List<IptvChannel> channels;
+  const _Searchable(
+      this.index, this.contentType, this.snapshot, this.channels);
+}
+
+/// Sendable description of a source for the worker: a DB source carries its
+/// (catalogKey, generation) so the worker can re-pin a snapshot on its own
+/// connection; a mem source carries its channels.
+class _JobSource {
+  final int index;
+  final String contentType;
+  final String? catalogKey;
+  final int? generation;
+  final List<IptvChannel> channels;
+  const _JobSource({
+    required this.index,
+    required this.contentType,
+    required this.catalogKey,
+    required this.generation,
+    required this.channels,
+  });
+}
+
+class _SearchJob {
+  final String query;
+
+  /// The catalog DB path, or null when the index has no DB-backed source.
+  final String? dbPath;
+  final List<_JobSource> sources;
+  const _SearchJob({
+    required this.query,
+    required this.dbPath,
+    required this.sources,
+  });
+}
+
+/// Worker entry (top-level, for [compute]): opens its own DB connection when
+/// the job has DB sources, re-pins each snapshot on it, and runs the shared
+/// bucketing algorithm.
+_RawResults _iptvGlobalSearchWorker(_SearchJob job) {
+  final terms = IptvGlobalSearchIndex._tokenize(job.query);
+  if (terms.isEmpty) {
+    return const _RawResults(
+      live: [], vod: [], series: [],
+      liveTotal: 0, vodTotal: 0, seriesTotal: 0,
+    );
+  }
+  List<_Searchable> build(CatalogSnapshot? Function(_JobSource) resolve) => [
+        for (final s in job.sources)
+          _Searchable(s.index, s.contentType, resolve(s), s.channels),
+      ];
+
+  final dbPath = job.dbPath;
+  if (dbPath == null) {
+    return IptvGlobalSearchIndex._run(build((_) => null), terms);
+  }
+  return IptvCatalogDb.withConnection(dbPath, (db) {
+    return IptvGlobalSearchIndex._run(
+      build((s) => s.catalogKey == null
+          ? null
+          : IptvCatalogDb.snapshotOn(db, s.catalogKey!, s.generation!)),
+      terms,
+    );
+  });
 }

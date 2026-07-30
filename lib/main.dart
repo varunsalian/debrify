@@ -2149,7 +2149,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return BrowseScreen(
           tabIndex: 13,
           hintText: 'Search channels...',
-          submitOnly: false,
+          // Submit-only: the in-page channel filter runs a full-scan COUNT on
+          // the UI isolate, so filter on the search key press, not on every
+          // keystroke — one scan per deliberate search, no per-keystroke storm.
+          submitOnly: true,
           isTelevision: _isAndroidTv,
           viewBuilder: (args) => IptvResultsView(
             key: args.resultKey,

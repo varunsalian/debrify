@@ -64,8 +64,18 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
   IptvGlobalSearchIndex? _index;
   bool _indexLoading = true;
 
+  /// Current field text. Search runs on SUBMIT, not per keystroke — one scan
+  /// per deliberate search, never a scan storm while typing.
   String _query = '';
-  Timer? _debounce;
+
+  /// The query the currently-shown results belong to (may lag [_query] while
+  /// the user edits before submitting again).
+  String _searchedQuery = '';
+
+  /// Monotonic search id — a search resolves on a worker isolate, so a slower
+  /// earlier run (or a clear) must not overwrite a newer state.
+  int _searchSeq = 0;
+  bool _searching = false;
   IptvGlobalSearchResults? _results;
 
   /// Flat render list + one focus node per hit, in DPAD order.
@@ -95,7 +105,6 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _controller.dispose();
     _searchFocusNode.dispose();
     _scrollController.dispose();
@@ -106,21 +115,46 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
   }
 
   void _onQueryChanged(String value) {
-    _query = value.trim();
-    _debounce?.cancel();
+    // Track the text only — the search fires on SUBMIT (below), never per
+    // keystroke, so typing can't kick off a scan. setState keeps the ✕ button
+    // and "press search" hint in sync with the field.
+    setState(() => _query = value.trim());
     if (_query.isEmpty) {
+      // Clearing wipes the results and cancels any in-flight search.
+      _searchSeq++;
+      _searchedQuery = '';
+      _searching = false;
       _applyResults(null);
-      return;
     }
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (mounted) _runSearch();
-    });
   }
 
-  void _runSearch() {
+  Future<void> _runSearch() async {
     final index = _index;
-    if (index == null || _query.isEmpty) return;
-    _applyResults(index.search(_query));
+    final query = _query;
+    if (index == null || query.isEmpty) return;
+    final seq = ++_searchSeq;
+    setState(() => _searching = true);
+    // The whole scan runs on a worker isolate — the UI never blocks, whatever
+    // the catalog size. A worker failure must never take down the page: fall
+    // back to the inline scan (same ordinary SQL), then to empty.
+    IptvGlobalSearchResults results;
+    try {
+      results = await index.searchAsync(query);
+    } catch (_) {
+      try {
+        results = index.search(query);
+      } catch (_) {
+        results = const IptvGlobalSearchResults(
+          live: [], vod: [], series: [],
+          liveTotal: 0, vodTotal: 0, seriesTotal: 0,
+        );
+      }
+    }
+    // Drop stale results: a newer search started, or the field was cleared.
+    if (!mounted || seq != _searchSeq) return;
+    _searchedQuery = query;
+    _searching = false;
+    _applyResults(results);
   }
 
   void _applyResults(IptvGlobalSearchResults? results) {
@@ -285,10 +319,7 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
               autofocus: true,
               style: const TextStyle(color: Colors.white),
               onChanged: _onQueryChanged,
-              onSubmitted: (_) {
-                _debounce?.cancel();
-                _runSearch();
-              },
+              onSubmitted: (_) => _runSearch(),
               onDownArrow: _focusFirstHit,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
@@ -375,9 +406,14 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
     if (_indexLoading) {
       return const Center(child: CircularProgressIndicator());
     }
+    if (_searching) {
+      return const Center(child: CircularProgressIndicator());
+    }
     final results = _results;
-    if (_query.isEmpty || results == null) {
-      return _buildIdleState();
+    if (results == null) {
+      // Text typed but not searched yet → nudge to submit; otherwise the
+      // idle intro. (Search is submit-only, so results lag the field.)
+      return _query.isEmpty ? _buildIdleState() : _buildPromptState();
     }
     if (results.isEmpty) {
       return Center(
@@ -391,7 +427,7 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
             ),
             const SizedBox(height: 14),
             Text(
-              'No matches for "$_query"',
+              'No matches for "$_searchedQuery"',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.75),
                 fontSize: 15,
@@ -474,6 +510,41 @@ class _IptvGlobalSearchPageState extends State<IptvGlobalSearchPage> {
 
   /// Empty-query state: what this search covers, source by source — and which
   /// sources it can't cover yet, with the way to fix that.
+  /// Shown when the field holds text that hasn't been searched yet — search is
+  /// submit-only, so pressing OK / the search key runs it.
+  Widget _buildPromptState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.search_rounded,
+            size: 56,
+            color: kSeeAllAccent2.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Press search to look for "$_query"',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.75),
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Searches every source at once',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.4),
+              fontSize: 12.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildIdleState() {
     final index = _index;
     if (index == null) return const SizedBox.shrink();
