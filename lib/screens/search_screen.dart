@@ -314,8 +314,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   Set<String> _kwSelectedTorrent = {};
 
   /// True when the results list is being narrowed to TorBox-cached torrents
-  /// only (TorBox active, Real-Debrid not, TorBox cache-check on) — mirrors the
-  /// old screen's `_showingTorboxCachedOnly`. Drives the info banner.
+  /// only (TorBox is the sole usable debrid provider and its cache-check is on)
+  /// — mirrors the old screen's `_showingTorboxCachedOnly`. Drives the banner.
   bool _kwCachedOnly = false;
 
   // Bulk-selection state for keyword results (mirrors Home's multi-select).
@@ -345,11 +345,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   bool _kwPmOn = false;
   String? _kwTbKey;
   String? _kwPmKey;
-  bool _kwRdActive = false;
+  bool _kwOtherProviderActive = false;
 
-  /// Reads the TorBox/Premiumize cache-check gating (+ RD-active, for cached-
-  /// only mode) into the `_kw*` fields. Awaited at the top of each search so
-  /// the streaming batch checks see up-to-date settings.
+  /// Reads the cache-check gating and whether any usable non-TorBox provider
+  /// is active. Awaited at the top of each search so streaming batch checks
+  /// see up-to-date settings.
   Future<void> _loadKwCacheConfig() async {
     final r = await Future.wait([
       StorageService.getTorboxCacheCheckEnabled(),
@@ -360,15 +360,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       StorageService.getPremiumizeApiKey(),
       StorageService.getApiKey(),
       StorageService.getRealDebridIntegrationEnabled(),
+      StorageService.getAllDebridApiKey(),
+      StorageService.getAllDebridIntegrationEnabled(),
+      StorageService.getPikPakEnabled(),
     ]);
     final tbKey = r[2] as String?;
     final pmKey = r[5] as String?;
     final rdKey = r[6] as String?;
+    final adKey = r[8] as String?;
     _kwTbOn = (r[0] as bool) && (r[1] as bool) && (tbKey?.isNotEmpty ?? false);
     _kwPmOn = (r[3] as bool) && (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
     _kwTbKey = tbKey;
     _kwPmKey = pmKey;
-    _kwRdActive = (r[7] as bool) && (rdKey?.isNotEmpty ?? false);
+    final rdActive = (r[7] as bool) && (rdKey?.isNotEmpty ?? false);
+    final pmActive = (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
+    final adActive = (r[9] as bool) && (adKey?.isNotEmpty ?? false);
+    final pikpakActive = r[10] as bool;
+    _kwOtherProviderActive =
+        rdActive || pmActive || adActive || pikpakActive;
   }
 
   // ── Streaming keyword search (per-engine batches, Sources-list parity) ──
@@ -5007,10 +5016,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Retry any hash still un-memoized (never dispatched, or a failed check).
     await _checkKeywordCache(full, token);
     if (!mounted || token != _kwSearchToken) return;
-    // Cached-only mode mirrors the old screen: when a TorBox cache-check ran
-    // this search and Real-Debrid is NOT configured, narrow the list to
-    // TorBox-cached torrents. RD users keep the full list (RD auto-adds uncached).
-    final cachedOnly = _kwTbRan && !_kwRdActive;
+    // Narrow to TorBox-cached torrents only when TorBox is the sole usable
+    // provider. Any other active provider may be able to handle a result that
+    // TorBox does not cache, so its rows must remain visible.
+    final cachedOnly = _kwTbRan && !_kwOtherProviderActive;
     if (cachedOnly != _kwCachedOnly) {
       // Cached-only mode toggles the visible set → full recompute.
       _kwCachedOnly = cachedOnly;
