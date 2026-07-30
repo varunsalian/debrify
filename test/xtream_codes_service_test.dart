@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:debrify/services/iptv_catalog_cache.dart';
+import 'package:debrify/services/iptv_catalog_key.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/xtream_codes_service.dart';
 
@@ -657,7 +657,7 @@ void main() {
       final receipt = result.ingest!;
       expect(receipt.channelCount, 2);
       expect(receipt.catalogKey,
-          IptvCatalogCache.keyForXtream(base, 'user', 'live'));
+          IptvCatalogKey.forXtream(base, 'user', 'live'));
 
       final snap = IptvCatalogDb.snapshot(receipt.catalogKey)!;
       expect(snap.channelCount, 2);
@@ -675,16 +675,17 @@ void main() {
       );
     });
 
-    test('flag off restores the legacy list pipeline untouched', () async {
-      SharedPreferences.setMockInitialValues(
-          {'iptv_db_catalog_enabled': false});
+    test('without an open catalog DB the fetch returns a plain list', () async {
+      // The old `iptv_db_catalog_enabled` preference is gone — ingest now
+      // depends only on whether the catalog database is available, which is
+      // the condition that actually decides where rows can go.
+      IptvCatalogDb.debugClose();
 
       final result = await XtreamCodesService.instance
           .fetchLiveStreams(base, 'u2', 'p2');
 
       expect(result.ingest, isNull);
       expect(result.channels.length, 2);
-      expect(IptvCatalogDb.snapshot('xc|$base|u2|live'), isNull);
     });
   });
 }

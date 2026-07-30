@@ -184,10 +184,9 @@ Future<void> main() async {
 Future<void> _prewarmIptvCatalogDb() async {
   if (kIsWeb) return;
   try {
-    if (!await StorageService.getIptvDbCatalogEnabled()) return;
-    // DB mode defaults on, but most users never configure IPTV. Do not create
-    // a database or compete with Home startup IO unless a stored source could
-    // actually use the paged catalog.
+    // Most users never configure IPTV. Do not create a database or compete
+    // with Home startup IO unless a stored source could actually use the
+    // paged catalog.
     if ((await StorageService.getIptvPlaylists()).isEmpty) return;
     await IptvCatalogDb.open();
   } catch (e) {

@@ -206,6 +206,26 @@ class XmltvEpgSource {
   /// byId + the guideKey to query under). Legacy JSON snapshots are imported
   /// once — preserving their original fetch time so a stale file doesn't
   /// masquerade as fresh — then deleted.
+  /// Whether the legacy JSON guide file has nothing left to give and may be
+  /// deleted: either its rows are now in the database, or it never held usable
+  /// rows to begin with.
+  ///
+  /// A FAILED import must keep the file. The previous rule deleted it
+  /// unconditionally ("imported or useless either way"), which is wrong for
+  /// the throw case — a transient failure (a locked or full database) silently
+  /// discarded a cached guide that can be hundreds of megabytes to fetch
+  /// again, on exactly the low-end devices least able to re-download it. This
+  /// is the one shipped-build data-loss path in the IPTV cleanup audit.
+  ///
+  /// [imported] is deliberately "the guide is readable from the database now",
+  /// not "ingest returned without throwing", so a write that silently failed
+  /// to land also keeps the file.
+  @visibleForTesting
+  static bool shouldDropLegacyGuideFile({
+    required bool hadRows,
+    required bool imported,
+  }) => !hadRows || imported;
+
   static Future<XmltvGuide?> _loadDbMode(
     String epgUrl,
     Set<String> tvgIds,
@@ -216,11 +236,18 @@ class XmltvEpgSource {
   ) async {
     var info = IptvCatalogDb.epgGuideInfo(guideKey);
 
+    // Set when this pass kept a legacy file whose import failed. That file is
+    // then the ONLY copy of its guide, and the import is only ever attempted
+    // while `info` is null — so nothing below may write guide metadata that
+    // would make the next load skip the retry and strand it forever.
+    var retainedLegacy = false;
+
     // One-time import of the legacy snapshot file.
     if (info == null && await legacyFile.exists()) {
       final cached = await _readSnapshot(legacyFile);
       final guide = cached?.guide;
-      if (guide != null && guide.byId.isNotEmpty) {
+      final hadRows = guide != null && guide.byId.isNotEmpty;
+      if (hadRows) {
         try {
           final byId = guide.byId;
           final nameToId = guide.nameToId;
@@ -244,10 +271,13 @@ class XmltvEpgSource {
           debugPrint('XmltvEpgSource: legacy guide import failed: $e');
         }
       }
-      // Imported or useless either way — the file's job is done.
-      try {
-        await legacyFile.delete();
-      } catch (_) {}
+      if (shouldDropLegacyGuideFile(hadRows: hadRows, imported: info != null)) {
+        try {
+          await legacyFile.delete();
+        } catch (_) {}
+      } else {
+        retainedLegacy = true;
+      }
     }
 
     XmltvGuide? stored() {
@@ -300,14 +330,28 @@ class XmltvEpgSource {
             'XmltvEpgSource: empty parse, keeping stored guide: $epgUrl');
         return fallback;
       }
-      IptvCatalogDb.markEpgGuideEmpty(
-        guideKey: guideKey,
-        epgUrl: epgUrl,
-        sawWanted: guide.sawWantedChannel,
-      );
+      if (!retainedLegacy) {
+        IptvCatalogDb.markEpgGuideEmpty(
+          guideKey: guideKey,
+          epgUrl: epgUrl,
+          sawWanted: guide.sawWantedChannel,
+        );
+      }
+      // With a retained file, the negative cache is deliberately NOT written:
+      // its row would satisfy `info != null` on the next load, skip the legacy
+      // import, and leave a guide sitting on disk that can never be read
+      // again. Leaving the metadata absent costs one re-parse and keeps the
+      // retry alive.
       return guide;
     }
     // The parser ingested + stamped inside its isolate; the guide is light.
+    // A retained legacy file is now genuinely obsolete — the database holds a
+    // newer copy — so it stops being an orphan nothing would ever delete.
+    if (retainedLegacy) {
+      try {
+        await legacyFile.delete();
+      } catch (_) {}
+    }
     return guide;
   }
 

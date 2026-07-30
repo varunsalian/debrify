@@ -194,12 +194,6 @@ class _NativeSqliteApi {
           // "the column exists".
         }
       }
-      _execute(
-        handle,
-        "INSERT OR REPLACE INTO meta(key, value) VALUES "
-        "('schema_version', '${IptvCatalogDb._schemaVersion}')",
-      );
-
       transferred = true;
       return handle.address;
     } finally {
@@ -252,12 +246,11 @@ class _NativeSqliteApi {
 /// generation protocol below makes refreshes invisible until they commit
 /// (proven in test/catalog_ingest_spike_test.dart).
 ///
-/// A catalog is identified by the SAME key string the legacy disk snapshot
-/// cache used (`IptvCatalogCache.keyForPlaylist`: `xc|server|user|type` or
-/// `m3u|url`) — so eligibility ("is this a cacheable catalog?") and
-/// invalidation (settings edit/delete) keep their existing semantics
-/// unchanged. Virtual playlists (favorites://, continue://, Stremio, local
-/// files) have no key and stay materialized in memory, exactly as before.
+/// A catalog is identified by an [IptvCatalogKey] (`xc|server|user|type` or
+/// `m3u|url`), so eligibility ("is this a cacheable catalog?") and
+/// invalidation (settings edit/delete) ask the same question everywhere.
+/// Virtual playlists (favorites://, continue://, Stremio, local files) have no
+/// key and stay materialized in memory.
 ///
 /// Each ingest writes a NEW generation, flips the `catalogs` pointer and
 /// deletes the old generation in ONE transaction — a reader either sees the
@@ -644,11 +637,14 @@ class IptvCatalogDb {
   }
 
   static void _createSchema(Database db) {
-    // Defensive cleanup: a previous build shipped an FTS5 `channels_fts` index
-    // (plus these triggers) that crashed on devices whose bundled SQLite lacks
-    // the trigram tokenizer. Drop any leftovers so their triggers can't fire on
-    // ingest and break catalog writes. Wrapped so a missing or corrupt object
-    // can never abort schema setup; a clean database no-ops through it.
+    // Defensive cleanup: a DEVELOPMENT build (never a release — the FTS
+    // experiment was reverted before any tag) created an FTS5 `channels_fts`
+    // index plus these triggers, and it crashed on devices whose bundled
+    // SQLite lacks the trigram tokenizer. Drop any leftovers so their triggers
+    // can't fire on ingest and break catalog writes. Wrapped so a missing or
+    // corrupt object can never abort schema setup; a clean database no-ops
+    // through it. Removable once every development install has opened a build
+    // containing this cleanup.
     for (final sql in _defensiveCleanupSql) {
       try {
         db.execute(sql);
@@ -665,10 +661,6 @@ class IptvCatalogDb {
         // expected result after the first successful v2 migration.
       }
     }
-    db.execute(
-      "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
-      ['$_schemaVersion'],
-    );
     // Deliberately NOT _runPendingMigrations: this runs before EVERY ingest,
     // and an ordinary background refresh has no business carrying a one-time
     // upgrade of unrelated catalogs. Schema shape is all ingest needs; the
@@ -1167,7 +1159,7 @@ class IptvCatalogDb {
   // ── Worker-side bulk readers ─────────────────────────────────────────────
   //
   // Whole-catalog scans (EPG filter sets, favorites reconcile) run on WORKER
-  // isolates in DB mode — walking the paging facade on the UI isolate would
+  // isolates — walking the paging facade on the UI isolate would
   // saturate it for tens of seconds on a big playlist even with yields.
   // These open their own connection from [dbPath] and return plain sendable
   // data.
@@ -1417,7 +1409,7 @@ class IptvCatalogDb {
 
   // ── Maintenance (UI isolate) ─────────────────────────────────────────────
 
-  /// Settings edit/delete paths call this alongside the legacy snapshot
+  /// Settings edit/delete paths call this alongside the in-memory
   /// cache invalidation; it opens the DB if this session hasn't yet (the
   /// user can delete a playlist without ever opening the IPTV page).
   /// Deletes catalogs on a WORKER, behind the maintenance gate.
@@ -1590,7 +1582,7 @@ class IptvCatalogDb {
   }
 
   /// Drops the stored catalogs for [keys] (settings edit/delete paths — the
-  /// same call sites that invalidate the legacy snapshot cache).
+  /// same call sites that invalidate the services' in-memory caches).
   /// Synchronous deletion against the caller's own connection. Worker-side
   /// entry point for [removeCatalogsByKeys]; UI callers must use that instead,
   /// so a 50k-row delete never lands on this isolate.
@@ -1600,6 +1592,12 @@ class IptvCatalogDb {
       for (final key in keys) {
         db.execute('DELETE FROM channels WHERE catalog_key = ?', [key]);
         db.execute('DELETE FROM catalogs WHERE catalog_key = ?', [key]);
+        // The catalog's bookkeeping goes with it. Narrow but real: a delete
+        // and re-add inside the backoff window would otherwise inherit the old
+        // entry's suppressed refresh.
+        db.execute('DELETE FROM meta WHERE key = ?', [
+          _revalidateStartedKey(key),
+        ]);
       }
       db.execute('COMMIT');
     } catch (_) {
@@ -1905,39 +1903,5 @@ class EpgGuideInfo {
     required this.sawWanted,
     required this.channelCount,
     required this.nameToId,
-  });
-}
-
-/// compute() entry for the one-time legacy-snapshot import: the decoded
-/// snapshot's channels are shipped to a worker which writes them into the
-/// catalog DB, so the 55k inserts never run on the UI isolate. Returns the
-/// ingested channel count.
-int ingestLegacySnapshotJob(LegacySnapshotIngestJob job) {
-  IptvCatalogDb.ingest(
-    dbPath: job.dbPath,
-    catalogKey: job.catalogKey,
-    channels: job.channels,
-    categories: job.categories,
-    epgUrl: job.epgUrl,
-    numberingSourceKey: job.numberingSourceKey,
-  );
-  return job.channels.length;
-}
-
-class LegacySnapshotIngestJob {
-  final String dbPath;
-  final String catalogKey;
-  final String? numberingSourceKey;
-  final List<IptvChannel> channels;
-  final List<String> categories;
-  final String? epgUrl;
-
-  const LegacySnapshotIngestJob({
-    required this.dbPath,
-    required this.catalogKey,
-    this.numberingSourceKey,
-    required this.channels,
-    required this.categories,
-    required this.epgUrl,
   });
 }

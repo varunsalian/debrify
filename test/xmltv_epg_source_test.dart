@@ -391,4 +391,38 @@ void main() {
       );
     });
   });
+
+  group('legacy guide file retention', () {
+    // The JSON epg_cache shipped in v0.6.3-alpha.1, so real installs upgrade
+    // through this import. Deleting the file when the import failed threw away
+    // a guide that can be hundreds of MB to re-download.
+    test('a failed import keeps the file for the next attempt', () {
+      expect(
+        XmltvEpgSource.shouldDropLegacyGuideFile(
+          hadRows: true,
+          imported: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('a successful import drops the file', () {
+      expect(
+        XmltvEpgSource.shouldDropLegacyGuideFile(hadRows: true, imported: true),
+        isTrue,
+      );
+    });
+
+    test('a file with no usable rows is dropped either way', () {
+      // Nothing to lose and nothing to retry — keeping it would retry an
+      // import that can never succeed, on every single open.
+      expect(
+        XmltvEpgSource.shouldDropLegacyGuideFile(
+          hadRows: false,
+          imported: false,
+        ),
+        isTrue,
+      );
+    });
+  });
 }

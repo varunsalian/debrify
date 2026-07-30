@@ -420,20 +420,6 @@ class StorageService {
     await prefs.setBool('iptv_redesign_enabled', enabled);
   }
 
-  /// Store big IPTV catalogs in iptv_catalog.db and page the UI from SQL
-  /// (constant memory regardless of playlist size) instead of holding every
-  /// channel on the heap. On by default; off restores the legacy
-  /// in-memory/snapshot pipeline unchanged.
-  static Future<bool> getIptvDbCatalogEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('iptv_db_catalog_enabled') ?? true;
-  }
-
-  static Future<void> setIptvDbCatalogEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('iptv_db_catalog_enabled', enabled);
-  }
-
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,
   /// purple Discover theme, 1-click marketplace) instead of the classic two-tab
   /// Addons screen. On by default; can be turned off per-device via

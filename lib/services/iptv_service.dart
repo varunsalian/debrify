@@ -4,9 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
 import '../utils/m3u_parser.dart';
-import 'iptv_catalog_cache.dart';
+import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
-import 'storage_service.dart';
 
 /// Service for fetching and managing IPTV M3U playlists
 class IptvService {
@@ -39,11 +38,11 @@ class IptvService {
     bool forceRefresh = false,
     String? numberingSourceKey,
   }) async {
-    // DB-catalog mode: the parse worker ingests straight into
-    // iptv_catalog.db and this service's in-memory cache is bypassed —
-    // freshness policy moves to the caller (snapshot.ingestedAt).
+    // With the catalog database open, the parse worker ingests straight
+    // into it and this service's in-memory cache is bypassed — freshness
+    // policy moves to the caller (snapshot.ingestedAt).
     final ingestToDb =
-        IptvCatalogDb.isOpen && await StorageService.getIptvDbCatalogEnabled();
+        IptvCatalogDb.isOpen;
 
     // Check cache
     if (!ingestToDb && !forceRefresh && _cache.containsKey(url)) {
@@ -112,7 +111,7 @@ class IptvService {
 
       final result = await _parse(
         content,
-        ingestCatalogKey: ingestToDb ? IptvCatalogCache.keyForUrl(url) : null,
+        ingestCatalogKey: ingestToDb ? IptvCatalogKey.forUrl(url) : null,
         numberingSourceKey: numberingSourceKey,
       );
 
@@ -183,18 +182,6 @@ class IptvService {
     }
     final lowerQuery = query.toLowerCase();
     return channels.where((c) => c.searchKey.contains(lowerQuery)).toList();
-  }
-
-  /// Peek the in-memory cache: the fresh (within-TTL) result for this URL,
-  /// or null. Lets callers skip both the network AND a disk-snapshot read
-  /// for same-session revisits.
-  IptvParseResult? cachedResult(String url) {
-    final cached = _cache[url];
-    if (cached == null) return null;
-    if (DateTime.now().difference(cached.fetchedAt) >= _cacheDuration) {
-      return null;
-    }
-    return cached.result;
   }
 
   /// Clear cache for a specific URL or all

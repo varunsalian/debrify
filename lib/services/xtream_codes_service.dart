@@ -5,9 +5,8 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
-import 'iptv_catalog_cache.dart';
+import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
-import 'storage_service.dart';
 
 /// Result of Xtream Codes authentication
 class XcAuthResult {
@@ -325,12 +324,12 @@ class XtreamCodesService {
     final label = isLive ? 'live' : (isSeries ? 'series' : 'VOD');
     final cacheKey = '$serverUrl:$username:$contentType';
 
-    // DB-catalog mode: the worker ingests straight into iptv_catalog.db and
+    // With the catalog database open, the worker ingests straight into it and
     // the service's in-memory result cache is bypassed entirely — holding
     // three 55k-object catalogs on the heap is exactly what this mode
     // removes. Freshness policy moves to the caller (snapshot.ingestedAt).
     final ingestToDb =
-        IptvCatalogDb.isOpen && await StorageService.getIptvDbCatalogEnabled();
+        IptvCatalogDb.isOpen;
 
     // Check cache
     if (!ingestToDb && _cache.containsKey(cacheKey)) {
@@ -450,7 +449,7 @@ class XtreamCodesService {
         liveUrlForm: liveUrlForm,
         ingestDbPath: ingestToDb ? IptvCatalogDb.path : null,
         ingestCatalogKey: ingestToDb
-            ? IptvCatalogCache.keyForXtream(serverUrl, username, contentType)
+            ? IptvCatalogKey.forXtream(serverUrl, username, contentType)
             : null,
         numberingSourceKey: numberingSourceKey,
       );
@@ -781,8 +780,12 @@ class XtreamCodesService {
   }
 
   /// Peek the in-memory cache: the fresh (within-TTL) result for this
-  /// account + content type, or null. Lets callers skip both the network AND
-  /// a disk-snapshot read for same-session revisits.
+  /// account + content type, or null.
+  ///
+  /// No production callers — it exists so the test suite can assert that DB
+  /// mode does NOT also keep the catalog on this service's heap, which is the
+  /// whole point of ingesting to rows.
+  @visibleForTesting
   IptvParseResult? cachedResult(
     String serverUrl,
     String username,
@@ -1134,10 +1137,10 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
     }
   }
 
-  // DB-catalog mode: write the rows here on the worker and hand back only a
+  // Catalog database: write the rows here on the worker and hand back only a
   // receipt. An EMPTY list is deliberately NOT ingested — a flaky panel
   // returning nothing must not wipe a previously good stored catalog (the
-  // same rule the snapshot cache's "never cache an empty catalog" enforces);
+  // same "never store an empty catalog" rule the caches have always used);
   // the empty result flows back as-is and reads as empty, exactly like today.
   final ingestDbPath = job.ingestDbPath;
   final ingestCatalogKey = job.ingestCatalogKey;

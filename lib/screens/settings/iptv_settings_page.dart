@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/iptv_playlist.dart';
-import '../../services/iptv_catalog_cache.dart';
+import '../../services/iptv_catalog_key.dart';
 import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_service.dart';
 import '../../services/xtream_codes_service.dart';
@@ -527,25 +527,20 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       setState(() => _defaultPlaylistId = null);
     }
 
-    // Clear caches for this playlist — the in-memory fetch cache, the
-    // on-disk catalog snapshots, and the catalog DB rows.
+    // Clear caches for this playlist — the in-memory fetch cache and the
+    // catalog DB rows.
     if (playlist.isXtreamCodes) {
       XtreamCodesService.instance.clearCache(playlist.serverUrl);
-      await IptvCatalogCache.instance.removeXtream(
-        playlist.serverUrl!,
-        playlist.username ?? '',
-      );
       await IptvCatalogDb.removeCatalogsByKeys(
-        IptvCatalogCache.xtreamKeys(
+        IptvCatalogKey.allForXtream(
           playlist.serverUrl!,
           playlist.username ?? '',
         ),
       );
     } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogCache.instance.removeUrl(playlist.url);
       await IptvCatalogDb.removeCatalogsByKeys(
-        [IptvCatalogCache.keyForUrl(playlist.url)],
+        [IptvCatalogKey.forUrl(playlist.url)],
       );
     }
 
@@ -611,12 +606,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final result = await IptvCatalogDb.runExclusive(() async {
       if (playlist.isXtreamCodes) {
         XtreamCodesService.instance.clearCache(playlist.serverUrl);
-        await IptvCatalogCache.instance.removeXtream(
-          playlist.serverUrl!,
-          playlist.username ?? '',
-        );
         await IptvCatalogDb.removeCatalogsByKeys(
-          IptvCatalogCache.xtreamKeys(
+          IptvCatalogKey.allForXtream(
             playlist.serverUrl!,
             playlist.username ?? '',
           ),
@@ -629,9 +620,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         );
       }
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogCache.instance.removeUrl(playlist.url);
       await IptvCatalogDb.removeCatalogsByKeys(
-        [IptvCatalogCache.keyForUrl(playlist.url)],
+        [IptvCatalogKey.forUrl(playlist.url)],
       );
       return IptvService.instance.fetchPlaylist(
         playlist.url,
@@ -776,12 +766,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       if (credsChanged) {
         XtreamCodesService.instance.clearCache(playlist.serverUrl);
         XtreamCodesService.instance.clearCache(updated.serverUrl);
-        await IptvCatalogCache.instance.removeXtream(
-          playlist.serverUrl!,
-          playlist.username ?? '',
-        );
         await IptvCatalogDb.removeCatalogsByKeys(
-          IptvCatalogCache.xtreamKeys(
+          IptvCatalogKey.allForXtream(
             playlist.serverUrl!,
             playlist.username ?? '',
           ),
@@ -789,9 +775,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       }
     } else if (!playlist.isLocalFile && playlist.url != updated.url) {
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogCache.instance.removeUrl(playlist.url);
       await IptvCatalogDb.removeCatalogsByKeys(
-        [IptvCatalogCache.keyForUrl(playlist.url)],
+        [IptvCatalogKey.forUrl(playlist.url)],
       );
     }
 
@@ -1147,9 +1132,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               child: SwitchListTile(
                 title: const Text('IPTV redesign'),
                 subtitle: const Text(
-                  'Programme guide inside channel rows, search across every '
-                  'source, and the TV source rail. Turn off for the classic '
-                  'IPTV page.',
+                  'Programme guide inside channel rows and the TV source '
+                  'rail. Turn off for the classic IPTV page.',
                 ),
                 value: _redesignEnabled,
                 onChanged: (enabled) async {

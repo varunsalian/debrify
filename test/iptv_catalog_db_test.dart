@@ -1152,11 +1152,25 @@ void main() {
       );
     }
 
+    // A refresh that never finished, on one of the doomed catalogs and on the
+    // survivor: deletion must take the deleted catalog's bookkeeping with it,
+    // or a delete-and-re-add inside the backoff window would inherit the old
+    // entry's suppressed refresh.
+    IptvCatalogDb.markRevalidateStarted('xc|s|u|live');
+    IptvCatalogDb.markRevalidateStarted('m3u|http://other');
+
     await IptvCatalogDb.removeCatalogsByKeys(['xc|s|u|live', 'xc|s|u|vod']);
 
     expect(IptvCatalogDb.snapshot('xc|s|u|live'), isNull);
     expect(IptvCatalogDb.snapshot('xc|s|u|vod'), isNull);
     expect(IptvCatalogDb.snapshot('m3u|http://other')!.channelCount, 1);
+
+    expect(IptvCatalogDb.revalidateInterrupted('xc|s|u|live'), isFalse);
+    expect(
+      IptvCatalogDb.revalidateInterrupted('m3u|http://other'),
+      isTrue,
+      reason: 'a surviving catalog keeps its own marker',
+    );
   });
 
   group('live-filter + zap-window queries', () {
