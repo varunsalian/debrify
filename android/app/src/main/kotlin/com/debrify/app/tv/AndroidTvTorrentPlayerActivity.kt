@@ -449,7 +449,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Handlers
     private val progressHandler = Handler(Looper.getMainLooper())
-    private val titleHandler = Handler(Looper.getMainLooper())
     private val controlsHandler = Handler(Looper.getMainLooper())
     private val seekbarHandler = Handler(Looper.getMainLooper())
 
@@ -481,12 +480,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             maybeShowUpNext()
             progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
         }
-    }
-
-    private val hideTitleRunnable = Runnable {
-        titleContainer.animate().alpha(0f).setDuration(220).withEndAction {
-            titleContainer.visibility = View.GONE
-        }.start()
     }
 
     private val hideControlsRunnable = Runnable {
@@ -2736,15 +2729,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
-        // Always show simple mode by default (OTT mode only when controls menu visible)
-        titleView.visibility = View.VISIBLE
-        titleOttContainer.visibility = View.GONE
-
         channelBadge.visibility = View.GONE
-        titleContainer.visibility = View.VISIBLE
-        titleContainer.alpha = 1f
-        titleHandler.removeCallbacks(hideTitleRunnable)
-        titleHandler.postDelayed(hideTitleRunnable, TITLE_FADE_DELAY_MS)
     }
 
     private fun setResolvingState(resolving: Boolean) {
@@ -4268,8 +4253,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Hide subtitles when controls menu is shown
         subtitleOverlay.visibility = View.GONE
 
-        // Show title when controls menu is shown
-        titleHandler.removeCallbacks(hideTitleRunnable)
+        // The title and controls are one presentation state: metadata updates
+        // may change the text, but only this method is allowed to reveal it.
         titleContainer.animate().cancel()
 
         // Switch to OTT mode if we have series metadata, otherwise keep simple mode
@@ -4334,6 +4319,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             overlay.visibility = View.GONE
             overlay.alpha = 0f
             overlay.translationY = 0f
+            hideTitleImmediately()
+            hideStremioSourceBadge()
             cancelScheduledHideControlsMenu()
             return
         }
@@ -4342,13 +4329,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         controlsMenuVisible = false
 
         // Hide title and revert to simple mode when controls hide
-        titleHandler.removeCallbacks(hideTitleRunnable)
         titleContainer.animate()
             .alpha(0f)
             .setDuration(250)
             .withEndAction {
                 titleContainer.visibility = View.GONE
-                // Revert to simple mode for next title flash
+                // Revert to simple mode for the next controls reveal.
                 titleView.visibility = View.VISIBLE
                 titleOttContainer.visibility = View.GONE
             }
@@ -4372,6 +4358,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
             .start()
+    }
+
+    private fun hideTitleImmediately() {
+        titleContainer.animate().cancel()
+        titleContainer.visibility = View.GONE
+        titleContainer.alpha = 0f
+        // Reset the presentation mode for the next controls reveal.
+        titleView.visibility = View.VISIBLE
+        titleOttContainer.visibility = View.GONE
     }
 
     private fun scheduleHideControlsMenu() {
@@ -6664,7 +6659,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     resetSubtitleState()
                     beginIptvPlayback(replay)
                     titleView.text = replay.name
-                    titleContainer.visibility = View.VISIBLE
                     updateIptvEpisodeControls()
                 }
 
@@ -7530,7 +7524,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Update title
         titleView.text = selected.displayName
-        titleContainer.visibility = View.VISIBLE
 
         // Channel-change feedback belongs to live zapping. VOD keeps the
         // standard player presentation.
@@ -7940,10 +7933,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         beginIptvPlayback(entry)
 
-        // Show title briefly
+        // Update the title content. Visibility stays synchronized with controls.
         titleView.text = entry.displayName
-        titleOttContainer.visibility = View.GONE
-        titleContainer.visibility = View.VISIBLE
 
         // First tune on a live channel: the zap banner doubles as the "here's
         // what's on" card and teaches the zap/guide keys — without it, EPG
@@ -10202,16 +10193,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Rebuild playlist UI (without re-adding RecyclerView listeners)
         rebuildPlaylistContent()
 
-        // Flash title to indicate source switch
+        // Update the title content for the next controls reveal.
         val currentSource = stremioSources.getOrNull(sourceIndex)
         if (currentSource != null) {
             titleView.text = currentSource.displayTitle
-            titleView.visibility = View.VISIBLE
-            titleOttContainer.visibility = View.GONE
-            titleContainer.visibility = View.VISIBLE
-            titleContainer.alpha = 1f
-            titleHandler.removeCallbacks(hideTitleRunnable)
-            titleHandler.postDelayed(hideTitleRunnable, TITLE_FADE_DELAY_MS)
         }
 
         // Resume the previously-playing item; the captured position is carried
@@ -10316,16 +10301,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Report the switch outcome once playback settles
         watchSourceSwitchOutcome(sourceIndex)
 
-        // Flash title to indicate source switch
+        // Update the title content for the next controls reveal.
         val currentSource = stremioSources.getOrNull(sourceIndex)
         if (currentSource != null) {
             titleView.text = currentSource.displayTitle
-            titleView.visibility = View.VISIBLE
-            titleOttContainer.visibility = View.GONE
-            titleContainer.visibility = View.VISIBLE
-            titleContainer.alpha = 1f
-            titleHandler.removeCallbacks(hideTitleRunnable)
-            titleHandler.postDelayed(hideTitleRunnable, TITLE_FADE_DELAY_MS)
         }
 
         // For PikPak URLs, start cold storage retry monitoring
@@ -10627,7 +10606,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Clear all handlers
         progressHandler.removeCallbacksAndMessages(null)
-        titleHandler.removeCallbacksAndMessages(null)
         controlsHandler.removeCallbacksAndMessages(null)
         seekbarHandler.removeCallbacksAndMessages(null)
 
@@ -11364,7 +11342,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val UP_NEXT_THRESHOLD_MS = 25_000L   // show card when this much remains
         private const val UP_NEXT_MIN_DURATION_MS = 5 * 60_000L  // skip for short clips
         private const val UP_NEXT_TICK_MS = 500L
-        private const val TITLE_FADE_DELAY_MS = 4000L
         private const val CONTROLS_AUTO_HIDE_DELAY_MS = 4000L
         private const val SEEK_STEP_MS = 10_000L
         private const val SEEK_LONG_PRESS_THRESHOLD = 3
