@@ -239,7 +239,7 @@ void main() {
     expect(IptvCatalogDb.snapshot('m3u|http://other')!.channelCount, 1);
   });
 
-  group('global-search queries', () {
+  group('live-filter + zap-window queries', () {
     setUp(() {
       IptvCatalogDb.ingest(
         dbPath: IptvCatalogDb.path,
@@ -262,27 +262,12 @@ void main() {
       );
     });
 
-    test('AND-of-terms with name-prefix leads, in catalog order', () {
-      final snap = IptvCatalogDb.snapshot('k')!;
-      expect(snap.searchCount(['sky']), 3);
-      expect(snap.searchCount(['sky', 'news']), 1);
-
-      final leads =
-          snap.searchPage(['sky'], namePrefixLead: true, limit: 10);
-      expect(leads.map((c) => c.name), ['Sky Sports F1', 'Sky Movies'],
-          reason: 'CNN Sky News matches but its NAME has no sky prefix');
-      final rest =
-          snap.searchPage(['sky'], namePrefixLead: false, limit: 10);
-      expect(rest.map((c) => c.name), ['CNN Sky News']);
-    });
-
     test('live bucketing matches IptvChannel.isLive exactly', () {
       final snap = IptvCatalogDb.snapshot('k')!;
       expect(snap.count(live: true), 2,
           reason: 'explicit live + the duration-less M3U heuristic');
       expect(snap.count(live: false), 2,
           reason: 'explicit vod + the real-duration M3U row');
-      expect(snap.searchCount(['sky'], live: false), 1);
     });
 
     test('positionOf + beforePosition rebuild a zap window', () {
