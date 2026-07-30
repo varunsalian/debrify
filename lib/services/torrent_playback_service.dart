@@ -1598,7 +1598,7 @@ class TorrentPlaybackService {
     if (isSeries) {
       if (meta.season == null || meta.episode == null) return (null, null);
       if (!await Directory(localPath).exists()) {
-        await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+        await SeriesSourceService.removeSourceEntry(imdbId, source);
         return (
           null,
           'Saved local folder is no longer available. Falling back to search.'
@@ -1606,7 +1606,7 @@ class TorrentPlaybackService {
       }
       final episodes = await LocalBoundSourceService.scanSeriesFolder(localPath);
       if (episodes.isEmpty) {
-        await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+        await SeriesSourceService.removeSourceEntry(imdbId, source);
         return (
           null,
           'Saved local folder has no playable episodes. Falling back to search.'
@@ -1645,7 +1645,7 @@ class TorrentPlaybackService {
     final file = File(localPath);
     final fileName = FileUtils.getFileName(localPath);
     if (!await file.exists() || !FileUtils.isVideoFile(fileName)) {
-      await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+      await SeriesSourceService.removeSourceEntry(imdbId, source);
       return (
         null,
         'Saved local source is no longer available. Falling back to search.'
@@ -1786,6 +1786,161 @@ class TorrentPlaybackService {
     );
   }
 
+  /// Resolve a hashless cloud binding from its provider-native stable id.
+  /// Direct URLs are deliberately refreshed on every play.
+  static Future<_Resolved?> _resolveProviderNativeBound(
+    SeriesSource source,
+    PlaybackMeta meta,
+  ) async {
+    final sourceId = source.debridTorrentId.trim();
+    if (!source.isProviderNativeCloud || sourceId.isEmpty) return null;
+
+    switch (source.debridService) {
+      case 'premiumize':
+        final apiKey = (await StorageService.getPremiumizeApiKey()) ?? '';
+        if (apiKey.isEmpty) return null;
+        if (source.cloudSourceKind == SeriesSource.cloudKindFile) {
+          final file = await PremiumizeService.resolveItemById(apiKey, sourceId);
+          if (file == null || file.link.isEmpty) return null;
+          return _Resolved(
+            title: source.torrentName,
+            playUrl: file.link,
+            downloadUrls: [file.link],
+            fileName: file.path.isNotEmpty ? file.path : source.torrentName,
+          );
+        }
+
+        final all = await PremiumizeService.listFolderRecursive(
+          apiKey,
+          sourceId,
+        );
+        final videos = all.where((f) => f.isVideo).toList();
+        if (videos.isEmpty) return null;
+        if (meta.contentType != 'series') {
+          final video =
+              videos.reduce((a, b) => a.size >= b.size ? a : b);
+          var url = video.playableUrl ?? '';
+          if (url.isEmpty) {
+            final resolved =
+                await PremiumizeService.resolveItemById(apiKey, video.id);
+            url = resolved?.link ?? '';
+          }
+          if (url.isEmpty) return null;
+          return _Resolved(
+            title: source.torrentName,
+            playUrl: url,
+            downloadUrls: [url],
+            fileName: video.relativePath ?? video.name,
+          );
+        }
+        final (sorted, startIndex) = _orderBySeries(
+          videos,
+          (f) => f.relativePath ?? f.name,
+        );
+        final entries = <PlaylistEntry>[
+          for (var i = 0; i < sorted.length; i++)
+            PlaylistEntry(
+              url: i == startIndex ? (sorted[i].playableUrl ?? '') : '',
+              title: sorted[i].relativePath ?? sorted[i].name,
+              relativePath: sorted[i].relativePath ?? sorted[i].name,
+              provider: 'premiumize',
+              premiumizeItemId: sorted[i].id,
+              sizeBytes: sorted[i].size > 0 ? sorted[i].size : null,
+            ),
+        ];
+        var playUrl = entries[startIndex].url;
+        if (playUrl.isEmpty) {
+          final resolved = await PremiumizeService.resolveItemById(
+            apiKey,
+            entries[startIndex].premiumizeItemId!,
+          );
+          playUrl = resolved?.link ?? '';
+        }
+        if (playUrl.isEmpty) return null;
+        return _Resolved(
+          title: source.torrentName,
+          playUrl: playUrl,
+          downloadUrls: [playUrl],
+          playlist: entries.length > 1 ? entries : null,
+          startIndex: startIndex,
+          fileName: entries.length == 1 ? entries.first.title : null,
+        );
+
+      case 'pikpak':
+        final pikpak = PikPakApiService.instance;
+        if (source.cloudSourceKind == SeriesSource.cloudKindFile) {
+          final data = await pikpak.getFileDetails(sourceId);
+          if (data['phase'] != 'PHASE_TYPE_COMPLETE') return null;
+          final url = pikpak.getStreamingUrl(data);
+          if (url == null || url.isEmpty) return null;
+          final name = (data['name'] ?? source.torrentName).toString();
+          return _Resolved(
+            title: source.torrentName,
+            playUrl: url,
+            downloadUrls: [url],
+            fileName: name,
+            pikpakFileId: sourceId,
+            pikpakVideoFileId: sourceId,
+          );
+        }
+
+        final all = await pikpak.listFilesRecursive(
+          folderId: sourceId,
+          includePaths: true,
+        );
+        final videos = all.where((file) {
+          final name = file['name']?.toString() ?? '';
+          final mime = file['mime_type']?.toString() ?? '';
+          return mime.startsWith('video/') || FileUtils.isVideoFile(name);
+        }).toList();
+        if (videos.isEmpty) return null;
+        if (meta.contentType != 'series') {
+          int sizeOf(Map<String, dynamic> file) =>
+              int.tryParse(file['size']?.toString() ?? '') ?? 0;
+          final video =
+              videos.reduce((a, b) => sizeOf(a) >= sizeOf(b) ? a : b);
+          final videoId = video['id']?.toString() ?? '';
+          if (videoId.isEmpty) return null;
+          final data = await pikpak.getFileDetails(videoId);
+          if (data['phase'] != 'PHASE_TYPE_COMPLETE') return null;
+          final url = pikpak.getStreamingUrl(data);
+          if (url == null || url.isEmpty) return null;
+          return _Resolved(
+            title: source.torrentName,
+            playUrl: url,
+            downloadUrls: [url],
+            fileName: video['_fullPath']?.toString() ??
+                video['name']?.toString() ??
+                source.torrentName,
+            pikpakFileId: sourceId,
+            pikpakVideoFileId: videoId,
+          );
+        }
+        final playlist = await _buildPikPakPlaylist(
+          source.torrentName,
+          videos,
+          pikpak,
+        );
+        if (playlist == null || playlist.isEmpty) return null;
+        var startIndex = playlist.indexWhere((e) => e.url.isNotEmpty);
+        if (startIndex < 0) startIndex = 0;
+        final playUrl = playlist[startIndex].url;
+        if (playUrl.isEmpty) return null;
+        return _Resolved(
+          title: source.torrentName,
+          playUrl: playUrl,
+          downloadUrls: [playUrl],
+          playlist: playlist.length > 1 ? playlist : null,
+          startIndex: startIndex,
+          fileName: playlist.length == 1 ? playlist.first.title : null,
+          pikpakFileId: sourceId,
+          pikpakVideoFileId:
+              playlist.length == 1 ? playlist.first.pikpakFileId : null,
+        );
+    }
+    return null;
+  }
+
   /// Play a pinned source directly (no search). Tries each bound source in
   /// priority order; returns true once one plays. Self-heals a source that is
   /// confirmed dead/uncached (removes it) so the caller can fall back to search.
@@ -1871,18 +2026,24 @@ class TorrentPlaybackService {
       }
 
       final prov = _providerFromStored(source.debridService);
-      final t = _torrentFromSource(source);
+      final nativeCloud = source.isProviderNativeCloud;
+      final t = nativeCloud ? null : _torrentFromSource(source);
       _Resolved? res;
       // Default reason if this attempt fails without a more specific one
       // (no magnet, empty play URL, not-cached, transient error) — Home's
       // generic wording. Overwritten below when we know more.
       fallbackHint = 'Saved source is no longer available. Falling back to search.';
       try {
-        final magnet = await _magnetFor(t);
-        if (magnet == null) continue;
-        if (cancel.cancelled) return true;
-        final r = await _add(prov, magnet, t);
-        if (r.playUrl != null && r.playUrl!.isNotEmpty) {
+        final _Resolved? r;
+        if (nativeCloud) {
+          r = await _resolveProviderNativeBound(source, meta);
+        } else {
+          final magnet = await _magnetFor(t!);
+          if (magnet == null) continue;
+          if (cancel.cancelled) return true;
+          r = await _add(prov, magnet, t);
+        }
+        if (r != null && r.playUrl != null && r.playUrl!.isNotEmpty) {
           if (season != null &&
               episode != null &&
               !_resolvedHasEpisode(r, season, episode)) {
@@ -1898,12 +2059,15 @@ class TorrentPlaybackService {
             // fallbacks don't pile up orphans. TorBox/AllDebrid dedup the
             // add to an existing entry (deleting could break other bindings)
             // and Premiumize adds nothing, so those are left alone.
-            if (prov == 'debrid' && (r.rdTorrentId?.isNotEmpty ?? false)) {
+            if (!nativeCloud &&
+                prov == 'debrid' &&
+                (r.rdTorrentId?.isNotEmpty ?? false)) {
               try {
                 final apiKey = (await StorageService.getApiKey()) ?? '';
                 await DebridService.deleteTorrent(apiKey, r.rdTorrentId!);
               } catch (_) {}
-            } else if (prov == 'pikpak' &&
+            } else if (!nativeCloud &&
+                prov == 'pikpak' &&
                 (r.pikpakFileId?.isNotEmpty ?? false)) {
               try {
                 await PikPakApiService.instance
@@ -1919,7 +2083,7 @@ class TorrentPlaybackService {
         try {
           await DebridService.deleteTorrent(e.apiKey, e.torrentId);
         } catch (_) {}
-        await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+        await SeriesSourceService.removeSourceEntry(imdbId, source);
       } on AllDebridTorrentNotReadyException catch (e) {
         // Transient (still resolving) — keep the binding, just fail this attempt.
         try {
@@ -1939,16 +2103,19 @@ class TorrentPlaybackService {
         }
         // Loader stays up through the launch prep; _launch has it dismissed
         // when the player takes the screen.
-        await _launch(context, res, t.displayTitle,
+        await _launch(
+            context, res, nativeCloud ? source.torrentName : t!.displayTitle,
             provider: prov,
             meta: meta,
-            sources: [t],
+            sources: nativeCloud ? null : [t!],
             sourceIndex: 0,
             // Bound play searched NOTHING — every applicable "Load more"
             // shows. Each factory self-gates on content type, so exactly one
             // (or neither, for non-tt ids) is non-null.
-            seriesFetcher: seriesFetcherFor(meta: meta, provider: prov) ??
-                movieFetcherFor(meta: meta, provider: prov),
+            seriesFetcher: nativeCloud
+                ? null
+                : (seriesFetcherFor(meta: meta, provider: prov) ??
+                    movieFetcherFor(meta: meta, provider: prov)),
             overlay: overlay);
         return true;
       }
@@ -2647,7 +2814,7 @@ class TorrentPlaybackService {
         await SeriesSourceService.getSources(imdbId),
       );
       final existingIdx =
-          list.indexWhere((s) => s.torrentHash == source.torrentHash);
+          list.indexWhere((s) => s.bindingKey == source.bindingKey);
       if (existingIdx >= 0) {
         // Same source replayed — refresh in place, keep priority.
         list[existingIdx] = source;
@@ -2663,8 +2830,8 @@ class TorrentPlaybackService {
           final overflow = singles.length + 1 - _maxAutoBoundSingles;
           if (overflow > 0) {
             final drop =
-                singles.take(overflow).map((s) => s.torrentHash).toSet();
-            list.removeWhere((s) => drop.contains(s.torrentHash));
+                singles.take(overflow).map((s) => s.bindingKey).toSet();
+            list.removeWhere((s) => drop.contains(s.bindingKey));
           }
         }
         list.add(source);
@@ -3099,10 +3266,10 @@ class TorrentPlaybackService {
       // Series: promote the chosen source to primary, replacing the one being
       // switched away from, but keep any other fallbacks. Re-selecting the
       // current primary leaves the rest of the list intact.
-      final currentPrimaryHash = existing.first.torrentHash;
+      final currentPrimaryKey = existing.first.bindingKey;
       final list = List<SeriesSource>.from(existing)
-        ..removeWhere((s) => s.torrentHash == source.torrentHash);
-      if (currentPrimaryHash != source.torrentHash && list.isNotEmpty) {
+        ..removeWhere((s) => s.bindingKey == source.bindingKey);
+      if (currentPrimaryKey != source.bindingKey && list.isNotEmpty) {
         list.removeAt(0);
       }
       list.insert(0, source);

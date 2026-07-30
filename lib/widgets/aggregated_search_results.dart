@@ -14,6 +14,9 @@ import '../services/local_bound_source_service.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../screens/debrid_downloads_screen.dart';
+import '../screens/alldebrid/alldebrid_files_screen.dart';
+import '../screens/pikpak/pikpak_files_screen.dart';
+import '../screens/premiumize/premiumize_files_screen.dart';
 import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import 'add_source_picker_dialog.dart';
@@ -561,20 +564,34 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     }
   }
 
-  /// Show the add-source picker (Torrent Search / Real-Debrid / TorBox).
-  /// Skips the picker if no cloud providers are enabled.
+  /// Show the add-source picker with every configured cloud provider.
   Future<void> _showAddSourcePicker(StremioMeta item, String imdbId) async {
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final premiumizeIntegration =
+        await StorageService.getPremiumizeIntegrationEnabled();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
     final rdEnabled = rdKey != null && rdKey.isNotEmpty;
     final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
+    final premiumizeEnabled = premiumizeIntegration &&
+        premiumizeKey != null &&
+        premiumizeKey.isNotEmpty;
+    final allDebridEnabled =
+        allDebridKey != null && allDebridKey.isNotEmpty;
 
     if (!mounted) return;
 
     final isMovie = item.type == 'movie';
     final supportsLocal = isMovie || item.type == 'series';
 
-    if (!rdEnabled && !torboxEnabled && !supportsLocal) {
+    if (!rdEnabled &&
+        !torboxEnabled &&
+        !premiumizeEnabled &&
+        !allDebridEnabled &&
+        !pikpakEnabled &&
+        !supportsLocal) {
       widget.onSelectSource?.call(item);
       return;
     }
@@ -607,7 +624,76 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               torboxEnabled: true,
             )
           : null,
+      onPremiumize: premiumizeEnabled
+          ? () => _pushCloudSelectSource(
+                show: item,
+                imdbId: imdbId,
+                provider: 'premiumize',
+              )
+          : null,
+      onAllDebrid: allDebridEnabled
+          ? () => _pushCloudSelectSource(
+                show: item,
+                imdbId: imdbId,
+                provider: 'alldebrid',
+              )
+          : null,
+      onPikPak: pikpakEnabled
+          ? () => _pushCloudSelectSource(
+                show: item,
+                imdbId: imdbId,
+                provider: 'pikpak',
+              )
+          : null,
     );
+  }
+
+  void _pushCloudSelectSource({
+    required StremioMeta show,
+    required String imdbId,
+    required String provider,
+  }) {
+    final isMovie = show.type == 'movie';
+
+    Future<void> saveSource(SeriesSource source) async {
+      if (isMovie) {
+        await SeriesSourceService.setSources(imdbId, [source]);
+      } else {
+        await SeriesSourceService.addSource(imdbId, source);
+      }
+      final updated = await SeriesSourceService.getSources(imdbId);
+      if (mounted) setState(() => _boundSources[imdbId] = updated);
+    }
+
+    final Widget screen;
+    switch (provider) {
+      case 'premiumize':
+        screen = PremiumizeFilesScreen(
+          isPushedRoute: true,
+          initialSearchQuery: show.name,
+          selectSourceMode: true,
+          onSourceSelected: saveSource,
+        );
+        break;
+      case 'alldebrid':
+        screen = AllDebridFilesScreen(
+          isPushedRoute: true,
+          initialSearchQuery: show.name,
+          selectSourceMode: true,
+          onSourceSelected: saveSource,
+        );
+        break;
+      case 'pikpak':
+        screen = PikPakFilesScreen(
+          isPushedRoute: true,
+          selectSourceMode: true,
+          onSourceSelected: saveSource,
+        );
+        break;
+      default:
+        return;
+    }
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
   Future<void> _pickAndSaveLocalSource(StremioMeta item, String imdbId) async {
@@ -713,14 +799,14 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                                 itemBuilder: (context, index) {
                                   final source = sources[index];
                                   return _buildSourceListTile(
-                                    key: ValueKey(source.torrentHash),
+                                    key: ValueKey(source.bindingKey),
                                     source: source,
                                     index: index,
                                     showDragHandle: false,
                                     onDelete: () async {
-                                      await SeriesSourceService.removeSourceByHash(
+                                      await SeriesSourceService.removeSourceEntry(
                                         imdbId,
-                                        source.torrentHash,
+                                        source,
                                       );
                                       final updated =
                                           await SeriesSourceService.getSources(
@@ -776,13 +862,13 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                                 itemBuilder: (context, index) {
                                   final source = sources[index];
                                   return _buildSourceListTile(
-                                    key: ValueKey(source.torrentHash),
+                                    key: ValueKey(source.bindingKey),
                                     source: source,
                                     index: index,
                                     onDelete: () async {
-                                      await SeriesSourceService.removeSourceByHash(
+                                      await SeriesSourceService.removeSourceEntry(
                                         imdbId,
-                                        source.torrentHash,
+                                        source,
                                       );
                                       final updated =
                                           await SeriesSourceService.getSources(

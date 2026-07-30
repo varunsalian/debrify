@@ -80,6 +80,9 @@ import 'episodes_screen.dart';
 import 'stremio_tv/stremio_tv_service.dart';
 import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'torbox/torbox_downloads_screen.dart';
+import 'premiumize/premiumize_files_screen.dart';
+import 'alldebrid/alldebrid_files_screen.dart';
+import 'pikpak/pikpak_files_screen.dart';
 
 /// Stremio-style palette for the Search tab: an indigo/purple accent and a deep
 /// near-black indigo base behind the poster board.
@@ -5787,14 +5790,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                 itemCount: sources.length,
                                 itemBuilder: (context, index) =>
                                     _buildSourceListTile(
-                                      key: ValueKey(sources[index].torrentHash),
+                                      key: ValueKey(sources[index].bindingKey),
                                       source: sources[index],
                                       index: index,
                                       showDragHandle: false,
                                       onDelete: () async {
-                                        await SeriesSourceService.removeSourceByHash(
+                                        await SeriesSourceService.removeSourceEntry(
                                           imdbId,
-                                          sources[index].torrentHash,
+                                          sources[index],
                                         );
                                         await refreshInto(
                                           setDialogState,
@@ -5826,13 +5829,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     ),
                                 itemBuilder: (context, index) =>
                                     _buildSourceListTile(
-                                      key: ValueKey(sources[index].torrentHash),
+                                      key: ValueKey(sources[index].bindingKey),
                                       source: sources[index],
                                       index: index,
                                       onDelete: () async {
-                                        await SeriesSourceService.removeSourceByHash(
+                                        await SeriesSourceService.removeSourceEntry(
                                           imdbId,
-                                          sources[index].torrentHash,
+                                          sources[index],
                                         );
                                         await refreshInto(
                                           setDialogState,
@@ -5958,7 +5961,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// Add-source picker: Torrent Search (imdb) / Keyword Search (free-text) /
-  /// Local file / Real-Debrid / TorBox.
+  /// Local file plus every configured cloud provider.
   Future<void> _showAddSourcePicker(StremioMeta item) async {
     final imdbId = _imdbOf(item);
     if (imdbId == null) {
@@ -5970,8 +5973,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final navigator = Navigator.of(context);
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final premiumizeIntegration =
+        await StorageService.getPremiumizeIntegrationEnabled();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
     final rdEnabled = rdKey != null && rdKey.isNotEmpty;
     final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
+    final premiumizeEnabled = premiumizeIntegration &&
+        premiumizeKey != null &&
+        premiumizeKey.isNotEmpty;
+    final allDebridEnabled =
+        allDebridKey != null && allDebridKey.isNotEmpty;
     if (!mounted) return;
 
     final isMovie = item.type == 'movie';
@@ -5987,7 +6000,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
 
     // No cloud providers and no local option → go straight to torrent search.
-    if (!rdEnabled && !torboxEnabled && !supportsLocal) {
+    if (!rdEnabled &&
+        !torboxEnabled &&
+        !premiumizeEnabled &&
+        !allDebridEnabled &&
+        !pikpakEnabled &&
+        !supportsLocal) {
       _openBindSources(item);
       return;
     }
@@ -6016,6 +6034,41 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 builder: (_) => TorboxDownloadsScreen(
                   isPushedRoute: true,
                   initialSearchQuery: item.name,
+                  selectSourceMode: true,
+                  onSourceSelected: saveSource,
+                ),
+              ),
+            )
+          : null,
+      onPremiumize: premiumizeEnabled
+          ? () => navigator.push(
+              MaterialPageRoute(
+                builder: (_) => PremiumizeFilesScreen(
+                  isPushedRoute: true,
+                  initialSearchQuery: item.name,
+                  selectSourceMode: true,
+                  onSourceSelected: saveSource,
+                ),
+              ),
+            )
+          : null,
+      onAllDebrid: allDebridEnabled
+          ? () => navigator.push(
+              MaterialPageRoute(
+                builder: (_) => AllDebridFilesScreen(
+                  isPushedRoute: true,
+                  initialSearchQuery: item.name,
+                  selectSourceMode: true,
+                  onSourceSelected: saveSource,
+                ),
+              ),
+            )
+          : null,
+      onPikPak: pikpakEnabled
+          ? () => navigator.push(
+              MaterialPageRoute(
+                builder: (_) => PikPakFilesScreen(
+                  isPushedRoute: true,
                   selectSourceMode: true,
                   onSourceSelected: saveSource,
                 ),

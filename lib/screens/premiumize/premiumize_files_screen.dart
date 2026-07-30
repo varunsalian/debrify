@@ -8,6 +8,7 @@ import '../../services/storage_service.dart';
 import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/series_source_service.dart';
 import '../../models/premiumize_folder_item.dart';
 import '../../models/premiumize_transfer.dart';
 import '../../utils/file_utils.dart';
@@ -29,6 +30,9 @@ import '../../utils/tv_keys.dart';
 class PremiumizeFilesScreen extends StatefulWidget {
   final String? initialFolderId;
   final String? initialFolderName;
+  final String? initialSearchQuery;
+  final bool selectSourceMode;
+  final Future<void> Function(SeriesSource)? onSourceSelected;
 
   /// When true, this screen was pushed as a route (not displayed in a tab).
   /// Back navigation pops the route instead of switching tabs.
@@ -38,7 +42,10 @@ class PremiumizeFilesScreen extends StatefulWidget {
     super.key,
     this.initialFolderId,
     this.initialFolderName,
+    this.initialSearchQuery,
     this.isPushedRoute = false,
+    this.selectSourceMode = false,
+    this.onSourceSelected,
   });
 
   @override
@@ -185,10 +192,17 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         _currentFolderId = widget.initialFolderId;
         _currentFolderName = widget.initialFolderName!;
       }
+      final initialQuery = widget.initialSearchQuery?.trim() ?? '';
+      if (initialQuery.isNotEmpty) {
+        _isSearchActive = true;
+        _searchController.text = initialQuery;
+      }
     });
 
     if (_premiumizeEnabled) {
       _loadFolder();
+      final initialQuery = widget.initialSearchQuery?.trim() ?? '';
+      if (initialQuery.isNotEmpty) _performSearch(initialQuery);
     } else {
       setState(() => _initialLoad = false);
     }
@@ -493,6 +507,83 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   // ── Playback ───────────────────────────────────────────────────────────────
+
+  Future<void> _selectBoundSource(PremiumizeFolderItem item) async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) return;
+
+    _showLoadingDialog(
+      item.isFolder ? 'Checking folder for videos...' : 'Checking file...',
+    );
+    var checkingDialogOpen = true;
+    void closeCheckingDialog() {
+      if (!checkingDialogOpen) return;
+      checkingDialogOpen = false;
+      _dismissDialog();
+    }
+    try {
+      if (item.isFolder) {
+        final files = await PremiumizeService.listFolderRecursive(
+          apiKey,
+          item.id,
+        );
+        if (!mounted) return;
+        final videos = files.where((f) => f.isVideo).toList();
+        if (videos.isEmpty) {
+          closeCheckingDialog();
+          _showSnackBar('This folder has no playable videos', isError: true);
+          return;
+        }
+        final first = videos.first;
+        final firstReady = first.playableUrl?.isNotEmpty == true ||
+            await PremiumizeService.resolveItemById(apiKey, first.id) != null;
+        if (!mounted) return;
+        if (!firstReady) {
+          closeCheckingDialog();
+          _showSnackBar('This folder has no ready video streams',
+              isError: true);
+          return;
+        }
+      } else {
+        if (!item.isVideo) {
+          closeCheckingDialog();
+          _showSnackBar('Only video files can be bound', isError: true);
+          return;
+        }
+        final resolved = await PremiumizeService.resolveItemById(
+          apiKey,
+          item.id,
+        );
+        if (resolved == null || resolved.link.isEmpty) {
+          closeCheckingDialog();
+          _showSnackBar('This file is not ready to stream', isError: true);
+          return;
+        }
+      }
+
+      closeCheckingDialog();
+      await widget.onSourceSelected?.call(
+        SeriesSource(
+          torrentHash: '',
+          torrentName: item.name,
+          debridService: 'premiumize',
+          debridTorrentId: item.id,
+          cloudSourceKind: item.isFolder
+              ? SeriesSource.cloudKindFolder
+              : SeriesSource.cloudKindFile,
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      closeCheckingDialog();
+      if (mounted) {
+        _showSnackBar('Could not bind this Premiumize source: $e',
+            isError: true);
+      }
+    }
+  }
 
   Future<void> _playFile(PremiumizeFolderItem file) async {
     String? url = file.playableUrl;
@@ -1414,14 +1505,19 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                     onPressed: () => Navigator.of(context).maybePop(),
                   )
                 : null),
-        title: Text(_isAtRoot ? 'Premiumize' : _currentFolderName),
+        title: Text(
+          widget.selectSourceMode
+              ? 'Select Premiumize Source'
+              : (_isAtRoot ? 'Premiumize' : _currentFolderName),
+        ),
         actions: [
           // Keep the button mounted while a navigation fetch runs (_items is
           // cleared then) so the AppBar doesn't flicker and TV focus parked
           // on it isn't dropped.
           if (_selectedView == _PremiumizeView.files &&
               (_items.isNotEmpty || _isLoading) &&
-              !_isSearchActive)
+              !_isSearchActive &&
+              !widget.selectSourceMode)
             IconButton(
               icon: Icon(
                   _isSelectionMode ? Icons.close : Icons.checklist_outlined),
@@ -1446,16 +1542,17 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
               constraints: iconConstraints,
               visualDensity: VisualDensity.compact,
             ),
-          IconButton(
-            focusNode: _addLinkButtonFocusNode,
-            icon: const Icon(Icons.add_link),
-            onPressed: _isLoading ? null : _showAddLinkDialog,
-            tooltip: 'Add to Premiumize',
-            iconSize: iconSize,
-            padding: iconPadding,
-            constraints: iconConstraints,
-            visualDensity: VisualDensity.compact,
-          ),
+          if (!widget.selectSourceMode)
+            IconButton(
+              focusNode: _addLinkButtonFocusNode,
+              icon: const Icon(Icons.add_link),
+              onPressed: _isLoading ? null : _showAddLinkDialog,
+              tooltip: 'Add to Premiumize',
+              iconSize: iconSize,
+              padding: iconPadding,
+              constraints: iconConstraints,
+              visualDensity: VisualDensity.compact,
+            ),
           IconButton(
             focusNode: _refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
@@ -1470,7 +1567,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       ),
       body: Column(
         children: [
-          if (_isAtRoot && !_isSearchActive) _buildViewSelector(),
+          if (_isAtRoot &&
+              !_isSearchActive &&
+              !widget.selectSourceMode)
+            _buildViewSelector(),
           if (_isSelectionMode) _buildSelectionBar(),
           if (showViewModeDropdown) _buildViewModeDropdown(),
           if (_isSearchActive && showSearch) _buildSearchBar(),
@@ -1766,6 +1866,32 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       if (!item.isFolder && item.size > 0) Formatters.formatFileSize(item.size),
       if (date.isNotEmpty) date,
     ];
+
+    if (widget.selectSourceMode) {
+      return CloudFileRow(
+        kind: item.isFolder
+            ? CloudRowKind.folder
+            : isVideo
+                ? CloudRowKind.video
+                : CloudRowKind.file,
+        title: item.name,
+        meta: metaParts.isEmpty ? null : metaParts.join(' · '),
+        onTap: (item.isFolder || isVideo)
+            ? () => _selectBoundSource(item)
+            : null,
+        actions: item.isFolder
+            ? [
+                CloudRowAction(
+                  icon: Icons.folder_open_rounded,
+                  label: 'Browse folder',
+                  onSelected: () => _navigateIntoFolder(item),
+                ),
+              ]
+            : const [],
+        focusNode:
+            (autofocusFirst && index == 0) ? _firstItemFocusNode : null,
+      );
+    }
 
     // Same action set (labels, icons, conditions) the old Open/Play pills +
     // ⋮ menu offered; the row's tap now carries Open (folders) and Play

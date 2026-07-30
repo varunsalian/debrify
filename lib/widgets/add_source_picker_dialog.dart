@@ -12,9 +12,10 @@ import '../utils/tv_keys.dart';
 /// - Disabled Local File / Folder (only if [localDisabledReason] is non-null)
 /// - Real-Debrid (only if [onRealDebrid] is non-null, in CLOUD section)
 /// - TorBox (only if [onTorbox] is non-null, in CLOUD section)
+/// - Premiumize / AllDebrid / PikPak when their callbacks are non-null
 ///
-/// If [onLocal], [onRealDebrid], and [onTorbox] are null, callers may skip
-/// showing this dialog and call [onTorrentSearch] directly.
+/// Callers may skip this dialog when every local/cloud callback is null and
+/// call [onTorrentSearch] directly.
 Future<void> showAddSourcePickerDialog(
   BuildContext context, {
   required VoidCallback onTorrentSearch,
@@ -23,6 +24,9 @@ Future<void> showAddSourcePickerDialog(
   String? localDisabledReason,
   VoidCallback? onRealDebrid,
   VoidCallback? onTorbox,
+  VoidCallback? onPremiumize,
+  VoidCallback? onAllDebrid,
+  VoidCallback? onPikPak,
 }) {
   return showDialog<void>(
     context: context,
@@ -129,7 +133,11 @@ Future<void> showAddSourcePickerDialog(
                         ],
 
                         // CLOUD section (only if a provider is enabled)
-                        if (onRealDebrid != null || onTorbox != null) ...[
+                        if (onRealDebrid != null ||
+                            onTorbox != null ||
+                            onPremiumize != null ||
+                            onAllDebrid != null ||
+                            onPikPak != null) ...[
                           const SizedBox(height: 16),
                           const _SectionHeader(
                             title: 'CLOUD',
@@ -156,6 +164,42 @@ Future<void> showAddSourcePickerDialog(
                               onTap: () {
                                 Navigator.of(dialogContext).pop();
                                 onTorbox();
+                              },
+                            ),
+                          ],
+                          if (onPremiumize != null) ...[
+                            const SizedBox(height: 8),
+                            _SourceOption(
+                              icon: Icons.cloud,
+                              iconColor: const Color(0xFFFB923C),
+                              label: 'Premiumize',
+                              onTap: () {
+                                Navigator.of(dialogContext).pop();
+                                onPremiumize();
+                              },
+                            ),
+                          ],
+                          if (onAllDebrid != null) ...[
+                            const SizedBox(height: 8),
+                            _SourceOption(
+                              icon: Icons.cloud,
+                              iconColor: const Color(0xFF26A69A),
+                              label: 'AllDebrid',
+                              onTap: () {
+                                Navigator.of(dialogContext).pop();
+                                onAllDebrid();
+                              },
+                            ),
+                          ],
+                          if (onPikPak != null) ...[
+                            const SizedBox(height: 8),
+                            _SourceOption(
+                              icon: Icons.cloud,
+                              iconColor: const Color(0xFFF59E0B),
+                              label: 'PikPak',
+                              onTap: () {
+                                Navigator.of(dialogContext).pop();
+                                onPikPak();
                               },
                             ),
                           ],

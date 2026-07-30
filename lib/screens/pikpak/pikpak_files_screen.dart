@@ -8,6 +8,7 @@ import '../../services/storage_service.dart';
 import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/series_source_service.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
@@ -21,6 +22,8 @@ import '../../widgets/tv_text_field.dart';
 class PikPakFilesScreen extends StatefulWidget {
   final String? initialFolderId;
   final String? initialFolderName;
+  final bool selectSourceMode;
+  final Future<void> Function(SeriesSource)? onSourceSelected;
 
   /// When true, this screen was pushed as a route (not displayed in a tab).
   /// Back navigation will pop the route instead of switching tabs.
@@ -31,6 +34,8 @@ class PikPakFilesScreen extends StatefulWidget {
     this.initialFolderId,
     this.initialFolderName,
     this.isPushedRoute = false,
+    this.selectSourceMode = false,
+    this.onSourceSelected,
   });
 
   @override
@@ -159,6 +164,134 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _focusFirstItemOrFallback();
       };
       MainPageBridge.registerTvContentFocusHandler(6, _tvContentFocusHandler!);
+    }
+  }
+
+  Future<void> _selectBoundSource(Map<String, dynamic> file) async {
+    final id = file['id']?.toString() ?? '';
+    final name = file['name']?.toString() ?? 'PikPak Source';
+    final kind = file['kind']?.toString() ?? '';
+    final isFolder = kind == 'drive#folder';
+    final isVideo =
+        (file['mime_type']?.toString().startsWith('video/') ?? false) ||
+        FileUtils.isVideoFile(name);
+    if (id.isEmpty || (!isFolder && !isVideo)) {
+      _showSnackBar('Choose a video file or folder', isError: true);
+      return;
+    }
+
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Checking PikPak source...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+    var checkingDialogOpen = true;
+    void closeCheckingDialog() {
+      if (!checkingDialogOpen || !mounted) return;
+      checkingDialogOpen = false;
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    try {
+      if (isFolder) {
+        final folderDetails =
+            await PikPakApiService.instance.getFileDetails(id);
+        if (folderDetails['phase'] != 'PHASE_TYPE_COMPLETE') {
+          if (!mounted) return;
+          closeCheckingDialog();
+          _showSnackBar('This PikPak folder is not ready to stream',
+              isError: true);
+          return;
+        }
+        final files = await PikPakApiService.instance.listFilesRecursive(
+          folderId: id,
+          includePaths: true,
+        );
+        final videos = files.where((entry) {
+          final entryName = entry['name']?.toString() ?? '';
+          final mime = entry['mime_type']?.toString() ?? '';
+          return mime.startsWith('video/') || FileUtils.isVideoFile(entryName);
+        }).toList();
+        if (!mounted) return;
+        if (videos.isEmpty) {
+          closeCheckingDialog();
+          _showSnackBar('This folder has no playable videos', isError: true);
+          return;
+        }
+
+        // A completed folder can still contain an incomplete or otherwise
+        // unstreamable file. Confirm that at least one video resolves to a
+        // fresh PikPak URL before persisting only the stable folder id.
+        var hasPlayableVideo = false;
+        for (final video in videos) {
+          if (video['phase'] != 'PHASE_TYPE_COMPLETE') continue;
+          final videoId = video['id']?.toString() ?? '';
+          if (videoId.isEmpty) continue;
+          try {
+            final details =
+                await PikPakApiService.instance.getFileDetails(videoId);
+            final url = PikPakApiService.instance.getStreamingUrl(details);
+            if (details['phase'] == 'PHASE_TYPE_COMPLETE' &&
+                url != null &&
+                url.isNotEmpty) {
+              hasPlayableVideo = true;
+              break;
+            }
+          } catch (_) {
+            // One stale child must not hide another playable video.
+          }
+        }
+        if (!mounted) return;
+        closeCheckingDialog();
+        if (!hasPlayableVideo) {
+          _showSnackBar('This PikPak folder has no ready video streams',
+              isError: true);
+          return;
+        }
+      } else {
+        final details = await PikPakApiService.instance.getFileDetails(id);
+        if (!mounted) return;
+        closeCheckingDialog();
+        if (details['phase'] != 'PHASE_TYPE_COMPLETE' ||
+            PikPakApiService.instance.getStreamingUrl(details) == null) {
+          _showSnackBar('This PikPak file is not ready to stream',
+              isError: true);
+          return;
+        }
+      }
+
+      await widget.onSourceSelected?.call(
+        SeriesSource(
+          torrentHash: '',
+          torrentName: name,
+          debridService: 'pikpak',
+          debridTorrentId: id,
+          cloudSourceKind: isFolder
+              ? SeriesSource.cloudKindFolder
+              : SeriesSource.cloudKindFile,
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        closeCheckingDialog();
+        _showSnackBar('Could not bind this PikPak source: $e', isError: true);
+      }
     }
   }
 
@@ -1802,6 +1935,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     final name = file['name'] as String? ?? 'Unknown';
     final size = file['size'] as String? ?? '0';
 
+    if (widget.selectSourceMode) {
+      return CloudFileRow(
+        kind: CloudRowKind.video,
+        title: name,
+        meta: result.path.isEmpty
+            ? Formatters.formatFileSize(int.tryParse(size) ?? 0)
+            : result.path,
+        onTap: () => _selectBoundSource(file),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1959,7 +2103,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           children: [
             Text(_isInVirtualFolder
                 ? _virtualFolderName ?? 'Virtual Folder'
-                : _currentFolderName),
+                : widget.selectSourceMode
+                    ? 'Select PikPak Source'
+                    : _currentFolderName),
             if (_restrictedFolderId != null && !_isInVirtualFolder)
               const Text(
                 'Restricted Access',
@@ -1971,7 +2117,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           // Keep the button mounted while a navigation fetch runs (_files is
           // cleared then) so the AppBar doesn't flicker and TV focus parked
           // on it isn't dropped.
-          if ((_files.isNotEmpty || _isLoading) && !_isInVirtualFolder)
+          if ((_files.isNotEmpty || _isLoading) &&
+              !_isInVirtualFolder &&
+              !widget.selectSourceMode)
             IconButton(
               icon: Icon(_isSelectionMode ? Icons.close : Icons.checklist_outlined),
               onPressed: _toggleSelectionMode,
@@ -1995,16 +2143,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               constraints: actionIconConstraints,
               visualDensity: VisualDensity.compact,
             ),
-          IconButton(
-            focusNode: _addLinkButtonFocusNode,
-            icon: const Icon(Icons.add_link),
-            onPressed: _isLoading ? null : _showAddLinkDialog,
-            tooltip: 'Add Link',
-            iconSize: actionIconSize,
-            padding: actionIconPadding,
-            constraints: actionIconConstraints,
-            visualDensity: VisualDensity.compact,
-          ),
+          if (!widget.selectSourceMode)
+            IconButton(
+              focusNode: _addLinkButtonFocusNode,
+              icon: const Icon(Icons.add_link),
+              onPressed: _isLoading ? null : _showAddLinkDialog,
+              tooltip: 'Add Link',
+              iconSize: actionIconSize,
+              padding: actionIconPadding,
+              constraints: actionIconConstraints,
+              visualDensity: VisualDensity.compact,
+            ),
           IconButton(
             focusNode: _refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
@@ -2286,7 +2435,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
     final isFolder = kind == 'drive#folder';
     final isVirtualFolder = kind == 'virtual#season'; // Virtual Season folder
-    final isVideo = mimeType.startsWith('video/');
+    final isVideo =
+        mimeType.startsWith('video/') || FileUtils.isVideoFile(name);
     final isComplete = phase == 'PHASE_TYPE_COMPLETE';
 
     final date = _formatDate(createdTime);
@@ -2295,6 +2445,39 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         Formatters.formatFileSize(int.tryParse(size.toString()) ?? 0),
       if (date.isNotEmpty) date,
     ];
+
+    if (widget.selectSourceMode) {
+      final selectable =
+          !isVirtualFolder && (isFolder || (isVideo && isComplete));
+      return CloudFileRow(
+        kind: isVirtualFolder
+            ? CloudRowKind.season
+            : isFolder
+                ? CloudRowKind.folder
+                : isVideo
+                    ? CloudRowKind.video
+                    : CloudRowKind.file,
+        title: name,
+        meta: metaParts.isEmpty ? null : metaParts.join(' · '),
+        extra: (!isComplete && !isVirtualFolder)
+            ? Text(
+                'Still downloading',
+                style: TextStyle(color: Colors.orange.shade700, fontSize: 12.5),
+              )
+            : null,
+        onTap: selectable ? () => _selectBoundSource(file) : null,
+        actions: isFolder
+            ? [
+                CloudRowAction(
+                  icon: Icons.folder_open_rounded,
+                  label: 'Browse folder',
+                  onSelected: () => _navigateIntoFolder(file['id'], name),
+                ),
+              ]
+            : const [],
+        focusNode: index == 0 ? _firstItemFocusNode : null,
+      );
+    }
 
     // Same action set (labels, conditions) the old pills + ⋮ menu offered.
     // Virtual Season folders keep their special shape: Open only (via tap),
