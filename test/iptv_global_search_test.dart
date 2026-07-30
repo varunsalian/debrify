@@ -48,6 +48,13 @@ void main() {
     expect(async.live.single.channel.name, 'Sky Sports Needle HD');
     // The hit must point at this index's live source object, not a copy.
     expect(identical(async.live.single.source, index.sources.first), isTrue);
+    // And at the LIVE channel object (not the worker's cross-isolate copy) —
+    // liveZapWindow locates the channel by identity, so a copy breaks zapping.
+    expect(
+      identical(async.live.single.channel, index.sources.first.channels[1234]),
+      isTrue,
+      reason: 'memory-source hit must reassemble to the live channel object',
+    );
 
     // Parity with the inline algorithm.
     final sync = index.search('needle');

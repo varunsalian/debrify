@@ -311,12 +311,25 @@ class IptvGlobalSearchIndex {
 
   /// Rebuilds hits that point at THIS index's live source objects (the worker
   /// only sent back source indices — it can't ship a CatalogSnapshot).
+  ///
+  /// For memory sources the worker's channel is a cross-isolate COPY; swap it
+  /// back for the live object at [_RawHit.channelIndex] so `liveZapWindow`'s
+  /// identity lookup still finds it. (Out-of-range guard: if the source list
+  /// changed under us, fall back to the copy — display is fine, only zapping
+  /// degrades.)
   IptvGlobalSearchResults _reassemble(_RawResults raw) {
-    IptvGlobalSearchHit hit(_RawHit r) => IptvGlobalSearchHit(
-          channel: r.channel,
-          source: sources[r.sourceIndex],
-          section: r.section,
-        );
+    IptvGlobalSearchHit hit(_RawHit r) {
+      final source = sources[r.sourceIndex];
+      final channel =
+          (r.channelIndex >= 0 && r.channelIndex < source.channels.length)
+              ? source.channels[r.channelIndex]
+              : r.channel;
+      return IptvGlobalSearchHit(
+        channel: channel,
+        source: source,
+        section: r.section,
+      );
+    }
     return IptvGlobalSearchResults(
       live: [for (final r in raw.live) hit(r)],
       vod: [for (final r in raw.vod) hit(r)],
@@ -362,7 +375,9 @@ class IptvGlobalSearchIndex {
             namePrefixLead: true,
             limit: leadRoom,
           )) {
-            sectionLead.add(_RawHit(item.index, channel, section));
+            // -1: DB hits are materialized copies located by url+name, not by
+            // in-memory index (see liveZapWindow's DB branch).
+            sectionLead.add(_RawHit(item.index, channel, section, -1));
           }
           final restRoom =
               sectionCap - sectionLead.length - sectionRest.length;
@@ -372,7 +387,7 @@ class IptvGlobalSearchIndex {
             namePrefixLead: false,
             limit: restRoom,
           )) {
-            sectionRest.add(_RawHit(item.index, channel, section));
+            sectionRest.add(_RawHit(item.index, channel, section, -1));
           }
         }
 
@@ -384,7 +399,8 @@ class IptvGlobalSearchIndex {
         }
         continue;
       }
-      for (final channel in item.channels) {
+      for (var ci = 0; ci < item.channels.length; ci++) {
+        final channel = item.channels[ci];
         final key = channel.searchKey;
         var matches = true;
         for (final term in terms) {
@@ -407,7 +423,9 @@ class IptvGlobalSearchIndex {
         final sectionLead = lead[section]!;
         final sectionRest = rest[section]!;
         final isLead = channel.name.toLowerCase().startsWith(terms.first);
-        final hit = _RawHit(item.index, channel, section);
+        // ci lets [_reassemble] restore the LIVE channel object after the
+        // worker returned a copy — so identity-based zapping still works.
+        final hit = _RawHit(item.index, channel, section, ci);
         if (isLead) {
           if (sectionLead.length < sectionCap) sectionLead.add(hit);
         } else {
@@ -436,11 +454,17 @@ class IptvGlobalSearchIndex {
 /// A hit as computed on a worker: the source is named by its index into the
 /// index's `sources` list (the worker can't send back a CatalogSnapshot), plus
 /// the channel and section. Sendable across isolates.
+///
+/// [channelIndex] is the hit's position in a MEMORY source's `channels` list
+/// (or -1 for DB-materialized hits). Across an isolate the worker returns a
+/// COPY of the channel, and `liveZapWindow` locates the channel by identity —
+/// so [_reassemble] uses this index to swap the copy back for the live object.
 class _RawHit {
   final int sourceIndex;
   final IptvChannel channel;
   final String section;
-  const _RawHit(this.sourceIndex, this.channel, this.section);
+  final int channelIndex;
+  const _RawHit(this.sourceIndex, this.channel, this.section, this.channelIndex);
 }
 
 class _RawResults {
