@@ -59,6 +59,7 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
@@ -139,6 +140,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var pauseButton: AppCompatButton? = null
     private var iptvPrevButton: AppCompatButton? = null
     private var iptvNextButton: AppCompatButton? = null
+    private var iptvGuideButton: AppCompatButton? = null
     private var audioButton: AppCompatButton? = null
     private var subtitleButton: AppCompatButton? = null
     private var aspectButton: AppCompatButton? = null
@@ -258,6 +260,38 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvBrowseToken = 0
     private var iptvWatchRegistrationToken = 0
     private val iptvBrowseHandler = Handler(Looper.getMainLooper())
+    private val iptvZapPageSize = 200
+    private var iptvZapPagingActive = false
+    private var iptvZapCategory: String? = null
+    private var iptvZapSourceId: String? = null
+    private var iptvZapSourceName: String = "IPTV"
+    private var iptvZapContentType: String = "live"
+    private var iptvZapCategories = mutableListOf<String>()
+    private var iptvZapCategoryTotal = 0
+    private var iptvZapRequestToken = 0
+    private var iptvZapRequestInFlight = false
+    private val iptvZapPendingInputs = java.util.ArrayDeque<Int>()
+    private var iptvZapDrainingInputs = false
+    private var iptvGuideUsesZapWindow = false
+    private var iptvUiContextToken = 0
+    private var iptvZapOwnsUiContext = false
+    // Search always spans the whole source. Keep the visible category context
+    // aside while the search field/results are active so Back/Close/Browse can
+    // restore it exactly when the user leaves without tuning another channel.
+    private var iptvAllCategorySearchActive = false
+    private var iptvSearchSavedCategory: String? = null
+    private var iptvSearchSavedChannels = mutableListOf<IptvChannelEntry>()
+    private var iptvSearchSavedCategories = mutableListOf<String>()
+    private var iptvSearchSavedUsesZapWindow = false
+    private var iptvSearchSavedZapOwnsUiContext = false
+    private val iptvZapMaxHiddenWindow = 600
+    private var iptvZapCachedOriginCategory: String? = null
+    private var iptvZapCachedDirection = 0
+    private var iptvZapCachedChannels = mutableListOf<IptvChannelEntry>()
+    private var iptvZapCachedOffset = 0
+    private var iptvZapCachedTotal = 0
+    private var iptvZapCachedCategory: String? = null
+    private var iptvZapCachedCategories = emptyList<String>()
 
     // Contextual EPG pane shown beside the Lean Rail.
     private var iptvEpgPanel: View? = null
@@ -1847,6 +1881,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val randomButton: AppCompatButton? = playerView.findViewById(R.id.debrify_random_button)
         iptvNextButton = nextButton
         iptvPrevButton = prevButton
+        iptvGuideButton = playlistButton
 
         // Time display views (Cinema Mode)
         debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display)  // Legacy (hidden)
@@ -3850,7 +3885,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // (repeatCount gate, same as the LEFT/RIGHT zap path): a held key's
         // auto-repeat would otherwise re-prepare ExoPlayer tens of times a
         // second and hammer the panel with one stream open per repeat.
-        if (isIptvMode && iptvChannels.size > 1 &&
+        if (isIptvMode &&
+            iptvChannels.getOrNull(currentIptvIndex)?.isLive == true &&
+            (iptvChannels.size > 1 || iptvZapPagingActive) &&
             (keyCode == KeyEvent.KEYCODE_CHANNEL_UP ||
                 keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN)
         ) {
@@ -4065,8 +4102,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
                 return true
             }
-            // IPTV mode: UP opens the channel guide
-            if (isIptvMode) {
+            // Only live IPTV has a channel guide. IPTV VOD follows the normal
+            // video-player controls and UP behavior.
+            if (isIptvMode &&
+                iptvChannels.getOrNull(currentIptvIndex)?.isLive == true
+            ) {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                     showIptvGuide()
                 }
@@ -5151,6 +5191,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             json.optString("selectedCategory").takeIf { it.isNotEmpty() }
         iptvSources = parseIptvSources(json.optJSONArray("sources"))
         iptvCategories = parseStringList(json.optJSONArray("categories"))
+        // Playback owns this context until the user starts browsing another
+        // source/category. CH +/- can then restore the actual playing source
+        // instead of whatever catalog happens to be visible in the guide.
+        iptvZapSourceId = iptvSourceId
+        iptvZapSourceName = iptvSourceName
+        iptvZapContentType = iptvContentType
+        iptvZapCategory = iptvSelectedCategory
+        iptvZapCategories = iptvCategories.toMutableList()
+        iptvZapOwnsUiContext = true
 
         iptvChannels = parseIptvChannels(json.optJSONArray("channels") ?: JSONArray())
         iptvChannels.forEach { channel ->
@@ -5222,17 +5271,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         setupIptvOverlay()
 
-        // Override playlist button to show IPTV guide instead
+        // Override the normal List button only for live television. VOD keeps
+        // the standard video controls installed by setupControls().
         val playlistButton: AppCompatButton? = playerView.findViewById(R.id.debrify_playlist_button)
-        playlistButton?.text = "Guide"
-        playlistButton?.setOnClickListener {
-            hideControlsMenu()
-            toggleIptvGuide()
+        if (iptvChannels.getOrNull(currentIptvIndex)?.isLive == true) {
+            playlistButton?.text = "Guide"
+            playlistButton?.setOnClickListener {
+                hideControlsMenu()
+                toggleIptvGuide()
+            }
         }
 
         // Play initial channel
         if (iptvChannels.isNotEmpty()) {
+            val initial = iptvChannels[currentIptvIndex]
             playIptvChannel(currentIptvIndex)
+            bootstrapInitialIptvZapPaging(initial)
         }
     }
 
@@ -5247,7 +5301,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 isContinue = source.optBoolean("isContinue"),
                 isXtream = source.optBoolean("isXtream"),
             )
-        }.filterTo(mutableListOf()) { it.id.isNotEmpty() }
+        }.filterTo(mutableListOf()) { it.id.isNotEmpty() && !it.isContinue }
     }
 
     private fun parseStringList(array: JSONArray?): MutableList<String> {
@@ -5380,6 +5434,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun setupIptvControls() {
         playerView.findViewById<View>(R.id.debrify_random_button)?.visibility = View.GONE
+        val entry = iptvChannels.getOrNull(currentIptvIndex)
+        if (entry?.isLive == false) {
+            // IPTV VOD uses the same cinema/Netflix-style dock installed by
+            // setupControls(). Do not replace its panel/button backgrounds or
+            // handlers with the live-TV presentation.
+            iptvGuideButton?.visibility = View.GONE
+            iptvPrevButton?.visibility = View.GONE
+            iptvNextButton?.visibility = View.GONE
+            updateIptvControlPresentation(entry)
+            return
+        }
+
         playerView.findViewById<View>(R.id.debrify_controls_buttons)
             ?.setBackgroundResource(R.drawable.iptv_premium_panel_bg)
 
@@ -5402,21 +5468,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         iptvPrevButton?.apply {
-            visibility = View.VISIBLE
             text = "CH -"
             setOnClickListener {
                 hideControlsMenu()
-                val previous = prevIptvEpisode()
-                if (previous != null) switchToIptvChannel(previous) else zapIptvChannel(-1)
+                zapIptvChannel(-1)
             }
         }
         iptvNextButton?.apply {
-            visibility = View.VISIBLE
             text = "CH +"
             setOnClickListener {
                 hideControlsMenu()
-                val next = nextIptvEpisode()
-                if (next != null) switchToIptvChannel(next) else zapIptvChannel(1)
+                zapIptvChannel(1)
             }
         }
         updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
@@ -5425,11 +5487,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun updateIptvControlPresentation(entry: IptvChannelEntry?) {
         val live = entry?.isLive != false
         val vodVisibility = if (live) View.GONE else View.VISIBLE
+        if (!live) restoreCinemaIptvControlStyle()
         cinemaProgressContainer?.visibility = vodVisibility
         debrifyTimeCurrent?.visibility = vodVisibility
         debrifyTimeTotal?.visibility = vodVisibility
         speedButton?.visibility = vodVisibility
         nightModeButton?.visibility = vodVisibility
+        iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
+        if (!live && iptvGuideVisible) hideIptvGuide()
         if (live) {
             cinemaSeekMode = false
             cinemaProgressThumb?.visibility = View.INVISIBLE
@@ -5437,6 +5502,36 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (currentFocus == cinemaProgressContainer) {
                 pauseButton?.requestFocus()
             }
+        }
+    }
+
+    private fun restoreCinemaIptvControlStyle() {
+        playerView.findViewById<View>(R.id.debrify_controls_buttons)
+            ?.setBackgroundResource(R.drawable.cinema_dock_bg)
+        val standardButtons = listOfNotNull(
+            audioButton,
+            subtitleButton,
+            aspectButton,
+            speedButton,
+            nightModeButton,
+            iptvPrevButton,
+            iptvNextButton,
+            iptvGuideButton,
+        )
+        standardButtons.forEach {
+            it.setBackgroundResource(R.drawable.cinema_button_bg)
+            it.setTextColor(
+                ContextCompat.getColorStateList(this, R.color.cinema_control_button_text)
+            )
+        }
+        pauseButton?.apply {
+            setBackgroundResource(R.drawable.cinema_play_button_bg)
+            setTextColor(
+                ContextCompat.getColorStateList(
+                    this@AndroidTvTorrentPlayerActivity,
+                    R.color.cinema_play_button_text,
+                ),
+            )
         }
     }
 
@@ -5454,9 +5549,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         title = entry.name,
                         sourceIdOverride = entry.sourceId,
                     )
-                } else {
+                } else if (iptvContentType == "episodes") {
+                    commitIptvAllCategorySearch()
                     hideIptvGuide()
+                    disableIptvZapPaging()
                     switchToIptvChannel(entry)
+                } else {
+                    commitIptvAllCategorySearch()
+                    hideIptvGuide()
+                    beginIptvCategoryZapSession(entry)
                 }
             },
             onItemLongClick = { entry ->
@@ -5473,6 +5574,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             onEpgNeeded = { entry -> ensureIptvChannelEpg(entry) },
         )
         guideList.adapter = iptvChannelAdapter
+        guideList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (!iptvZapPagingActive ||
+                    !iptvGuideUsesZapWindow ||
+                    iptvZapRequestInFlight
+                ) return
+                val layout = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                val last = layout.findLastVisibleItemPosition()
+                val first = layout.findFirstVisibleItemPosition()
+                val count = iptvChannelAdapter?.itemCount ?: return
+                when {
+                    dy >= 0 && last >= count - 12 -> prefetchIptvZapPage(1, force = true)
+                    dy < 0 && first in 0..11 -> prefetchIptvZapPage(-1, force = true)
+                }
+            }
+        })
 
         iptvEpgList?.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
@@ -5485,14 +5602,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             R.id.iptv_nav_browse,
             R.id.iptv_nav_search,
             R.id.iptv_nav_favorites,
-            R.id.iptv_nav_continue,
             R.id.iptv_nav_sources,
             R.id.iptv_nav_close,
             R.id.iptv_source_button,
             R.id.iptv_category_button,
             R.id.iptv_mode_live,
-            R.id.iptv_mode_movies,
-            R.id.iptv_mode_series,
             R.id.iptv_epg_day_today,
             R.id.iptv_epg_day_tomorrow,
             R.id.iptv_epg_day_later,
@@ -5505,8 +5619,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val sourceControlsVisibility =
             if (iptvSources.isEmpty()) View.GONE else View.VISIBLE
         findViewById<View>(R.id.iptv_nav_favorites)?.visibility =
-            sourceControlsVisibility
-        findViewById<View>(R.id.iptv_nav_continue)?.visibility =
             sourceControlsVisibility
         findViewById<View>(R.id.iptv_nav_sources)?.visibility =
             sourceControlsVisibility
@@ -5522,12 +5634,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: android.text.Editable?) {
                 iptvGuideCountText?.text = if (s.isNullOrBlank()) {
-                    "${iptvBrowseChannels.size} items"
+                    iptvGuideItemCountLabel()
                 } else {
                     "Press OK to search"
                 }
             }
         })
+        iptvGuideSearch?.setOnFocusChangeListener { _, focused ->
+            if (focused) beginIptvAllCategorySearch()
+        }
         // Submit-only catalog search: the paged browse of the current source
         // fires when the user commits the query with the search / enter key —
         // not on every keystroke,
@@ -5550,21 +5665,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.iptv_nav_browse)?.setOnClickListener {
-            requestIptvBrowse(action = "browse")
+            if (restoreIptvCategoryAfterSearch()) {
+                focusCurrentIptvGuideRow()
+            } else {
+                iptvGuideSearch?.setText("")
+                requestIptvBrowse(action = "browse", query = "")
+            }
         }
         findViewById<View>(R.id.iptv_nav_search)?.setOnClickListener {
+            beginIptvAllCategorySearch()
             iptvGuideSearch?.requestFocus()
         }
         findViewById<View>(R.id.iptv_nav_favorites)?.setOnClickListener {
             val source = iptvSources.firstOrNull { it.isFavorites }
             if (source != null) selectIptvSource(source) else {
                 Toast.makeText(this, "No favorites source", Toast.LENGTH_SHORT).show()
-            }
-        }
-        findViewById<View>(R.id.iptv_nav_continue)?.setOnClickListener {
-            val source = iptvSources.firstOrNull { it.isContinue }
-            if (source != null) selectIptvSource(source) else {
-                Toast.makeText(this, "Nothing in continue watching", Toast.LENGTH_SHORT).show()
             }
         }
         findViewById<View>(R.id.iptv_nav_sources)?.setOnClickListener {
@@ -5577,12 +5692,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvCategoryButton?.setOnClickListener { showIptvCategoryPicker() }
         findViewById<View>(R.id.iptv_mode_live)?.setOnClickListener {
             selectIptvContentType("live")
-        }
-        findViewById<View>(R.id.iptv_mode_movies)?.setOnClickListener {
-            selectIptvContentType("vod")
-        }
-        findViewById<View>(R.id.iptv_mode_series)?.setOnClickListener {
-            selectIptvContentType("series")
         }
         findViewById<View>(R.id.iptv_epg_day_today)?.setOnClickListener {
             selectIptvEpgDay(0)
@@ -5602,6 +5711,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         entry.contentType == "series" || entry.url.startsWith("xtream-series://")
 
     private fun showIptvGuide() {
+        if (iptvChannels.getOrNull(currentIptvIndex)?.isLive != true) return
         // The banner is attached last to the content view (topmost) — it must
         // never float over the guide.
         hideIptvZapBanner()
@@ -5627,12 +5737,103 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun hideIptvGuide() {
+        restoreIptvCategoryAfterSearch()
         iptvGuideVisible = false
+        trimHiddenIptvZapWindow()
         hideIptvEpgPane()
         iptvGuideOverlay?.animate()?.cancel() // cancel any pending show animation
         iptvGuideOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
             iptvGuideOverlay?.visibility = View.GONE
         }?.start()
+    }
+
+    private fun beginIptvAllCategorySearch() {
+        if (iptvContentType != "live" || iptvAllCategorySearchActive) return
+        iptvAllCategorySearchActive = true
+        iptvSearchSavedCategory = iptvSelectedCategory
+        iptvSearchSavedChannels =
+            iptvChannelAdapter?.entriesSnapshot()?.toMutableList()
+                ?: iptvBrowseChannels.toMutableList()
+        iptvSearchSavedCategories = iptvCategories.toMutableList()
+        iptvSearchSavedUsesZapWindow = iptvGuideUsesZapWindow
+        iptvSearchSavedZapOwnsUiContext = iptvZapOwnsUiContext
+
+        // Search is a temporary browsing context. Invalidate any page that was
+        // about to update the category window and send subsequent browse
+        // requests without a category filter.
+        iptvUiContextToken++
+        iptvBrowseToken++
+        iptvZapRequestToken++
+        iptvZapRequestInFlight = false
+        iptvZapPendingInputs.clear()
+        iptvZapOwnsUiContext = false
+        iptvSelectedCategory = null
+        iptvBrowseLoading?.visibility = View.GONE
+        refreshIptvBrowserChrome()
+    }
+
+    /**
+     * Restore the category/list that was visible before Search got focus.
+     * Returning true lets callers avoid a redundant bridge request and keep
+     * the guide responsive.
+     */
+    private fun restoreIptvCategoryAfterSearch(): Boolean {
+        if (!iptvAllCategorySearchActive) return false
+        val savedCategory = iptvSearchSavedCategory
+        val savedChannels = iptvSearchSavedChannels.toMutableList()
+        val savedCategories = iptvSearchSavedCategories.toMutableList()
+        val savedUsesZapWindow = iptvSearchSavedUsesZapWindow
+        val savedZapOwnsUiContext = iptvSearchSavedZapOwnsUiContext
+        clearIptvAllCategorySearchState()
+
+        // A submitted All-categories result may still be returning. Make it
+        // stale before putting the original category window back.
+        iptvUiContextToken++
+        iptvBrowseToken++
+        iptvZapRequestToken++
+        iptvZapRequestInFlight = false
+        iptvZapPendingInputs.clear()
+        iptvBrowseLoading?.visibility = View.GONE
+        iptvSelectedCategory = savedCategory
+        iptvCategories = savedCategories
+        iptvBrowseChannels = savedChannels
+        iptvGuideUsesZapWindow = savedUsesZapWindow
+        iptvZapOwnsUiContext = savedZapOwnsUiContext
+        iptvGuideSearch?.setText("")
+        iptvChannelAdapter?.updateChannels(savedChannels)
+        refreshIptvBrowserChrome()
+        updateIptvGuideCurrentName()
+        if (savedZapOwnsUiContext && !iptvZapPagingActive) {
+            iptvChannels.getOrNull(currentIptvIndex)?.let {
+                bootstrapInitialIptvZapPaging(it)
+            }
+        }
+        return true
+    }
+
+    private fun commitIptvAllCategorySearch() {
+        if (!iptvAllCategorySearchActive) return
+        clearIptvAllCategorySearchState()
+    }
+
+    private fun clearIptvAllCategorySearchState() {
+        iptvAllCategorySearchActive = false
+        iptvSearchSavedCategory = null
+        iptvSearchSavedChannels = mutableListOf()
+        iptvSearchSavedCategories = mutableListOf()
+        iptvSearchSavedUsesZapWindow = false
+        iptvSearchSavedZapOwnsUiContext = false
+    }
+
+    private fun focusCurrentIptvGuideRow() {
+        iptvGuideList?.post {
+            val position = iptvChannelAdapter?.getCurrentChannelPosition() ?: 0
+            iptvGuideList?.scrollToPosition(position)
+            iptvGuideList?.post {
+                iptvGuideList?.findViewHolderForAdapterPosition(position)
+                    ?.itemView?.requestFocus()
+            }
+        }
     }
 
     private fun toggleIptvGuide() {
@@ -5648,28 +5849,58 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "episodes" -> "Episodes"
             else -> "Live television"
         }
-        iptvGuideCountText?.text = "${iptvBrowseChannels.size} items"
+        iptvGuideCountText?.text = iptvGuideItemCountLabel()
 
         val modeButtons = listOf(
             "live" to findViewById<AppCompatButton>(R.id.iptv_mode_live),
-            "vod" to findViewById<AppCompatButton>(R.id.iptv_mode_movies),
-            "series" to findViewById<AppCompatButton>(R.id.iptv_mode_series),
         )
         modeButtons.forEach { (type, button) ->
-            button?.isSelected = iptvContentType == type ||
-                (iptvContentType == "episodes" && type == "series")
+            button?.isSelected = iptvContentType == type
         }
+        updateIptvCatalogControlVisibility()
+    }
+
+    private fun updateIptvCatalogControlVisibility() {
+        val liveCatalog = iptvContentType == "live"
+        val liveVisibility = if (liveCatalog) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.iptv_nav_browse)?.visibility = liveVisibility
+        findViewById<View>(R.id.iptv_nav_search)?.visibility = liveVisibility
+        findViewById<View>(R.id.iptv_filter_bar)?.visibility = liveVisibility
+
+        val sourceVisibility =
+            if (liveCatalog && iptvSources.isNotEmpty()) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.iptv_nav_favorites)?.visibility = sourceVisibility
+        findViewById<View>(R.id.iptv_nav_sources)?.visibility = sourceVisibility
+        iptvSourceButton?.visibility = sourceVisibility
+    }
+
+    private fun iptvGuideItemCountLabel(): String {
+        val count = if (iptvGuideUsesZapWindow &&
+            iptvZapPagingActive &&
+            iptvZapCategoryTotal > 0
+        ) {
+            iptvZapCategoryTotal
+        } else {
+            iptvBrowseChannels.size
+        }
+        return "$count items"
     }
 
     private fun selectIptvContentType(contentType: String) {
-        if (iptvContentType == contentType) return
+        if (iptvContentType == contentType) {
+            restoreIptvCategoryAfterSearch()
+            return
+        }
+        commitIptvAllCategorySearch()
         iptvContentType = contentType
         iptvSelectedCategory = null
+        iptvGuideSearch?.setText("")
         refreshIptvBrowserChrome()
-        requestIptvBrowse(action = "browse")
+        requestIptvBrowse(action = "browse", query = "")
     }
 
     private fun selectIptvSource(source: IptvSourceEntry) {
+        commitIptvAllCategorySearch()
         iptvSourceId = source.id
         iptvSourceName = source.name
         iptvSelectedCategory = null
@@ -5687,12 +5918,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun showIptvSourcePicker() {
-        if (iptvSources.isEmpty()) return
-        val options = iptvSources.map { it.name }
+        val liveSources = iptvSources.filterNot { it.isContinue }
+        if (liveSources.isEmpty()) return
+        val options = liveSources.map { it.name }
         AlertDialog.Builder(this)
             .setTitle("Choose source")
             .setItems(options.toTypedArray()) { _, index ->
-                selectIptvSource(iptvSources[index])
+                selectIptvSource(liveSources[index])
             }
             .show()
     }
@@ -5768,9 +6000,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             searchViewId = searchInput.id,
         ) { category ->
             dialog.dismiss()
+            commitIptvAllCategorySearch()
             iptvSelectedCategory = category.takeUnless { it == allLabel }
+            iptvGuideSearch?.setText("")
             refreshIptvBrowserChrome()
-            requestIptvBrowse(action = "browse")
+            requestIptvBrowse(action = "browse", query = "")
         }
         categoryList.adapter = adapter
 
@@ -5929,6 +6163,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sourceIdOverride: String? = null,
     ) {
         val channel = MainActivity.getAndroidTvPlayerChannel() ?: return
+        val uiContext = ++iptvUiContextToken
+        iptvZapOwnsUiContext = false
+        iptvZapRequestToken++
+        iptvZapRequestInFlight = false
+        iptvZapPendingInputs.clear()
         val token = ++iptvBrowseToken
         iptvBrowseLoading?.visibility = View.VISIBLE
         val args = hashMapOf<String, Any?>(
@@ -5945,13 +6184,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             args,
             object : io.flutter.plugin.common.MethodChannel.Result {
                 override fun success(result: Any?) {
-                    if (token != iptvBrowseToken) return
+                    if (token != iptvBrowseToken ||
+                        uiContext != iptvUiContextToken ||
+                        iptvZapOwnsUiContext
+                    ) return
                     iptvBrowseLoading?.visibility = View.GONE
                     val response = result as? Map<*, *> ?: return
                     val keepSearchFocus = iptvGuideSearch?.hasFocus() == true
                     val channels = parseIptvChannels(response["channels"] as? List<*> ?: emptyList<Any>())
                     val playingUrl = iptvChannels.getOrNull(currentIptvIndex)?.url
                     channels.forEach { it.isCurrent = it.url == playingUrl }
+                    iptvGuideUsesZapWindow = false
                     iptvBrowseChannels = channels
                     iptvChannelAdapter?.updateChannels(channels)
                     (response["sourceId"] as? String)?.let { iptvSourceId = it }
@@ -5984,7 +6227,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
 
                 override fun error(code: String, message: String?, details: Any?) {
-                    if (token != iptvBrowseToken) return
+                    if (token != iptvBrowseToken ||
+                        uiContext != iptvUiContextToken ||
+                        iptvZapOwnsUiContext
+                    ) return
                     iptvBrowseLoading?.visibility = View.GONE
                     Toast.makeText(
                         this@AndroidTvTorrentPlayerActivity,
@@ -5994,7 +6240,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
 
                 override fun notImplemented() {
-                    if (token == iptvBrowseToken) iptvBrowseLoading?.visibility = View.GONE
+                    if (token == iptvBrowseToken &&
+                        uiContext == iptvUiContextToken &&
+                        !iptvZapOwnsUiContext
+                    ) {
+                        iptvBrowseLoading?.visibility = View.GONE
+                    }
                 }
             },
         )
@@ -6002,6 +6253,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun toggleIptvFavorite(entry: IptvChannelEntry) {
         entry.isFavorite = !entry.isFavorite
+        if (iptvAllCategorySearchActive) {
+            iptvSearchSavedChannels
+                .filter {
+                    it.url == entry.url &&
+                        it.name == entry.name &&
+                        it.sourceId == entry.sourceId
+                }
+                .forEach { it.isFavorite = entry.isFavorite }
+        }
         iptvChannelAdapter?.notifyFavoriteFor(entry)
         val args = hashMapOf<String, Any?>(
             "url" to entry.url,
@@ -6294,6 +6554,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     iptvChannels = mutableListOf(replay)
                     currentIptvIndex = 0
                     iptvSeriesAudioKey = null
+                    // Starting a replay is a real playback switch, just like
+                    // selecting a live search result. Do not restore the
+                    // category that preceded Search while closing the guide.
+                    commitIptvAllCategorySearch()
                     hideIptvGuide()
                     resetSubtitleState()
                     beginIptvPlayback(replay)
@@ -6457,12 +6721,513 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun switchToIptvChannel(entry: IptvChannelEntry) {
+    /**
+     * A guide search is only a way to discover the destination. Once selected,
+     * playback belongs to the channel's category: the search is cleared and a
+     * small page centered on the channel becomes the CH +/- and guide context.
+     */
+    private fun beginIptvCategoryZapSession(entry: IptvChannelEntry) {
+        commitIptvAllCategorySearch()
+        val category = entry.group?.trim()?.takeIf { it.isNotEmpty() }
+        val sourceId = iptvSourceId
+        val sourceName = iptvSourceName
+        val contentType = iptvContentType
+        val fallbackChannels = iptvChannelAdapter?.entriesSnapshot().orEmpty()
+
+        iptvSelectedCategory = category
+        iptvGuideSearch?.setText("")
+        refreshIptvBrowserChrome()
+
+        iptvUiContextToken++
+        iptvZapOwnsUiContext = true
+        iptvBrowseToken++
+        iptvZapPagingActive = true
+        iptvZapCategory = category
+        iptvZapSourceId = sourceId
+        iptvZapSourceName = sourceName
+        iptvZapContentType = contentType
+        iptvZapCategories = iptvCategories.toMutableList()
+        iptvZapCategoryTotal = 1
+        iptvZapPendingInputs.clear()
+        iptvGuideUsesZapWindow = false
+        // A second rapid selection supersedes a page still returning for the
+        // previous result.
+        iptvZapRequestToken++
+        iptvZapRequestInFlight = false
+        clearIptvZapBoundaryCache()
+
+        // Do not let the search matches become the temporary zap list while
+        // the centered category page crosses the platform channel.
+        switchToIptvChannel(entry, adoptVisibleBrowseList = false)
+        requestIptvZapPage(
+            category = category,
+            offset = 0,
+            anchor = entry,
+            onFailure = {
+                restoreIptvZapBootstrapFallback(entry, fallbackChannels)
+            },
+        ) { channels, pageOffset, total, responseCategory, categories ->
+            val containsPlayingChannel = channels.any {
+                it.url == entry.url && it.name == entry.name
+            }
+            if (channels.isEmpty() || !containsPlayingChannel) {
+                restoreIptvZapBootstrapFallback(entry, fallbackChannels)
+                return@requestIptvZapPage
+            }
+            installIptvZapWindow(
+                channels = channels,
+                pageOffset = pageOffset,
+                total = total,
+                category = responseCategory,
+                categories = categories,
+                preservePlayingChannel = true,
+            )
+            drainPendingIptvZapInputs()
+            prefetchIptvZapPage(1)
+            prefetchAdjacentIptvCategory(1)
+        }
+    }
+
+    /**
+     * The launch payload is capped and has window-relative indices. Resolve a
+     * small anchored page immediately so CH +/- works across the full category
+     * even before the user opens the guide for the first time.
+     */
+    private fun bootstrapInitialIptvZapPaging(entry: IptvChannelEntry) {
+        if (!entry.isLive || iptvContentType != "live") return
+        val category =
+            entry.group?.trim()?.takeIf { it.isNotEmpty() } ?: iptvSelectedCategory
+        iptvSelectedCategory = category
+        iptvZapCategory = category
+        refreshIptvBrowserChrome()
+        requestIptvZapPage(
+            category = category,
+            offset = 0,
+            anchor = entry,
+        ) { channels, pageOffset, total, responseCategory, categories ->
+            val playing = iptvChannels.getOrNull(currentIptvIndex)
+            if (playing?.url != entry.url || playing.name != entry.name) {
+                if (playing?.isLive == true && iptvZapOwnsUiContext) {
+                    bootstrapInitialIptvZapPaging(playing)
+                }
+                return@requestIptvZapPage
+            }
+            val containsPlayingChannel = channels.any {
+                it.url == playing.url && it.name == playing.name
+            }
+            if (channels.isEmpty() || !containsPlayingChannel) return@requestIptvZapPage
+            iptvZapPagingActive = true
+            installIptvZapWindow(
+                channels = channels,
+                pageOffset = pageOffset,
+                total = total,
+                category = responseCategory,
+                categories = categories,
+                preservePlayingChannel = true,
+            )
+            updateIptvEpisodeControls()
+            prefetchIptvZapPage(1)
+            prefetchAdjacentIptvCategory(1)
+        }
+    }
+
+    private fun restoreIptvZapBootstrapFallback(
+        selected: IptvChannelEntry,
+        fallbackChannels: List<IptvChannelEntry>,
+    ) {
+        val playing = iptvChannels.getOrNull(currentIptvIndex)
+        if (playing?.url != selected.url || playing.name != selected.name) return
+        disableIptvZapPaging()
+        val fallback = fallbackChannels
+            .ifEmpty { listOf(selected) }
+            .mapIndexed { index, entry ->
+                entry.apply {
+                    this.index = index
+                    isCurrent = url == selected.url && name == selected.name
+                }
+            }
+            .toMutableList()
+        if (fallback.none { it.isCurrent }) {
+            selected.index = fallback.size
+            selected.isCurrent = true
+            fallback.add(selected)
+        }
+        iptvChannels = fallback
+        currentIptvIndex = fallback.indexOfFirst { it.isCurrent }.coerceAtLeast(0)
+        iptvBrowseChannels = fallback.toMutableList()
+        iptvGuideUsesZapWindow = false
+        iptvChannelAdapter?.updateChannels(fallback)
+        refreshIptvBrowserChrome()
+    }
+
+    private fun requestIptvZapPage(
+        category: String?,
+        offset: Int,
+        anchor: IptvChannelEntry? = null,
+        fromEnd: Boolean = false,
+        onFailure: (() -> Unit)? = null,
+        onLoaded: (
+            channels: MutableList<IptvChannelEntry>,
+            pageOffset: Int,
+            total: Int,
+            category: String?,
+            categories: List<String>,
+        ) -> Unit,
+    ) {
+        if (iptvZapRequestInFlight) return
+        val bridge = MainActivity.getAndroidTvPlayerChannel()
+        if (bridge == null) {
+            onFailure?.invoke()
+            return
+        }
+        val uiContext = iptvUiContextToken
+        val token = ++iptvZapRequestToken
+        iptvZapRequestInFlight = true
+        bridge.invokeMethod(
+            "requestIptvBrowse",
+            hashMapOf<String, Any?>(
+                "action" to "zapPage",
+                "sourceId" to iptvZapSourceId,
+                "contentType" to iptvZapContentType,
+                "category" to category,
+                "query" to "",
+                "offset" to offset.coerceAtLeast(0),
+                "limit" to iptvZapPageSize,
+                "anchorUrl" to anchor?.url,
+                "anchorName" to anchor?.name,
+                "fromEnd" to fromEnd,
+            ),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    if (token != iptvZapRequestToken ||
+                        uiContext != iptvUiContextToken ||
+                        !iptvZapOwnsUiContext
+                    ) return
+                    iptvZapRequestInFlight = false
+                    val response = result as? Map<*, *>
+                    if (response == null) {
+                        iptvZapPendingInputs.clear()
+                        onFailure?.invoke()
+                        return
+                    }
+                    (response["sourceId"] as? String)?.takeIf { it.isNotEmpty() }?.let {
+                        iptvZapSourceId = it
+                        iptvSourceId = it
+                    }
+                    (response["sourceName"] as? String)?.takeIf { it.isNotEmpty() }?.let {
+                        iptvZapSourceName = it
+                        iptvSourceName = it
+                    }
+                    (response["contentType"] as? String)?.takeIf { it.isNotEmpty() }?.let {
+                        iptvZapContentType = it
+                        iptvContentType = it
+                    }
+                    val channels = parseIptvChannels(
+                        response["channels"] as? List<*> ?: emptyList<Any>()
+                    )
+                    val pageOffset =
+                        (response["pageOffset"] as? Number)?.toInt()?.coerceAtLeast(0) ?: 0
+                    val total =
+                        (response["totalChannels"] as? Number)?.toInt()?.coerceAtLeast(0)
+                            ?: channels.size
+                    val responseCategory =
+                        (response["selectedCategory"] as? String)?.takeIf { it.isNotEmpty() }
+                    val categories = (response["categories"] as? List<*>)
+                        ?.mapNotNull { it as? String }
+                        ?.filter { it.isNotEmpty() }
+                        .orEmpty()
+                    onLoaded(channels, pageOffset, total, responseCategory, categories)
+                }
+
+                override fun error(code: String, message: String?, details: Any?) {
+                    if (token != iptvZapRequestToken ||
+                        uiContext != iptvUiContextToken ||
+                        !iptvZapOwnsUiContext
+                    ) return
+                    iptvZapRequestInFlight = false
+                    iptvZapPendingInputs.clear()
+                    onFailure?.invoke()
+                    Toast.makeText(
+                        this@AndroidTvTorrentPlayerActivity,
+                        message ?: "Unable to load more channels",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+
+                override fun notImplemented() {
+                    if (token != iptvZapRequestToken ||
+                        uiContext != iptvUiContextToken ||
+                        !iptvZapOwnsUiContext
+                    ) return
+                    iptvZapRequestInFlight = false
+                    iptvZapPendingInputs.clear()
+                    onFailure?.invoke()
+                }
+            },
+        )
+    }
+
+    private fun installIptvZapWindow(
+        channels: MutableList<IptvChannelEntry>,
+        pageOffset: Int,
+        total: Int,
+        category: String?,
+        categories: List<String>,
+        preservePlayingChannel: Boolean,
+    ) {
+        if (category != iptvZapCategory) clearIptvZapBoundaryCache()
+        val playing = iptvChannels.getOrNull(currentIptvIndex)
+        if (!preservePlayingChannel) {
+            // The old list is about to disappear. Bank its VOD position while
+            // currentIptvIndex still identifies the actual outgoing item.
+            checkpointCurrentIptvPosition()
+        }
+        channels.forEachIndexed { index, entry ->
+            entry.index = pageOffset + index
+            entry.isCurrent = preservePlayingChannel &&
+                playing != null &&
+                entry.url == playing.url &&
+                entry.name == playing.name
+        }
+
+        iptvZapCategory = category
+        iptvZapCategoryTotal = total
+        if (categories.isNotEmpty()) {
+            iptvZapCategories = categories.toMutableList()
+            iptvCategories = categories.toMutableList()
+        }
+        iptvSelectedCategory = category
+        iptvChannels = channels
+        iptvBrowseChannels = channels.toMutableList()
+        iptvGuideUsesZapWindow = true
+        currentIptvIndex = channels.indexOfFirst { it.isCurrent }.let { index ->
+            if (index >= 0) index else 0
+        }
+        if (preservePlayingChannel &&
+            channels.isNotEmpty() &&
+            channels.none { it.isCurrent }
+        ) {
+            channels[currentIptvIndex].isCurrent = true
+        }
+        iptvChannelAdapter?.updateChannels(channels)
+        refreshIptvBrowserChrome()
+        updateIptvGuideCurrentName()
+    }
+
+    private fun mergeIptvZapPage(
+        page: MutableList<IptvChannelEntry>,
+        pageOffset: Int,
+        total: Int,
+        category: String?,
+        categories: List<String>,
+    ) {
+        if (!iptvZapPagingActive || category != iptvZapCategory) return
+        val playing = iptvChannels.getOrNull(currentIptvIndex)
+        page.forEachIndexed { index, entry -> entry.index = pageOffset + index }
+        val byPosition = java.util.TreeMap<Int, IptvChannelEntry>()
+        iptvChannels.forEach { byPosition[it.index] = it }
+        page.forEach { byPosition[it.index] = it }
+        val merged = byPosition.values.toMutableList()
+        merged.forEach {
+            it.isCurrent = playing != null &&
+                it.url == playing.url &&
+                it.name == playing.name
+        }
+        iptvZapCategoryTotal = total
+        if (categories.isNotEmpty()) {
+            iptvZapCategories = categories.toMutableList()
+            iptvCategories = categories.toMutableList()
+        }
+        val window = boundedHiddenIptvZapWindow(merged)
+        iptvChannels = window
+        iptvBrowseChannels = window.toMutableList()
+        iptvGuideUsesZapWindow = true
+        currentIptvIndex = window.indexOfFirst { it.isCurrent }.coerceAtLeast(0)
+        iptvChannelAdapter?.updateChannels(window)
+        refreshIptvBrowserChrome()
+    }
+
+    private fun boundedHiddenIptvZapWindow(
+        channels: MutableList<IptvChannelEntry>,
+    ): MutableList<IptvChannelEntry> {
+        if (iptvGuideVisible || channels.size <= iptvZapMaxHiddenWindow) return channels
+        val current = channels.indexOfFirst { it.isCurrent }.coerceAtLeast(0)
+        val maxStart = channels.size - iptvZapMaxHiddenWindow
+        val start = (current - iptvZapMaxHiddenWindow / 2).coerceIn(0, maxStart)
+        return channels.subList(start, start + iptvZapMaxHiddenWindow).toMutableList()
+    }
+
+    private fun trimHiddenIptvZapWindow() {
+        if (!iptvZapPagingActive || iptvChannels.size <= iptvZapMaxHiddenWindow) return
+        val trimmed = boundedHiddenIptvZapWindow(iptvChannels)
+        if (trimmed.size == iptvChannels.size) return
+        iptvChannels = trimmed
+        iptvBrowseChannels = trimmed.toMutableList()
+        currentIptvIndex = trimmed.indexOfFirst { it.isCurrent }.coerceAtLeast(0)
+        if (iptvGuideUsesZapWindow) iptvChannelAdapter?.updateChannels(trimmed)
+    }
+
+    private fun prefetchIptvZapPage(delta: Int, force: Boolean = false) {
+        if (!iptvZapPagingActive || iptvZapRequestInFlight || iptvChannels.isEmpty()) return
+        val firstAbsolute = iptvChannels.first().index
+        val lastAbsolute = iptvChannels.last().index
+        val shouldLoad = if (delta > 0) {
+            lastAbsolute + 1 < iptvZapCategoryTotal &&
+                (force || currentIptvIndex >= iptvChannels.size - 12)
+        } else {
+            firstAbsolute > 0 && (force || currentIptvIndex <= 11)
+        }
+        if (!shouldLoad) return
+        val offset = if (delta > 0) {
+            lastAbsolute + 1
+        } else {
+            (firstAbsolute - iptvZapPageSize).coerceAtLeast(0)
+        }
+        requestIptvZapPage(
+            category = iptvZapCategory,
+            offset = offset,
+        ) { channels, loadedOffset, total, category, categories ->
+            mergeIptvZapPage(channels, loadedOffset, total, category, categories)
+            drainPendingIptvZapInputs()
+        }
+    }
+
+    private fun queuePendingIptvZapInput(delta: Int) {
+        if (iptvZapPendingInputs.size < 24) {
+            iptvZapPendingInputs.addLast(if (delta >= 0) 1 else -1)
+        }
+    }
+
+    private fun drainPendingIptvZapInputs() {
+        if (iptvZapDrainingInputs) return
+        iptvZapDrainingInputs = true
+        try {
+            while (iptvZapPendingInputs.isNotEmpty()) {
+                val delta = iptvZapPendingInputs.removeFirst()
+                zapIptvChannel(delta)
+                if (iptvZapRequestInFlight) break
+            }
+        } finally {
+            iptvZapDrainingInputs = false
+        }
+    }
+
+    private fun clearIptvZapBoundaryCache() {
+        iptvZapCachedOriginCategory = null
+        iptvZapCachedDirection = 0
+        // Replace rather than clear: a boundary consumer may already hold the
+        // previous list while it atomically installs that cached category.
+        iptvZapCachedChannels = mutableListOf()
+        iptvZapCachedOffset = 0
+        iptvZapCachedTotal = 0
+        iptvZapCachedCategory = null
+        iptvZapCachedCategories = emptyList()
+    }
+
+    private fun disableIptvZapPaging() {
+        iptvZapPagingActive = false
+        iptvZapRequestToken++
+        iptvZapRequestInFlight = false
+        iptvZapPendingInputs.clear()
+        clearIptvZapBoundaryCache()
+    }
+
+    private fun adjacentIptvCategory(delta: Int, attempt: Int): String? {
+        val categories = iptvZapCategories.distinct()
+        val currentCategory = iptvZapCategory ?: return null
+        if (categories.isEmpty() || attempt !in 1..categories.size) return null
+        val currentIndex = categories.indexOf(currentCategory).let {
+            if (it >= 0) it else 0
+        }
+        val target =
+            (currentIndex + delta * attempt + categories.size * 2) % categories.size
+        return categories[target]
+    }
+
+    private fun prefetchAdjacentIptvCategory(delta: Int, attempt: Int = 1) {
+        if (iptvZapCachedChannels.isNotEmpty() &&
+            iptvZapCachedDirection != delta
+        ) {
+            clearIptvZapBoundaryCache()
+        }
+        if (!iptvZapPagingActive ||
+            iptvZapRequestInFlight ||
+            iptvZapCategory == null ||
+            iptvZapCachedChannels.isNotEmpty()
+        ) return
+        val nearBoundary = if (delta > 0) {
+            iptvChannels.lastOrNull()?.index == iptvZapCategoryTotal - 1 &&
+                currentIptvIndex >= iptvChannels.size - 12
+        } else {
+            iptvChannels.firstOrNull()?.index == 0 && currentIptvIndex <= 11
+        }
+        if (!nearBoundary) return
+        val targetCategory = adjacentIptvCategory(delta, attempt) ?: return
+        val originCategory = iptvZapCategory
+        requestIptvZapPage(
+            category = targetCategory,
+            offset = 0,
+            fromEnd = delta < 0,
+        ) { channels, pageOffset, total, category, categories ->
+            if (originCategory != iptvZapCategory) return@requestIptvZapPage
+            if (channels.isEmpty()) {
+                prefetchAdjacentIptvCategory(delta, attempt + 1)
+                return@requestIptvZapPage
+            }
+            iptvZapCachedOriginCategory = originCategory
+            iptvZapCachedDirection = delta
+            iptvZapCachedChannels = channels
+            iptvZapCachedOffset = pageOffset
+            iptvZapCachedTotal = total
+            iptvZapCachedCategory = category
+            iptvZapCachedCategories = categories
+            drainPendingIptvZapInputs()
+        }
+    }
+
+    private fun consumeCachedAdjacentIptvCategory(delta: Int): Boolean {
+        if (iptvZapCachedOriginCategory != iptvZapCategory ||
+            iptvZapCachedDirection != delta ||
+            iptvZapCachedChannels.isEmpty()
+        ) return false
+        // Detach from the cache before clearing it. Keeping the same mutable
+        // instance here made clearIptvZapBoundaryCache() empty [channels] and
+        // the following first()/last() crash at category boundaries.
+        val channels = iptvZapCachedChannels.toMutableList()
+        val offset = iptvZapCachedOffset
+        val total = iptvZapCachedTotal
+        val category = iptvZapCachedCategory
+        val categories = iptvZapCachedCategories
+        clearIptvZapBoundaryCache()
+        if (channels.isEmpty()) return false
+        installIptvZapWindow(
+            channels,
+            offset,
+            total,
+            category,
+            categories,
+            preservePlayingChannel = false,
+        )
+        val destination =
+            if (delta > 0) iptvChannels.firstOrNull() else iptvChannels.lastOrNull()
+        if (destination == null) return false
+        switchToIptvChannel(destination, checkpointOutgoing = false)
+        prefetchIptvZapPage(delta)
+        prefetchAdjacentIptvCategory(delta)
+        return true
+    }
+
+    private fun switchToIptvChannel(
+        entry: IptvChannelEntry,
+        adoptVisibleBrowseList: Boolean = true,
+        checkpointOutgoing: Boolean = true,
+    ) {
         android.util.Log.d("AndroidTvPlayer", "switchToIptvChannel: ${entry.name} (index=${entry.index})")
+        val previousPlaying = iptvChannels.getOrNull(currentIptvIndex)
         // Bank the outgoing channel's position BEFORE currentIptvIndex moves,
         // or zapping back to a half-watched movie would rewind it to wherever
         // it stood when the player was launched.
-        checkpointCurrentIptvPosition()
+        if (checkpointOutgoing) checkpointCurrentIptvPosition()
         // A channel zap orphans any pending source-switch watcher (see playItem)
         dropStaleSourceSwitchFeedback()
 
@@ -6472,10 +7237,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         var selected = entry
         val adoptsBrowseList = iptvChannels.none { it === entry }
         if (adoptsBrowseList) {
-            iptvChannels = iptvChannelAdapter?.entriesSnapshot()
-                ?.mapIndexed { index, item -> item.apply { this.index = index } }
-                ?.toMutableList()
-                ?: mutableListOf(entry.apply { index = 0 })
+            iptvChannels = if (adoptVisibleBrowseList) {
+                iptvChannelAdapter?.entriesSnapshot()
+                    ?.mapIndexed { index, item -> item.apply { this.index = index } }
+                    ?.toMutableList()
+                    ?: mutableListOf(entry.apply { index = 0 })
+            } else {
+                mutableListOf(entry.apply { index = 0 })
+            }
             selected = iptvChannels.firstOrNull { it === entry || it.url == entry.url }
                 ?: iptvChannels.first()
             iptvSeriesAudioKey = selected.seriesId?.let { seriesId ->
@@ -6487,6 +7256,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvChannels.forEach { it.isCurrent = false }
         selected.isCurrent = true
         currentIptvIndex = iptvChannels.indexOfFirst { it === selected }.coerceAtLeast(0)
+        iptvChannelAdapter?.notifyCurrentChanged(previousPlaying, selected)
 
         // Clear subtitle identity/results when changing channels from the guide.
         resetSubtitleState()
@@ -6499,9 +7269,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         titleView.text = selected.name
         titleContainer.visibility = View.VISIBLE
 
-        // Channel-change feedback: the zap banner (name, now/next, key hints)
-        // replaces the old bare-name overlay for every IPTV switch.
-        showIptvZapBanner(selected)
+        // Channel-change feedback belongs to live zapping. VOD keeps the
+        // standard player presentation.
+        if (selected.isLive) showIptvZapBanner(selected) else hideIptvZapBanner()
 
         updateIptvGuideCurrentName()
         // Index moved — a previous episode may have (dis)appeared.
@@ -6563,16 +7333,133 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      *  LEFT/RIGHT belong to whatever the user is looking at, and a surprise
      *  channel change under an open menu would read as a glitch. */
     private fun isLiveIptvZapContext(): Boolean =
-        isIptvMode && !controlsMenuVisible && iptvChannels.size > 1 &&
+        isIptvMode && !controlsMenuVisible &&
+            (iptvChannels.size > 1 || iptvZapPagingActive) &&
             iptvChannels.getOrNull(currentIptvIndex)?.isLive == true
 
+    private fun activateIptvZapUiContext() {
+        if (iptvZapOwnsUiContext) return
+        iptvUiContextToken++
+        iptvBrowseToken++
+        iptvZapRequestToken++
+        iptvZapRequestInFlight = false
+        iptvZapOwnsUiContext = true
+        iptvSourceId = iptvZapSourceId
+        iptvSourceName = iptvZapSourceName
+        iptvContentType = iptvZapContentType
+        iptvSelectedCategory = iptvZapCategory
+        iptvCategories = iptvZapCategories.toMutableList()
+        iptvGuideSearch?.setText("")
+        iptvBrowseChannels = iptvChannels.toMutableList()
+        iptvGuideUsesZapWindow = true
+        iptvChannelAdapter?.updateChannels(iptvChannels)
+        refreshIptvBrowserChrome()
+    }
+
     /** Fullscreen channel zap: previous/next channel in guide order,
-     *  wrapping at the ends. */
+     *  paging through the active category and crossing into the adjacent
+     *  category at its ends. */
     private fun zapIptvChannel(delta: Int) {
-        if (iptvChannels.size < 2) return
+        if (iptvChannels.getOrNull(currentIptvIndex)?.isLive != true) return
+        // A physical channel key is a real tune, so the temporary search scope
+        // is no longer eligible for restoration.
+        commitIptvAllCategorySearch()
+        activateIptvZapUiContext()
+        if (!iptvZapPagingActive && iptvChannels.size < 2) return
         val from = currentIptvIndex.coerceIn(0, iptvChannels.lastIndex)
-        val next = (from + delta + iptvChannels.size) % iptvChannels.size
-        switchToIptvChannel(iptvChannels[next])
+        val next = from + delta
+        if (!iptvZapPagingActive) {
+            val wrapped = (next + iptvChannels.size) % iptvChannels.size
+            switchToIptvChannel(iptvChannels[wrapped])
+            return
+        }
+        if (next in iptvChannels.indices) {
+            switchToIptvChannel(iptvChannels[next])
+            prefetchIptvZapPage(delta)
+            prefetchAdjacentIptvCategory(delta)
+            return
+        }
+
+        val firstAbsolute = iptvChannels.first().index
+        val lastAbsolute = iptvChannels.last().index
+        val hasAnotherPage = if (delta > 0) {
+            lastAbsolute + 1 < iptvZapCategoryTotal
+        } else {
+            firstAbsolute > 0
+        }
+        if (hasAnotherPage) {
+            queuePendingIptvZapInput(delta)
+            prefetchIptvZapPage(delta)
+            return
+        }
+        if (consumeCachedAdjacentIptvCategory(delta)) return
+        requestAdjacentIptvCategory(delta)
+    }
+
+    private fun requestAdjacentIptvCategory(delta: Int, attempt: Int = 1) {
+        if (iptvZapRequestInFlight) {
+            queuePendingIptvZapInput(delta)
+            return
+        }
+        val categories = iptvZapCategories.distinct()
+        val currentCategory = iptvZapCategory
+        if (currentCategory == null || categories.isEmpty()) {
+            // An uncategorized/All-channels context has no category boundary;
+            // wrap by paging the opposite end of the same result set.
+            requestIptvZapPage(
+                category = null,
+                offset = 0,
+                fromEnd = delta < 0,
+            ) { channels, pageOffset, total, category, returnedCategories ->
+                if (channels.isEmpty()) return@requestIptvZapPage
+                installIptvZapWindow(
+                    channels,
+                    pageOffset,
+                    total,
+                    category,
+                    returnedCategories,
+                    preservePlayingChannel = false,
+                )
+                switchToIptvChannel(
+                    if (delta > 0) iptvChannels.first() else iptvChannels.last(),
+                    checkpointOutgoing = false,
+                )
+                prefetchIptvZapPage(delta)
+                drainPendingIptvZapInputs()
+            }
+            return
+        }
+
+        if (attempt > categories.size) {
+            iptvZapPendingInputs.clear()
+            return
+        }
+        val targetCategory = adjacentIptvCategory(delta, attempt) ?: return
+        requestIptvZapPage(
+            category = targetCategory,
+            offset = 0,
+            fromEnd = delta < 0,
+        ) { channels, pageOffset, total, category, returnedCategories ->
+            if (channels.isEmpty()) {
+                requestAdjacentIptvCategory(delta, attempt + 1)
+                return@requestIptvZapPage
+            }
+            installIptvZapWindow(
+                channels,
+                pageOffset,
+                total,
+                category,
+                returnedCategories,
+                preservePlayingChannel = false,
+            )
+            switchToIptvChannel(
+                if (delta > 0) iptvChannels.first() else iptvChannels.last(),
+                checkpointOutgoing = false,
+            )
+            prefetchIptvZapPage(delta)
+            prefetchAdjacentIptvCategory(delta)
+            drainPendingIptvZapInputs()
+        }
     }
 
     // ── IPTV zap banner ──────────────────────────────────────────────────
@@ -6676,10 +7563,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (iptvGuideVisible) return
         val banner = ensureIptvZapBanner()
         iptvZapBannerName?.text = entry.name
+        val channelTotal =
+            if (iptvZapPagingActive && iptvZapCategoryTotal > 0) {
+                iptvZapCategoryTotal
+            } else {
+                iptvChannels.size
+            }
         val meta = buildList {
             // "CH" reads wrong on an episode/movie list — plain position there.
             add(
-                if (entry.isLive) "CH ${entry.index + 1}/${iptvChannels.size}"
+                if (entry.isLive) "CH ${entry.index + 1}/$channelTotal"
                 else "${entry.index + 1} of ${iptvChannels.size}"
             )
             entry.group?.takeIf { it.isNotEmpty() }?.let { add(it) }
@@ -6796,8 +7689,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     /** This IPTV session is an Xtream SERIES episode list. Scoped to series
      *  (the launcher sets seriesAudioKey only then) — NOT every non-live item —
-     *  so a plain Movies-grid play keeps the guide only, with no Next/Previous
-     *  or auto-advance, exactly as before. */
+     *  so automatic episode progression never applies to a standalone movie. */
     private fun isIptvEpisodeMode(): Boolean {
         if (!isIptvMode || iptvSeriesAudioKey == null) return false
         val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
@@ -6814,29 +7706,31 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return iptvChannels.getOrNull(currentIptvIndex - 1)
     }
 
-    /** Manage the episode controls ONLY for a series session: show Previous
-     *  when a previous episode exists, and hide Next at the last episode. For
-     *  every other flow (non-series IPTV, movies, torrent playlists) the
-     *  controls are left exactly as they were — no regression. */
+    /** IPTV guide and CH controls belong to live television only. VOD keeps
+     *  the standard seek controls and episode Previous/Next actions. */
     private fun updateIptvEpisodeControls() {
-        updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
-        val seriesSession = isIptvMode && iptvSeriesAudioKey != null
-        if (!seriesSession) {
-            if (isIptvMode) {
-                iptvPrevButton?.text = "CH -"
-                iptvNextButton?.text = "CH +"
-                val visible = if (iptvChannels.size > 1) View.VISIBLE else View.GONE
-                iptvPrevButton?.visibility = visible
-                iptvNextButton?.visibility = visible
-            }
-            return
+        val entry = iptvChannels.getOrNull(currentIptvIndex)
+        updateIptvControlPresentation(entry)
+        if (!isIptvMode) return
+        if (entry?.isLive == true) {
+            iptvPrevButton?.text = "CH -"
+            iptvNextButton?.text = "CH +"
+            val visibility =
+                if (iptvChannels.size > 1 || iptvZapPagingActive) {
+                    View.VISIBLE
+                } else {
+                    View.GONE
+                }
+            iptvPrevButton?.visibility = visibility
+            iptvNextButton?.visibility = visibility
+        } else {
+            iptvPrevButton?.text = "Previous"
+            iptvNextButton?.text = "Next"
+            iptvPrevButton?.visibility =
+                if (prevIptvEpisode() != null) View.VISIBLE else View.GONE
+            iptvNextButton?.visibility =
+                if (nextIptvEpisode() != null) View.VISIBLE else View.GONE
         }
-        iptvPrevButton?.text = "EP -"
-        iptvNextButton?.text = "EP +"
-        iptvPrevButton?.visibility =
-            if (prevIptvEpisode() != null) View.VISIBLE else View.GONE
-        iptvNextButton?.visibility =
-            if (nextIptvEpisode() != null) View.VISIBLE else View.GONE
     }
 
     /** Set the TrackSelector's preferred audio language — a persistent
@@ -9431,6 +10325,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         iptvBrowseHandler.removeCallbacksAndMessages(null)
         iptvEpgToken++
+        iptvUiContextToken++
+        iptvBrowseToken++
+        iptvZapRequestToken++
+        iptvZapRequestInFlight = false
+        iptvZapPendingInputs.clear()
 
         // Cancel PikPak retry operations
         cancelPikPakRetry()
@@ -11444,10 +12343,52 @@ private class IptvChannelAdapter(
         if (position >= 0) notifyItemChanged(position)
     }
 
+    fun notifyCurrentChanged(
+        previous: IptvChannelEntry?,
+        current: IptvChannelEntry,
+    ) {
+        val previousPosition = channels.indexOfFirst { it === previous }
+        val currentPosition = channels.indexOfFirst { it === current }
+        if (previousPosition >= 0) notifyItemChanged(previousPosition)
+        if (currentPosition >= 0 && currentPosition != previousPosition) {
+            notifyItemChanged(currentPosition)
+        }
+    }
+
     fun updateChannels(filtered: List<IptvChannelEntry>) {
+        val old = channels.toList()
+        val updated = filtered.toList()
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = old.size
+            override fun getNewListSize(): Int = updated.size
+
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val before = old[oldItemPosition]
+                val after = updated[newItemPosition]
+                return before.index == after.index &&
+                    before.url == after.url &&
+                    before.name == after.name &&
+                    before.sourceId == after.sourceId
+            }
+
+            override fun areContentsTheSame(
+                oldItemPosition: Int,
+                newItemPosition: Int,
+            ): Boolean {
+                val before = old[oldItemPosition]
+                val after = updated[newItemPosition]
+                return before === after ||
+                    (before.isCurrent == after.isCurrent &&
+                        before.isFavorite == after.isFavorite &&
+                        before.logoUrl == after.logoUrl &&
+                        before.group == after.group &&
+                        before.epgNowTitle == after.epgNowTitle &&
+                        before.epgNextTitle == after.epgNextTitle)
+            }
+        }, true)
         channels.clear()
-        channels.addAll(filtered)
-        notifyDataSetChanged()
+        channels.addAll(updated)
+        diff.dispatchUpdatesTo(this)
     }
 
     fun getCurrentChannelPosition(): Int {

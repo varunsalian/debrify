@@ -12,17 +12,16 @@ IptvChannel _ch(
   String? contentType = 'live',
   Map<String, String> attributes = const {},
   Map<String, String> headers = const {},
-}) =>
-    IptvChannel(
-      name: name ?? 'Channel $i',
-      url: 'http://h/live/u/p/$i.ts',
-      logoUrl: 'http://h/logo/$i.png',
-      group: group,
-      duration: -1,
-      contentType: contentType,
-      attributes: attributes,
-      httpHeaders: headers,
-    );
+}) => IptvChannel(
+  name: name ?? 'Channel $i',
+  url: 'http://h/live/u/p/$i.ts',
+  logoUrl: 'http://h/logo/$i.png',
+  group: group,
+  duration: -1,
+  contentType: contentType,
+  attributes: attributes,
+  httpHeaders: headers,
+);
 
 int _ingestInWorker(List<Object> args) {
   final channels = [for (var i = 0; i < 500; i++) _ch(i, group: 'G${i % 5}')];
@@ -54,11 +53,13 @@ void main() {
       dbPath: IptvCatalogDb.path,
       catalogKey: 'xc|http://h|u|live',
       channels: [
-        _ch(0,
-            group: 'Спорт',
-            name: 'Канал ᴴᴰ',
-            attributes: {'stream_id': '7', 'tvg-id': 'ch7.tv'},
-            headers: {'User-Agent': 'X'}),
+        _ch(
+          0,
+          group: 'Спорт',
+          name: 'Канал ᴴᴰ',
+          attributes: {'stream_id': '7', 'tvg-id': 'ch7.tv'},
+          headers: {'User-Agent': 'X'},
+        ),
         _ch(1, group: 'News'),
       ],
       epgUrl: 'http://h/xmltv.php',
@@ -117,8 +118,34 @@ void main() {
     expect(snap.page(offset: 0, limit: 10, group: 'Sports').length, 2);
   });
 
-  test('search matches name and group, case-insensitively, as substrings',
-      () {
+  test('position lookup can stay inside the active zap category', () {
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'k',
+      channels: [
+        _ch(7, group: 'News', name: 'Shared'),
+        _ch(1, group: 'Sports'),
+        _ch(7, group: 'Sports', name: 'Shared'),
+        _ch(2, group: 'Sports'),
+      ],
+    );
+    final snap = IptvCatalogDb.snapshot('k')!;
+
+    final position = snap.positionOf(
+      url: 'http://h/live/u/p/7.ts',
+      name: 'Shared',
+      group: 'Sports',
+      live: true,
+    );
+    expect(position, 2);
+    expect(
+      snap.count(group: 'Sports', live: true, beforePosition: position),
+      1,
+      reason: 'the centered page uses the channel ordinal within its category',
+    );
+  });
+
+  test('search matches name and group, case-insensitively, as substrings', () {
     IptvCatalogDb.ingest(
       dbPath: IptvCatalogDb.path,
       catalogKey: 'k',
@@ -130,10 +157,15 @@ void main() {
     );
     final snap = IptvCatalogDb.snapshot('k')!;
 
-    expect(snap.page(offset: 0, limit: 10, search: 'sport').single.name,
-        'Sky Sports Main Event');
-    expect(snap.page(offset: 0, limit: 10, search: 'usa').single.name, 'CNN',
-        reason: 'the group is part of the search haystack, as today');
+    expect(
+      snap.page(offset: 0, limit: 10, search: 'sport').single.name,
+      'Sky Sports Main Event',
+    );
+    expect(
+      snap.page(offset: 0, limit: 10, search: 'usa').single.name,
+      'CNN',
+      reason: 'the group is part of the search haystack, as today',
+    );
     expect(snap.count(search: 'PORT'), 1, reason: 'mid-word substring match');
     expect(snap.count(search: 'zzz'), 0);
   });
@@ -148,11 +180,17 @@ void main() {
       ],
     );
     final snap = IptvCatalogDb.snapshot('k')!;
-    expect(snap.count(search: '100%'), 1,
-        reason: '"%" must not act as a wildcard');
+    expect(
+      snap.count(search: '100%'),
+      1,
+      reason: '"%" must not act as a wildcard',
+    );
     expect(snap.count(search: '0% h'), 1);
-    expect(snap.count(search: '_'), 0,
-        reason: '"_" must not match arbitrary characters');
+    expect(
+      snap.count(search: '_'),
+      0,
+      reason: '"_" must not match arbitrary characters',
+    );
   });
 
   test('re-ingest swaps generations atomically and staleness is visible', () {
@@ -171,23 +209,32 @@ void main() {
     );
 
     expect(old.isStale, isTrue);
-    expect(old.count(), 3,
-        reason: 'the previous generation survives ONE refresh — the UI may '
-            'still be scrolled through it while the commit lands');
+    expect(
+      old.count(),
+      3,
+      reason:
+          'the previous generation survives ONE refresh — the UI may '
+          'still be scrolled through it while the commit lands',
+    );
     expect(old.page(offset: 0, limit: 10).first.name, 'Channel 0');
 
     final fresh = IptvCatalogDb.snapshot('k')!;
     expect(fresh.channelCount, 2);
-    expect(fresh.page(offset: 0, limit: 10).map((c) => c.name),
-        ['Channel 10', 'Channel 11']);
+    expect(fresh.page(offset: 0, limit: 10).map((c) => c.name), [
+      'Channel 10',
+      'Channel 11',
+    ]);
 
     IptvCatalogDb.ingest(
       dbPath: IptvCatalogDb.path,
       catalogKey: 'k',
       channels: [_ch(20)],
     );
-    expect(old.count(), 0,
-        reason: 'two refreshes later the first generation is finally swept');
+    expect(
+      old.count(),
+      0,
+      reason: 'two refreshes later the first generation is finally swept',
+    );
     expect(fresh.count(), 2, reason: 'the second is now the retained one');
   });
 
@@ -198,10 +245,14 @@ void main() {
     final renamed = [_ch(0), _ch(1, name: 'Renamed')];
 
     expect(IptvCatalogDb.contentDigest(a), IptvCatalogDb.contentDigest(same));
-    expect(IptvCatalogDb.contentDigest(a),
-        isNot(IptvCatalogDb.contentDigest(reordered)));
-    expect(IptvCatalogDb.contentDigest(a),
-        isNot(IptvCatalogDb.contentDigest(renamed)));
+    expect(
+      IptvCatalogDb.contentDigest(a),
+      isNot(IptvCatalogDb.contentDigest(reordered)),
+    );
+    expect(
+      IptvCatalogDb.contentDigest(a),
+      isNot(IptvCatalogDb.contentDigest(renamed)),
+    );
   });
 
   test('ingest reports the digest of what it wrote; unchanged re-ingest '
@@ -219,8 +270,11 @@ void main() {
       catalogKey: 'k',
       channels: channels,
     );
-    expect(again, digest,
-        reason: 'the revalidate path compares digests to decide "Up to date"');
+    expect(
+      again,
+      digest,
+      reason: 'the revalidate path compares digests to decide "Up to date"',
+    );
   });
 
   test('removeCatalogs deletes only the named catalogs', () {
@@ -264,25 +318,48 @@ void main() {
 
     test('live bucketing matches IptvChannel.isLive exactly', () {
       final snap = IptvCatalogDb.snapshot('k')!;
-      expect(snap.count(live: true), 2,
-          reason: 'explicit live + the duration-less M3U heuristic');
-      expect(snap.count(live: false), 2,
-          reason: 'explicit vod + the real-duration M3U row');
+      expect(
+        snap.count(live: true),
+        2,
+        reason: 'explicit live + the duration-less M3U heuristic',
+      );
+      expect(
+        snap.count(live: false),
+        2,
+        reason: 'explicit vod + the real-duration M3U row',
+      );
     });
 
     test('positionOf + beforePosition rebuild a zap window', () {
       final snap = IptvCatalogDb.snapshot('k')!;
-      final pos = snap.positionOf(url: 'http://h/live/u/p/2.ts', name: 'CNN Sky News')!;
-      expect(snap.count(live: true, beforePosition: pos), 1,
-          reason: 'one live row precedes it, so it is live index 1');
+      final pos = snap.positionOf(
+        url: 'http://h/live/u/p/2.ts',
+        name: 'CNN Sky News',
+        group: 'News',
+        live: true,
+      )!;
+      expect(
+        snap.count(live: true, beforePosition: pos),
+        1,
+        reason: 'one live row precedes it, so it is live index 1',
+      );
       final window = snap.page(offset: 0, limit: 10, live: true);
       expect(window[1].name, 'CNN Sky News');
+      expect(
+        snap.positionOf(
+          url: 'http://h/live/u/p/2.ts',
+          name: 'CNN Sky News',
+          group: 'Sports',
+          live: true,
+        ),
+        isNull,
+        reason: 'the search result must anchor inside its selected category',
+      );
     });
   });
 
   group('EPG guide storage', () {
-    test('ingest → info + programme rows round-trip; re-ingest replaces',
-        () {
+    test('ingest → info + programme rows round-trip; re-ingest replaces', () {
       IptvCatalogDb.ingestEpgGuide(
         dbPath: IptvCatalogDb.path,
         guideKey: 'g1',
@@ -327,8 +404,11 @@ void main() {
       expect(IptvCatalogDb.epgProgrammes('g1', 'bbcone.uk'), [
         [5000, 6000, 'Replaced', ''],
       ]);
-      expect(IptvCatalogDb.epgProgrammes('g1', 'itv.uk'), isEmpty,
-          reason: 'a re-ingest fully replaces the guide');
+      expect(
+        IptvCatalogDb.epgProgrammes('g1', 'itv.uk'),
+        isEmpty,
+        reason: 'a re-ingest fully replaces the guide',
+      );
     });
 
     test('markEpgGuideEmpty writes only metadata (negative cache)', () {
@@ -342,35 +422,39 @@ void main() {
       expect(info.sawWanted, isFalse);
     });
 
-    test('channelTvgIdentity resolves a URL against the current generation',
-        () {
-      IptvCatalogDb.ingest(
-        dbPath: IptvCatalogDb.path,
-        catalogKey: 'cat',
-        channels: [
-          _ch(0,
+    test(
+      'channelTvgIdentity resolves a URL against the current generation',
+      () {
+        IptvCatalogDb.ingest(
+          dbPath: IptvCatalogDb.path,
+          catalogKey: 'cat',
+          channels: [
+            _ch(
+              0,
               name: 'BBC One ᴴᴰ',
-              attributes: {'tvg-id': 'BBCOne.uk', 'tvg-name': 'BBC One'}),
-        ],
-      );
-      final identity = IptvCatalogDb.channelTvgIdentity(
-        catalogKey: 'cat',
-        url: 'http://h/live/u/p/0.ts',
-      )!;
-      expect(identity.name, 'BBC One ᴴᴰ');
-      expect(identity.attributes['tvg-id'], 'BBCOne.uk');
-      expect(
-        IptvCatalogDb.channelTvgIdentity(catalogKey: 'cat', url: 'http://x'),
-        isNull,
-      );
-    });
+              attributes: {'tvg-id': 'BBCOne.uk', 'tvg-name': 'BBC One'},
+            ),
+          ],
+        );
+        final identity = IptvCatalogDb.channelTvgIdentity(
+          catalogKey: 'cat',
+          url: 'http://h/live/u/p/0.ts',
+        )!;
+        expect(identity.name, 'BBC One ᴴᴰ');
+        expect(identity.attributes['tvg-id'], 'BBCOne.uk');
+        expect(
+          IptvCatalogDb.channelTvgIdentity(catalogKey: 'cat', url: 'http://x'),
+          isNull,
+        );
+      },
+    );
   });
 
   test('ingest from a worker isolate is read back on this one', () async {
-    final written = await compute(
-      _ingestInWorker,
-      <Object>[IptvCatalogDb.path, 'worker|k'],
-    );
+    final written = await compute(_ingestInWorker, <Object>[
+      IptvCatalogDb.path,
+      'worker|k',
+    ]);
     final snap = IptvCatalogDb.snapshot('worker|k')!;
     expect(snap.channelCount, written);
     expect(snap.count(group: 'G3'), 100);

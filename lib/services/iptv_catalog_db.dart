@@ -65,7 +65,8 @@ class IptvCatalogDb {
   /// is synchronous.
   static Future<void> open() async {
     if (_db != null) return;
-    final dir = debugDirectoryOverride ??
+    final dir =
+        debugDirectoryOverride ??
         (await getApplicationDocumentsDirectory()).path;
     final path = p.join(dir, _dbFileName);
     final db = _openConnection(path);
@@ -347,8 +348,9 @@ class IptvCatalogDb {
       return [
         for (final row in rows)
           () {
-            final attrs =
-                CatalogSnapshot._decodeStringMap(row['attributes_json']);
+            final attrs = CatalogSnapshot._decodeStringMap(
+              row['attributes_json'],
+            );
             return (
               name: row['name'] as String,
               tvgId: attrs['tvg-id'],
@@ -386,7 +388,8 @@ class IptvCatalogDb {
   }
 
   /// Mirrors [CatalogSnapshot._isLiveSql] for the static readers above.
-  static const _liveSql = '(CASE WHEN content_type IS NOT NULL '
+  static const _liveSql =
+      '(CASE WHEN content_type IS NOT NULL '
       "THEN content_type = 'live' "
       'ELSE (duration IS NULL OR duration = -1) END)';
 
@@ -425,10 +428,9 @@ class IptvCatalogDb {
       // last-writer-wins correct once they can't interleave).
       db.execute('BEGIN IMMEDIATE');
       try {
-        db.execute(
-          'DELETE FROM epg_programmes WHERE guide_key = ?',
-          [guideKey],
-        );
+        db.execute('DELETE FROM epg_programmes WHERE guide_key = ?', [
+          guideKey,
+        ]);
         for (final entry in byId.entries) {
           for (final row in entry.value) {
             insert.execute([
@@ -562,8 +564,9 @@ class IptvCatalogDb {
     if (rows.isEmpty) return null;
     return (
       name: rows.first['name'] as String,
-      attributes:
-          CatalogSnapshot._decodeStringMap(rows.first['attributes_json']),
+      attributes: CatalogSnapshot._decodeStringMap(
+        rows.first['attributes_json'],
+      ),
     );
   }
 
@@ -678,28 +681,23 @@ class CatalogSnapshot {
     return rows.isEmpty || (rows.first['generation'] as int) != generation;
   }
 
-  static const _base =
-      'FROM channels WHERE catalog_key = ? AND generation = ?';
+  static const _base = 'FROM channels WHERE catalog_key = ? AND generation = ?';
 
   /// Exactly IptvChannel.isLive in SQL: an explicit content type decides;
   /// otherwise the M3U duration heuristic (-1 or absent = live).
-  static const _isLiveSql = '(CASE WHEN content_type IS NOT NULL '
+  static const _isLiveSql =
+      '(CASE WHEN content_type IS NOT NULL '
       "THEN content_type = 'live' "
       'ELSE (duration IS NULL OR duration = -1) END)';
 
-  List<Object?> _args({
-    String? group,
-    String? search,
-    int? beforePosition,
-  }) =>
-      [
-        catalogKey,
-        generation,
-        if (group != null) group,
-        if (search != null && search.isNotEmpty)
-          '%${_escapeLike(search.toLowerCase())}%',
-        if (beforePosition != null) beforePosition,
-      ];
+  List<Object?> _args({String? group, String? search, int? beforePosition}) => [
+    catalogKey,
+    generation,
+    if (group != null) group,
+    if (search != null && search.isNotEmpty)
+      '%${_escapeLike(search.toLowerCase())}%',
+    if (beforePosition != null) beforePosition,
+  ];
 
   String _where({
     String? group,
@@ -712,7 +710,9 @@ class CatalogSnapshot {
     if (search != null && search.isNotEmpty) {
       buf.write(" AND search_key LIKE ? ESCAPE '\\'");
     }
-    if (live != null) buf.write(live ? ' AND $_isLiveSql' : ' AND NOT $_isLiveSql');
+    if (live != null) {
+      buf.write(live ? ' AND $_isLiveSql' : ' AND NOT $_isLiveSql');
+    }
     if (beforePosition != null) buf.write(' AND position < ?');
     return buf.toString();
   }
@@ -735,11 +735,17 @@ class CatalogSnapshot {
   /// Catalog position of the row matching url+name, or null. (Duplicate
   /// url+name pairs are legal in playlists — the first occurrence answers,
   /// which is where zapping should land anyway.)
-  int? positionOf({required String url, required String name}) {
+  int? positionOf({
+    required String url,
+    required String name,
+    String? group,
+    bool? live,
+  }) {
     final rows = _db.select(
-      'SELECT position $_base AND url = ? AND name = ? '
+      'SELECT position ${_where(group: group, live: live)} '
+      'AND url = ? AND name = ? '
       'ORDER BY position LIMIT 1',
-      [catalogKey, generation, url, name],
+      [..._args(group: group), url, name],
     );
     return rows.isEmpty ? null : rows.first['position'] as int;
   }

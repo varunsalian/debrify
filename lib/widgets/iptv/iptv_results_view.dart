@@ -8,9 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart'
     show compute, kIsWeb, listEquals, mapEquals, setEquals;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
-import '../../utils/tv_keys.dart';
 import '../browse/brand_accent.dart';
 import '../browse/browse_results_focus.dart';
 import '../../models/playlist_view_mode.dart';
@@ -23,6 +21,7 @@ import '../../services/stremio_service.dart';
 import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
+import '../../utils/iptv_player_paging.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
@@ -397,8 +396,9 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// strand entries pointing at URLs that no longer authenticate.
   String? _originPlaylistIdFor(IptvChannel channel) {
     final playlist = _selectedPlaylist;
-    if (playlist?.isFavorites ?? false)
+    if (playlist?.isFavorites ?? false) {
       return _favoritePlaylistIds[channel.url];
+    }
     if (playlist?.isContinueWatching ?? false) {
       return _continuePlaylistIds[channel.url];
     }
@@ -1994,19 +1994,21 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// of ms right on OK. A window this size is far more guide than anyone
   /// DPADs through while still launching instantly.
   static const int _kMaxPlayerChannels = 1500;
+  static const int _kPlayerZapPageSize = 200;
   List<IptvChannel> _playerSeriesEpisodes = const [];
   String? _playerSeriesEpisodeSourceId;
   String? _playerSeriesTitle;
 
   List<Map<String, dynamic>> _playerSourcePayload() => [
     for (final playlist in _playlists)
-      {
-        'id': playlist.id,
-        'name': playlist.name,
-        'isFavorites': playlist.isFavorites,
-        'isContinue': playlist.isContinueWatching,
-        'isXtream': playlist.isXtreamCodes,
-      },
+      if (!playlist.isContinueWatching)
+        {
+          'id': playlist.id,
+          'name': playlist.name,
+          'isFavorites': playlist.isFavorites,
+          'isContinue': playlist.isContinueWatching,
+          'isXtream': playlist.isXtreamCodes,
+        },
   ];
 
   String _playerOriginPlaylistId(IptvChannel channel, IptvPlaylist source) {
@@ -2097,8 +2099,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     return <String>{
       for (final channel in _allChannels)
         if (channel.group?.isNotEmpty == true) channel.group!,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
   }
 
   Future<Map<String, dynamic>?> _providePlayerIptvBrowse(
@@ -2274,7 +2275,20 @@ class IptvResultsViewState extends State<IptvResultsView>
         category == null || category.isEmpty || category == 'All'
         ? null
         : category;
+    final isZapPage = action == 'zapPage';
+    final requestedLimit = (request['limit'] as num?)?.toInt();
+    final pageLimit = isZapPage
+        ? (requestedLimit ?? _kPlayerZapPageSize).clamp(1, _kMaxPlayerChannels)
+        : _kMaxPlayerChannels;
+    var pageOffset = isZapPage
+        ? ((request['offset'] as num?)?.toInt() ?? 0).clamp(0, 1 << 30)
+        : 0;
+    final anchorUrl = (request['anchorUrl'] as String?)?.trim();
+    final anchorName = (request['anchorName'] as String?)?.trim();
+    final fromEnd = request['fromEnd'] == true;
     List<IptvChannel> channels;
+    var totalChannels = 0;
+    int? anchorIndex;
     final snap = _dbSnapshot;
     if (snap != null) {
       final live = source.isXtreamCodes
@@ -2284,18 +2298,45 @@ class IptvResultsViewState extends State<IptvResultsView>
               'vod' => false,
               _ => null,
             };
+      totalChannels = snap.count(group: effectiveCategory, live: live);
+      if (isZapPage &&
+          anchorUrl != null &&
+          anchorUrl.isNotEmpty &&
+          anchorName != null &&
+          anchorName.isNotEmpty) {
+        final catalogPosition = snap.positionOf(
+          url: anchorUrl,
+          name: anchorName,
+          group: effectiveCategory,
+          live: live,
+        );
+        if (catalogPosition != null) {
+          anchorIndex = snap.count(
+            group: effectiveCategory,
+            live: live,
+            beforePosition: catalogPosition,
+          );
+        }
+      }
+      if (isZapPage) {
+        pageOffset = iptvPlayerZapPageOffset(
+          total: totalChannels,
+          limit: pageLimit,
+          requestedOffset: pageOffset,
+          anchorIndex: anchorIndex,
+          fromEnd: fromEnd,
+        );
+      }
       channels = snap.page(
-        offset: 0,
-        limit: _kMaxPlayerChannels,
+        offset: pageOffset,
+        limit: pageLimit,
         group: effectiveCategory,
-        search: query.isEmpty ? null : query,
+        search: isZapPage || query.isEmpty ? null : query,
         live: live,
       );
     } else {
       Iterable<IptvChannel> filtered = _allChannels;
-      if (!source.isXtreamCodes &&
-          !source.isFavorites &&
-          !source.isContinueWatching) {
+      if (!source.isXtreamCodes && !source.isContinueWatching) {
         filtered = switch (requestedType) {
           'live' => filtered.where((channel) => channel.isLive),
           'vod' => filtered.where(
@@ -2318,7 +2359,37 @@ class IptvResultsViewState extends State<IptvResultsView>
           (channel) => terms.every(channel.searchKey.contains),
         );
       }
-      channels = filtered.take(_kMaxPlayerChannels).toList();
+      if (isZapPage) {
+        // Legacy/in-memory catalogs are already materialized. Compute the
+        // filtered ordinal once so native can request a small window centered
+        // on a channel selected from search.
+        final materialized = filtered.toList(growable: false);
+        totalChannels = materialized.length;
+        if (anchorUrl != null && anchorUrl.isNotEmpty) {
+          anchorIndex = materialized.indexWhere(
+            (channel) =>
+                channel.url == anchorUrl &&
+                (anchorName == null ||
+                    anchorName.isEmpty ||
+                    channel.name == anchorName),
+          );
+          if (anchorIndex == -1) anchorIndex = null;
+        }
+        pageOffset = iptvPlayerZapPageOffset(
+          total: totalChannels,
+          limit: pageLimit,
+          requestedOffset: pageOffset,
+          anchorIndex: anchorIndex,
+          fromEnd: fromEnd,
+        );
+        channels = materialized
+            .skip(pageOffset)
+            .take(pageLimit)
+            .toList(growable: false);
+      } else {
+        channels = filtered.take(_kMaxPlayerChannels).toList();
+        totalChannels = channels.length;
+      }
     }
 
     final categories = _fullCategoryList();
@@ -2328,6 +2399,9 @@ class IptvResultsViewState extends State<IptvResultsView>
       'contentType': requestedType,
       'selectedCategory': effectiveCategory,
       'categories': categories,
+      if (isZapPage) 'pageOffset': pageOffset,
+      if (isZapPage) 'totalChannels': totalChannels,
+      if (isZapPage && anchorIndex != null) 'anchorIndex': anchorIndex,
       'sources': _playerSourcePayload(),
       'channels': await _playerChannelPayload([
         for (final channel in channels) (channel: channel, source: source),

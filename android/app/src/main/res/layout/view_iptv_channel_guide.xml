@@ -91,20 +91,6 @@
                     android:textColor="#FF7D898E"
                     android:textSize="8sp" />
 
-                <androidx.appcompat.widget.AppCompatButton
-                    android:id="@+id/iptv_nav_continue"
-                    android:layout_width="50dp"
-                    android:layout_height="52dp"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/iptv_premium_nav_item_bg"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:padding="5dp"
-                    android:text="↻&#10;RECENT"
-                    android:textAllCaps="false"
-                    android:textColor="#FF7D898E"
-                    android:textSize="8sp" />
-
                 <Space
                     android:layout_width="1dp"
                     android:layout_height="0dp"
@@ -154,6 +140,7 @@
                 android:paddingBottom="14dp">
 
                 <LinearLayout
+                    android:id="@+id/iptv_mode_bar"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:gravity="center_vertical"
@@ -233,32 +220,10 @@
                         android:textColor="#FFFFFFFF"
                         android:textSize="11sp" />
 
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/iptv_mode_movies"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:background="@drawable/iptv_premium_button_bg"
-                        android:focusable="true"
-                        android:text="Movies"
-                        android:textAllCaps="false"
-                        android:textColor="#FF7D898E"
-                        android:textSize="11sp" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/iptv_mode_series"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:background="@drawable/iptv_premium_button_bg"
-                        android:focusable="true"
-                        android:text="Series"
-                        android:textAllCaps="false"
-                        android:textColor="#FF7D898E"
-                        android:textSize="11sp" />
                 </LinearLayout>
 
                 <LinearLayout
+                    android:id="@+id/iptv_filter_bar"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:layout_marginTop="9dp"
