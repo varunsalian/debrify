@@ -2103,7 +2103,24 @@ class IptvResultsViewState extends State<IptvResultsView>
       final index = _playerGlobalSearchIndex ??=
           await IptvGlobalSearchIndex.load();
       if (!mounted) return null;
-      final results = index.search(query);
+      // Run the catalog scan on a worker isolate — the in-player "search all"
+      // used to call the synchronous search() here, which froze the UI on a
+      // six-figure catalog exactly like the Search-all page did. A worker
+      // failure falls back to the inline scan, then to empty.
+      IptvGlobalSearchResults results;
+      try {
+        results = await index.searchAsync(query);
+      } catch (_) {
+        try {
+          results = index.search(query);
+        } catch (_) {
+          results = const IptvGlobalSearchResults(
+            live: [], vod: [], series: [],
+            liveTotal: 0, vodTotal: 0, seriesTotal: 0,
+          );
+        }
+      }
+      if (!mounted) return null;
       final requestedType = request['contentType'] as String?;
       final hits = switch (requestedType) {
         'vod' => results.vod,
