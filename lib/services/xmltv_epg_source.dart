@@ -226,15 +226,19 @@ class XmltvEpgSource {
           final nameToId = guide.nameToId;
           final sawWanted = guide.sawWantedChannel;
           final fetchedAtMs = cached!.fetchedAt.millisecondsSinceEpoch;
-          await Isolate.run(() => IptvCatalogDb.ingestEpgGuide(
-                dbPath: dbPath,
-                guideKey: guideKey,
-                epgUrl: epgUrl,
-                byId: byId,
-                nameToId: nameToId,
-                sawWanted: sawWanted,
-                fetchedAtMs: fetchedAtMs,
-              ));
+          // Bulk programme-row import — same gate as every other whole-catalog
+          // write.
+          await IptvCatalogDb.runExclusive(
+            () => Isolate.run(() => IptvCatalogDb.ingestEpgGuide(
+                  dbPath: dbPath,
+                  guideKey: guideKey,
+                  epgUrl: epgUrl,
+                  byId: byId,
+                  nameToId: nameToId,
+                  sawWanted: sawWanted,
+                  fetchedAtMs: fetchedAtMs,
+                )),
+          );
           info = IptvCatalogDb.epgGuideInfo(guideKey);
         } catch (e) {
           debugPrint('XmltvEpgSource: legacy guide import failed: $e');
@@ -369,15 +373,23 @@ class XmltvEpgSource {
       final capturedDbPath = dbPath;
       final capturedGuideKey = guideKey;
       final capturedUrl = epgUrl;
-      final guide = await Isolate.run(() => parseXmltvFile(
-            path,
-            ids,
-            names,
-            nowMs,
-            dbPath: capturedDbPath,
-            guideKey: capturedGuideKey,
-            epgUrl: capturedUrl,
-          ));
+      // The download is already done; what remains is a large parse that, in
+      // DB mode, writes the programme rows into iptv_catalog.db. That is
+      // whole-catalog-scale write work, so it takes the shared maintenance
+      // gate rather than contending with a migration, adoption or ingest.
+      // (The gate is deliberately taken HERE and not around the fetch above —
+      // a guide download can take minutes.)
+      final guide = await IptvCatalogDb.runExclusive(
+        () => Isolate.run(() => parseXmltvFile(
+              path,
+              ids,
+              names,
+              nowMs,
+              dbPath: capturedDbPath,
+              guideKey: capturedGuideKey,
+              epgUrl: capturedUrl,
+            )),
+      );
       if (guide.isEmpty) {
         // Parsed fine, matched nothing — a real answer (the caller tells the
         // user WHY there's no guide), distinct from a null failure.

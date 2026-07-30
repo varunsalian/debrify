@@ -517,7 +517,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     // Only reload playlist if it changed or forced, or if we have no channels loaded
     if (_selectedPlaylist != null &&
         (forceReload || playlistChanged || _allChannels.isEmpty)) {
-      _loadPlaylist(_selectedPlaylist!);
+      // forceReload follows a settings edit — the user just changed this
+      // provider, so a suppressed refresh must not outrank that.
+      _loadPlaylist(_selectedPlaylist!, userRequested: forceReload);
     }
   }
 
@@ -570,7 +572,15 @@ class IptvResultsViewState extends State<IptvResultsView>
     super.dispose();
   }
 
-  Future<void> _loadPlaylist(IptvPlaylist playlist) async {
+  /// [userRequested] marks a load the user explicitly asked for (the error
+  /// screen's Retry, a settings round-trip). Such a load ignores the
+  /// interrupted-refresh backoff — that guard exists to stop the page from
+  /// re-running a refresh the device did not survive, not to override someone
+  /// deliberately asking for fresh data.
+  Future<void> _loadPlaylist(
+    IptvPlaylist playlist, {
+    bool userRequested = false,
+  }) async {
     final ticket = ++_loadTicket;
     _lastProgressiveApply = null;
     // A lingering refresh chip belongs to the outgoing playlist.
@@ -623,6 +633,11 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (_dbCatalogEnabled && cacheKey != null) {
       await IptvCatalogDb.open();
       if (!mounted || ticket != _loadTicket) return;
+      // Pending row-level upgrades run on a worker and are deliberately NOT
+      // awaited: the stored catalog can render without them (channel_number is
+      // simply null until the backfill lands), and nothing the user can see is
+      // worth holding the page behind a whole-table write on slow flash. The
+      // numbers appear when it finishes.
       var snap = IptvCatalogDb.snapshot(cacheKey);
       if (snap == null) {
         final legacy = await IptvCatalogCache.instance.read(cacheKey);
@@ -630,15 +645,20 @@ class IptvResultsViewState extends State<IptvResultsView>
         if (legacy != null && legacy.channels.isNotEmpty) {
           setState(() => _loadingStatus = 'Upgrading your library…');
           try {
-            await compute(
-              ingestLegacySnapshotJob,
-              LegacySnapshotIngestJob(
-                dbPath: IptvCatalogDb.path,
-                catalogKey: cacheKey,
-                numberingSourceKey: playlist.id,
-                channels: legacy.channels,
-                categories: legacy.categories,
-                epgUrl: legacy.epgUrl,
+            // A 50k-row ingest, so it takes the same process-wide gate as
+            // every other whole-catalog job — a previous page's adoption or
+            // refresh must never be grinding alongside this.
+            await IptvCatalogDb.runExclusive(
+              () => compute(
+                ingestLegacySnapshotJob,
+                LegacySnapshotIngestJob(
+                  dbPath: IptvCatalogDb.path,
+                  catalogKey: cacheKey,
+                  numberingSourceKey: playlist.id,
+                  channels: legacy.channels,
+                  categories: legacy.categories,
+                  epgUrl: legacy.epgUrl,
+                ),
               ),
             );
             await IptvCatalogCache.instance.remove(cacheKey);
@@ -655,15 +675,20 @@ class IptvResultsViewState extends State<IptvResultsView>
       if (snap != null && snap.channelCount > 0) {
         await _presentDbCatalog(playlist, ticket, snap);
         if (!mounted || ticket != _loadTicket) return;
-        final age = DateTime.now().millisecondsSinceEpoch - snap.ingestedAt;
-        final needsNumbering =
-            snap.hasLiveChannels &&
-            !IptvCatalogDb.hasNumberingSource(playlist.id);
-        if (age > _dbCatalogTtl.inMilliseconds || needsNumbering) {
-          unawaited(
-            _revalidateDbCatalog(playlist, contentType, cacheKey, ticket),
-          );
-        }
+        // Everything heavy this catalog still needs — pending migration,
+        // numbering adoption, an optional refresh — runs as one queued
+        // background pipeline that decides for itself what is still required.
+        // Started here rather than awaited: the list is already on screen and
+        // none of it changes what the user sees.
+        unawaited(
+          _runCatalogMaintenance(
+            playlist,
+            contentType,
+            cacheKey,
+            ticket,
+            userRequested: userRequested,
+          ),
+        );
         return;
       }
       // Never ingested (fresh install / brand-new playlist): fall through to
@@ -739,6 +764,15 @@ class IptvResultsViewState extends State<IptvResultsView>
             );
     } else if (playlist.isLocalFile) {
       result = await _iptvService.parseContent(playlist.content!);
+    } else if (_dbCatalogEnabled && cacheKey != null) {
+      // First-ever load of a cacheable catalog: the parse worker ingests it,
+      // so this is a whole-catalog write and belongs behind the same gate as
+      // migration, adoption and refresh. Without it, switching to a new 50k
+      // provider could ingest while the previous page's surviving adoption or
+      // refresh was still running — the overlap this all exists to prevent.
+      result = await IptvCatalogDb.runExclusive(
+        () => _fetchCatalogFromNetwork(playlist, contentType),
+      );
     } else {
       result = await _fetchCatalogFromNetwork(playlist, contentType);
     }
@@ -777,6 +811,19 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
 
     await _presentCatalog(playlist, ticket, result);
+
+    // A first-ever ingest just wrote this catalog, so there is no numbering to
+    // adopt and nothing to refresh — but a database that has never been
+    // migrated still needs its version stamp and number index. Deliberately
+    // last, after that ingest has finished, so the two never overlap.
+    if (_dbCatalogEnabled && cacheKey != null && mounted &&
+        ticket == _loadTicket) {
+      unawaited(
+        IptvCatalogDb.runExclusive(
+          () => _runPendingMigrations(cacheKey, ticket),
+        ),
+      );
+    }
   }
 
   /// Bind a loaded catalog to the view: favorites migration, list swap,
@@ -1015,12 +1062,197 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
+  /// Catalogs at or above this many rows never refresh on their own.
+  ///
+  /// Refreshing one means downloading the provider's entire response, decoding
+  /// it and ingesting a fresh generation — the single heaviest thing this page
+  /// does, and at 50k channels heavy enough that it is what the weakest boxes
+  /// die on. Suppressing an interrupted refresh only stops the immediate
+  /// retry; it does not make the operation itself affordable, so above this
+  /// size it stops being something the page decides to do unprompted. The
+  /// stored catalog keeps serving, and Settings → the playlist → Refresh
+  /// remains the deliberate, user-chosen way to pull a fresh one.
+  static const _autoRefreshRowCeiling = 20000;
+
+  /// Whether a stale DB-backed catalog may refresh itself right now. Pure, so
+  /// the policy can be tested without standing up the page.
+  @visibleForTesting
+  static bool shouldAutoRevalidate({
+    required int channelCount,
+    required int ageMs,
+    required bool userRequested,
+    required bool interrupted,
+  }) {
+    if (ageMs <= _dbCatalogTtl.inMilliseconds) return false;
+    // Asking for this load explicitly overrides both guards below — they exist
+    // to stop the page choosing to do something expensive, not to refuse the
+    // user.
+    if (userRequested) return true;
+    if (channelCount >= _autoRefreshRowCeiling) return false;
+    return !interrupted;
+  }
+
+  /// Every heavy background job this catalog needs, run STRICTLY ONE AT A
+  /// TIME: pending migration, then numbering adoption, then an optional
+  /// refresh.
+  ///
+  /// Serialization is the point. Each stage is a whole-catalog job that scans
+  /// rows and takes the database write lock, and firing them independently
+  /// meant two workers grinding over the same 50k rows and contending for that
+  /// lock on the very first upgraded open — recreating the overlapping-heavy-
+  /// work condition all of this exists to remove. Ordering also saves real
+  /// work: migration numbers the rows in catalog order, so the adoption that
+  /// follows confirms those numbers instead of rewriting 50k of them.
+  Future<void> _runCatalogMaintenance(
+    IptvPlaylist playlist,
+    String contentType,
+    String cacheKey,
+    int ticket, {
+    required bool userRequested,
+  }) async {
+    // Let the page settle before taking the gate. Nothing on screen waits for
+    // any of this, and starting whole-catalog work while the list is still
+    // painting its first rows, resolving EPG and loading logos is what tips a
+    // weak box over. Deliberately OUTSIDE the gate: holding it through an idle
+    // wait would make a foreground load queue behind nothing happening.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (!mounted || ticket != _loadTicket) return;
+
+    // Process-wide, not just within this page: a previous page's workers keep
+    // running after it is gone, and two 50k scans at once is the exact
+    // condition being designed out. Whether each stage is still NEEDED is
+    // decided inside the gate, against the database as it is by then — a
+    // pipeline queued behind one that already did the work finds nothing to do
+    // and costs a few indexed reads.
+    return IptvCatalogDb.runExclusive(() async {
+      await _runPendingMigrations(cacheKey, ticket);
+      if (!mounted || ticket != _loadTicket) return;
+
+      final snap = IptvCatalogDb.snapshot(cacheKey);
+      if (snap == null || snap.channelCount == 0) return;
+
+      final needsNumbering =
+          snap.hasLiveChannels &&
+          !IptvCatalogDb.hasNumberingSource(playlist.id) &&
+          !IptvCatalogDb.adoptionRecentlyFailed(playlist.id);
+      if (needsNumbering) {
+        await _adoptNumbering(playlist, cacheKey, ticket);
+        if (!mounted || ticket != _loadTicket) return;
+      }
+
+      // Re-read staleness too: the catalog may have been refreshed by the
+      // pipeline this one queued behind.
+      final current = IptvCatalogDb.snapshot(cacheKey) ?? snap;
+      final age = DateTime.now().millisecondsSinceEpoch - current.ingestedAt;
+      if (!shouldAutoRevalidate(
+        channelCount: current.channelCount,
+        ageMs: age,
+        userRequested: userRequested,
+        interrupted: IptvCatalogDb.revalidateInterrupted(cacheKey),
+      )) {
+        return;
+      }
+      await _revalidateDbCatalog(playlist, contentType, cacheKey, ticket);
+    });
+  }
+
+  /// Apply any pending catalog-DB upgrade in the background, then show the
+  /// result. Never rethrows: a migration that fails leaves rows exactly as
+  /// they were (its transaction rolls back), and the page must keep working —
+  /// throwing here would strand it on the spinner forever.
+  Future<void> _runPendingMigrations(String cacheKey, int ticket) async {
+    try {
+      final applied = await IptvCatalogDb.ensureMigrations();
+      if (!applied || !mounted || ticket != _loadTicket) return;
+      // Rows presented before the backfill landed hold null numbers; re-fault
+      // them so the numbers show up. Skipped entirely when this load already
+      // presented after the migration, or moved on to another catalog.
+      if (_dbSnapshot?.catalogKey != cacheKey) return;
+      final fresh = IptvCatalogDb.snapshot(cacheKey);
+      if (fresh != null) _rebuildDbFacades(fresh);
+    } catch (e) {
+      debugPrint('IptvResultsView: catalog migration failed: $e');
+    }
+  }
+
+  /// Give a catalog stored before channel numbering existed its durable
+  /// numbering namespace, derived on a worker from the rows already in the
+  /// catalog DB.
+  ///
+  /// The path this replaces refetched the ENTIRE provider catalog just to
+  /// establish the namespace — on a 50k-channel panel a full download, 50k
+  /// materialized channels and a second 50k-row generation, re-run on every
+  /// visit until one refresh happened to succeed. Nothing about it needed the
+  /// network: the rows were already on disk.
+  ///
+  /// Only ever called from inside [_runCatalogMaintenance]'s exclusivity gate,
+  /// which also owns the refresh that may follow. It must not queue any
+  /// further maintenance itself — that would wait on a gate its own caller is
+  /// holding.
+  Future<void> _adoptNumbering(
+    IptvPlaylist playlist,
+    String cacheKey,
+    int ticket,
+  ) async {
+    try {
+      final corrected = await IptvCatalogDb.adoptNumbering(
+        catalogKey: cacheKey,
+        sourceKey: playlist.id,
+      );
+      if (!mounted || ticket != _loadTicket) return;
+      // Adoption normally confirms the numbers the v2 backfill already wrote,
+      // in which case the rows on screen are correct and rebuilding them would
+      // cost focus and scroll for nothing. Only a namespace that relinked to an
+      // archived provider actually moves numbers.
+      if (corrected > 0) {
+        final fresh = IptvCatalogDb.snapshot(cacheKey);
+        if (fresh != null) _rebuildDbFacades(fresh);
+      }
+    } catch (e) {
+      // Backed off inside adoptNumbering; the catalog is untouched and the
+      // rows keep their provisional numbers, so there is nothing to tell the
+      // user about.
+      debugPrint('IptvResultsView: numbering adoption failed: $e');
+    }
+  }
+
+  /// Re-fault the visible rows from the DB at the SAME generation — for a
+  /// change written in place (channel numbers), where [DbChannelList.repin]
+  /// does not apply because the generation never moved. Dropping the instance
+  /// cache is what forces the stale [IptvChannel] objects to be rebuilt.
+  void _rebuildDbFacades(CatalogSnapshot snap) {
+    _dbInstanceCache.clear();
+    _dbInstanceCacheKey = null;
+    setState(() {
+      _dbSnapshot = snap;
+      _allChannels = _makeDbList(snap);
+    });
+    _applyFilters();
+  }
+
   /// Background refresh for a DB-backed catalog. The fetch itself ingests a
   /// new generation on the worker; this decides what the UI does with it:
   /// identical content → re-pin the facades (zero disruption, the DB-mode
   /// equivalent of the identity reconcile), changed content → swap facades
   /// and run the same focus-repair the materialized path uses.
   Future<void> _revalidateDbCatalog(
+    IptvPlaylist playlist,
+    String contentType,
+    String cacheKey,
+    int ticket,
+  ) async {
+    IptvCatalogDb.markRevalidateStarted(cacheKey);
+    try {
+      await _revalidateDbCatalogInner(playlist, contentType, cacheKey, ticket);
+    } finally {
+      // Cleared on EVERY outcome this code can see, so a surviving marker
+      // means one thing only: the device died mid-refresh. See
+      // IptvCatalogDb.revalidateInterrupted.
+      if (IptvCatalogDb.isOpen) IptvCatalogDb.markRevalidateFinished(cacheKey);
+    }
+  }
+
+  Future<void> _revalidateDbCatalogInner(
     IptvPlaylist playlist,
     String contentType,
     String cacheKey,
@@ -1676,14 +1908,22 @@ class IptvResultsViewState extends State<IptvResultsView>
         }
       }
     }
-    service
-        .setM3uEpgContext(
-          playlistKey: playlist.id,
-          epgUrl: epgUrl,
-          channels: result.channels,
-          // DB-backed view: the guide stores its rows in iptv_catalog.db and
-          // binds URLs through the catalog instead of whole-playlist maps.
-          dbCatalogKey: _dbSnapshot?.catalogKey,
+    // Started in the ROOT zone on purpose. This is fire-and-forget work that
+    // takes the maintenance gate for its catalog scan and guide ingest, and
+    // one of its callers (the background refresh) is itself running inside
+    // that gate — inheriting the caller's zone would make the gate re-entrant
+    // for this long-lived job and let it run alongside the next queued one,
+    // which is the overlap being designed out.
+    Zone.root
+        .run(
+          () => service.setM3uEpgContext(
+            playlistKey: playlist.id,
+            epgUrl: epgUrl,
+            channels: result.channels,
+            // DB-backed view: the guide stores its rows in iptv_catalog.db and
+            // binds URLs through the catalog instead of whole-playlist maps.
+            dbCatalogKey: _dbSnapshot?.catalogKey,
+          ),
         )
         .then((status) {
           if (!mounted || ticket != _loadTicket) return;
@@ -3587,7 +3827,8 @@ class IptvResultsViewState extends State<IptvResultsView>
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => _loadPlaylist(_selectedPlaylist!),
+                onPressed: () =>
+                    _loadPlaylist(_selectedPlaylist!, userRequested: true),
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
               ),

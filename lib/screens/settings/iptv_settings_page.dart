@@ -604,37 +604,41 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // category) — without a snapshot the IPTV page falls back to a real
     // blocking fetch on next open, so a genuinely dead source finally shows
     // its error instead of ghost rows served from disk.
-    IptvParseResult result;
-    if (playlist.isXtreamCodes) {
-      XtreamCodesService.instance.clearCache(playlist.serverUrl);
-      await IptvCatalogCache.instance.removeXtream(
-        playlist.serverUrl!,
-        playlist.username ?? '',
-      );
-      await IptvCatalogDb.removeCatalogsByKeys(
-        IptvCatalogCache.xtreamKeys(
+    // Refetching a provider ingests its whole catalog, so it takes the same
+    // process-wide gate as every other whole-catalog job. The IPTV page may
+    // still be running maintenance for a catalog it presented before the user
+    // walked into settings, and on a low-end box those two must not overlap.
+    final result = await IptvCatalogDb.runExclusive(() async {
+      if (playlist.isXtreamCodes) {
+        XtreamCodesService.instance.clearCache(playlist.serverUrl);
+        await IptvCatalogCache.instance.removeXtream(
           playlist.serverUrl!,
           playlist.username ?? '',
-        ),
-      );
-      result = await XtreamCodesService.instance.fetchLiveStreams(
-        playlist.serverUrl!,
-        playlist.username!,
-        playlist.password!,
-        numberingSourceKey: playlist.id,
-      );
-    } else {
+        );
+        await IptvCatalogDb.removeCatalogsByKeys(
+          IptvCatalogCache.xtreamKeys(
+            playlist.serverUrl!,
+            playlist.username ?? '',
+          ),
+        );
+        return XtreamCodesService.instance.fetchLiveStreams(
+          playlist.serverUrl!,
+          playlist.username!,
+          playlist.password!,
+          numberingSourceKey: playlist.id,
+        );
+      }
       IptvService.instance.clearCache(playlist.url);
       await IptvCatalogCache.instance.removeUrl(playlist.url);
       await IptvCatalogDb.removeCatalogsByKeys(
         [IptvCatalogCache.keyForUrl(playlist.url)],
       );
-      result = await IptvService.instance.fetchPlaylist(
+      return IptvService.instance.fetchPlaylist(
         playlist.url,
         forceRefresh: true,
         numberingSourceKey: playlist.id,
       );
-    }
+    });
 
     if (!mounted) return;
     setState(() => _refreshingIds.remove(playlist.id));

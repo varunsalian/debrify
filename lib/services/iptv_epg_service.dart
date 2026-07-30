@@ -282,9 +282,20 @@ class IptvEpgService {
       // of it saturates the UI isolate for tens of seconds on a 50k-channel
       // playlist, which reads as DPAD lag right after the page opens. Only
       // the two filter sets come back.
-      final sets = await compute(
-        _buildEpgFilterSetsJob,
-        _EpgFilterSetsJob(dbPath: IptvCatalogDb.path, catalogKey: dbCatalogKey),
+      // Another whole-catalog scan — every live row, two unicode
+      // normalizations each — so it queues with migration, adoption, ingest
+      // and refresh instead of running a second 50k-scale worker alongside
+      // one of them. Only the SCAN is gated: the guide download below can
+      // take minutes and holding the gate through it would stall every other
+      // catalog job behind a network wait.
+      final sets = await IptvCatalogDb.runExclusive(
+        () => compute(
+          _buildEpgFilterSetsJob,
+          _EpgFilterSetsJob(
+            dbPath: IptvCatalogDb.path,
+            catalogKey: dbCatalogKey,
+          ),
+        ),
       );
       if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
       ids = sets.ids;

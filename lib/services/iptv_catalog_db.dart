@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -26,6 +27,46 @@ _CatalogDbPreparation _prepareCatalogDb(String path) {
 
 void _closeTransferredCatalogDb(int handleAddress) {
   _NativeSqliteApi.open().closeHandle(handleAddress);
+}
+
+/// Worker entry for catalog deletion. `args[0]` is the database path, the rest
+/// are catalog keys. Mass deletes belong off the UI isolate — see
+/// [IptvCatalogDb.removeCatalogsByKeys].
+void _removeCatalogsJob(List<String> args) {
+  final db = IptvCatalogDb._openConnection(args.first);
+  try {
+    IptvCatalogDb.removeCatalogsOn(db, args.skip(1));
+  } finally {
+    db.dispose();
+  }
+}
+
+/// Worker entry for [IptvCatalogDb.adoptNumbering] — a whole-catalog identity
+/// pass, so it never runs on the UI isolate. Returns the corrected row count.
+int _adoptNumberingJob(List<String> args) {
+  final db = IptvCatalogDb._openConnection(args[0]);
+  try {
+    return IptvCatalogDb.adoptNumberingFromCatalog(
+      db,
+      catalogKey: args[1],
+      sourceKey: args[2],
+    );
+  } finally {
+    db.dispose();
+  }
+}
+
+/// Worker entry for pending row-level migrations. Opens its OWN connection —
+/// the UI isolate's handle stays untouched, and WAL lets it keep serving reads
+/// from the pre-migration snapshot for the (now sub-second) duration of the
+/// upgrade. Returns the resulting schema version.
+int _migrateCatalogDb(String path) {
+  final db = IptvCatalogDb._openConnection(path);
+  try {
+    return IptvCatalogDb._runPendingMigrations(db);
+  } finally {
+    db.dispose();
+  }
 }
 
 class _CatalogDbPreparation {
@@ -144,13 +185,13 @@ class _NativeSqliteApi {
       for (final sql in IptvCatalogDb._schemaSql) {
         _execute(handle, sql);
       }
-      for (final sql in IptvCatalogDb._migrationSql) {
+      for (final sql in IptvCatalogDb._columnMigrationSql) {
         try {
           _execute(handle, sql);
         } catch (_) {
           // ALTER ADD COLUMN intentionally fails once an upgraded database
-          // already has the column. The following idempotent index statement
-          // still runs.
+          // already has the column — the only outcome that matters here is
+          // "the column exists".
         }
       }
       _execute(
@@ -338,11 +379,27 @@ class IptvCatalogDb {
       )
     ''',
   ];
-  static const _migrationSql = [
+  /// Metadata-only DDL: `ALTER TABLE ... ADD COLUMN` rewrites the schema
+  /// header and never touches a row, so its cost is independent of catalog
+  /// size and it can stay on the connection-preparation path. Everything that
+  /// reads or writes rows belongs in [_runPendingMigrations] instead.
+  static const _columnMigrationSql = [
     'ALTER TABLE channels ADD COLUMN channel_number INTEGER',
-    'CREATE INDEX IF NOT EXISTS idx_channels_number '
-        'ON channels(catalog_key, generation, channel_number)',
-    '''
+  ];
+
+  /// The v2 backfill: give every pre-numbering live row a provisional number
+  /// in catalog order.
+  ///
+  /// `UPDATE ... FROM` is load-bearing, not style. The obvious spelling —
+  /// `SET channel_number = (SELECT ... FROM numbered WHERE numbered.id =
+  /// channels.id)` — plans as a CORRELATED SCALAR SUBQUERY that re-scans the
+  /// whole materialized CTE once per updated row: quadratic, and measured at
+  /// 14 SECONDS for 50k channels on a fast desktop (minutes on the low-end TV
+  /// boxes that carry those playlists, which is what made opening the IPTV
+  /// page look like a hang). Joined against the CTE the same work is ~45ms.
+  /// Any rewrite here must keep `EXPLAIN QUERY PLAN` free of a correlated
+  /// subquery — iptv_catalog_db_test.dart asserts exactly that.
+  static const _numberBackfillSql = '''
       WITH numbered AS (
         SELECT id,
                ROW_NUMBER() OVER (
@@ -356,12 +413,21 @@ class IptvCatalogDb {
           END)
       )
       UPDATE channels
-      SET channel_number = (
-        SELECT assigned_number FROM numbered WHERE numbered.id = channels.id
-      )
-      WHERE id IN (SELECT id FROM numbered)
-    ''',
-  ];
+      SET channel_number = numbered.assigned_number
+      FROM numbered
+      WHERE numbered.id = channels.id
+    ''';
+
+  /// The backfill statement, so the test suite can assert its query plan.
+  @visibleForTesting
+  static String get debugNumberBackfillSql => _numberBackfillSql;
+
+  /// Built AFTER the backfill (inside the same transaction), never before it:
+  /// maintaining it across a 50k-row mass update costs ~50% more than one
+  /// linear build at the end, and writes an index page per row into the WAL.
+  static const _numberIndexSql =
+      'CREATE INDEX IF NOT EXISTS idx_channels_number '
+      'ON channels(catalog_key, generation, channel_number)';
 
   /// Tests point this at a temp directory; production resolves the app
   /// documents directory once in [open].
@@ -371,12 +437,18 @@ class IptvCatalogDb {
   static Database? _db;
   static String? _path;
   static Future<void>? _opening;
+  static Future<void>? _migrating;
 
   @visibleForTesting
   static String? debugLastPreparationIsolateName;
 
   @visibleForTesting
   static int debugPreparationCount = 0;
+
+  /// How many times [ensureMigrations] found work to do. Stays at its initial
+  /// value once a database is migrated — that is the property worth asserting.
+  @visibleForTesting
+  static int debugMigrationRunCount = 0;
 
   /// The resolved database path — worker isolates need it to open their own
   /// connection. Only valid after [open] has completed.
@@ -398,9 +470,118 @@ class IptvCatalogDb {
   /// connection to the already-prepared file afterwards; all subsequent reads
   /// stay synchronous because the paging facade faults tiny windows from build
   /// paths.
+  ///
+  /// Cost here is bounded and independent of channel count: only DDL runs.
+  /// Row-touching upgrades live in [ensureMigrations], which callers that need
+  /// migrated data await separately.
   static Future<void> open() {
     if (_db != null) return Future.value();
     return _opening ??= _open().whenComplete(() => _opening = null);
+  }
+
+  /// Applies any pending row-level schema migration, on a worker isolate.
+  ///
+  /// Free once applied — the gate is a single-page `PRAGMA user_version` read
+  /// on the already-open connection, so the steady state costs one synchronous
+  /// query and never spawns an isolate. Concurrent callers share one run.
+  ///
+  /// The migration is one transaction covering the backfill, the index build
+  /// AND the version stamp, all three of which SQLite rolls back together. A
+  /// device that dies mid-upgrade (which a 50k-channel box genuinely did)
+  /// therefore reopens on an untouched v1 database and simply retries — there
+  /// is no half-migrated state to detect or resume from.
+  /// Tail of the global heavy-work queue. Process-wide on purpose: see
+  /// [runExclusive].
+  static Future<void> _maintenanceQueue = Future<void>.value();
+
+  /// How many jobs [runExclusive] has admitted. Tests assert that overlapping
+  /// callers do not overlap.
+  @visibleForTesting
+  static int debugMaintenanceRunCount = 0;
+
+  /// Runs [job] with no other catalog maintenance running anywhere in the
+  /// process, queueing behind whatever is already in flight.
+  ///
+  /// Serializing inside one page was not enough. A page's in-flight workers
+  /// cannot be cancelled when it goes away, so leaving and reopening IPTV,
+  /// switching providers, or any second load would start a fresh pipeline
+  /// alongside the orphaned one — two whole-catalog scans grinding over the
+  /// same rows and contending for the write lock, which is the low-end-device
+  /// overload this whole effort exists to remove. [ensureMigrations] was
+  /// already globally shared through its own future; nothing else was.
+  ///
+  /// Re-entrant. A job that is already holding the gate runs nested work
+  /// inline instead of queueing behind a slot it owns, which would deadlock —
+  /// and nesting is easy to reach without noticing, since a coarse caller
+  /// (the settings refresh) legitimately contains finer-grained gated
+  /// operations (catalog deletion). Callers re-check their own preconditions
+  /// inside, so a second pipeline for work the first already finished costs a
+  /// couple of indexed reads instead of a duplicate scan.
+  static Future<T> runExclusive<T>(Future<T> Function() job) {
+    if (Zone.current[#iptvCatalogMaintenance] == true) return job();
+    final result = _maintenanceQueue.then((_) {
+      debugMaintenanceRunCount++;
+      return runZoned(job, zoneValues: {#iptvCatalogMaintenance: true});
+    });
+    // The queue must survive a failed job, and must not carry its error into
+    // the next one.
+    _maintenanceQueue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  /// Returns true when this call actually applied an upgrade — the caller uses
+  /// that to refresh rows it may have already rendered unnumbered.
+  static Future<bool> ensureMigrations() async {
+    await open();
+    if (_schemaVersionOf(_requireDb()) >= _schemaVersion) return false;
+    // Counted where the run is actually created, so concurrent callers that
+    // share one migration are one run, not several.
+    if (_migrating == null) debugMigrationRunCount++;
+    await (_migrating ??=
+        compute(
+          _migrateCatalogDb,
+          path,
+          debugLabel: 'iptv-catalog-db-migrate',
+        ).whenComplete(() => _migrating = null));
+    return true;
+  }
+
+  /// The applied-migration level. Deliberately `PRAGMA user_version` and not
+  /// the `meta` row: it lives in the database header (no table read), and it
+  /// is transactional, which is what makes the migration atomic.
+  static int _schemaVersionOf(Database db) {
+    final rows = db.select('PRAGMA user_version');
+    if (rows.isEmpty) return 0;
+    return (rows.first.values.first as int?) ?? 0;
+  }
+
+  /// Runs every migration the database has not applied yet. Safe to call on
+  /// any connection (UI, prepare worker, ingest worker) — a database already
+  /// at [_schemaVersion] returns after one header read.
+  static int _runPendingMigrations(Database db) {
+    final current = _schemaVersionOf(db);
+    if (current >= _schemaVersion) return current;
+
+    // The column may already be there (prepared by this build, or a v2
+    // database whose stamp predates version gating); all that matters is that
+    // the backfill below can write to it.
+    for (final sql in _columnMigrationSql) {
+      try {
+        db.execute(sql);
+      } catch (_) {}
+    }
+
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      db.execute(_numberBackfillSql);
+      db.execute(_numberIndexSql);
+      db.execute('PRAGMA user_version = $_schemaVersion');
+      db.execute('COMMIT');
+    } catch (_) {
+      db.execute('ROLLBACK');
+      rethrow;
+    }
+    return _schemaVersion;
   }
 
   static Future<void> _open() async {
@@ -444,8 +625,12 @@ class IptvCatalogDb {
     _db = null;
     _path = null;
     _opening = null;
+    _migrating = null;
     debugLastPreparationIsolateName = null;
     debugPreparationCount = 0;
+    debugMigrationRunCount = 0;
+    debugMaintenanceRunCount = 0;
+    _maintenanceQueue = Future<void>.value();
   }
 
   /// Shared connection setup — reader (UI) and writer (worker) sides must
@@ -472,7 +657,7 @@ class IptvCatalogDb {
     for (final sql in _schemaSql) {
       db.execute(sql);
     }
-    for (final sql in _migrationSql) {
+    for (final sql in _columnMigrationSql) {
       try {
         db.execute(sql);
       } catch (_) {
@@ -484,6 +669,10 @@ class IptvCatalogDb {
       "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
       ['$_schemaVersion'],
     );
+    // Deliberately NOT _runPendingMigrations: this runs before EVERY ingest,
+    // and an ordinary background refresh has no business carrying a one-time
+    // upgrade of unrelated catalogs. Schema shape is all ingest needs; the
+    // backfill is [ensureMigrations]' job, once, on its own worker.
   }
 
   // ── Ingest (worker isolate) ──────────────────────────────────────────────
@@ -641,22 +830,64 @@ class IptvCatalogDb {
     required String sourceKey,
     required List<IptvChannel> channels,
   }) {
-    final now = DateTime.now().millisecondsSinceEpoch;
     final identities = <int, String>{};
     final occurrences = <String, int>{};
     for (var i = 0; i < channels.length; i++) {
       final channel = channels[i];
       if (!channel.isLive) continue;
-      final tvgId = channel.tvgId?.trim();
-      final base = tvgId != null && tvgId.isNotEmpty
-          ? 'tvg:${_normalizeNumberIdentity(tvgId)}'
-          : 'name:${_normalizeNumberIdentity(channel.name)}'
-                '\u001fgroup:${_normalizeNumberIdentity(channel.group ?? '')}';
-      final occurrence = (occurrences[base] ?? 0) + 1;
-      occurrences[base] = occurrence;
-      identities[i] = '$base\u001f$occurrence';
+      identities[i] = _numberIdentity(
+        tvgId: channel.tvgId,
+        name: channel.name,
+        group: channel.group,
+        occurrences: occurrences,
+      );
     }
+    return _commitNumberAssignments(
+      db,
+      sourceKey: sourceKey,
+      identities: identities,
+    );
+  }
+
+  /// The identity a live row is numbered under: tvg-id when it has one, else
+  /// normalized name+group, plus a deterministic occurrence suffix so two rows
+  /// that look identical still receive distinct numbers.
+  ///
+  /// [occurrences] is the running per-base tally for ONE ordered pass and is
+  /// mutated here — callers must walk rows in catalog order sharing a single
+  /// map, or duplicate channels drift between passes.
+  ///
+  /// Shared verbatim by the ingest path and [adoptNumberingFromCatalog]: both
+  /// must derive the same identity from the same channel, or adopting a stored
+  /// catalog locally would hand out different numbers than the next provider
+  /// refresh does.
+  static String _numberIdentity({
+    required String? tvgId,
+    required String name,
+    required String? group,
+    required Map<String, int> occurrences,
+  }) {
+    final id = tvgId?.trim();
+    final base = id != null && id.isNotEmpty
+        ? 'tvg:${_normalizeNumberIdentity(id)}'
+        : 'name:${_normalizeNumberIdentity(name)}'
+              '\u001fgroup:${_normalizeNumberIdentity(group ?? '')}';
+    final occurrence = (occurrences[base] ?? 0) + 1;
+    occurrences[base] = occurrence;
+    return '$base\u001f$occurrence';
+  }
+
+  /// Resolves the provider's namespace and turns an ordered identity map into
+  /// durable numbers: identities already on record keep the number they hold,
+  /// new ones append. Keyed by whatever the caller keyed [identities] by —
+  /// channel index for ingest, row id for adoption.
+  static Map<K, int> _commitNumberAssignments<K>(
+    Database db, {
+    required String sourceKey,
+    required Map<K, String> identities,
+  }) {
     if (identities.isEmpty) return const {};
+    final now = DateTime.now().millisecondsSinceEpoch;
 
     String namespaceId;
     final alias = db.select(
@@ -710,7 +941,7 @@ class IptvCatalogDb {
       'ON CONFLICT(namespace_id, identity_key) DO UPDATE SET '
       'last_seen = excluded.last_seen',
     );
-    final result = <int, int>{};
+    final result = <K, int>{};
     try {
       for (final entry in identities.entries) {
         final number = existing[entry.value] ?? ++nextNumber;
@@ -727,6 +958,143 @@ class IptvCatalogDb {
       [sourceKey, identities.length, nextNumber, now, namespaceId],
     );
     return result;
+  }
+
+  /// Rows read per pass by [adoptNumberingFromCatalog]. Big enough that a 50k
+  /// catalog is ten queries, small enough that no pass materializes a
+  /// meaningful slice of the catalog.
+  static const _adoptionChunkSize = 5000;
+
+  /// Gives an ALREADY-STORED catalog a durable numbering namespace, built from
+  /// the rows in this database — no network, no provider fetch.
+  ///
+  /// This is what a catalog ingested before channel numbering existed needs.
+  /// The alternative it replaces was to refetch the entire provider catalog
+  /// purely to establish the alias: for a 50k-channel panel that meant a full
+  /// download and decode, 50k channel objects, a second 50k-row generation
+  /// held alongside the first, and a pile of WAL — repeated on every visit
+  /// until one refresh finally succeeded. Every input it needed was already
+  /// on disk.
+  ///
+  /// Walks the live rows of the served generation in catalog order, in
+  /// [_adoptionChunkSize] chunks, deriving each row's identity with the same
+  /// [_numberIdentity] the ingest path uses — so the numbers this hands out
+  /// are the numbers the next real refresh will confirm, not a placeholder set
+  /// that shifts under the user later.
+  ///
+  /// Memory, precisely — this is bounded, not constant. No catalog ROWS are
+  /// held: a chunk is dropped once read, and nothing here builds an
+  /// [IptvChannel]. The derived identity strings ARE held, because an ordered
+  /// identity map is what numbering needs and the occurrence tally has to span
+  /// the whole pass or duplicate channels would renumber. So it scales with
+  /// channel count, at a small fraction of the ~50k live channel objects the
+  /// provider refresh this replaces had to materialize.
+  /// iptv_catalog_db_test.dart measures the resident-set cost of a 50k pass
+  /// rather than trusting that description.
+  ///
+  /// One transaction: assignments, the alias and the row numbers commit
+  /// together or not at all, so an interrupted run leaves the catalog exactly
+  /// as unadopted as it was and the next open simply retries.
+  ///
+  /// Returns how many rows had their stored number corrected — 0 means the
+  /// provisional numbers were already right and the UI needs no rebuild.
+  /// Called on a WORKER isolate (see [_adoptNumberingJob]).
+  static int adoptNumberingFromCatalog(
+    Database db, {
+    required String catalogKey,
+    required String sourceKey,
+  }) {
+    final catalogRows = db.select(
+      'SELECT generation FROM catalogs WHERE catalog_key = ?',
+      [catalogKey],
+    );
+    if (catalogRows.isEmpty) return 0;
+    final generation = catalogRows.first['generation'] as int;
+
+    // Read phase, deliberately OUTSIDE any transaction. This is the long part
+    // (every live row, two unicode normalizations each), and holding the write
+    // lock across it would make anything else that writes wait on it — the UI
+    // isolate's own metadata writes among them, which block synchronously up
+    // to busy_timeout. WAL gives consistent reads here without a lock.
+    final identities = <int, String>{};
+    final occurrences = <String, int>{};
+    final page = db.prepare(
+      'SELECT id, name, grp, attributes_json '
+      'FROM channels WHERE catalog_key = ? AND generation = ? '
+      'AND $_liveSql ORDER BY position LIMIT ? OFFSET ?',
+    );
+    try {
+      for (var offset = 0; ; offset += _adoptionChunkSize) {
+        final rows = page.select([
+          catalogKey,
+          generation,
+          _adoptionChunkSize,
+          offset,
+        ]);
+        if (rows.isEmpty) break;
+        for (final row in rows) {
+          final id = row['id'] as int;
+          identities[id] = _numberIdentity(
+            tvgId: CatalogSnapshot._decodeStringMap(
+              row['attributes_json'],
+            )['tvg-id'],
+            name: row['name'] as String,
+            group: row['grp'] as String?,
+            occurrences: occurrences,
+          );
+        }
+        if (rows.length < _adoptionChunkSize) break;
+      }
+    } finally {
+      page.dispose();
+    }
+    if (identities.isEmpty) return 0;
+
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      // An ingest may have committed a new generation while the read ran, in
+      // which case these numbers describe rows that no longer exist. Drop the
+      // whole attempt rather than write them; the next visit adopts the
+      // generation that actually won.
+      final current = db.select(
+        'SELECT generation FROM catalogs WHERE catalog_key = ?',
+        [catalogKey],
+      );
+      if (current.isEmpty || current.first['generation'] as int != generation) {
+        db.execute('ROLLBACK');
+        return 0;
+      }
+
+      final numbers = _commitNumberAssignments(
+        db,
+        sourceKey: sourceKey,
+        identities: identities,
+      );
+
+      // Only rows whose stored number is actually wrong are rewritten, and the
+      // WHERE clause decides that rather than a 50k-entry map of the numbers
+      // read earlier. After the v2 backfill it is normally none of them: the
+      // backfill numbers live rows in catalog order and so does this, so they
+      // agree unless the namespace relinked to an archived provider.
+      var corrected = 0;
+      final update = db.prepare(
+        'UPDATE channels SET channel_number = ? WHERE id = ? AND '
+        '(channel_number IS NULL OR channel_number != ?)',
+      );
+      try {
+        for (final entry in numbers.entries) {
+          update.execute([entry.value, entry.key, entry.value]);
+          corrected += db.updatedRows;
+        }
+      } finally {
+        update.dispose();
+      }
+      db.execute('COMMIT');
+      return corrected;
+    } catch (_) {
+      db.execute('ROLLBACK');
+      rethrow;
+    }
   }
 
   /// Relinks only to an explicitly archived provider and only when the
@@ -1052,9 +1420,18 @@ class IptvCatalogDb {
   /// Settings edit/delete paths call this alongside the legacy snapshot
   /// cache invalidation; it opens the DB if this session hasn't yet (the
   /// user can delete a playlist without ever opening the IPTV page).
+  /// Deletes catalogs on a WORKER, behind the maintenance gate.
+  ///
+  /// Deleting a provider means deleting its channel rows, and for a 50k-channel
+  /// panel that is a mass delete — it froze the settings screen for as long as
+  /// it took, because it ran synchronously on the UI isolate. It is also
+  /// whole-catalog write work, so it queues with migration, adoption, ingest
+  /// and refresh rather than racing whatever the IPTV page left running.
   static Future<void> removeCatalogsByKeys(Iterable<String> keys) async {
+    final list = keys.toList(growable: false);
+    if (list.isEmpty) return;
     await open();
-    removeCatalogs(keys);
+    await runExclusive(() => compute(_removeCatalogsJob, [path, ...list]));
   }
 
   /// Marks a removed playlist's numbering namespace as eligible for a future
@@ -1074,12 +1451,136 @@ class IptvCatalogDb {
       'SELECT namespace_id FROM channel_number_aliases WHERE source_key = ?)',
       [now, sourceKey],
     );
+    clearAdoptionFailure(sourceKey);
   }
 
   /// Whether this saved playlist has committed its durable identity mapping.
+  /// How long a failed adoption is left alone. A failure is almost always
+  /// environmental (no disk, a locked database); retrying it on every single
+  /// visit would burn a whole-catalog pass each time for the same result.
+  static const _adoptionRetryBackoff = Duration(hours: 6);
+
+  static String _adoptionFailureKey(String sourceKey) =>
+      'numbering_adopt_failed:$sourceKey';
+
+  /// True when a recent adoption attempt for [sourceKey] failed and its
+  /// backoff has not expired. Synchronous single-row read — cheap enough for
+  /// the page-load path.
+  static bool adoptionRecentlyFailed(String sourceKey) {
+    final rows = _requireDb().select(
+      'SELECT value FROM meta WHERE key = ?',
+      [_adoptionFailureKey(sourceKey)],
+    );
+    if (rows.isEmpty) return false;
+    final at = int.tryParse(rows.first['value'] as String);
+    if (at == null) return false;
+    final age = DateTime.now().millisecondsSinceEpoch - at;
+    return age < _adoptionRetryBackoff.inMilliseconds;
+  }
+
+  /// Builds [sourceKey]'s numbering namespace from the stored rows of
+  /// [catalogKey], on a worker isolate. See [adoptNumberingFromCatalog].
+  ///
+  /// Returns the number of rows whose stored number changed, so the caller
+  /// knows whether the visible list needs rebuilding. Failures are recorded
+  /// for [adoptionRecentlyFailed] and rethrown.
+  static Future<int> adoptNumbering({
+    required String catalogKey,
+    required String sourceKey,
+  }) async {
+    await open();
+    try {
+      final corrected = await compute(_adoptNumberingJob, [
+        path,
+        catalogKey,
+        sourceKey,
+      ], debugLabel: 'iptv-catalog-adopt-numbering');
+      clearAdoptionFailure(sourceKey);
+      return corrected;
+    } catch (_) {
+      // Bookkeeping must never replace the failure it is recording: if the
+      // database is unusable enough to fail the adoption, this write can fail
+      // too, and throwing from a catch block would swallow the real cause.
+      try {
+        _requireDb().execute(
+          'INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)',
+          [
+            _adoptionFailureKey(sourceKey),
+            '${DateTime.now().millisecondsSinceEpoch}',
+          ],
+        );
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
+  /// How long an interrupted catalog refresh suppresses the next automatic
+  /// one. Long enough that a device which dies mid-refresh gets working page
+  /// opens instead of retrying the job that killed it; short enough that a
+  /// genuinely stale catalog still catches up on its own.
+  static const _revalidateRetryBackoff = Duration(hours: 6);
+
+  static String _revalidateStartedKey(String catalogKey) =>
+      'catalog_revalidate_started:$catalogKey';
+
+  /// Records that an automatic refresh of [catalogKey] is starting.
+  ///
+  /// Paired with [markRevalidateFinished], which the refresh calls on EVERY
+  /// outcome it can observe — success, failure, or being superseded. A marker
+  /// therefore survives exactly one situation: the process died mid-refresh.
+  /// That is the signal [revalidateInterrupted] reads.
+  static void markRevalidateStarted(String catalogKey) {
+    _requireDb().execute(
+      'INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)',
+      [
+        _revalidateStartedKey(catalogKey),
+        '${DateTime.now().millisecondsSinceEpoch}',
+      ],
+    );
+  }
+
+  static void markRevalidateFinished(String catalogKey) {
+    _requireDb().execute('DELETE FROM meta WHERE key = ?', [
+      _revalidateStartedKey(catalogKey),
+    ]);
+  }
+
+  /// True when the last automatic refresh of [catalogKey] never finished and
+  /// its backoff has not expired.
+  ///
+  /// This is the crash-loop breaker. Refreshing a 50k-channel catalog is the
+  /// heaviest thing the page does — a full download, decode and ingest — and
+  /// a device that cannot survive it would otherwise be handed the same job on
+  /// every single visit, because a stale catalog stays stale until a refresh
+  /// completes. Backing off leaves the saved catalog on screen and working,
+  /// with the refresh chip still there for anyone who wants to force it.
+  static bool revalidateInterrupted(String catalogKey) {
+    final rows = _requireDb().select(
+      'SELECT value FROM meta WHERE key = ?',
+      [_revalidateStartedKey(catalogKey)],
+    );
+    if (rows.isEmpty) return false;
+    final at = int.tryParse(rows.first['value'] as String);
+    if (at == null) return false;
+    final age = DateTime.now().millisecondsSinceEpoch - at;
+    return age < _revalidateRetryBackoff.inMilliseconds;
+  }
+
+  /// Drops any recorded adoption failure for [sourceKey], so the next visit
+  /// retries immediately. Called on success and when a provider is archived —
+  /// a playlist that was deleted and re-added must not inherit the backoff of
+  /// the entry it replaced.
+  static void clearAdoptionFailure(String sourceKey) {
+    _requireDb().execute('DELETE FROM meta WHERE key = ?', [
+      _adoptionFailureKey(sourceKey),
+    ]);
+  }
+
+  /// Whether [sourceKey] already owns a durable numbering namespace.
+  ///
   /// Existing v1 catalog rows receive provisional position-based numbers
   /// during migration; this distinguishes those from a fully persistent v2
-  /// assignment so the view can backfill in the background.
+  /// assignment, so the view knows to adopt one in the background.
   static bool hasNumberingSource(String sourceKey) {
     final db = _requireDb();
     return db.select(
@@ -1090,8 +1591,10 @@ class IptvCatalogDb {
 
   /// Drops the stored catalogs for [keys] (settings edit/delete paths — the
   /// same call sites that invalidate the legacy snapshot cache).
-  static void removeCatalogs(Iterable<String> keys) {
-    final db = _requireDb();
+  /// Synchronous deletion against the caller's own connection. Worker-side
+  /// entry point for [removeCatalogsByKeys]; UI callers must use that instead,
+  /// so a 50k-row delete never lands on this isolate.
+  static void removeCatalogsOn(Database db, Iterable<String> keys) {
     db.execute('BEGIN');
     try {
       for (final key in keys) {
