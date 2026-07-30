@@ -10021,43 +10021,78 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     VoidCallback? onSeeAll,
   }) {
     final tv = widget.isTelevision;
+    final compact = !tv && MediaQuery.sizeOf(context).width < 480;
     return Padding(
       // Tighter vertically on TV so the current row's header + a peek of the
       // next row fit under the hero on short-canvas panels.
-      padding: EdgeInsets.fromLTRB(24, tv ? 14 : 22, 24, tv ? 10 : 12),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 16 : 24,
+        tv ? 14 : 22,
+        compact ? 16 : 24,
+        tv ? 10 : 12,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Text.rich(
-              TextSpan(
-                text: title,
-                children: [
-                  if (tag != null)
-                    TextSpan(
-                      text: '  ·  $tag',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.34),
-                        fontWeight: FontWeight.w600,
+            child: compact
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.92),
+                        ),
                       ),
+                      if (tag != null)
+                        Text(
+                          tag,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white.withValues(alpha: 0.38),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                    ],
+                  )
+                : Text.rich(
+                    TextSpan(
+                      text: title,
+                      children: [
+                        if (tag != null)
+                          TextSpan(
+                            text: '  ·  $tag',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.34),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                      ],
                     ),
-                ],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              // Poppins for the rail titles too, so headings share one display
-              // face; loosened from the old -0.2 tracking for the airier look.
-              // TV runs them quieter (15px) — the hero carries the weight, the
-              // row title just labels the shelf (Nuvio's row grammar).
-              style: GoogleFonts.poppins(
-                fontSize: tv ? 15 : 17,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0,
-                color: Colors.white.withValues(alpha: 0.92),
-              ),
-            ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    // Poppins for the rail titles too, so headings share one display
+                    // face; loosened from the old -0.2 tracking for the airier look.
+                    // TV runs them quieter (15px) — the hero carries the weight, the
+                    // row title just labels the shelf (Nuvio's row grammar).
+                    style: GoogleFonts.poppins(
+                      fontSize: tv ? 15 : 17,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                      color: Colors.white.withValues(alpha: 0.92),
+                    ),
+                  ),
           ),
-          if (onSeeAll != null && !tv) _SeeAllLink(onTap: onSeeAll),
+          if (onSeeAll != null && !tv)
+            _SeeAllLink(onTap: onSeeAll, compact: compact),
         ],
       ),
     );
@@ -13035,7 +13070,8 @@ class _StremioCardState extends State<_StremioCard> {
 /// posters. TV rails are chrome-free and paginate on scroll instead.
 class _SeeAllLink extends StatefulWidget {
   final VoidCallback onTap;
-  const _SeeAllLink({required this.onTap});
+  final bool compact;
+  const _SeeAllLink({required this.onTap, this.compact = false});
 
   @override
   State<_SeeAllLink> createState() => _SeeAllLinkState();
@@ -13066,7 +13102,7 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'See All',
+                widget.compact ? 'All' : 'See All',
                 style: TextStyle(
                   color: color,
                   fontSize: 12.5,
