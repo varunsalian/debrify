@@ -27,6 +27,7 @@ import '../services/debrid_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/pikpak_tv_service.dart';
 import '../services/storage_service.dart';
+import '../services/video_player_launcher.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../models/premiumize_file.dart';
@@ -59,6 +60,7 @@ import 'debrify_tv/widgets/tv_focusable_card.dart';
 import 'debrify_tv/dialogs/cached_loading_dialog.dart';
 import 'debrify_tv/dialogs/channel_creation_dialog.dart';
 import 'debrify_tv/dialogs/community_channels_dialog.dart';
+import 'debrify_tv/dialogs/external_player_notice_dialog.dart';
 import 'debrify_tv/dialogs/import_channels_dialog.dart';
 
 const int _randomStartPercentDefault = 20;
@@ -4560,6 +4562,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         )
                       : null;
 
+                  // External player set as the default: hand this one title
+                  // over and stop the search — nothing rotates past it.
+                  if (await _handOffToExternalPlayer(
+                    firstUrl,
+                    firstTitleResolved,
+                  )) {
+                    break; // Exit the search loop
+                  }
+
                   // Try to launch on Android TV first (early launch path)
                   final launchedOnTv = await _launchRealDebridOnAndroidTv(
                     firstStream: first,
@@ -4900,6 +4911,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _channels.isNotEmpty
           ? _androidTvChannelMetadata(activeChannelId: activeChannelId)
           : null;
+
+      if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {
+        return;
+      }
 
       // Try to launch on Android TV first
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
@@ -5284,6 +5299,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _closeProgressDialog();
       if (!mounted) return;
 
+      if (await _handOffToExternalPlayer(
+        first['url'] ?? '',
+        first['title'] ?? 'Debrify TV',
+      )) {
+        return;
+      }
+
       final launchedOnTv = await _launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
@@ -5555,6 +5577,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       _closeProgressDialog();
       if (!mounted) return;
+
+      if (await _handOffToExternalPlayer(
+        first['url'] ?? '',
+        first['title'] ?? 'Debrify TV',
+      )) {
+        return;
+      }
 
       // Try Android TV native player first
       final launchedOnTv = await _launchPikPakOnAndroidTv(
@@ -5850,6 +5879,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _startPrefetch();
       _closeProgressDialog();
 
+      if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {
+        return;
+      }
+
       // Try to launch on Android TV first (for cached flow)
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
         firstStream: first,
@@ -6093,6 +6126,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _activeProvider = _providerAllDebrid;
       _startPrefetch();
       _closeProgressDialog();
+
+      if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {
+        return;
+      }
 
       // Try to launch on Android TV first (reuses the generic direct-URL
       // launcher; AllDebrid streams are ready URLs just like Real-Debrid's).
@@ -7126,6 +7163,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _closeProgressDialog();
 
+      if (await _handOffToExternalPlayer(
+        first['url'] ?? '',
+        first['title'] ?? 'Debrify TV',
+      )) {
+        return;
+      }
+
       final launchedOnTv = await _launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
@@ -7287,6 +7331,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (!mounted) return;
       _closeProgressDialog();
+
+      if (await _handOffToExternalPlayer(
+        first['url'] ?? '',
+        first['title'] ?? 'Debrify TV',
+      )) {
+        return;
+      }
 
       // Try Android TV native player first
       final launchedOnTv = await _launchPikPakOnAndroidTv(
@@ -7535,6 +7586,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             setState(() {
               _status = 'Playing: ${next.name}';
             });
+
+            if (await _handOffToExternalPlayer(videoUrl, next.name)) {
+              break;
+            }
 
             // Hide auto-launch overlay before launching player
             MainPageBridge.notifyPlayerLaunching();
@@ -9986,6 +10041,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _closeProgressDialog();
 
+      if (await _handOffToExternalPlayer(
+        first['url'] ?? '',
+        first['title'] ?? 'Debrify TV',
+      )) {
+        return;
+      }
+
       final launchedOnTv = await _launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPremiumizeNext,
@@ -10262,6 +10324,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _closeProgressDialog();
       if (!mounted) return;
 
+      if (await _handOffToExternalPlayer(
+        first['url'] ?? '',
+        first['title'] ?? 'Debrify TV',
+      )) {
+        return;
+      }
+
       final launchedOnTv = await _launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPremiumizeNext,
@@ -10527,6 +10596,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _activeProvider = _providerAllDebrid;
       _startPrefetch();
 
+      if (await _handOffToExternalPlayer(first['url'] ?? '', firstTitle)) {
+        return;
+      }
+
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
@@ -10712,6 +10785,60 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return error.message;
     }
     return error.toString().replaceFirst('Exception: ', '').trim();
+  }
+
+  // ===================== External player hand-off =====================
+
+  /// Hands one resolved stream to the user's external player when that is
+  /// their default, after warning them what external playback costs here.
+  ///
+  /// Returns true when the caller must abandon its own launch — either the
+  /// stream is now playing in another app, or the user backed out of the
+  /// warning. False means "carry on unchanged": the in-app player is the
+  /// default, or the external launch failed and the built-in player is the
+  /// fallback (same policy as [VideoPlayerLauncher.push]).
+  ///
+  /// Channel rotation dies with the hand-off — nothing outside Debrify can
+  /// call back into `requestMagicNext` — so on any outcome that ends the flow
+  /// this also stops the prefetcher that exists purely to feed it. A failed
+  /// launch leaves the prefetcher running, because the in-app player that
+  /// picks the flow back up still wants it.
+  Future<bool> _handOffToExternalPlayer(String url, String title) async {
+    if (url.isEmpty || !mounted) return false;
+    if (!await VideoPlayerLauncher.isExternalPlayerDefault()) return false;
+    if (!mounted) return false;
+
+    _closeProgressDialog();
+    // The home-screen auto-launch overlay draws above routes, so drop it
+    // before the notice or the notice appears underneath it. Only the overlay
+    // — firing notifyPlayerLaunching here would stop other screens' trailers
+    // for a launch the user may still decline.
+    MainPageBridge.hideAutoLaunchOverlay?.call();
+    if (!mounted) return false;
+
+    // Backing out must not silently fall through to the in-app player — that
+    // is the very thing the user chose against — so a decline reports
+    // "handled" too and every caller stops. Deliberately without touching
+    // _watchCancelled: that flag is only reset by the quick-play and cached-
+    // dialog entry points, so setting it here would leave channel plays
+    // stuck-cancelled on the next attempt.
+    if (!await ExternalPlayerNoticeDialog.confirm(context)) {
+      await _stopPrefetch();
+      return true;
+    }
+    if (!mounted) return true;
+
+    final launched = await VideoPlayerLauncher.launchExternalIfConfigured(
+      context,
+      videoUrl: url,
+      title: title.trim().isEmpty ? 'Debrify TV' : title.trim(),
+    );
+    if (launched) {
+      _launchedPlayer = true;
+      await _stopPrefetch();
+      return true;
+    }
+    return false;
   }
 
   // ===================== Prefetcher =====================

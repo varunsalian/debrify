@@ -73,6 +73,12 @@ class StorageService {
       'debrify_tv_filter_qualities';
   static const String _debrifyTvFilterSizesKey = 'debrify_tv_filter_sizes';
 
+  // "You're using an external player" notice shown before Debrify TV hands a
+  // stream to another app. Dismissible forever, because the trade-off it
+  // explains (one title, no channel rotation) never changes.
+  static const String _debrifyTvExternalNoticeDismissedKey =
+      'debrify_tv_external_notice_dismissed';
+
   // Home page default keys
   static const String _homeDefaultSourceTypeKey = 'home_default_source_type';
   static const String _homeDefaultAddonUrlKey = 'home_default_addon_url';
@@ -4679,6 +4685,17 @@ class StorageService {
   static Future<void> setDebrifyTvFilterSizes(List<String> sizes) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_debrifyTvFilterSizesKey, jsonEncode(sizes));
+  }
+
+  /// Whether the user dismissed the Debrify TV external-player notice forever.
+  static Future<bool> getDebrifyTvExternalNoticeDismissed() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_debrifyTvExternalNoticeDismissedKey) ?? false;
+  }
+
+  static Future<void> setDebrifyTvExternalNoticeDismissed(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_debrifyTvExternalNoticeDismissedKey, value);
   }
 
   // Default Torrent Provider methods

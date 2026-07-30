@@ -941,6 +941,58 @@ class VideoPlayerLauncher {
     }
   }
 
+  /// Whether playback should leave the app entirely, per the user's default
+  /// player setting. Screens that build their own player route ask this before
+  /// spending work on in-app-only setup.
+  static Future<bool> isExternalPlayerDefault() async {
+    final mode = await StorageService.getDefaultPlayerMode();
+    return mode == 'external' || (mode == 'deovr' && Platform.isAndroid);
+  }
+
+  /// Hand a single already-resolved stream to the user's configured external
+  /// player, if — and only if — they set one as their default.
+  ///
+  /// This is the entry point for flows that build their own player route
+  /// instead of going through [push] (Debrify TV, which drives channel
+  /// rotation from its own screen state). Returns false when the default is
+  /// the in-app player, when the platform launch fails, or when the caller
+  /// passes an empty URL — the caller then continues to its own player exactly
+  /// as before, so this is always safe to call first.
+  ///
+  /// Only the URL and title travel to the other app: playlists, resume state
+  /// and "play next" callbacks are meaningless once playback leaves Debrify.
+  static Future<bool> launchExternalIfConfigured(
+    BuildContext context, {
+    required String videoUrl,
+    required String title,
+  }) async {
+    if (videoUrl.isEmpty) return false;
+
+    final mode = await StorageService.getDefaultPlayerMode();
+    final bool wantsDeoVR = mode == 'deovr' && Platform.isAndroid;
+    if (mode != 'external' && !wantsDeoVR) return false;
+    if (!context.mounted) return false;
+
+    final args = VideoPlayerLaunchArgs(videoUrl: videoUrl, title: title);
+
+    // Same pre-launch beat the in-app path uses: drop the auto-launch overlay
+    // before another activity comes to the front.
+    MainPageBridge.notifyPlayerLaunching();
+
+    final launched = wantsDeoVR
+        ? await _launchWithDeoVR(context, args)
+        : await _launchWithExternalPlayer(context, args);
+
+    if (!launched) return false;
+
+    // Control returns to Flutter without a route ever being pushed, so
+    // RouteAware can't tell screens when playback ended — same signal the
+    // launcher's own external path arms. See [push].
+    _notifyOnReturnFromExternalActivity();
+    MainPageBridge.notifyExternalPlayerLaunched();
+    return true;
+  }
+
   /// Launch video with external player based on platform
   /// Returns true if successfully launched, false if should fall back to in-app player
   static Future<bool> _launchWithExternalPlayer(
