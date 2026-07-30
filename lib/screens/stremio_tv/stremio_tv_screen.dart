@@ -18,6 +18,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_service.dart';
+import '../../services/torbox_torrent_control_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/pikpak_tv_service.dart';
 import '../../services/premiumize_service.dart';
@@ -27,6 +28,7 @@ import '../../utils/file_utils.dart';
 import '../../utils/rd_blocked_filter.dart';
 import '../../utils/formatters.dart';
 import '../../utils/stremio_episode_selector.dart';
+import '../../utils/stremio_tv_debrid_fallback.dart';
 import '../../utils/series_parser.dart';
 import '../../utils/torrent_coverage_detector.dart';
 import '../../services/torrent_service.dart';
@@ -59,8 +61,6 @@ class StremioTvScreen extends StatefulWidget {
 }
 
 class _StremioTvScreenState extends State<StremioTvScreen> {
-  static const int _stremioTvNextMaxResolveAttempts = 4;
-
   final StremioTvService _service = StremioTvService.instance;
 
   List<StremioTvChannel> _channels = [];
@@ -655,6 +655,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           .toList(),
     );
     final maxTorrentAttempts = torrentStreams.length.clamp(0, 20);
+    final attemptedTorrents = torrentStreams
+        .take(maxTorrentAttempts)
+        .toList();
+    final loadAutoTorboxCachedHashes =
+        StremioTvDebridFallback.memoizeAsync<Set<String>>(
+      () => _loadTorboxCachedHashes(
+        attemptedTorrents,
+        isCancelled: () =>
+            !mounted || _playGeneration != myGeneration,
+      ),
+    );
+
     for (int i = 0; i < maxTorrentAttempts; i++) {
       if (!mounted || _playGeneration != myGeneration) return null;
       final url = await _resolveTorrentUrl(
@@ -663,6 +675,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         _debridProvider,
         season: season,
         episode: episode,
+        isCancelled: () =>
+            !mounted || _playGeneration != myGeneration,
+        loadAutoTorboxCachedHashes: _debridProvider == 'auto'
+            ? loadAutoTorboxCachedHashes
+            : null,
       );
       if (url != null && url.isNotEmpty) {
         final index = playableSources.indexWhere(
@@ -924,7 +941,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     try {
       final isMovie = item.type.toLowerCase() == 'movie';
-      var results = await TorrentService.searchByImdbWithStremio(
+      final results = await TorrentService.searchByImdbWithStremio(
         item.effectiveImdbId ?? item.id,
         isMovie: isMovie,
         season: season,
@@ -933,32 +950,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         stremioTimeout: const Duration(seconds: 7),
         engineTimeout: const Duration(seconds: 10),
       );
-
-      // For series, retry with episode 1 if the picked episode returns no streams
-      if (!isMovie && episode != null && episode != 1) {
-        final torrents = results['torrents'] as List<Torrent>? ?? [];
-        if (torrents.isEmpty) {
-          debugPrint(
-            'StremioTV: No streams for S${season}E$episode, retrying with E1',
-          );
-          final retryResults = await TorrentService.searchByImdbWithStremio(
-            item.effectiveImdbId ?? item.id,
-            isMovie: false,
-            season: season,
-            episode: 1,
-            contentType: item.type,
-            stremioTimeout: const Duration(seconds: 7),
-            engineTimeout: const Duration(seconds: 10),
-          );
-          final retryTorrents =
-              retryResults['torrents'] as List<Torrent>? ?? [];
-          if (retryTorrents.isNotEmpty) {
-            results = retryResults;
-            episode = 1;
-            _currentPlayTitle = '${item.name} (S${season}E1)';
-          }
-        }
-      }
 
       if (!mounted || _playGeneration != myGeneration) {
         overlay.dismiss();
@@ -1114,26 +1105,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       // Try to find the best stream to auto-play
       if (_preferredQuality != 'auto') {
         debugPrint('StremioTV: Preferred quality: $_preferredQuality');
-      }
-
-      // Filter out RD-blocked torrents when Real-Debrid will be used
-      final bool willUseRd = _debridProvider == 'realdebrid' ||
-          (_debridProvider == 'auto' &&
-              _availableProviders.any((p) => p.key == 'realdebrid'));
-      if (_rdSkipBlockedTorrents && willUseRd) {
-        final filtered = playableSources
-            .where(
-              (t) =>
-                  t.streamType != StreamType.torrent ||
-                  !isRdBlockedTorrent(t.name),
-            )
-            .toList();
-        if (filtered.isNotEmpty) {
-          debugPrint(
-            'StremioTV: Filtered ${playableSources.length - filtered.length} RD-blocked torrents',
-          );
-          playableSources = filtered;
-        }
       }
 
       String? firstPlayableUrl;
@@ -1322,7 +1293,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     // Search streams (torrent engines + Stremio addons)
     final isMovie = item.type.toLowerCase() == 'movie';
-    var results = await TorrentService.searchByImdbWithStremio(
+    final results = await TorrentService.searchByImdbWithStremio(
       item.effectiveImdbId ?? item.id,
       isMovie: isMovie,
       season: season,
@@ -1330,29 +1301,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       contentType: item.type,
       stremioTimeout: const Duration(seconds: 7),
     );
-
-    // E1 fallback for series
-    if (!isMovie && episode != null && episode != 1) {
-      final torrents = results['torrents'] as List<Torrent>? ?? [];
-      if (torrents.isEmpty) {
-        debugPrint(
-          'StremioTV guide: No streams for S${season}E$episode, retrying E1',
-        );
-        final retryResults = await TorrentService.searchByImdbWithStremio(
-          item.effectiveImdbId ?? item.id,
-          isMovie: false,
-          season: season,
-          episode: 1,
-          contentType: item.type,
-          stremioTimeout: const Duration(seconds: 7),
-          engineTimeout: const Duration(seconds: 10),
-        );
-        if ((retryResults['torrents'] as List<Torrent>? ?? []).isNotEmpty) {
-          results = retryResults;
-          episode = 1;
-        }
-      }
-    }
 
     final torrents = results['torrents'] as List<Torrent>? ?? [];
     if (torrents.isEmpty) return null;
@@ -1730,38 +1678,22 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   /// Creates a provider for the player Next button in Stremio TV mode.
   ///
-  /// It advances through future guide slots, and keeps a small per-channel
-  /// cursor so repeated Next presses do not keep replaying the same next slot
-  /// before the wall-clock schedule catches up.
+  /// It advances one guide slot at a time and keeps a small per-channel cursor.
+  /// An unavailable slot is reported to the player instead of silently skipping
+  /// over another series and making the channel appear to contain one title.
+  /// The failed slot is still remembered, so another explicit Next press moves
+  /// on rather than retrying it forever.
   Future<Map<String, dynamic>?> Function(String) _createNextProvider() {
     return (String channelId) async {
       final ch = _channels.firstWhereOrNull((c) => c.id == channelId);
       if (ch == null) return null;
 
-      final firstSlotOffset = _nextSlotOffsetFor(ch);
-      var lastAttemptedOffset = firstSlotOffset;
-      for (
-        var attempt = 0;
-        attempt < _stremioTvNextMaxResolveAttempts;
-        attempt++
-      ) {
-        final slotOffset = firstSlotOffset + attempt;
-        lastAttemptedOffset = slotOffset;
-        final result = await _resolveChannelPlayback(
-          ch,
-          slotOffset: slotOffset,
-        );
-        if (result == null) {
-          debugPrint(
-            'StremioTV next: slot offset $slotOffset unavailable, trying next guide slot.',
-          );
-          continue;
-        }
-        if (attempt > 0) {
-          debugPrint(
-            'StremioTV next: skipped $attempt unavailable guide slot(s).',
-          );
-        }
+      final slotOffset = _nextSlotOffsetFor(ch);
+      final result = await _resolveChannelPlayback(
+        ch,
+        slotOffset: slotOffset,
+      );
+      if (result != null) {
         _rememberPlaybackCursor(
           channelId,
           baseSlotStartMs: result.baseSlotStartMs,
@@ -1770,6 +1702,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return _playbackResultToMap(channelId, result);
       }
 
+      debugPrint(
+        'StremioTV next: slot offset $slotOffset unavailable; '
+        'not skipping it silently.',
+      );
       final current = _service.getNowPlaying(
         ch,
         rotationMinutes: _rotationFor(ch),
@@ -1779,7 +1715,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         _rememberPlaybackCursor(
           channelId,
           baseSlotStartMs: current.slotStart.millisecondsSinceEpoch,
-          slotOffset: lastAttemptedOffset,
+          slotOffset: slotOffset,
         );
       }
       return null;
@@ -1793,99 +1729,132 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     String debridProvider, {
     int? season,
     int? episode,
+    bool Function()? isCancelled,
+    Future<Set<String>> Function()? loadAutoTorboxCachedHashes,
+  }) => StremioTvDebridFallback.resolve<String>(
+    selected: debridProvider,
+    isCancelled: isCancelled,
+    canAttempt: (provider) async {
+      switch (provider) {
+        case 'realdebrid':
+          return !_rdSkipBlockedTorrents ||
+              !isRdBlockedTorrent(torrent.name);
+        case 'torbox':
+          if (debridProvider != 'auto') return true;
+          final cachedHashes = loadAutoTorboxCachedHashes != null
+              ? await loadAutoTorboxCachedHashes()
+              : await _loadTorboxCachedHashes(
+                  <Torrent>[torrent],
+                  isCancelled: isCancelled,
+                );
+          return cachedHashes.contains(
+            torrent.infohash.trim().toLowerCase(),
+          );
+        case 'premiumize':
+          return StorageService.getPremiumizeIntegrationEnabled();
+        case 'alldebrid':
+          return StorageService.getAllDebridIntegrationEnabled();
+        default:
+          return true;
+      }
+    },
+    attempt: (provider) async {
+      switch (provider) {
+        case 'realdebrid':
+          final apiKey = await StorageService.getApiKey();
+          if (apiKey == null || apiKey.isEmpty) return null;
+          return _resolveViaRealDebrid(
+            torrent,
+            item,
+            apiKey,
+            season: season,
+            episode: episode,
+          );
+        case 'torbox':
+          final apiKey = await StorageService.getTorboxApiKey();
+          if (apiKey == null || apiKey.isEmpty) return null;
+          return _resolveViaTorbox(
+            torrent,
+            item,
+            apiKey,
+            season: season,
+            episode: episode,
+            isCancelled: isCancelled,
+          );
+        case 'pikpak':
+          if (!await StorageService.getPikPakEnabled()) return null;
+          return _resolveViaPikPak(
+            torrent,
+            item,
+            season: season,
+            episode: episode,
+            isCancelled: isCancelled,
+          );
+        case 'premiumize':
+          final apiKey = await StorageService.getPremiumizeApiKey();
+          if (apiKey == null || apiKey.isEmpty) return null;
+          return _resolveViaPremiumize(
+            torrent,
+            item,
+            apiKey,
+            season: season,
+            episode: episode,
+          );
+        case 'alldebrid':
+          final apiKey = await StorageService.getAllDebridApiKey();
+          if (apiKey == null || apiKey.isEmpty) return null;
+          return _resolveViaAllDebrid(
+            torrent,
+            item,
+            apiKey,
+            season: season,
+            episode: episode,
+          );
+      }
+      return null;
+    },
+  );
+
+  Future<Set<String>> _loadTorboxCachedHashes(
+    Iterable<Torrent> torrents, {
+    bool Function()? isCancelled,
   }) async {
-    // Try the selected provider first
-    if (debridProvider == 'realdebrid') {
-      final rdKey = await StorageService.getApiKey();
-      if (rdKey != null && rdKey.isNotEmpty) {
-        return _resolveViaRealDebrid(
-          torrent,
-          item,
-          rdKey,
-          season: season,
-          episode: episode,
-        );
-      }
-    } else if (debridProvider == 'torbox') {
-      final tbKey = await StorageService.getTorboxApiKey();
-      if (tbKey != null && tbKey.isNotEmpty) {
-        return _resolveViaTorbox(
-          torrent,
-          item,
-          tbKey,
-          season: season,
-          episode: episode,
-        );
-      }
-    } else if (debridProvider == 'pikpak') {
-      final pikpakEnabled = await StorageService.getPikPakEnabled();
-      if (pikpakEnabled) {
-        return _resolveViaPikPak(
-          torrent,
-          item,
-          season: season,
-          episode: episode,
-        );
-      }
-    } else if (debridProvider == 'premiumize') {
-      final pmKey = await StorageService.getPremiumizeApiKey();
-      if (pmKey != null && pmKey.isNotEmpty) {
-        return _resolveViaPremiumize(
-          torrent,
-          item,
-          pmKey,
-          season: season,
-          episode: episode,
-        );
-      }
-    } else if (debridProvider == 'alldebrid') {
-      final adKey = await StorageService.getAllDebridApiKey();
-      if (adKey != null && adKey.isNotEmpty) {
-        return _resolveViaAllDebrid(
-          torrent,
-          item,
-          adKey,
-          season: season,
-          episode: episode,
-        );
-      }
+    if (isCancelled?.call() ?? false) return const <String>{};
+
+    final apiKey = await StorageService.getTorboxApiKey();
+    if (apiKey == null ||
+        apiKey.isEmpty ||
+        (isCancelled?.call() ?? false)) {
+      return const <String>{};
     }
 
-    // Auto fallback
-    final rdKey = await StorageService.getApiKey();
-    if (rdKey != null && rdKey.isNotEmpty) {
-      return _resolveViaRealDebrid(
-        torrent,
-        item,
-        rdKey,
-        season: season,
-        episode: episode,
-      );
-    }
-    final tbKey = await StorageService.getTorboxApiKey();
-    if (tbKey != null && tbKey.isNotEmpty) {
-      return _resolveViaTorbox(
-        torrent,
-        item,
-        tbKey,
-        season: season,
-        episode: episode,
-      );
-    }
-    final pikpakEnabled = await StorageService.getPikPakEnabled();
-    if (pikpakEnabled) {
-      return _resolveViaPikPak(torrent, item, season: season, episode: episode);
-    }
-    final pmKey = await StorageService.getPremiumizeApiKey();
-    if (pmKey != null && pmKey.isNotEmpty) {
-      return _resolveViaPremiumize(torrent, item, pmKey, season: season, episode: episode);
-    }
-    final adKey = await StorageService.getAllDebridApiKey();
-    if (adKey != null && adKey.isNotEmpty) {
-      return _resolveViaAllDebrid(torrent, item, adKey, season: season, episode: episode);
-    }
+    final infoHashes = torrents
+        .map((torrent) => torrent.infohash.trim().toLowerCase())
+        .where((hash) => hash.isNotEmpty)
+        .toSet()
+        .toList();
+    if (infoHashes.isEmpty) return const <String>{};
 
-    return null;
+    try {
+      final cachedHashes = await TorboxService.checkCachedTorrents(
+        apiKey: apiKey,
+        infoHashes: infoHashes,
+      );
+      if (isCancelled?.call() ?? false) return const <String>{};
+
+      final normalized = cachedHashes
+          .map((hash) => hash.trim().toLowerCase())
+          .where((hash) => hash.isNotEmpty)
+          .toSet();
+      debugPrint(
+        'StremioTV: Auto TorBox cache check found ${normalized.length} '
+        'of ${infoHashes.length} candidate(s)',
+      );
+      return normalized;
+    } catch (e) {
+      debugPrint('StremioTV: TorBox cache check failed: $e');
+      return const <String>{};
+    }
   }
 
   Future<String?> _resolveViaRealDebrid(
@@ -1932,16 +1901,25 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         final candidateNames = selectedVideoFiles.map((file) {
           return (file['path'] as String?) ?? (file['name'] as String?) ?? '';
         }).toList();
-        final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+        final targetIndex = StremioEpisodeSelector
+            .findEpisodeFileIndexWithSingleFileFallback(
           candidateNames,
+          sourceName: torrent.name,
           season: season,
           episode: episode,
         );
         if (targetIndex == null || targetIndex >= selectedVideoLinks.length) {
           debugPrint(
             'StremioTV: RD could not match S${season}E$episode in ${torrent.name}, '
-            'falling back to default file selection',
+            'rejecting source',
           );
+          final torrentId = result['torrentId']?.toString();
+          if (torrentId != null && torrentId.isNotEmpty) {
+            try {
+              await DebridService.deleteTorrent(apiKey, torrentId);
+            } catch (_) {}
+          }
+          return null;
         } else {
           linkToUnrestrict = selectedVideoLinks[targetIndex];
         }
@@ -2000,16 +1978,22 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final isSeries = item.type.toLowerCase() == 'series';
       if (isSeries && season != null && episode != null) {
         final candidateNames = videoFiles.map((f) => f.path).toList();
-        final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+        final targetIndex = StremioEpisodeSelector
+            .findEpisodeFileIndexWithSingleFileFallback(
           candidateNames,
+          sourceName: torrent.name,
           season: season,
           episode: episode,
         );
         if (targetIndex == null || targetIndex >= videoFiles.length) {
           debugPrint(
             'StremioTV: AllDebrid could not match S${season}E$episode in '
-            '${torrent.name}, falling back to default file selection',
+            '${torrent.name}, rejecting source',
           );
+          try {
+            await AllDebridService.deleteMagnet(apiKey, result.magnetId);
+          } catch (_) {}
+          return null;
         } else {
           targetLink = videoFiles[targetIndex].link;
         }
@@ -2037,7 +2021,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     String apiKey, {
     int? season,
     int? episode,
+    bool Function()? isCancelled,
   }) async {
+    int? createdTorrentId;
+    var keepTorrent = false;
     try {
       final magnet =
           'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
@@ -2046,20 +2033,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         magnet: magnet,
       );
       final data = result['data'];
-      final torrentId = data is Map
+      final rawTorrentId = data is Map
           ? (data['torrent_id'] ?? data['id'])
           : (result['torrent_id'] ?? result['id']);
 
-      if (torrentId == null) return null;
+      createdTorrentId = rawTorrentId is int
+          ? rawTorrentId
+          : int.tryParse(rawTorrentId?.toString() ?? '');
+      if (createdTorrentId == null) return null;
 
       await Future.delayed(const Duration(seconds: 3));
+      if (isCancelled?.call() ?? false) return null;
 
       final torrentInfo = await TorboxService.getTorrentById(
         apiKey,
-        torrentId is int ? torrentId : int.parse(torrentId.toString()),
+        createdTorrentId,
       );
 
-      if (torrentInfo == null) return null;
+      if (torrentInfo == null || (isCancelled?.call() ?? false)) return null;
 
       final allFiles = torrentInfo.files;
       final videoFiles = allFiles
@@ -2081,16 +2072,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         final candidateNames = files
             .map((f) => f.absolutePath ?? f.name)
             .toList();
-        final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+        final targetIndex = StremioEpisodeSelector
+            .findEpisodeFileIndexWithSingleFileFallback(
           candidateNames,
+          sourceName: torrent.name,
           season: season,
           episode: episode,
         );
         if (targetIndex == null || targetIndex >= files.length) {
           debugPrint(
             'StremioTV: Torbox could not match S${season}E$episode in ${torrent.name}, '
-            'falling back to legacy file selection',
+            'rejecting source',
           );
+          return null;
         } else {
           targetFile = files[targetIndex];
         }
@@ -2107,16 +2101,32 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         }
       }
 
-      return await TorboxService.requestFileDownloadLink(
+      final streamUrl = await TorboxService.requestFileDownloadLink(
         apiKey: apiKey,
-        torrentId: torrentId is int
-            ? torrentId
-            : int.parse(torrentId.toString()),
+        torrentId: createdTorrentId,
         fileId: targetFile.id,
       );
+      if (streamUrl.isEmpty || (isCancelled?.call() ?? false)) return null;
+
+      keepTorrent = true;
+      return streamUrl;
     } catch (e) {
       debugPrint('StremioTV: Torbox resolve error: $e');
       return null;
+    } finally {
+      if (createdTorrentId != null && !keepTorrent) {
+        try {
+          await TorboxTorrentControlService.deleteTorrent(
+            apiKey: apiKey,
+            torrentId: createdTorrentId,
+          ).timeout(const Duration(seconds: 10));
+        } catch (e) {
+          debugPrint(
+            'StremioTV: Failed to delete rejected TorBox torrent '
+            '$createdTorrentId: $e',
+          );
+        }
+      }
     }
   }
 
@@ -2125,7 +2135,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     StremioMeta item, {
     int? season,
     int? episode,
+    bool Function()? isCancelled,
   }) async {
+    Map<String, dynamic>? preparedForCleanup;
+    var keepPreparedItem = false;
     try {
       final prepared = await PikPakTvService.instance.prepareTorrent(
         infohash: torrent.infohash.trim().toLowerCase(),
@@ -2133,13 +2146,37 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
 
       if (prepared == null) return null;
+      preparedForCleanup = prepared;
+      if (isCancelled?.call() ?? false) return null;
 
       String? streamUrl = prepared['url'] as String?;
 
       final allVideoFiles = prepared['allVideoFiles'] as List<dynamic>?;
+      final isSeries = item.type.toLowerCase() == 'series';
+      if (isSeries &&
+          season != null &&
+          episode != null &&
+          (allVideoFiles == null || allVideoFiles.isEmpty)) {
+        final directNames = <String>[
+          if ((prepared['title'] as String?)?.trim().isNotEmpty == true)
+            (prepared['title'] as String).trim(),
+          torrent.name,
+        ];
+        final directMatch = StremioEpisodeSelector.namesContainEpisode(
+          directNames,
+          season: season,
+          episode: episode,
+        );
+        if (!directMatch) {
+          debugPrint(
+            'StremioTV: PikPak single file could not verify '
+            'S${season}E$episode in ${torrent.name}, rejecting source',
+          );
+          return null;
+        }
+      }
       if (allVideoFiles != null && allVideoFiles.isNotEmpty) {
         Map<String, dynamic>? targetFile;
-        final isSeries = item.type.toLowerCase() == 'series';
         if (isSeries && season != null && episode != null) {
           final candidateNames = allVideoFiles.map((file) {
             if (file is! Map<String, dynamic>) return '';
@@ -2147,16 +2184,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 (file['name'] as String?) ??
                 '';
           }).toList();
-          final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+          final targetIndex = StremioEpisodeSelector
+              .findEpisodeFileIndexWithSingleFileFallback(
             candidateNames,
+            sourceName: torrent.name,
             season: season,
             episode: episode,
           );
           if (targetIndex == null || targetIndex >= allVideoFiles.length) {
             debugPrint(
               'StremioTV: PikPak could not match S${season}E$episode in ${torrent.name}, '
-              'falling back to prepared default file',
+              'rejecting source',
             );
+            return null;
           } else {
             final file = allVideoFiles[targetIndex];
             if (file is Map<String, dynamic>) {
@@ -2178,21 +2218,50 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
         if (targetFile != null) {
           final targetFileId = targetFile['id'] as String?;
-          if (targetFileId != null && targetFileId.isNotEmpty) {
-            final api = PikPakApiService.instance;
-            final fileData = await api.getFileDetails(targetFileId);
-            final url = api.getStreamingUrl(fileData);
-            if (url != null && url.isNotEmpty) {
-              streamUrl = url;
-            }
-          }
+          if (targetFileId == null || targetFileId.isEmpty) return null;
+
+          final api = PikPakApiService.instance;
+          final fileData = await api.getFileDetails(targetFileId);
+          final url = api.getStreamingUrl(fileData);
+          if (url == null || url.isEmpty) return null;
+          streamUrl = url;
+        } else if (isSeries && season != null && episode != null) {
+          return null;
         }
       }
 
+      if (streamUrl == null ||
+          streamUrl.isEmpty ||
+          (isCancelled?.call() ?? false)) {
+        return null;
+      }
+
+      keepPreparedItem = true;
       return streamUrl;
     } catch (e) {
       debugPrint('StremioTV: PikPak resolve error: $e');
       return null;
+    } finally {
+      if (preparedForCleanup != null && !keepPreparedItem) {
+        await _trashRejectedPikPakItem(preparedForCleanup);
+      }
+    }
+  }
+
+  Future<void> _trashRejectedPikPakItem(
+    Map<String, dynamic> prepared,
+  ) async {
+    final rootId = StremioTvDebridFallback.pikPakCleanupRootId(prepared);
+    if (rootId == null) return;
+
+    try {
+      await PikPakApiService.instance
+          .batchTrashFiles(<String>[rootId])
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint(
+        'StremioTV: Failed to trash rejected PikPak item $rootId: $e',
+      );
     }
   }
 
@@ -2217,15 +2286,23 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       PremiumizeFile? targetFile;
       final isSeries = item.type.toLowerCase() == 'series';
-      if (isSeries && season != null && episode != null && candidates.length > 1) {
+      if (isSeries && season != null && episode != null) {
         final candidateNames = candidates.map((f) => f.path).toList();
-        final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+        final targetIndex = StremioEpisodeSelector
+            .findEpisodeFileIndexWithSingleFileFallback(
           candidateNames,
+          sourceName: torrent.name,
           season: season,
           episode: episode,
         );
         if (targetIndex != null && targetIndex < candidates.length) {
           targetFile = candidates[targetIndex];
+        } else {
+          debugPrint(
+            'StremioTV: Premiumize could not match S${season}E$episode in '
+            '${torrent.name}, rejecting source',
+          );
+          return null;
         }
       }
       targetFile ??= candidates.length > 1

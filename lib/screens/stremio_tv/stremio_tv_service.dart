@@ -6,9 +6,10 @@ import 'package:http/http.dart' as http;
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
-import '../../services/imdb_lookup_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import '../../services/tvmaze_service.dart';
+import '../../utils/stremio_tv_episode_picker.dart';
 
 /// Service for Stremio TV — channel discovery, time-based rotation, and item loading.
 ///
@@ -487,8 +488,8 @@ class StremioTvService {
   /// Strategy:
   /// 1. If the source addon has a `meta` resource, fetch `/meta/series/{id}.json`
   ///    and pick an episode from the videos array (season > 0) using DJB2 hash.
-  /// 2. Fallback: call IMDbbot to get season list, pick a season via DJB2,
-  ///    then an episode 1-5 via DJB2. If streams fail, caller can retry with episode 1.
+  /// 2. Fallback: resolve the IMDb ID through TVMaze and pick from its real,
+  ///    aired episode list.
   ///
   /// Returns `({int season, int episode})` or null if resolution fails entirely.
   Future<({int season, int episode})?> resolveRandomEpisode({
@@ -508,10 +509,12 @@ class StremioTvService {
       if (result != null) return result;
     }
 
-    // Fallback: IMDbbot
+    // Local/custom channels often come from a stream-only addon and therefore
+    // have no metadata endpoint. Resolve their IMDb ID through TVMaze rather
+    // than guessing E1-E5; the old guess created a tiny permanent repeat pool.
     final imdbId = item.effectiveImdbId;
     if (imdbId != null) {
-      return _resolveViaImdbBot(imdbId, seed);
+      return _resolveViaTvMaze(imdbId, seed);
     }
 
     return null;
@@ -582,76 +585,54 @@ class StremioTvService {
       final videos = meta['videos'] as List<dynamic>?;
       if (videos == null || videos.isEmpty) return null;
 
-      // Filter to actual episodes (season > 0) that have aired
-      final episodes = videos.where((v) {
-        if (v is! Map<String, dynamic>) return false;
-        final s = v['season'];
-        final seasonNum = s is int ? s : (s is num ? s.toInt() : null);
-        if (seasonNum == null || seasonNum <= 0) return false;
-        return true;
-      }).toList();
-
-      if (episodes.isEmpty) return null;
-
-      // Pick a deterministic episode using DJB2 hash
-      final hash = _djb2('episode:$seed');
-      final picked = episodes[hash % episodes.length] as Map<String, dynamic>;
-      final seasonRaw = picked['season'];
-      final season = seasonRaw is int ? seasonRaw : (seasonRaw as num).toInt();
-      final episodeRaw = picked['number'] ?? picked['episode'];
-      final episode = episodeRaw is int
-          ? episodeRaw
-          : (episodeRaw is num ? episodeRaw.toInt() : 1);
+      final picked = StremioTvEpisodePicker.pick(videos, seed: seed);
+      if (picked == null) return null;
 
       debugPrint(
-        'StremioTvService: Resolved episode via addon meta: S${season}E$episode',
+        'StremioTvService: Resolved episode via addon meta: '
+        'S${picked.season}E${picked.episode}',
       );
-      return (season: season, episode: episode);
+      return picked;
     } catch (e) {
       debugPrint('StremioTvService: Addon meta fetch failed: $e');
       return null;
     }
   }
 
-  /// Fallback: resolve an episode via IMDbbot.
-  /// Gets season list, picks a season via DJB2, then episode 1-5 via DJB2.
-  Future<({int season, int episode})?> _resolveViaImdbBot(
+  /// Resolve an exact IMDb match through TVMaze, then pick from the complete
+  /// aired episode list. Returning null is preferable to inventing an episode:
+  /// the caller can report/skip an unavailable slot without replaying E1.
+  Future<({int season, int episode})?> _resolveViaTvMaze(
     String imdbId,
     String seed,
   ) async {
     try {
-      final details = await ImdbLookupService.getTitleDetails(
+      final show = await TVMazeService.lookupByImdbId(
         imdbId,
-      ).timeout(const Duration(seconds: 10));
-      final seasons =
-          details['main']?['episodes']?['seasons'] as List<dynamic>?;
-      if (seasons == null || seasons.isEmpty) return null;
+      ).timeout(const Duration(seconds: 15));
+      final showIdRaw = show?['id'];
+      final showId = showIdRaw is int
+          ? showIdRaw
+          : (showIdRaw is num ? showIdRaw.toInt() : null);
+      if (showId == null) return null;
 
-      // Extract season numbers, filter out season 0 (specials)
-      final seasonNumbers = seasons
-          .map((s) {
-            if (s is Map) return s['number'] as int?;
-            if (s is int) return s;
-            return null;
-          })
-          .whereType<int>()
-          .where((s) => s > 0)
-          .toList();
-
-      if (seasonNumbers.isEmpty) return null;
-
-      // Deterministic pick using DJB2
-      final seasonHash = _djb2('season:$seed');
-      final season = seasonNumbers[seasonHash % seasonNumbers.length];
-      final episodeHash = _djb2('episode:$seed');
-      final episode = (episodeHash % 5) + 1; // 1-5
+      final episodes = await TVMazeService.getEpisodes(
+        showId,
+      ).timeout(const Duration(seconds: 20));
+      final picked = StremioTvEpisodePicker.pick(
+        episodes,
+        seed: seed,
+        requireAirDate: true,
+      );
+      if (picked == null) return null;
 
       debugPrint(
-        'StremioTvService: Resolved episode via IMDbbot: S${season}E$episode',
+        'StremioTvService: Resolved episode via TVMaze: '
+        'S${picked.season}E${picked.episode}',
       );
-      return (season: season, episode: episode);
+      return picked;
     } catch (e) {
-      debugPrint('StremioTvService: IMDbbot fallback failed: $e');
+      debugPrint('StremioTvService: TVMaze fallback failed: $e');
       return null;
     }
   }

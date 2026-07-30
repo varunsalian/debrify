@@ -37,6 +37,50 @@ class StremioEpisodeSelector {
     return null;
   }
 
+  /// Whether any supplied direct-file or torrent name identifies the requested
+  /// episode. Used when a provider returns one playable file without exposing a
+  /// folder manifest (notably PikPak single-file torrents).
+  static bool namesContainEpisode(
+    Iterable<String> names, {
+    required int season,
+    required int episode,
+  }) {
+    return findEpisodeFileIndex(
+          names.where((name) => name.trim().isNotEmpty).toList(),
+          season: season,
+          episode: episode,
+        ) !=
+        null;
+  }
+
+  /// Finds the requested episode in a provider manifest. A generic inner
+  /// filename is accepted only when the manifest contains exactly one file and
+  /// the source/torrent name itself identifies the requested episode.
+  static int? findEpisodeFileIndexWithSingleFileFallback(
+    List<String> filenames, {
+    required String sourceName,
+    required int season,
+    required int episode,
+  }) {
+    final targetIndex = findEpisodeFileIndex(
+      filenames,
+      season: season,
+      episode: episode,
+    );
+    if (targetIndex != null) return targetIndex;
+
+    if (filenames.length == 1 &&
+        namesContainEpisode(
+          <String>[sourceName],
+          season: season,
+          episode: episode,
+        )) {
+      return 0;
+    }
+
+    return null;
+  }
+
   static int findLargestFileIndex(List<int?> sizes) {
     int largestIndex = 0;
     int largestSize = -1;
