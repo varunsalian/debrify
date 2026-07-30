@@ -33,6 +33,7 @@ import 'screens/stremio_tv/stremio_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
+import 'services/iptv_catalog_db.dart';
 import 'services/storage_service.dart';
 import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
@@ -164,12 +165,36 @@ Future<void> main() async {
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
+  // Prepare the paged IPTV catalog while the user is on the startup/home
+  // experience. The expensive file open and schema work run on a worker
+  // isolate after first paint; opening IPTV later shares this future or finds
+  // the DB ready.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_prewarmIptvCatalogDb());
+  });
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     windowManager.waitUntilReadyToShow().then((_) async {
       await windowManager.show();
       await windowManager.focus();
     });
+  }
+}
+
+Future<void> _prewarmIptvCatalogDb() async {
+  if (kIsWeb) return;
+  try {
+    if (!await StorageService.getIptvDbCatalogEnabled()) return;
+    // DB mode defaults on, but most users never configure IPTV. Do not create
+    // a database or compete with Home startup IO unless a stored source could
+    // actually use the paged catalog.
+    if ((await StorageService.getIptvPlaylists()).isEmpty) return;
+    await IptvCatalogDb.open();
+  } catch (e) {
+    // Prewarming is an optimization. The IPTV page retries through the same
+    // open path and owns the user-visible error/loading state if it still
+    // cannot initialize.
+    debugPrint('IPTV catalog prewarm failed: $e');
   }
 }
 

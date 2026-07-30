@@ -1,11 +1,190 @@
 import 'dart:convert';
+import 'dart:ffi';
+import 'dart:isolate';
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../models/iptv_playlist.dart';
+
+/// Worker entry for cold catalog initialization. The native handle is opened
+/// with FULLMUTEX because ownership moves to Flutter's isolate after this job;
+/// no Dart [Database] wrapper is created here, so no worker finalizer can close
+/// the transferred handle when the isolate exits.
+_CatalogDbPreparation _prepareCatalogDb(String path) {
+  final api = _NativeSqliteApi.open();
+  final handleAddress = api.openPrepared(path);
+  return _CatalogDbPreparation(
+    handleAddress: handleAddress,
+    isolateName: Isolate.current.debugName,
+  );
+}
+
+void _closeTransferredCatalogDb(int handleAddress) {
+  _NativeSqliteApi.open().closeHandle(handleAddress);
+}
+
+class _CatalogDbPreparation {
+  const _CatalogDbPreparation({
+    required this.handleAddress,
+    required this.isolateName,
+  });
+
+  final int handleAddress;
+  final String? isolateName;
+}
+
+typedef _SqliteOpenNative =
+    Int32 Function(Pointer<Utf8>, Pointer<Pointer<Void>>, Int32, Pointer<Utf8>);
+typedef _SqliteOpenDart =
+    int Function(Pointer<Utf8>, Pointer<Pointer<Void>>, int, Pointer<Utf8>);
+typedef _SqliteExecNative =
+    Int32 Function(
+      Pointer<Void>,
+      Pointer<Utf8>,
+      Pointer<Void>,
+      Pointer<Void>,
+      Pointer<Pointer<Utf8>>,
+    );
+typedef _SqliteExecDart =
+    int Function(
+      Pointer<Void>,
+      Pointer<Utf8>,
+      Pointer<Void>,
+      Pointer<Void>,
+      Pointer<Pointer<Utf8>>,
+    );
+typedef _SqliteCloseNative = Int32 Function(Pointer<Void>);
+typedef _SqliteCloseDart = int Function(Pointer<Void>);
+typedef _SqliteFreeNative = Void Function(Pointer<Void>);
+typedef _SqliteFreeDart = void Function(Pointer<Void>);
+typedef _SqliteErrmsgNative = Pointer<Utf8> Function(Pointer<Void>);
+typedef _SqliteErrmsgDart = Pointer<Utf8> Function(Pointer<Void>);
+typedef _SqliteExtendedResultsNative = Int32 Function(Pointer<Void>, Int32);
+typedef _SqliteExtendedResultsDart = int Function(Pointer<Void>, int);
+
+/// Minimal native API used only to create a connection on a worker and
+/// transfer its ownership. Normal queries continue through package:sqlite3's
+/// safe Dart wrapper after [sqlite3.fromPointer] adopts this handle.
+class _NativeSqliteApi {
+  _NativeSqliteApi._(DynamicLibrary library)
+    : _open = library
+          .lookup<NativeFunction<_SqliteOpenNative>>('sqlite3_open_v2')
+          .asFunction(),
+      _exec = library
+          .lookup<NativeFunction<_SqliteExecNative>>('sqlite3_exec')
+          .asFunction(),
+      _close = library
+          .lookup<NativeFunction<_SqliteCloseNative>>('sqlite3_close_v2')
+          .asFunction(),
+      _free = library
+          .lookup<NativeFunction<_SqliteFreeNative>>('sqlite3_free')
+          .asFunction(),
+      _errmsg = library
+          .lookup<NativeFunction<_SqliteErrmsgNative>>('sqlite3_errmsg')
+          .asFunction(),
+      _extendedResults = library
+          .lookup<NativeFunction<_SqliteExtendedResultsNative>>(
+            'sqlite3_extended_result_codes',
+          )
+          .asFunction();
+
+  factory _NativeSqliteApi.open() =>
+      _NativeSqliteApi._(sqlite_open.open.openSqlite());
+
+  // https://sqlite.org/c3ref/c_open_autoproxy.html
+  static const _openReadWrite = 0x00000002;
+  static const _openCreate = 0x00000004;
+  static const _openFullMutex = 0x00010000;
+  static const _ok = 0;
+
+  final _SqliteOpenDart _open;
+  final _SqliteExecDart _exec;
+  final _SqliteCloseDart _close;
+  final _SqliteFreeDart _free;
+  final _SqliteErrmsgDart _errmsg;
+  final _SqliteExtendedResultsDart _extendedResults;
+
+  int openPrepared(String path) {
+    final pathPtr = path.toNativeUtf8();
+    final out = calloc<Pointer<Void>>();
+    Pointer<Void> handle = nullptr;
+    var transferred = false;
+    try {
+      final result = _open(
+        pathPtr,
+        out,
+        _openReadWrite | _openCreate | _openFullMutex,
+        nullptr,
+      );
+      handle = out.value;
+      if (result != _ok || handle == nullptr) {
+        final message = handle == nullptr
+            ? 'SQLite returned code $result without a database handle'
+            : _errmsg(handle).toDartString();
+        throw StateError('Could not open IPTV catalog database: $message');
+      }
+      _extendedResults(handle, 1);
+
+      for (final sql in IptvCatalogDb._connectionSetupSql) {
+        _execute(handle, sql);
+      }
+      for (final sql in IptvCatalogDb._defensiveCleanupSql) {
+        try {
+          _execute(handle, sql);
+        } catch (_) {
+          // A malformed leftover must not prevent the clean schema from
+          // opening, matching the previous _createSchema behavior.
+        }
+      }
+      for (final sql in IptvCatalogDb._schemaSql) {
+        _execute(handle, sql);
+      }
+      _execute(
+        handle,
+        "INSERT OR REPLACE INTO meta(key, value) VALUES "
+        "('schema_version', '${IptvCatalogDb._schemaVersion}')",
+      );
+
+      transferred = true;
+      return handle.address;
+    } finally {
+      calloc.free(pathPtr);
+      calloc.free(out);
+      if (!transferred && handle != nullptr) {
+        _close(handle);
+      }
+    }
+  }
+
+  void closeHandle(int address) {
+    if (address == 0) return;
+    _close(Pointer<Void>.fromAddress(address));
+  }
+
+  void _execute(Pointer<Void> handle, String sql) {
+    final sqlPtr = sql.toNativeUtf8();
+    final errorOut = calloc<Pointer<Utf8>>();
+    try {
+      final result = _exec(handle, sqlPtr, nullptr, nullptr, errorOut);
+      if (result == _ok) return;
+      final error = errorOut.value;
+      final message = error == nullptr
+          ? _errmsg(handle).toDartString()
+          : error.toDartString();
+      throw StateError('IPTV catalog SQL failed ($result): $message');
+    } finally {
+      final error = errorOut.value;
+      if (error != nullptr) _free(error.cast());
+      calloc.free(errorOut);
+      calloc.free(sqlPtr);
+    }
+  }
+}
 
 /// The IPTV catalog store: every channel of every loaded catalog as rows in
 /// `iptv_catalog.db`, so the UI can page/search/count with SQL instead of
@@ -39,78 +218,24 @@ class IptvCatalogDb {
 
   static const _dbFileName = 'iptv_catalog.db';
   static const _schemaVersion = 1;
-
-  /// Tests point this at a temp directory; production resolves the app
-  /// documents directory once in [open].
-  @visibleForTesting
-  static String? debugDirectoryOverride;
-
-  static Database? _db;
-  static String? _path;
-
-  /// The resolved database path — worker isolates need it to open their own
-  /// connection. Only valid after [open] has completed.
-  static String get path {
-    final resolved = _path;
-    if (resolved == null) {
-      throw StateError('IptvCatalogDb.open() has not completed yet');
-    }
-    return resolved;
-  }
-
-  static bool get isOpen => _db != null;
-
-  /// Opens (and on first run creates) the catalog database. Idempotent.
-  /// Must complete on the UI isolate before any read; after that every read
-  /// is synchronous.
-  static Future<void> open() async {
-    if (_db != null) return;
-    final dir =
-        debugDirectoryOverride ??
-        (await getApplicationDocumentsDirectory()).path;
-    final path = p.join(dir, _dbFileName);
-    final db = _openConnection(path);
-    _createSchema(db);
-    _db = db;
-    _path = path;
-  }
-
-  @visibleForTesting
-  static void debugClose() {
-    _db?.dispose();
-    _db = null;
-    _path = null;
-  }
-
-  /// Shared connection setup — reader (UI) and writer (worker) sides must
-  /// agree on WAL and busy behavior or one of them fails under contention.
-  static Database _openConnection(String path) {
-    final db = sqlite3.open(path);
-    db.execute('PRAGMA journal_mode=WAL');
-    db.execute('PRAGMA synchronous=NORMAL');
-    db.execute('PRAGMA busy_timeout=5000');
-    return db;
-  }
-
-  static void _createSchema(Database db) {
-    // Defensive cleanup: a previous build shipped an FTS5 `channels_fts` index
-    // (plus these triggers) that crashed on devices whose bundled SQLite lacks
-    // the trigram tokenizer. Drop any leftovers so their triggers can't fire on
-    // ingest and break catalog writes. Wrapped so a missing or corrupt object
-    // can never abort schema setup; a clean database no-ops through it.
-    try {
-      db.execute('DROP TRIGGER IF EXISTS channels_fts_ai');
-      db.execute('DROP TRIGGER IF EXISTS channels_fts_ad');
-      db.execute('DROP TABLE IF EXISTS channels_fts');
-    } catch (_) {}
-
-    db.execute('''
+  static const _connectionSetupSql = [
+    'PRAGMA journal_mode=WAL',
+    'PRAGMA synchronous=NORMAL',
+    'PRAGMA busy_timeout=5000',
+  ];
+  static const _defensiveCleanupSql = [
+    'DROP TRIGGER IF EXISTS channels_fts_ai',
+    'DROP TRIGGER IF EXISTS channels_fts_ad',
+    'DROP TABLE IF EXISTS channels_fts',
+  ];
+  static const _schemaSql = [
+    '''
       CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       )
-    ''');
-    db.execute('''
+    ''',
+    '''
       CREATE TABLE IF NOT EXISTS catalogs (
         catalog_key TEXT PRIMARY KEY,
         generation INTEGER NOT NULL,
@@ -120,8 +245,8 @@ class IptvCatalogDb {
         epg_url TEXT,
         ingested_at INTEGER NOT NULL
       )
-    ''');
-    db.execute('''
+    ''',
+    '''
       CREATE TABLE IF NOT EXISTS channels (
         id INTEGER PRIMARY KEY,
         catalog_key TEXT NOT NULL,
@@ -137,27 +262,20 @@ class IptvCatalogDb {
         http_headers_json TEXT,
         search_key TEXT NOT NULL
       )
-    ''');
-    // Every read filters on (catalog_key, generation); position makes the
-    // windowed page an index walk, grp serves the category chips.
-    db.execute('''
+    ''',
+    '''
       CREATE INDEX IF NOT EXISTS idx_channels_page
       ON channels(catalog_key, generation, position)
-    ''');
-    db.execute('''
+    ''',
+    '''
       CREATE INDEX IF NOT EXISTS idx_channels_grp
       ON channels(catalog_key, generation, grp)
-    ''');
-    // The EPG binding lookup resolves a channel URL to its tvg identity at
-    // row-paint time — it has to be an index walk.
-    db.execute('''
+    ''',
+    '''
       CREATE INDEX IF NOT EXISTS idx_channels_url
       ON channels(catalog_key, generation, url)
-    ''');
-    // XMLTV guide storage (one guide per md5(epgUrl) key): programme rows
-    // queried per (guide, channel) at row-paint time, plus one metadata row
-    // holding freshness and the name→id resolutions the parser made.
-    db.execute('''
+    ''',
+    '''
       CREATE TABLE IF NOT EXISTS epg_programmes (
         guide_key TEXT NOT NULL,
         channel_id TEXT NOT NULL,
@@ -167,8 +285,8 @@ class IptvCatalogDb {
         description TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (guide_key, channel_id, start_ms)
       )
-    ''');
-    db.execute('''
+    ''',
+    '''
       CREATE TABLE IF NOT EXISTS epg_guides (
         guide_key TEXT PRIMARY KEY,
         epg_url TEXT NOT NULL,
@@ -177,7 +295,118 @@ class IptvCatalogDb {
         channel_count INTEGER NOT NULL DEFAULT 0,
         name_to_id_json TEXT
       )
-    ''');
+    ''',
+  ];
+
+  /// Tests point this at a temp directory; production resolves the app
+  /// documents directory once in [open].
+  @visibleForTesting
+  static String? debugDirectoryOverride;
+
+  static Database? _db;
+  static String? _path;
+  static Future<void>? _opening;
+
+  @visibleForTesting
+  static String? debugLastPreparationIsolateName;
+
+  @visibleForTesting
+  static int debugPreparationCount = 0;
+
+  /// The resolved database path — worker isolates need it to open their own
+  /// connection. Only valid after [open] has completed.
+  static String get path {
+    final resolved = _path;
+    if (resolved == null) {
+      throw StateError('IptvCatalogDb.open() has not completed yet');
+    }
+    return resolved;
+  }
+
+  static bool get isOpen => _db != null;
+
+  /// Prepares and opens the catalog database. Idempotent and shared across
+  /// concurrent callers.
+  ///
+  /// Cold file opening, WAL negotiation, defensive cleanup and every schema /
+  /// index statement run on a worker isolate. The UI isolate only attaches a
+  /// connection to the already-prepared file afterwards; all subsequent reads
+  /// stay synchronous because the paging facade faults tiny windows from build
+  /// paths.
+  static Future<void> open() {
+    if (_db != null) return Future.value();
+    return _opening ??= _open().whenComplete(() => _opening = null);
+  }
+
+  static Future<void> _open() async {
+    final dir =
+        debugDirectoryOverride ??
+        (await getApplicationDocumentsDirectory()).path;
+    final path = p.join(dir, _dbFileName);
+
+    final prepared = await compute(
+      _prepareCatalogDb,
+      path,
+      debugLabel: 'iptv-catalog-db-init',
+    );
+    debugPreparationCount++;
+    debugLastPreparationIsolateName = prepared.isolateName;
+
+    // Another caller may have completed while this isolate job was queued.
+    if (_db != null) {
+      await compute(_closeTransferredCatalogDb, prepared.handleAddress);
+      return;
+    }
+
+    // Wrapping an existing FULLMUTEX handle is pure Dart allocation: no
+    // sqlite3_open_v2, filesystem access, WAL negotiation or schema SQL runs
+    // on Flutter's isolate. This wrapper takes sole ownership and closes the
+    // native handle from debugClose / its finalizer.
+    try {
+      _db = sqlite3.fromPointer(
+        Pointer<Void>.fromAddress(prepared.handleAddress),
+      );
+      _path = path;
+    } catch (_) {
+      await compute(_closeTransferredCatalogDb, prepared.handleAddress);
+      rethrow;
+    }
+  }
+
+  @visibleForTesting
+  static void debugClose() {
+    _db?.dispose();
+    _db = null;
+    _path = null;
+    _opening = null;
+    debugLastPreparationIsolateName = null;
+    debugPreparationCount = 0;
+  }
+
+  /// Shared connection setup — reader (UI) and writer (worker) sides must
+  /// agree on WAL and busy behavior or one of them fails under contention.
+  static Database _openConnection(String path) {
+    final db = sqlite3.open(path);
+    for (final sql in _connectionSetupSql) {
+      db.execute(sql);
+    }
+    return db;
+  }
+
+  static void _createSchema(Database db) {
+    // Defensive cleanup: a previous build shipped an FTS5 `channels_fts` index
+    // (plus these triggers) that crashed on devices whose bundled SQLite lacks
+    // the trigram tokenizer. Drop any leftovers so their triggers can't fire on
+    // ingest and break catalog writes. Wrapped so a missing or corrupt object
+    // can never abort schema setup; a clean database no-ops through it.
+    for (final sql in _defensiveCleanupSql) {
+      try {
+        db.execute(sql);
+      } catch (_) {}
+    }
+    for (final sql in _schemaSql) {
+      db.execute(sql);
+    }
     db.execute(
       "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
       ['$_schemaVersion'],

@@ -48,6 +48,50 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('cold open prepares the database on a worker isolate', () {
+    expect(
+      IptvCatalogDb.debugLastPreparationIsolateName,
+      'iptv-catalog-db-init',
+    );
+    expect(IptvCatalogDb.debugPreparationCount, 1);
+    expect(IptvCatalogDb.isOpen, isTrue);
+  });
+
+  test(
+    'concurrent opens share one worker preparation and one handle',
+    () async {
+      IptvCatalogDb.debugClose();
+
+      await Future.wait([
+        IptvCatalogDb.open(),
+        IptvCatalogDb.open(),
+        IptvCatalogDb.open(),
+      ]);
+
+      expect(IptvCatalogDb.debugPreparationCount, 1);
+      expect(IptvCatalogDb.isOpen, isTrue);
+      expect(IptvCatalogDb.path, endsWith('iptv_catalog.db'));
+    },
+  );
+
+  test(
+    'a failed worker open clears the shared future so retry works',
+    () async {
+      IptvCatalogDb.debugClose();
+      final notDirectory = File('${dir.path}/not-a-directory');
+      await notDirectory.writeAsString('x');
+      IptvCatalogDb.debugDirectoryOverride = notDirectory.path;
+
+      await expectLater(IptvCatalogDb.open(), throwsA(isA<StateError>()));
+      expect(IptvCatalogDb.isOpen, isFalse);
+
+      IptvCatalogDb.debugDirectoryOverride = dir.path;
+      await IptvCatalogDb.open();
+      expect(IptvCatalogDb.isOpen, isTrue);
+      expect(IptvCatalogDb.debugPreparationCount, 1);
+    },
+  );
+
   test('ingest → snapshot round-trips every channel field in order', () {
     IptvCatalogDb.ingest(
       dbPath: IptvCatalogDb.path,

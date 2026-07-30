@@ -48,6 +48,7 @@ dependencies:
   xml: ^6.5.0
   sqflite: ^2.3.3
   sqflite_common_ffi: ^2.3.3
+  ffi: ^2.1.4
   sqlite3: ^2.4.0
   sqlite3_flutter_libs: ^0.5.24
   file_picker: ^10.2.3
