@@ -353,7 +353,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     String formattedNumber = '';
     if (numberSource != null) {
-      final int safeNumber = numberSource.clamp(0, 999).toInt();
+      final int safeNumber = numberSource < 0 ? 0 : numberSource;
       formattedNumber = 'CH ${safeNumber.toString().padLeft(2, '0')}';
     }
     if (!hasName) {
@@ -1834,7 +1834,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (iptvChannels != null &&
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
-      return iptvChannels[_currentIptvIndex].name;
+      return iptvChannels[_currentIptvIndex].numberedName;
     }
 
     // Final fallback
@@ -3072,6 +3072,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() {
       _isTransitioning = true;
       _currentIptvIndex = index;
+      _currentChannelNumber = channel.channelNumber ?? (index + 1);
     });
     _startTransitionOverlay();
 

@@ -144,6 +144,15 @@ class _NativeSqliteApi {
       for (final sql in IptvCatalogDb._schemaSql) {
         _execute(handle, sql);
       }
+      for (final sql in IptvCatalogDb._migrationSql) {
+        try {
+          _execute(handle, sql);
+        } catch (_) {
+          // ALTER ADD COLUMN intentionally fails once an upgraded database
+          // already has the column. The following idempotent index statement
+          // still runs.
+        }
+      }
       _execute(
         handle,
         "INSERT OR REPLACE INTO meta(key, value) VALUES "
@@ -217,7 +226,7 @@ class IptvCatalogDb {
   IptvCatalogDb._();
 
   static const _dbFileName = 'iptv_catalog.db';
-  static const _schemaVersion = 1;
+  static const _schemaVersion = 2;
   static const _connectionSetupSql = [
     'PRAGMA journal_mode=WAL',
     'PRAGMA synchronous=NORMAL',
@@ -260,7 +269,8 @@ class IptvCatalogDb {
         content_type TEXT,
         attributes_json TEXT,
         http_headers_json TEXT,
-        search_key TEXT NOT NULL
+        search_key TEXT NOT NULL,
+        channel_number INTEGER
       )
     ''',
     '''
@@ -274,6 +284,37 @@ class IptvCatalogDb {
     '''
       CREATE INDEX IF NOT EXISTS idx_channels_url
       ON channels(catalog_key, generation, url)
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS channel_number_namespaces (
+        namespace_id TEXT PRIMARY KEY,
+        active_source_key TEXT,
+        last_channel_count INTEGER NOT NULL DEFAULT 0,
+        max_number INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS channel_number_aliases (
+        source_key TEXT PRIMARY KEY,
+        namespace_id TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        updated_at INTEGER NOT NULL
+      )
+    ''',
+    '''
+      CREATE INDEX IF NOT EXISTS idx_channel_number_alias_namespace
+      ON channel_number_aliases(namespace_id, is_active)
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS channel_number_assignments (
+        namespace_id TEXT NOT NULL,
+        identity_key TEXT NOT NULL,
+        channel_number INTEGER NOT NULL,
+        last_seen INTEGER NOT NULL,
+        PRIMARY KEY(namespace_id, identity_key),
+        UNIQUE(namespace_id, channel_number)
+      )
     ''',
     '''
       CREATE TABLE IF NOT EXISTS epg_programmes (
@@ -295,6 +336,30 @@ class IptvCatalogDb {
         channel_count INTEGER NOT NULL DEFAULT 0,
         name_to_id_json TEXT
       )
+    ''',
+  ];
+  static const _migrationSql = [
+    'ALTER TABLE channels ADD COLUMN channel_number INTEGER',
+    'CREATE INDEX IF NOT EXISTS idx_channels_number '
+        'ON channels(catalog_key, generation, channel_number)',
+    '''
+      WITH numbered AS (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY catalog_key, generation ORDER BY position
+               ) AS assigned_number
+        FROM channels
+        WHERE channel_number IS NULL AND
+          (CASE WHEN content_type IS NOT NULL
+            THEN content_type = 'live'
+            ELSE (duration IS NULL OR duration = -1)
+          END)
+      )
+      UPDATE channels
+      SET channel_number = (
+        SELECT assigned_number FROM numbered WHERE numbered.id = channels.id
+      )
+      WHERE id IN (SELECT id FROM numbered)
     ''',
   ];
 
@@ -407,6 +472,14 @@ class IptvCatalogDb {
     for (final sql in _schemaSql) {
       db.execute(sql);
     }
+    for (final sql in _migrationSql) {
+      try {
+        db.execute(sql);
+      } catch (_) {
+        // See the native preparation path above: duplicate-column is the
+        // expected result after the first successful v2 migration.
+      }
+    }
     db.execute(
       "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
       ['$_schemaVersion'],
@@ -431,6 +504,7 @@ class IptvCatalogDb {
     required List<IptvChannel> channels,
     List<String> categories = const [],
     String? epgUrl,
+    String? numberingSourceKey,
   }) {
     final digest = contentDigest(channels);
     final db = _openConnection(dbPath);
@@ -442,8 +516,8 @@ class IptvCatalogDb {
         INSERT INTO channels(
           catalog_key, generation, position, name, url, logo_url, grp,
           duration, content_type, attributes_json, http_headers_json,
-          search_key
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          search_key, channel_number
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ''');
       // IMMEDIATE takes the write lock up front, which is what makes the
       // generation allocation below safe: two overlapping ingests of the
@@ -455,6 +529,13 @@ class IptvCatalogDb {
       db.execute('BEGIN IMMEDIATE');
       try {
         final generation = _nextGeneration(db, catalogKey);
+        final channelNumbers = numberingSourceKey == null
+            ? const <int, int>{}
+            : _assignChannelNumbers(
+                db,
+                sourceKey: numberingSourceKey,
+                channels: channels,
+              );
         for (var i = 0; i < channels.length; i++) {
           final c = channels[i];
           insert.execute([
@@ -472,6 +553,7 @@ class IptvCatalogDb {
             // Same haystack IptvChannel.searchKey builds — search behavior
             // must not change when the query moves into SQL.
             '${c.name.toLowerCase()}\n${c.group?.toLowerCase() ?? ''}',
+            channelNumbers[i],
           ]);
         }
         db.execute(
@@ -547,6 +629,172 @@ class IptvCatalogDb {
     if (rows.isEmpty) return 1;
     return (rows.first['generation'] as int) + 1;
   }
+
+  /// Assigns live channels a stable number within one provider namespace.
+  ///
+  /// Identity preference is tvg-id, then normalized name+group. Duplicate
+  /// identities receive a deterministic occurrence suffix. Removed channels
+  /// keep their assignment as a tombstone, so refreshes never renumber the
+  /// surviving lineup and newly added channels always append.
+  static Map<int, int> _assignChannelNumbers(
+    Database db, {
+    required String sourceKey,
+    required List<IptvChannel> channels,
+  }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final identities = <int, String>{};
+    final occurrences = <String, int>{};
+    for (var i = 0; i < channels.length; i++) {
+      final channel = channels[i];
+      if (!channel.isLive) continue;
+      final tvgId = channel.tvgId?.trim();
+      final base = tvgId != null && tvgId.isNotEmpty
+          ? 'tvg:${_normalizeNumberIdentity(tvgId)}'
+          : 'name:${_normalizeNumberIdentity(channel.name)}'
+                '\u001fgroup:${_normalizeNumberIdentity(channel.group ?? '')}';
+      final occurrence = (occurrences[base] ?? 0) + 1;
+      occurrences[base] = occurrence;
+      identities[i] = '$base\u001f$occurrence';
+    }
+    if (identities.isEmpty) return const {};
+
+    String namespaceId;
+    final alias = db.select(
+      'SELECT namespace_id FROM channel_number_aliases WHERE source_key = ?',
+      [sourceKey],
+    );
+    if (alias.isNotEmpty) {
+      namespaceId = alias.first['namespace_id'] as String;
+    } else {
+      namespaceId =
+          _archivedNamespaceMatch(db, identities.values.toSet()) ??
+          'source:$sourceKey:$now';
+    }
+
+    db.execute(
+      'INSERT OR IGNORE INTO channel_number_namespaces('
+      'namespace_id, active_source_key, last_channel_count, max_number, '
+      'updated_at) VALUES (?, ?, 0, 0, ?)',
+      [namespaceId, sourceKey, now],
+    );
+    db.execute(
+      'INSERT INTO channel_number_aliases('
+      'source_key, namespace_id, is_active, updated_at) VALUES (?, ?, 1, ?) '
+      'ON CONFLICT(source_key) DO UPDATE SET '
+      'namespace_id = excluded.namespace_id, is_active = 1, '
+      'updated_at = excluded.updated_at',
+      [sourceKey, namespaceId, now],
+    );
+
+    final existingRows = db.select(
+      'SELECT identity_key, channel_number FROM channel_number_assignments '
+      'WHERE namespace_id = ?',
+      [namespaceId],
+    );
+    final existing = <String, int>{
+      for (final row in existingRows)
+        row['identity_key'] as String: row['channel_number'] as int,
+    };
+    final namespaceRows = db.select(
+      'SELECT max_number FROM channel_number_namespaces '
+      'WHERE namespace_id = ?',
+      [namespaceId],
+    );
+    var nextNumber = namespaceRows.isEmpty
+        ? 0
+        : namespaceRows.first['max_number'] as int;
+    final upsert = db.prepare(
+      'INSERT INTO channel_number_assignments('
+      'namespace_id, identity_key, channel_number, last_seen) '
+      'VALUES (?, ?, ?, ?) '
+      'ON CONFLICT(namespace_id, identity_key) DO UPDATE SET '
+      'last_seen = excluded.last_seen',
+    );
+    final result = <int, int>{};
+    try {
+      for (final entry in identities.entries) {
+        final number = existing[entry.value] ?? ++nextNumber;
+        result[entry.key] = number;
+        upsert.execute([namespaceId, entry.value, number, now]);
+      }
+    } finally {
+      upsert.dispose();
+    }
+    db.execute(
+      'UPDATE channel_number_namespaces SET active_source_key = ?, '
+      'last_channel_count = ?, max_number = ?, updated_at = ? '
+      'WHERE namespace_id = ?',
+      [sourceKey, identities.length, nextNumber, now, namespaceId],
+    );
+    return result;
+  }
+
+  /// Relinks only to an explicitly archived provider and only when the
+  /// lineups are overwhelmingly the same. Active providers are excluded so
+  /// two reseller logins with identical catalogs remain independently
+  /// numbered.
+  static String? _archivedNamespaceMatch(
+    Database db,
+    Set<String> incomingIdentities,
+  ) {
+    db.execute(
+      'CREATE TEMP TABLE IF NOT EXISTS incoming_channel_identities('
+      'identity_key TEXT PRIMARY KEY)',
+    );
+    db.execute('DELETE FROM incoming_channel_identities');
+    final insert = db.prepare(
+      'INSERT OR IGNORE INTO incoming_channel_identities(identity_key) '
+      'VALUES (?)',
+    );
+    try {
+      for (final identity in incomingIdentities) {
+        insert.execute([identity]);
+      }
+    } finally {
+      insert.dispose();
+    }
+    final candidates = db.select('''
+      SELECT a.namespace_id AS namespace_id,
+             COUNT(*) AS overlap_count,
+             n.last_channel_count AS previous_count
+      FROM channel_number_assignments a
+      JOIN incoming_channel_identities i
+        ON i.identity_key = a.identity_key
+      JOIN channel_number_namespaces n
+        ON n.namespace_id = a.namespace_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM channel_number_aliases active
+        WHERE active.namespace_id = a.namespace_id
+          AND active.is_active = 1
+      )
+      GROUP BY a.namespace_id
+      ORDER BY overlap_count DESC
+      LIMIT 2
+    ''');
+    if (candidates.isEmpty) return null;
+    final best = candidates.first;
+    final overlap = best['overlap_count'] as int;
+    final previous = best['previous_count'] as int;
+    final incoming = incomingIdentities.length;
+    final smaller = incoming < previous ? incoming : previous;
+    final larger = incoming > previous ? incoming : previous;
+    if (overlap < 20 ||
+        smaller == 0 ||
+        overlap / smaller < 0.85 ||
+        overlap / larger < 0.70) {
+      return null;
+    }
+    // If two archived lineups score equally, choosing one would make channel
+    // restoration nondeterministic. Start a clean namespace instead.
+    if (candidates.length > 1 &&
+        candidates[1]['overlap_count'] as int == overlap) {
+      return null;
+    }
+    return best['namespace_id'] as String;
+  }
+
+  static String _normalizeNumberIdentity(String value) =>
+      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
   // ── Worker-side bulk readers ─────────────────────────────────────────────
   //
@@ -809,6 +1057,37 @@ class IptvCatalogDb {
     removeCatalogs(keys);
   }
 
+  /// Marks a removed playlist's numbering namespace as eligible for a future
+  /// conservative lineup match. Assignments are intentionally retained.
+  static Future<void> archiveNumberingSource(String sourceKey) async {
+    await open();
+    final db = _requireDb();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    db.execute(
+      'UPDATE channel_number_aliases SET is_active = 0, updated_at = ? '
+      'WHERE source_key = ?',
+      [now, sourceKey],
+    );
+    db.execute(
+      'UPDATE channel_number_namespaces SET active_source_key = NULL, '
+      'updated_at = ? WHERE namespace_id IN ('
+      'SELECT namespace_id FROM channel_number_aliases WHERE source_key = ?)',
+      [now, sourceKey],
+    );
+  }
+
+  /// Whether this saved playlist has committed its durable identity mapping.
+  /// Existing v1 catalog rows receive provisional position-based numbers
+  /// during migration; this distinguishes those from a fully persistent v2
+  /// assignment so the view can backfill in the background.
+  static bool hasNumberingSource(String sourceKey) {
+    final db = _requireDb();
+    return db.select(
+      'SELECT 1 FROM channel_number_aliases WHERE source_key = ? LIMIT 1',
+      [sourceKey],
+    ).isNotEmpty;
+  }
+
   /// Drops the stored catalogs for [keys] (settings edit/delete paths — the
   /// same call sites that invalidate the legacy snapshot cache).
   static void removeCatalogs(Iterable<String> keys) {
@@ -961,6 +1240,19 @@ class CatalogSnapshot {
     return rows.first['c'] as int;
   }
 
+  /// Whether this generation contains at least one live channel.
+  ///
+  /// This avoids treating VOD-only catalogs as missing a durable live-channel
+  /// numbering assignment and repeatedly revalidating them on every visit.
+  bool get hasLiveChannels {
+    return _db
+        .select(
+          'SELECT 1 $_base AND $_isLiveSql LIMIT 1',
+          [catalogKey, generation],
+        )
+        .isNotEmpty;
+  }
+
   /// Catalog position of the row matching url+name, or null. (Duplicate
   /// url+name pairs are legal in playlists — the first occurrence answers,
   /// which is where zapping should land anyway.)
@@ -977,6 +1269,31 @@ class CatalogSnapshot {
       [..._args(group: group), url, name],
     );
     return rows.isEmpty ? null : rows.first['position'] as int;
+  }
+
+  /// Catalog position of an assigned live-channel number.
+  int? positionOfChannelNumber(int channelNumber) {
+    final rows = _db.select(
+      'SELECT position $_base AND channel_number = ? '
+      'ORDER BY position LIMIT 1',
+      [catalogKey, generation, channelNumber],
+    );
+    return rows.isEmpty ? null : rows.first['position'] as int;
+  }
+
+  /// Assigned channel and catalog position, used by native-player numeric
+  /// tuning without scanning or materializing the provider catalog.
+  ({int position, IptvChannel channel})? entryForChannelNumber(
+    int channelNumber,
+  ) {
+    final rows = _db.select(
+      'SELECT * $_base AND channel_number = ? '
+      'ORDER BY position LIMIT 1',
+      [catalogKey, generation, channelNumber],
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return (position: row['position'] as int, channel: _channelFromRow(row));
   }
 
   /// One page of channels in catalog order, filtered like [count]. This is
@@ -1042,6 +1359,7 @@ class CatalogSnapshot {
 
   static IptvChannel _channelFromRow(Row row) {
     return IptvChannel(
+      channelNumber: row['channel_number'] as int?,
       name: row['name'] as String,
       url: row['url'] as String,
       logoUrl: row['logo_url'] as String?,
@@ -1098,6 +1416,7 @@ int ingestLegacySnapshotJob(LegacySnapshotIngestJob job) {
     channels: job.channels,
     categories: job.categories,
     epgUrl: job.epgUrl,
+    numberingSourceKey: job.numberingSourceKey,
   );
   return job.channels.length;
 }
@@ -1105,6 +1424,7 @@ int ingestLegacySnapshotJob(LegacySnapshotIngestJob job) {
 class LegacySnapshotIngestJob {
   final String dbPath;
   final String catalogKey;
+  final String? numberingSourceKey;
   final List<IptvChannel> channels;
   final List<String> categories;
   final String? epgUrl;
@@ -1112,6 +1432,7 @@ class LegacySnapshotIngestJob {
   const LegacySnapshotIngestJob({
     required this.dbPath,
     required this.catalogKey,
+    this.numberingSourceKey,
     required this.channels,
     required this.categories,
     required this.epgUrl,

@@ -279,9 +279,16 @@ class XtreamCodesService {
   Future<IptvParseResult> fetchLiveStreams(
     String serverUrl,
     String username,
-    String password,
-  ) {
-    return _fetchStreams(serverUrl, username, password, contentType: 'live');
+    String password, {
+    String? numberingSourceKey,
+  }) {
+    return _fetchStreams(
+      serverUrl,
+      username,
+      password,
+      contentType: 'live',
+      numberingSourceKey: numberingSourceKey,
+    );
   }
 
   /// Fetch VOD items, converted to IptvChannel list + categories
@@ -311,6 +318,7 @@ class XtreamCodesService {
     String username,
     String password, {
     required String contentType,
+    String? numberingSourceKey,
   }) async {
     final isLive = contentType == 'live';
     final isSeries = contentType == 'series';
@@ -444,6 +452,7 @@ class XtreamCodesService {
         ingestCatalogKey: ingestToDb
             ? IptvCatalogCache.keyForXtream(serverUrl, username, contentType)
             : null,
+        numberingSourceKey: numberingSourceKey,
       );
       // Both bodies are decoded by the job, so both count toward the
       // threshold — a small channel list with a huge category list is still
@@ -945,6 +954,7 @@ class _StreamsJob {
   /// isolate at all.
   final String? ingestDbPath;
   final String? ingestCatalogKey;
+  final String? numberingSourceKey;
 
   const _StreamsJob({
     required this.streamsBytes,
@@ -959,6 +969,7 @@ class _StreamsJob {
     required this.categoriesCharset,
     this.ingestDbPath,
     this.ingestCatalogKey,
+    this.numberingSourceKey,
   });
 }
 
@@ -1136,6 +1147,7 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
       catalogKey: ingestCatalogKey,
       channels: channels,
       categories: categoryNames,
+      numberingSourceKey: job.numberingSourceKey,
     );
     return IptvParseResult(
       channels: const [],

@@ -687,6 +687,7 @@ class AndroidTvPlayerBridge {
             logoUrl: favoriteArgs['logoUrl'] as String?,
             group: favoriteArgs['group'] as String?,
             playlistId: favoriteArgs['sourceId'] as String?,
+            channelNumber: (favoriteArgs['channelNumber'] as num?)?.toInt(),
             httpHeaders: headers,
           );
           return true;

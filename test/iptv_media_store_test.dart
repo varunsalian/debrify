@@ -128,12 +128,14 @@ void main() {
         logoUrl: 'http://h/logo.png',
         group: 'News',
         playlistId: 'p1',
+        channelNumber: 407,
         httpHeaders: {'Referer': 'http://h/'},
       );
 
       var favorites = await StorageService.getIptvFavoriteChannels();
       final meta = favorites['http://h/live/u/p/7.ts']!;
       expect(meta['name'], 'News');
+      expect(meta['channelNumber'], 407);
       expect(meta['httpHeaders'], {'Referer': 'http://h/'});
       expect(meta['addedAt'], greaterThan(0));
 

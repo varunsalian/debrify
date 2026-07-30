@@ -413,6 +413,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       logoUrl: channel.logoUrl,
       group: channel.group,
       playlistId: _originPlaylistIdFor(channel),
+      channelNumber: channel.channelNumber,
       // Favorites are replayed from stored metadata, never re-parsed from the
       // playlist — so the channel's own headers have to travel with it.
       httpHeaders: channel.httpHeaders,
@@ -634,6 +635,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               LegacySnapshotIngestJob(
                 dbPath: IptvCatalogDb.path,
                 catalogKey: cacheKey,
+                numberingSourceKey: playlist.id,
                 channels: legacy.channels,
                 categories: legacy.categories,
                 epgUrl: legacy.epgUrl,
@@ -654,7 +656,10 @@ class IptvResultsViewState extends State<IptvResultsView>
         await _presentDbCatalog(playlist, ticket, snap);
         if (!mounted || ticket != _loadTicket) return;
         final age = DateTime.now().millisecondsSinceEpoch - snap.ingestedAt;
-        if (age > _dbCatalogTtl.inMilliseconds) {
+        final needsNumbering =
+            snap.hasLiveChannels &&
+            !IptvCatalogDb.hasNumberingSource(playlist.id);
+        if (age > _dbCatalogTtl.inMilliseconds || needsNumbering) {
           unawaited(
             _revalidateDbCatalog(playlist, contentType, cacheKey, ticket),
           );
@@ -801,6 +806,50 @@ class IptvResultsViewState extends State<IptvResultsView>
         );
         return;
       }
+    }
+    // Virtual/local catalogs do not live in the SQL catalog. Give their live
+    // rows a deterministic session number so every channel surface still has
+    // a useful number; persisted network providers use the stable DB mapping.
+    if (result.channels.any(
+      (channel) => channel.isLive && channel.channelNumber == null,
+    )) {
+      final usedNumbers = <int>{
+        for (final channel in result.channels)
+          if (channel.isLive && channel.channelNumber != null)
+            channel.channelNumber!,
+      };
+      var next = 0;
+      int nextFreeNumber() {
+        do {
+          next++;
+        } while (usedNumbers.contains(next));
+        usedNumbers.add(next);
+        return next;
+      }
+
+      result = IptvParseResult(
+        channels: [
+          for (final channel in result.channels)
+            if (channel.isLive)
+              IptvChannel(
+                channelNumber: channel.channelNumber ?? nextFreeNumber(),
+                name: channel.name,
+                url: channel.url,
+                logoUrl: channel.logoUrl,
+                group: channel.group,
+                duration: channel.duration,
+                contentType: channel.contentType,
+                attributes: channel.attributes,
+                httpHeaders: channel.httpHeaders,
+              )
+            else
+              channel,
+        ],
+        categories: result.categories,
+        error: result.error,
+        warning: result.warning,
+        epgUrl: result.epgUrl,
+      );
     }
     // Migrate favorites saved under older URL formats (e.g. before the
     // Xtream /live/ URL fix) to the freshly fetched URLs, then reload so
@@ -1020,7 +1069,16 @@ class IptvResultsViewState extends State<IptvResultsView>
     final fresh = IptvCatalogDb.snapshot(cacheKey);
     if (fresh == null) return;
 
-    if (old != null && fresh.contentDigest == old.contentDigest) {
+    final oldFirstLive = old?.page(offset: 0, limit: 1, live: true);
+    final freshFirstLive = fresh.page(offset: 0, limit: 1, live: true);
+    final numberingAdded =
+        oldFirstLive?.isNotEmpty == true &&
+        oldFirstLive!.first.channelNumber == null &&
+        freshFirstLive.isNotEmpty &&
+        freshFirstLive.first.channelNumber != null;
+    if (old != null &&
+        fresh.contentDigest == old.contentDigest &&
+        !numberingAdded) {
       // Channel rows unchanged: move the generation pin forward and keep
       // every resident page, instance, focus node and scroll offset exactly
       // as they are.
@@ -1210,9 +1268,13 @@ class IptvResultsViewState extends State<IptvResultsView>
         playlist.serverUrl!,
         playlist.username!,
         playlist.password!,
+        numberingSourceKey: playlist.id,
       );
     }
-    return _iptvService.fetchPlaylist(playlist.url);
+    return _iptvService.fetchPlaylist(
+      playlist.url,
+      numberingSourceKey: playlist.id,
+    );
   }
 
   /// Fresh in-memory service-cache result for a cacheable source, or null.
@@ -1826,6 +1888,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           final logoUrl = (meta['logoUrl'] as String?) ?? '';
           final group = (meta['group'] as String?) ?? '';
           return IptvChannel(
+            channelNumber: (meta['channelNumber'] as num?)?.toInt(),
             name: name.isEmpty ? 'Unknown Channel' : name,
             url: entry.key,
             logoUrl: logoUrl.isEmpty ? null : logoUrl,
@@ -2029,6 +2092,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     IptvPlaylist source,
   ) {
     return IptvChannel(
+      channelNumber: channel.channelNumber,
       name: channel.name,
       url: channel.url,
       logoUrl: channel.logoUrl,
@@ -2271,16 +2335,21 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
 
     final category = (request['category'] as String?)?.trim();
-    final effectiveCategory =
+    var effectiveCategory =
         category == null || category.isEmpty || category == 'All'
         ? null
         : category;
+    final jumpNumber = action == 'channelNumber'
+        ? (request['channelNumber'] as num?)?.toInt()
+        : null;
+    final isJump = jumpNumber != null && jumpNumber > 0;
     final isZapPage = action == 'zapPage';
+    final isPagedRequest = isZapPage || isJump;
     final requestedLimit = (request['limit'] as num?)?.toInt();
-    final pageLimit = isZapPage
+    final pageLimit = isPagedRequest
         ? (requestedLimit ?? _kPlayerZapPageSize).clamp(1, _kMaxPlayerChannels)
         : _kMaxPlayerChannels;
-    var pageOffset = isZapPage
+    var pageOffset = isPagedRequest
         ? ((request['offset'] as num?)?.toInt() ?? 0).clamp(0, 1 << 30)
         : 0;
     final anchorUrl = (request['anchorUrl'] as String?)?.trim();
@@ -2298,8 +2367,24 @@ class IptvResultsViewState extends State<IptvResultsView>
               'vod' => false,
               _ => null,
             };
+      final jumpEntry = isJump ? snap.entryForChannelNumber(jumpNumber) : null;
+      if (isJump && jumpEntry == null) {
+        return {
+          'sourceId': source.id,
+          'sourceName': source.name,
+          'contentType': requestedType,
+          'channelNotFound': true,
+        };
+      }
+      if (jumpEntry != null) effectiveCategory = jumpEntry.channel.group;
       totalChannels = snap.count(group: effectiveCategory, live: live);
-      if (isZapPage &&
+      if (jumpEntry != null) {
+        anchorIndex = snap.count(
+          group: effectiveCategory,
+          live: live,
+          beforePosition: jumpEntry.position,
+        );
+      } else if (isZapPage &&
           anchorUrl != null &&
           anchorUrl.isNotEmpty &&
           anchorName != null &&
@@ -2318,7 +2403,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           );
         }
       }
-      if (isZapPage) {
+      if (isPagedRequest) {
         pageOffset = iptvPlayerZapPageOffset(
           total: totalChannels,
           limit: pageLimit,
@@ -2331,11 +2416,29 @@ class IptvResultsViewState extends State<IptvResultsView>
         offset: pageOffset,
         limit: pageLimit,
         group: effectiveCategory,
-        search: isZapPage || query.isEmpty ? null : query,
+        search: isPagedRequest || query.isEmpty ? null : query,
         live: live,
       );
     } else {
       Iterable<IptvChannel> filtered = _allChannels;
+      IptvChannel? jumpChannel;
+      if (isJump) {
+        for (final channel in _allChannels) {
+          if (channel.channelNumber == jumpNumber && channel.isLive) {
+            jumpChannel = channel;
+            break;
+          }
+        }
+        if (jumpChannel == null) {
+          return {
+            'sourceId': source.id,
+            'sourceName': source.name,
+            'contentType': requestedType,
+            'channelNotFound': true,
+          };
+        }
+        effectiveCategory = jumpChannel.group;
+      }
       if (!source.isXtreamCodes && !source.isContinueWatching) {
         filtered = switch (requestedType) {
           'live' => filtered.where((channel) => channel.isLive),
@@ -2359,13 +2462,18 @@ class IptvResultsViewState extends State<IptvResultsView>
           (channel) => terms.every(channel.searchKey.contains),
         );
       }
-      if (isZapPage) {
+      if (isPagedRequest) {
         // Legacy/in-memory catalogs are already materialized. Compute the
         // filtered ordinal once so native can request a small window centered
         // on a channel selected from search.
         final materialized = filtered.toList(growable: false);
         totalChannels = materialized.length;
-        if (anchorUrl != null && anchorUrl.isNotEmpty) {
+        if (jumpChannel != null) {
+          anchorIndex = materialized.indexWhere(
+            (channel) => channel.channelNumber == jumpNumber,
+          );
+          if (anchorIndex == -1) anchorIndex = null;
+        } else if (anchorUrl != null && anchorUrl.isNotEmpty) {
           anchorIndex = materialized.indexWhere(
             (channel) =>
                 channel.url == anchorUrl &&
@@ -2399,9 +2507,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       'contentType': requestedType,
       'selectedCategory': effectiveCategory,
       'categories': categories,
-      if (isZapPage) 'pageOffset': pageOffset,
-      if (isZapPage) 'totalChannels': totalChannels,
-      if (isZapPage && anchorIndex != null) 'anchorIndex': anchorIndex,
+      if (isPagedRequest) 'pageOffset': pageOffset,
+      if (isPagedRequest) 'totalChannels': totalChannels,
+      if (isPagedRequest && anchorIndex != null) 'anchorIndex': anchorIndex,
+      if (isJump) 'targetChannelNumber': jumpNumber,
       'sources': _playerSourcePayload(),
       'channels': await _playerChannelPayload([
         for (final channel in channels) (channel: channel, source: source),
@@ -2631,6 +2740,9 @@ class IptvResultsViewState extends State<IptvResultsView>
         videoUrl: initialUrl,
         title: channel.name,
         subtitle: channel.group ?? 'IPTV',
+        channelName: channel.name,
+        channelNumber: channel.channelNumber,
+        showChannelName: channel.isLive,
         viewMode: PlaylistViewMode.sorted,
         iptvChannels: playerChannels,
         iptvStartIndex: channelIndex,
@@ -4135,7 +4247,9 @@ class _IptvFocusStageInfo extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            displayName,
+                            channel.channelNumber == null
+                                ? displayName
+                                : 'CH ${channel.channelNumber}  $displayName',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -4200,12 +4314,15 @@ class _IptvRailInfo extends StatelessWidget {
 
     final resMatch = _railResExp.firstMatch(ch.name);
     final resolution = resMatch?.group(1)?.toLowerCase();
-    final displayName = resMatch == null
+    final cleanName = resMatch == null
         ? ch.name
         : ch.name
               .replaceRange(resMatch.start, resMatch.end, '')
               .replaceAll(RegExp(r'\s+'), ' ')
               .trim();
+    final displayName = ch.channelNumber == null
+        ? cleanName
+        : 'CH ${ch.channelNumber}  $cleanName';
     final group = ch.group?.trim();
     final subParts = <String>[
       if (group != null && group.isNotEmpty) group,

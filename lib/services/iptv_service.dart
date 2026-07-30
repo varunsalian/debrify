@@ -34,7 +34,11 @@ class IptvService {
   static const _fetchDeadline = Duration(minutes: 2);
 
   /// Fetch and parse an M3U playlist from URL
-  Future<IptvParseResult> fetchPlaylist(String url, {bool forceRefresh = false}) async {
+  Future<IptvParseResult> fetchPlaylist(
+    String url, {
+    bool forceRefresh = false,
+    String? numberingSourceKey,
+  }) async {
     // DB-catalog mode: the parse worker ingests straight into
     // iptv_catalog.db and this service's in-memory cache is bypassed —
     // freshness policy moves to the caller (snapshot.ingestedAt).
@@ -109,6 +113,7 @@ class IptvService {
       final result = await _parse(
         content,
         ingestCatalogKey: ingestToDb ? IptvCatalogCache.keyForUrl(url) : null,
+        numberingSourceKey: numberingSourceKey,
       );
 
       // An ingested result IS the cache — the rows are on disk and nothing
@@ -231,12 +236,14 @@ class IptvService {
   Future<IptvParseResult> _parse(
     String content, {
     String? ingestCatalogKey,
+    String? numberingSourceKey,
   }) async {
     if (ingestCatalogKey != null) {
       final job = _M3uIngestJob(
         content: content,
         dbPath: IptvCatalogDb.path,
         catalogKey: ingestCatalogKey,
+        numberingSourceKey: numberingSourceKey,
       );
       return content.length > 100 * 1024
           ? await compute(_parseAndIngestM3u, job)
@@ -252,11 +259,13 @@ class _M3uIngestJob {
   final String content;
   final String dbPath;
   final String catalogKey;
+  final String? numberingSourceKey;
 
   const _M3uIngestJob({
     required this.content,
     required this.dbPath,
     required this.catalogKey,
+    required this.numberingSourceKey,
   });
 }
 
@@ -273,6 +282,7 @@ IptvParseResult _parseAndIngestM3u(_M3uIngestJob job) {
     channels: result.channels,
     categories: result.categories,
     epgUrl: result.epgUrl,
+    numberingSourceKey: job.numberingSourceKey,
   );
   return IptvParseResult(
     channels: const [],

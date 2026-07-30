@@ -325,6 +325,7 @@ class IptvMediaStore {
     String? logoUrl,
     String? group,
     String? playlistId,
+    int? channelNumber,
     Map<String, String>? httpHeaders,
   }) async {
     await _ensureMigrated();
@@ -351,6 +352,7 @@ class IptvMediaStore {
           'logo_url': logoUrl ?? '',
           'channel_group': group ?? '',
           'playlist_id': playlistId ?? '',
+          'channel_number': channelNumber,
           // The favorites view rebuilds channels from this metadata alone
           // (no re-fetch), so a channel that needs a specific UA/Referer has
           // to carry it here or it would play from the playlist but not from
@@ -535,6 +537,7 @@ class IptvMediaStore {
       'logo_url': map['logoUrl']?.toString() ?? '',
       'channel_group': map['group']?.toString() ?? '',
       'playlist_id': map['playlistId']?.toString() ?? '',
+      'channel_number': (map['channelNumber'] as num?)?.toInt(),
       'http_headers_json': _headersJson(map['httpHeaders']),
       'added_at': (map['addedAt'] as num?)?.toInt() ?? 0,
     };
@@ -591,6 +594,8 @@ class IptvMediaStore {
       'logoUrl': row['logo_url'] ?? '',
       'group': row['channel_group'] ?? '',
       'playlistId': row['playlist_id'] ?? '',
+      if (row['channel_number'] != null)
+        'channelNumber': (row['channel_number'] as num).toInt(),
       if (headers != null) 'httpHeaders': headers,
       'addedAt': (row['added_at'] as num?)?.toInt() ?? 0,
     };

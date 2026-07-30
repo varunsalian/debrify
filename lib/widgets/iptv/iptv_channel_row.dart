@@ -195,6 +195,26 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       ),
       child: Row(
         children: [
+          if (isLive && ch.channelNumber != null) ...[
+            SizedBox(
+              width: 45,
+              child: Text(
+                ch.channelNumber.toString(),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                style: TextStyle(
+                  color: _active
+                      ? HomeTheme.focusGold
+                      : Colors.white.withValues(alpha: 0.42),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+          ],
           _LogoChip(
             logoUrl: ch.logoUrl,
             name: displayName,

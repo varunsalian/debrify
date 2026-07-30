@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
+import 'package:sqlite3/sqlite3.dart' as raw;
 
 IptvChannel _ch(
   int i, {
@@ -55,6 +56,59 @@ void main() {
     );
     expect(IptvCatalogDb.debugPreparationCount, 1);
     expect(IptvCatalogDb.isOpen, isTrue);
+  });
+
+  test('v1 catalog migration backfills only live channel numbers', () async {
+    IptvCatalogDb.debugClose();
+    final path = '${dir.path}/iptv_catalog.db';
+    for (final suffix in ['', '-wal', '-shm']) {
+      final file = File('$path$suffix');
+      if (await file.exists()) await file.delete();
+    }
+    final db = raw.sqlite3.open(path);
+    db.execute('''
+      CREATE TABLE catalogs (
+        catalog_key TEXT PRIMARY KEY,
+        generation INTEGER NOT NULL,
+        channel_count INTEGER NOT NULL,
+        content_digest TEXT NOT NULL,
+        categories_json TEXT,
+        epg_url TEXT,
+        ingested_at INTEGER NOT NULL
+      )
+    ''');
+    db.execute('''
+      CREATE TABLE channels (
+        id INTEGER PRIMARY KEY,
+        catalog_key TEXT NOT NULL,
+        generation INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        logo_url TEXT,
+        grp TEXT,
+        duration INTEGER,
+        content_type TEXT,
+        attributes_json TEXT,
+        http_headers_json TEXT,
+        search_key TEXT NOT NULL
+      )
+    ''');
+    db.execute(
+      "INSERT INTO catalogs VALUES ('old', 1, 3, 'd', NULL, NULL, 1)",
+    );
+    db.execute(
+      "INSERT INTO channels(catalog_key, generation, position, name, url, "
+      "duration, content_type, search_key) VALUES "
+      "('old', 1, 0, 'Live A', 'a', -1, 'live', 'live a'), "
+      "('old', 1, 1, 'Movie', 'm', NULL, 'vod', 'movie'), "
+      "('old', 1, 2, 'Live B', 'b', -1, 'live', 'live b')",
+    );
+    db.dispose();
+
+    await IptvCatalogDb.open();
+    final page = IptvCatalogDb.snapshot('old')!.page(offset: 0, limit: 10);
+    expect(page.map((channel) => channel.channelNumber), [1, null, 2]);
   });
 
   test(
@@ -136,6 +190,114 @@ void main() {
     expect(snap.count(), 95);
     expect(snap.page(offset: 30, limit: 30).first.name, 'Channel 30');
     expect(snap.page(offset: 90, limit: 30).length, 5);
+  });
+
+  test('live-row check excludes VOD-only catalogs', () {
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'vod-only',
+      channels: [
+        _ch(1, contentType: 'vod'),
+        _ch(2, contentType: 'series'),
+      ],
+    );
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'mixed',
+      channels: [
+        _ch(1, contentType: 'vod'),
+        _ch(2),
+      ],
+    );
+
+    expect(IptvCatalogDb.snapshot('vod-only')!.hasLiveChannels, isFalse);
+    expect(IptvCatalogDb.snapshot('mixed')!.hasLiveChannels, isTrue);
+  });
+
+  test('live channel numbers survive reorder and append new channels', () {
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'provider-live',
+      numberingSourceKey: 'provider-id',
+      channels: [
+        _ch(1, name: 'One', attributes: {'tvg-id': 'one'}),
+        _ch(2, name: 'Two', attributes: {'tvg-id': 'two'}),
+        _ch(3, name: 'Movie', contentType: 'vod'),
+      ],
+    );
+    var snap = IptvCatalogDb.snapshot('provider-live')!;
+    expect(IptvCatalogDb.hasNumberingSource('provider-id'), isTrue);
+    expect(snap.page(offset: 0, limit: 10).map((c) => c.channelNumber), [
+      1,
+      2,
+      null,
+    ]);
+
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'provider-live',
+      numberingSourceKey: 'provider-id',
+      channels: [
+        _ch(2, name: 'Two renamed', attributes: {'tvg-id': 'two'}),
+        _ch(4, name: 'Four', attributes: {'tvg-id': 'four'}),
+        _ch(1, name: 'One renamed', attributes: {'tvg-id': 'one'}),
+      ],
+    );
+    snap = IptvCatalogDb.snapshot('provider-live')!;
+    final page = snap.page(offset: 0, limit: 10);
+    expect(page.map((c) => c.channelNumber), [2, 3, 1]);
+    expect(snap.entryForChannelNumber(1)?.channel.name, 'One renamed');
+    expect(snap.entryForChannelNumber(3)?.position, 1);
+    expect(snap.entryForChannelNumber(99), isNull);
+  });
+
+  test('delete and re-add restores an archived matching lineup', () async {
+    final original = [
+      for (var i = 0; i < 25; i++)
+        _ch(i, name: 'Station $i', group: 'Live'),
+    ];
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'old-credentials',
+      numberingSourceKey: 'old-playlist-id',
+      channels: original,
+    );
+    await IptvCatalogDb.archiveNumberingSource('old-playlist-id');
+    IptvCatalogDb.removeCatalogs(['old-credentials']);
+
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'new-server-and-credentials',
+      numberingSourceKey: 'new-playlist-id',
+      channels: original.reversed.toList(),
+    );
+    final restored = IptvCatalogDb.snapshot('new-server-and-credentials')!;
+    expect(restored.entryForChannelNumber(1)?.channel.name, 'Station 0');
+    expect(restored.entryForChannelNumber(25)?.channel.name, 'Station 24');
+  });
+
+  test('an active identical provider keeps an independent namespace', () {
+    final lineup = [
+      for (var i = 0; i < 25; i++)
+        _ch(i, name: 'Station $i', attributes: {'tvg-id': 'station-$i'}),
+    ];
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'provider-a',
+      numberingSourceKey: 'playlist-a',
+      channels: lineup,
+    );
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'provider-b',
+      numberingSourceKey: 'playlist-b',
+      channels: lineup.reversed.toList(),
+    );
+    final providerB = IptvCatalogDb.snapshot('provider-b')!;
+    expect(
+      providerB.entryForChannelNumber(1)?.channel.attributes['tvg-id'],
+      'station-24',
+    );
   });
 
   test('group filter and counts match the chip semantics', () {

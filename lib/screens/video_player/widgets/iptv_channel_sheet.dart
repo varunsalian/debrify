@@ -508,7 +508,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           channel: channel,
           isFocused: isFocused,
           isCurrent: isCurrent,
-          channelNumber: origIdx + 1,
+          channelNumber: channel.channelNumber ?? (origIdx + 1),
           pulseAnim: _pulseAnim,
           onTap: () {
             if (origIdx >= 0) widget.onChannelSelected(origIdx);
@@ -894,4 +894,3 @@ class _TileSubLineState extends State<_TileSubLine> {
     );
   }
 }
-

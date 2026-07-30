@@ -233,6 +233,7 @@ String _encodeSnapshot(_EncodeJob job) {
       for (final c in job.channels)
         {
           'n': c.name,
+          if (c.channelNumber != null) 'cn': c.channelNumber,
           'u': c.url,
           if (c.logoUrl != null) 'l': c.logoUrl,
           if (c.group != null) 'g': c.group,
@@ -274,6 +275,7 @@ IptvCatalogSnapshot? _decodeSnapshot(String raw) {
       if (url.isEmpty) continue;
       channels.add(
         IptvChannel(
+          channelNumber: entry['cn'] is int ? entry['cn'] as int : null,
           name: name,
           url: url,
           logoUrl: entry['l']?.toString(),

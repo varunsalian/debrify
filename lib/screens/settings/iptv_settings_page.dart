@@ -232,7 +232,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     setState(() => _isAdding = true);
 
     // Validate URL by trying to fetch it
-    final result = await IptvService.instance.fetchPlaylist(url);
+    final playlistId = DateTime.now().microsecondsSinceEpoch.toString();
+    final result = await IptvService.instance.fetchPlaylist(
+      url,
+      numberingSourceKey: playlistId,
+    );
 
     if (!mounted) return;
 
@@ -251,7 +255,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // Create new playlist
     final epgUrl = _epgUrlController.text.trim();
     final playlist = IptvPlaylist(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: playlistId,
       name: name,
       url: url,
       epgUrl: epgUrl.isEmpty ? null : epgUrl,
@@ -515,6 +519,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final removedIndex = _playlists.indexWhere((p) => p.id == playlist.id);
     final newPlaylists = _playlists.where((p) => p.id != playlist.id).toList();
     await StorageService.setIptvPlaylists(newPlaylists);
+    await IptvCatalogDb.archiveNumberingSource(playlist.id);
 
     // If removed playlist was the default, clear default
     if (_defaultPlaylistId == playlist.id) {
@@ -616,6 +621,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         playlist.serverUrl!,
         playlist.username!,
         playlist.password!,
+        numberingSourceKey: playlist.id,
       );
     } else {
       IptvService.instance.clearCache(playlist.url);
@@ -626,6 +632,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       result = await IptvService.instance.fetchPlaylist(
         playlist.url,
         forceRefresh: true,
+        numberingSourceKey: playlist.id,
       );
     }
 

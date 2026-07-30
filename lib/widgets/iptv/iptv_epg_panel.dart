@@ -615,7 +615,7 @@ class IptvSchedulePane extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      channel.name,
+                      channel.numberedName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -697,7 +697,7 @@ Future<void> showIptvScheduleSheet(
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      channel.name,
+                      channel.numberedName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

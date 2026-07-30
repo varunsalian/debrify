@@ -1980,10 +1980,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nightModeButton?.onFocusChangeListener = extendTimerOnFocus
         updateNightModeButtonLabel()
 
-        // Reserved for direct channel-number entry. It is deliberately a
-        // focusable no-op for now so the live dock can keep Play/Pause exactly
-        // centered without promising unfinished behavior.
-        iptvJumpButton?.setOnClickListener {}
+        iptvJumpButton?.setOnClickListener {
+            hideControlsMenu()
+            showIptvChannelJumpDialog()
+        }
         iptvJumpButton?.onFocusChangeListener = extendTimerOnFocus
 
         audioButton?.setOnClickListener {
@@ -5331,6 +5331,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val channel = array.optJSONObject(index) ?: JSONObject()
             iptvChannelEntry(
                 index = index,
+                channelNumber = channel.optInt("channelNumber", 0).takeIf { it > 0 },
                 name = channel.optString("name"),
                 url = channel.optString("url"),
                 logoUrl = channel.optString("logoUrl").takeIf { it.isNotEmpty() },
@@ -5384,6 +5385,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }?.toMap() ?: emptyMap()
             iptvChannelEntry(
                 index = index,
+                channelNumber = (channel["channelNumber"] as? Number)
+                    ?.toInt()
+                    ?.takeIf { it > 0 },
                 name = channel["name"] as? String ?: return@mapIndexedNotNullTo null,
                 url = channel["url"] as? String ?: return@mapIndexedNotNullTo null,
                 logoUrl = (channel["logoUrl"] as? String)?.takeIf { it.isNotEmpty() },
@@ -5406,6 +5410,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun iptvChannelEntry(
         index: Int,
+        channelNumber: Int?,
         name: String,
         url: String,
         logoUrl: String?,
@@ -5428,6 +5433,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         return IptvChannelEntry(
             index = index,
+            channelNumber = channelNumber,
             name = name,
             url = url,
             logoUrl = logoUrl,
@@ -6339,6 +6345,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "logoUrl" to entry.logoUrl,
             "group" to entry.group,
             "sourceId" to entry.sourceId,
+            "channelNumber" to entry.channelNumber,
             "httpHeaders" to entry.httpHeaders,
             "isFavorite" to entry.isFavorite,
         )
@@ -6443,9 +6450,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvEpgLoading?.visibility = View.VISIBLE
         iptvEpgEmpty?.visibility = View.GONE
         iptvEpgList?.visibility = View.GONE
-        iptvEpgChannelName?.text = entry.name
+        iptvEpgChannelName?.text = entry.displayName
         iptvEpgChannelGroup?.text =
-            listOfNotNull(entry.group, "Channel ${entry.index + 1}").joinToString(" · ")
+            listOfNotNull(
+                entry.group,
+                "Channel ${entry.channelNumber ?: (entry.index + 1)}",
+            ).joinToString(" · ")
         paintIptvEpgLogo(entry)
         selectIptvEpgDay(0, requestFocus = false)
 
@@ -6607,6 +6617,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     checkpointCurrentIptvPosition()
                     val replay = IptvChannelEntry(
                         index = 0,
+                        channelNumber = null,
                         name = response["title"] as? String ?: programme.title,
                         url = url,
                         logoUrl = channelEntry.logoUrl,
@@ -6737,7 +6748,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun updateIptvGuideCurrentName() {
         if (currentIptvIndex in iptvChannels.indices) {
             val ch = iptvChannels[currentIptvIndex]
-            iptvGuideCurrentName?.text = ch.name
+            iptvGuideCurrentName?.text = ch.displayName
             iptvGuideNowPlaying?.visibility = View.VISIBLE
 
             // Group
@@ -6928,6 +6939,167 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvGuideUsesZapWindow = false
         iptvChannelAdapter?.updateChannels(fallback)
         refreshIptvBrowserChrome()
+    }
+
+    private fun showIptvChannelJumpDialog() {
+        val current = iptvChannels.getOrNull(currentIptvIndex)
+        if (current?.isLive != true) return
+        val activeSource = iptvSources.firstOrNull { it.id == iptvZapSourceId }
+        if (activeSource?.isFavorites == true) {
+            Toast.makeText(
+                this,
+                "Select a provider before jumping by channel number",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            hint = "Channel number"
+            setSingleLine(true)
+            imeOptions = EditorInfo.IME_ACTION_GO
+            setPadding(dp(20), dp(14), dp(20), dp(14))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Jump to channel")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Jump", null)
+            .create()
+        dialog.setOnShowListener {
+            val submit = {
+                val number = input.text?.toString()?.trim()?.toIntOrNull()
+                if (number == null || number <= 0) {
+                    input.error = "Enter a valid channel number"
+                } else {
+                    dialog.dismiss()
+                    requestIptvChannelJump(number)
+                }
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                submit()
+            }
+            input.setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_GO) {
+                    submit()
+                    true
+                } else {
+                    false
+                }
+            }
+            input.requestFocus()
+            dialog.window?.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+            )
+        }
+        dialog.show()
+    }
+
+    private fun requestIptvChannelJump(channelNumber: Int) {
+        val bridge = MainActivity.getAndroidTvPlayerChannel()
+        if (bridge == null) {
+            Toast.makeText(this, "Channel lookup is unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val token = ++iptvZapRequestToken
+        iptvZapRequestInFlight = true
+        bridge.invokeMethod(
+            "requestIptvBrowse",
+            hashMapOf<String, Any?>(
+                "action" to "channelNumber",
+                "sourceId" to iptvZapSourceId,
+                "contentType" to "live",
+                "channelNumber" to channelNumber,
+                "limit" to iptvZapPageSize,
+            ),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    if (token != iptvZapRequestToken) return
+                    iptvZapRequestInFlight = false
+                    val response = result as? Map<*, *>
+                    if (response == null || response["channelNotFound"] == true) {
+                        Toast.makeText(
+                            this@AndroidTvTorrentPlayerActivity,
+                            "Channel $channelNumber was not found",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        drainPendingIptvZapInputs()
+                        return
+                    }
+                    val channels = parseIptvChannels(
+                        response["channels"] as? List<*> ?: emptyList<Any>()
+                    )
+                    val target = channels.firstOrNull {
+                        it.channelNumber == channelNumber
+                    }
+                    if (target == null) {
+                        Toast.makeText(
+                            this@AndroidTvTorrentPlayerActivity,
+                            "Channel $channelNumber was not found",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        drainPendingIptvZapInputs()
+                        return
+                    }
+                    (response["sourceId"] as? String)?.takeIf { it.isNotEmpty() }?.let {
+                        iptvZapSourceId = it
+                        iptvSourceId = it
+                    }
+                    (response["sourceName"] as? String)?.takeIf { it.isNotEmpty() }?.let {
+                        iptvZapSourceName = it
+                        iptvSourceName = it
+                    }
+                    val category =
+                        (response["selectedCategory"] as? String)?.takeIf { it.isNotEmpty() }
+                    val categories = (response["categories"] as? List<*>)
+                        ?.mapNotNull { it as? String }
+                        ?.filter { it.isNotEmpty() }
+                        .orEmpty()
+                    iptvZapContentType = "live"
+                    iptvContentType = "live"
+                    iptvZapOwnsUiContext = true
+                    iptvZapPagingActive = true
+                    installIptvZapWindow(
+                        channels,
+                        (response["pageOffset"] as? Number)?.toInt()?.coerceAtLeast(0) ?: 0,
+                        (response["totalChannels"] as? Number)?.toInt()
+                            ?.coerceAtLeast(0) ?: channels.size,
+                        category,
+                        categories,
+                        preservePlayingChannel = false,
+                    )
+                    val selected = iptvChannels.firstOrNull {
+                        it.channelNumber == channelNumber
+                    } ?: return
+                    switchToIptvChannel(selected, checkpointOutgoing = false)
+                    drainPendingIptvZapInputs()
+                    prefetchIptvZapPage(1)
+                    prefetchIptvZapPage(-1)
+                }
+
+                override fun error(code: String, message: String?, details: Any?) {
+                    if (token != iptvZapRequestToken) return
+                    iptvZapRequestInFlight = false
+                    Toast.makeText(
+                        this@AndroidTvTorrentPlayerActivity,
+                        message ?: "Unable to look up that channel",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    drainPendingIptvZapInputs()
+                }
+
+                override fun notImplemented() {
+                    if (token != iptvZapRequestToken) return
+                    iptvZapRequestInFlight = false
+                    Toast.makeText(
+                        this@AndroidTvTorrentPlayerActivity,
+                        "Channel lookup is unavailable",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    drainPendingIptvZapInputs()
+                }
+            },
+        )
     }
 
     private fun requestIptvZapPage(
@@ -7336,7 +7508,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         beginIptvPlaybackAfterWatchRegistration(selected)
 
         // Update title
-        titleView.text = selected.name
+        titleView.text = selected.displayName
         titleContainer.visibility = View.VISIBLE
 
         // Channel-change feedback belongs to live zapping. VOD keeps the
@@ -7632,7 +7804,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // on top of the list (it's the topmost child of the content view).
         if (iptvGuideVisible) return
         val banner = ensureIptvZapBanner()
-        iptvZapBannerName?.text = entry.name
+        iptvZapBannerName?.text = entry.displayName
         val channelTotal =
             if (iptvZapPagingActive && iptvZapCategoryTotal > 0) {
                 iptvZapCategoryTotal
@@ -7642,7 +7814,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val meta = buildList {
             // "CH" reads wrong on an episode/movie list — plain position there.
             add(
-                if (entry.isLive) "CH ${entry.index + 1}/$channelTotal"
+                if (entry.isLive) {
+                    val number = entry.channelNumber ?: (entry.index + 1)
+                    "CH $number  •  ${entry.index + 1}/$channelTotal"
+                }
                 else "${entry.index + 1} of ${iptvChannels.size}"
             )
             entry.group?.takeIf { it.isNotEmpty() }?.let { add(it) }
@@ -7745,7 +7920,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         beginIptvPlayback(entry)
 
         // Show title briefly
-        titleView.text = entry.name
+        titleView.text = entry.displayName
         titleOttContainer.visibility = View.GONE
         titleContainer.visibility = View.VISIBLE
 
@@ -12200,6 +12375,7 @@ private class MoviePlaylistAdapter(
 
 private data class IptvChannelEntry(
     var index: Int,
+    val channelNumber: Int?,
     val name: String,
     val url: String,
     val logoUrl: String?,
@@ -12235,7 +12411,14 @@ private data class IptvChannelEntry(
     val season: Int? = null,
     val episode: Int? = null,
     val hasNextEpisode: Boolean? = null,
-)
+) {
+    val displayName: String
+        get() = if (isLive && channelNumber != null) {
+            "CH $channelNumber  $name"
+        } else {
+            name
+        }
+}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private class IptvChannelAdapter(
@@ -12290,7 +12473,7 @@ private class IptvChannelAdapter(
         holder.itemView.scaleY = 1.0f
 
         // Channel number
-        holder.number.text = (entry.index + 1).toString()
+        holder.number.text = (entry.channelNumber ?: (entry.index + 1)).toString()
         holder.number.setTextColor(
             if (entry.isCurrent) Color.argb(204, 0, 229, 255) // accent 80%
             else Color.argb(46, 255, 255, 255) // 18%

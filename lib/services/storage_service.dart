@@ -3049,6 +3049,7 @@ class StorageService {
     String? logoUrl,
     String? group,
     String? playlistId,
+    int? channelNumber,
     Map<String, String>? httpHeaders,
   }) {
     return IptvMediaStore.setChannelFavorited(
@@ -3058,6 +3059,7 @@ class StorageService {
       logoUrl: logoUrl,
       group: group,
       playlistId: playlistId,
+      channelNumber: channelNumber,
       httpHeaders: httpHeaders,
     );
   }

@@ -31,7 +31,7 @@ class DebrifyTvDatabase {
 
     _db = await openDatabase(
       dbPath,
-      version: 3,
+      version: 4,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -141,6 +141,13 @@ class DebrifyTvDatabase {
         if (oldVersion < 3) {
           await createIptvStoreTables(db);
         }
+        // v1/v2 create this table above using the current schema, which
+        // already contains the column. Only a genuine v3 database needs ALTER.
+        if (oldVersion == 3) {
+          await db.execute(
+            'ALTER TABLE iptv_favorites ADD COLUMN channel_number INTEGER',
+          );
+        }
       },
     );
 
@@ -168,6 +175,7 @@ class DebrifyTvDatabase {
         logo_url TEXT NOT NULL DEFAULT '',
         channel_group TEXT NOT NULL DEFAULT '',
         playlist_id TEXT NOT NULL DEFAULT '',
+        channel_number INTEGER,
         http_headers_json TEXT,
         added_at INTEGER NOT NULL DEFAULT 0
       )

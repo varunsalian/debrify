@@ -95,6 +95,9 @@ class IptvPlaylist {
 
 /// Represents an IPTV channel from an M3U playlist
 class IptvChannel {
+  /// Stable, provider-scoped number for live television. Null for VOD,
+  /// series, and sources that have not been numbered yet.
+  final int? channelNumber;
   final String name;
   final String url;
   final String? logoUrl;
@@ -110,6 +113,7 @@ class IptvChannel {
   final Map<String, String> httpHeaders;
 
   IptvChannel({
+    this.channelNumber,
     required this.name,
     required this.url,
     this.logoUrl,
@@ -151,7 +155,13 @@ class IptvChannel {
   /// Get tvg-name attribute if present
   String? get tvgName => attributes['tvg-name'];
 
+  /// UI label that keeps the provider's name intact for matching/search while
+  /// consistently exposing the assigned number anywhere a channel is named.
+  String get numberedName =>
+      channelNumber == null ? name : 'CH $channelNumber  $name';
+
   Map<String, dynamic> toJson() => {
+    if (channelNumber != null) 'channelNumber': channelNumber,
     'name': name,
     'url': url,
     if (logoUrl != null) 'logoUrl': logoUrl,
