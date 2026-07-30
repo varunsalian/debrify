@@ -2082,12 +2082,17 @@ class IptvResultsViewState extends State<IptvResultsView>
     ];
   }
 
-  /// The source's full category list for the in-player picker: the provider's
-  /// declared categories (verbatim order) when present, else every distinct
-  /// group — from the whole catalog (SQL) or the in-memory channel list. NOT
-  /// derived from a launch window, so the picker shows ALL categories, not just
-  /// the handful present in the ~1500 channels sent to the player.
+  /// The source's full category list for the in-player picker — ALL of the
+  /// provider's categories, not just the handful present in the ~1500 channels
+  /// sent to the player.
+  ///
+  /// Reuses [_categories], which the view already maintains for its own chips
+  /// (provider categories in order, else every distinct group) and refreshes on
+  /// each catalog load — so the launch/browse path never re-runs a GROUP BY on
+  /// the UI isolate. The snapshot/in-memory branches only cover the rare case
+  /// where it hasn't been populated yet.
   List<String> _fullCategoryList() {
+    if (_categories.isNotEmpty) return _categories;
     final snap = _dbSnapshot;
     if (snap != null) {
       if (snap.categories.isNotEmpty) return snap.categories;
@@ -2096,7 +2101,6 @@ class IptvResultsViewState extends State<IptvResultsView>
           if (group.name?.isNotEmpty == true) group.name!,
       ];
     }
-    if (_categories.isNotEmpty) return _categories;
     return <String>{
       for (final channel in _allChannels)
         if (channel.group?.isNotEmpty == true) channel.group!,
