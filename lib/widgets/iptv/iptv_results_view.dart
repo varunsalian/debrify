@@ -3005,10 +3005,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       quiet: true,
       buildChips: () => [
         // The Sources dropdown — EVERY source in one place: Favorites,
-        // Continue watching, and each playlist. Replaces the old left rail;
-        // sits to the left of Search all. Holds _playlistFilterFocusNode so
-        // every wire into "the first filter" (down-from-search-field,
-        // revalidate focus repair, focusFirstFilter) keeps working.
+        // Continue watching, and each playlist. Replaces the old left rail.
+        // Holds _playlistFilterFocusNode so every wire into "the first filter"
+        // (down-from-search-field, revalidate focus repair, focusFirstFilter)
+        // keeps working.
         StremioDropdown<String>(
           value: _selectedPlaylist?.id ?? '',
           quiet: true,
