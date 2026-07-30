@@ -258,7 +258,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvBrowseToken = 0
     private var iptvWatchRegistrationToken = 0
     private val iptvBrowseHandler = Handler(Looper.getMainLooper())
-    private var iptvSearchRunnable: Runnable? = null
 
     // Contextual EPG pane shown beside the Lean Rail.
     private var iptvEpgPanel: View? = null
@@ -519,9 +518,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                                         if (launchTrakt > 0 && launchTrakt < 100) (duration * launchTrakt / 100.0).toLong() else 0L
                                     if (launchMs > 2000 && launchMs < hi) {
                                         player?.seekTo(launchMs)
-                                        android.util.Log.d("AndroidTvPlayer", "Resume: explicit launch Trakt ${launchTrakt.toInt()}% -> $launchMs ms of $duration ms")
+                                        android.util.Log.d("AndroidTvPlayer", "Resume: explicit launch tracker ${launchTrakt.toInt()}% -> $launchMs ms of $duration ms")
                                     } else {
-                                        // FURTHEST-WATCHED WINS: the per-episode Trakt
+                                        // FURTHEST-WATCHED WINS: the per-episode tracker
                                         // candidate is gated to the resumable window
                                         // (past 2s, before the last 10%); the LOCAL
                                         // candidate keeps the old cascade's semantics —
@@ -2010,7 +2009,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     // [suppressTrakt]: a source switch resumes the captured live position and
-    // must not let the per-episode Trakt percent override it.
+    // must not let the per-episode tracker percent override it. The parameter
+    // retains its legacy name because the payload field does too.
     private fun playItem(index: Int, suppressTrakt: Boolean = false) {
         val model = payload ?: return
         android.util.Log.d("AndroidTvPlayer", "playItem called - index: $index, total items: ${model.items.size}")
@@ -2038,8 +2038,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentIndex = index
         val item = model.items[index]
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
-        // Keep BOTH the local position and the Trakt percent; STATE_READY resumes
-        // the FURTHER of the two (never backward). Suppress Trakt during
+        // Keep BOTH the local position and the remote tracker percent (the
+        // payload field is the furthest of Trakt + Simkl); STATE_READY resumes
+        // the FURTHER of the two (never backward). Suppress trackers during
         // auto-advance (binge starts the next episode fresh) and during a source
         // switch on the same content (must honour the captured live position).
         val autoAdvance = isAutoAdvancing
@@ -5512,22 +5513,37 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvSourceButton?.visibility = sourceControlsVisibility
         findViewById<View>(R.id.iptv_nav_browse)?.isSelected = true
 
+        // Instant, bounded local filter of the loaded (<=1500) window as the
+        // user types — this scans only the in-memory list and can't freeze, and
+        // it keeps the field-clear reset working. The heavy CATALOG search runs
+        // on SUBMIT only (below), never per keystroke.
         iptvGuideSearch?.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: android.text.Editable?) {
-                iptvSearchRunnable?.let { iptvBrowseHandler.removeCallbacks(it) }
-                iptvSearchRunnable = Runnable {
-                    // Keep the launch payload searchable even when this IPTV
-                    // session was opened without a Dart browse provider.
-                    filterIptvChannels()
-                    requestIptvBrowse(
-                        action = if (iptvSourceId == "all") "globalSearch" else "browse",
-                        query = s?.toString()?.trim().orEmpty(),
-                    )
-                }.also { iptvBrowseHandler.postDelayed(it, 350) }
+                filterIptvChannels()
             }
         })
+        // Submit-only catalog search: the full-catalog scan (globalSearch across
+        // all sources, or a paged browse of one source) fires when the user
+        // commits the query with the search / enter key — not on every keystroke,
+        // which is what froze the player on six-figure catalogs.
+        iptvGuideSearch?.setOnEditorActionListener { _, actionId, event ->
+            val isSubmit = actionId == EditorInfo.IME_ACTION_SEARCH ||
+                actionId == EditorInfo.IME_ACTION_DONE ||
+                actionId == EditorInfo.IME_ACTION_GO ||
+                (event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                    event.action == KeyEvent.ACTION_UP)
+            if (isSubmit) {
+                requestIptvBrowse(
+                    action = if (iptvSourceId == "all") "globalSearch" else "browse",
+                    query = iptvGuideSearch?.text?.toString()?.trim().orEmpty(),
+                )
+                true
+            } else {
+                false
+            }
+        }
 
         findViewById<View>(R.id.iptv_nav_browse)?.setOnClickListener {
             requestIptvBrowse(action = "browse")
@@ -9062,11 +9078,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         // Resume the previously-playing item; the captured position is carried
-        // on the item above as resumePositionMs. Suppress trakt/startAt percent
+        // on the item above as resumePositionMs. Suppress tracker/startAt percent
         // seeks so they can't override our explicit resume position — but ONLY
         // when the new source landed on the SAME content: a fallback episode
         // (exact episode missing from the new source) has no captured position
-        // and must keep its own per-episode Trakt resume, matching the Dart
+        // and must keep its own per-episode tracker resume, matching the Dart
         // player's landedOnSameContent behaviour.
         percentSeekApplied = true
         playItem(targetIndex, suppressTrakt = matchedSameContent)
@@ -9963,9 +9979,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         payload?.startAtPercent = startAtPercent
         percentSeekApplied = false
         pendingSeekMs = 0
-        // Clear any leftover per-episode Trakt percent from a torrent item whose
+        // Clear any leftover per-episode tracker percent from a torrent item whose
         // READY never fired (rapid switch mid-buffer) — the resume branch now
-        // arms on it, and a live channel must never seek to a stale Trakt offset.
+        // arms on it, and a live channel must never seek to a stale tracker offset.
         pendingItemTraktPercent = 0.0
         hasEverBeenReady = false
 
@@ -10387,9 +10403,10 @@ private data class PlaybackItem(
     val sizeBytes: Long?,
     val rating: Double?,
     val provider: String?,
-    // Trakt cross-device progress for this episode (0-100), or null. Display-only
-    // fallback for the playlist bar, and a resume source when there's no local
-    // position — converted to ms once the real duration is known.
+    // Cross-device progress for this episode (0-100), or null. The legacy JSON
+    // key is named traktProgressPercent, but Flutter sends the furthest of Trakt
+    // and Simkl. Display-only fallback for the playlist bar and a resume source
+    // when there's no local position.
     val traktProgressPercent: Double? = null,
 ) {
     fun seasonEpisodeLabel(): String {
@@ -10403,9 +10420,9 @@ private data class PlaybackItem(
     }
 
     /** Playlist-bar progress percent: the FURTHER of the local resume ratio and
-     *  the Trakt cross-device percent, so the bar never shows less than what's
-     *  actually been watched (local advances live; Trakt is a launch snapshot).
-     *  Exception: an active REWATCH — Trakt says finished (>=95) but there's a
+     *  the cross-device tracker percent, so the bar never shows less than what's
+     *  actually been watched (local advances live; trackers are a launch snapshot).
+     *  Exception: an active REWATCH — a tracker says finished (>=95) but there's a
      *  real in-progress local position — shows the live local percent, or the
      *  card would dim into the watched state while you're 20% into a rewatch. */
     fun displayProgressPercent(): Int {
