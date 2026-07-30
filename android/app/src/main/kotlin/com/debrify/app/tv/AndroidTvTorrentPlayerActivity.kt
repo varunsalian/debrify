@@ -5513,15 +5513,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvSourceButton?.visibility = sourceControlsVisibility
         findViewById<View>(R.id.iptv_nav_browse)?.isSelected = true
 
-        // Instant, bounded local filter of the loaded (<=1500) window as the
-        // user types — this scans only the in-memory list and can't freeze, and
-        // it keeps the field-clear reset working. The heavy CATALOG search runs
-        // on SUBMIT only (below), never per keystroke.
+        // Submit-only search: typing does NOT filter. (A live filter only ever
+        // reached the loaded <=1500 window, so it looked like search was missing
+        // channels.) Instead show a hint so the user commits the query with the
+        // OK / search key; the real search then runs over the WHOLE source.
         iptvGuideSearch?.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: android.text.Editable?) {
-                filterIptvChannels()
+                iptvGuideCountText?.text = if (s.isNullOrBlank()) {
+                    "${iptvBrowseChannels.size} items"
+                } else {
+                    "Press OK to search"
+                }
             }
         })
         // Submit-only catalog search: the full-catalog scan (globalSearch across
@@ -5596,17 +5600,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun isIptvSeriesSentinel(entry: IptvChannelEntry): Boolean =
         entry.contentType == "series" || entry.url.startsWith("xtream-series://")
-
-    private fun filterIptvChannels() {
-        val query = iptvGuideSearch?.text?.toString()?.trim()?.lowercase().orEmpty()
-        val filtered = iptvBrowseChannels.filter { channel ->
-            query.isEmpty() ||
-                channel.name.lowercase().contains(query) ||
-                channel.group?.lowercase()?.contains(query) == true
-        }
-        iptvChannelAdapter?.updateChannels(filtered)
-        iptvGuideCountText?.text = "${filtered.size} items"
-    }
 
     private fun showIptvGuide() {
         // The banner is attached last to the content view (topmost) — it must

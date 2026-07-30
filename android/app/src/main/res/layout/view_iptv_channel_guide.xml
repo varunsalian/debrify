@@ -273,7 +273,7 @@
                         android:drawableStart="@drawable/ic_search"
                         android:drawablePadding="8dp"
                         android:drawableTint="#FF778388"
-                        android:hint="Search this source..."
+                        android:hint="Search this source — press OK"
                         android:imeOptions="actionSearch"
                         android:inputType="text"
                         android:maxLines="1"
