@@ -142,6 +142,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvNextButton: AppCompatButton? = null
     private var iptvGuideButton: AppCompatButton? = null
     private var iptvJumpButton: AppCompatButton? = null
+    private var iptvUpPressActive = false
+    private var iptvUpLongPressHandled = false
     private var originalControlDockOrder: List<View> = emptyList()
     private var audioButton: AppCompatButton? = null
     private var subtitleButton: AppCompatButton? = null
@@ -4123,8 +4125,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (isIptvMode &&
                 iptvChannels.getOrNull(currentIptvIndex)?.isLive == true
             ) {
-                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                    showIptvGuide()
+                when (event.action) {
+                    KeyEvent.ACTION_DOWN -> {
+                        if (event.repeatCount == 0) {
+                            iptvUpPressActive = true
+                            iptvUpLongPressHandled = false
+                        } else if (iptvUpPressActive &&
+                            !iptvUpLongPressHandled &&
+                            event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD
+                        ) {
+                            iptvUpLongPressHandled = true
+                            hideControlsMenu()
+                            showIptvChannelJumpDialog()
+                        }
+                    }
+                    KeyEvent.ACTION_UP -> {
+                        if (iptvUpPressActive && !iptvUpLongPressHandled) {
+                            showIptvGuide()
+                        }
+                        iptvUpPressActive = false
+                        iptvUpLongPressHandled = false
+                    }
                 }
                 return true
             }
