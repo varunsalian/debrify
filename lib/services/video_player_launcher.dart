@@ -225,6 +225,11 @@ class VideoPlayerLaunchArgs {
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
+
+  /// The source's FULL category list, in provider order. Without it the player
+  /// derived categories from the windowed (~1500) channel list, so the picker
+  /// only ever showed the handful of groups in that window.
+  final List<String>? iptvCategories;
   final String? iptvSourceId;
   final String? iptvSourceName;
   final String? iptvSelectedCategory;
@@ -312,6 +317,7 @@ class VideoPlayerLaunchArgs {
     this.contentEpisode,
     this.iptvChannels,
     this.iptvStartIndex,
+    this.iptvCategories,
     this.iptvSourceId,
     this.iptvSourceName,
     this.iptvSelectedCategory,
@@ -376,6 +382,7 @@ class VideoPlayerLaunchArgs {
       contentTitle: contentTitle,
       iptvChannels: iptvChannels,
       iptvStartIndex: iptvStartIndex,
+      iptvCategories: iptvCategories,
       stremioSources: stremioSources,
       stremioCurrentSourceIndex: stremioCurrentSourceIndex,
       resolveStremioSource: resolveStremioSource,
@@ -681,6 +688,7 @@ class VideoPlayerLauncher {
           contentEpisode: args.contentEpisode,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
+          iptvCategories: args.iptvCategories,
           iptvSourceId: args.iptvSourceId,
           iptvSourceName: args.iptvSourceName,
           iptvSelectedCategory: args.iptvSelectedCategory,
@@ -770,6 +778,7 @@ class VideoPlayerLauncher {
           contentEpisode: args.contentEpisode,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
+          iptvCategories: args.iptvCategories,
           iptvSourceId: args.iptvSourceId,
           iptvSourceName: args.iptvSourceName,
           iptvSelectedCategory: args.iptvSelectedCategory,
@@ -2050,14 +2059,20 @@ class VideoPlayerLauncher {
       final channels = args.iptvChannels!;
       final startIndex = args.iptvStartIndex ?? 0;
 
-      // Build unique categories from channel groups
-      final categorySet = <String>{};
-      for (final c in channels) {
-        if (c.group != null && c.group!.isNotEmpty) {
-          categorySet.add(c.group!);
+      // The source's FULL category list (provider order). Only fall back to
+      // deriving from the windowed channels when the caller didn't supply it —
+      // deriving only ever saw the ~1500-channel window, so the picker showed a
+      // truncated set of categories.
+      var categories = args.iptvCategories ?? const <String>[];
+      if (categories.isEmpty) {
+        final categorySet = <String>{};
+        for (final c in channels) {
+          if (c.group != null && c.group!.isNotEmpty) {
+            categorySet.add(c.group!);
+          }
         }
+        categories = categorySet.toList()..sort();
       }
-      final categories = categorySet.toList()..sort();
 
       // Saved positions for the on-demand items in this payload, so a movie
       // picks up where it was left off — and so does one the user zaps to

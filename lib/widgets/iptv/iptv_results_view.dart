@@ -2082,6 +2082,28 @@ class IptvResultsViewState extends State<IptvResultsView>
     ];
   }
 
+  /// The source's full category list for the in-player picker: the provider's
+  /// declared categories (verbatim order) when present, else every distinct
+  /// group — from the whole catalog (SQL) or the in-memory channel list. NOT
+  /// derived from a launch window, so the picker shows ALL categories, not just
+  /// the handful present in the ~1500 channels sent to the player.
+  List<String> _fullCategoryList() {
+    final snap = _dbSnapshot;
+    if (snap != null) {
+      if (snap.categories.isNotEmpty) return snap.categories;
+      return [
+        for (final group in snap.groups())
+          if (group.name?.isNotEmpty == true) group.name!,
+      ];
+    }
+    if (_categories.isNotEmpty) return _categories;
+    return <String>{
+      for (final channel in _allChannels)
+        if (channel.group?.isNotEmpty == true) channel.group!,
+    }.toList()
+      ..sort();
+  }
+
   Future<Map<String, dynamic>?> _providePlayerIptvBrowse(
     Map<String, dynamic> request,
   ) async {
@@ -2354,20 +2376,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       channels = filtered.take(_kMaxPlayerChannels).toList();
     }
 
-    final categories = snap != null
-        ? (snap.categories.isNotEmpty
-              ? snap.categories
-              : [
-                  for (final group in snap.groups())
-                    if (group.name?.isNotEmpty == true) group.name!,
-                ])
-        : (_categories.isNotEmpty
-                ? _categories
-                : <String>{
-                    for (final channel in _allChannels)
-                      if (channel.group?.isNotEmpty == true) channel.group!,
-                  }.toList()
-            ..sort());
+    final categories = _fullCategoryList();
     return {
       'sourceId': source.id,
       'sourceName': source.name,
@@ -2606,6 +2615,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         viewMode: PlaylistViewMode.sorted,
         iptvChannels: playerChannels,
         iptvStartIndex: channelIndex,
+        iptvCategories: _fullCategoryList(),
         iptvSourceId: _selectedPlaylist?.id,
         iptvSourceName: _selectedPlaylist?.name,
         iptvSelectedCategory: _selectedCategory,
