@@ -1497,6 +1497,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     String contentType,
     int ticket,
   ) async {
+    // Built once and shared by every branch below: a branch that forgets to
+    // pass it silently loses its progress reporting, which is exactly how the
+    // M3U path shipped dead.
+    void report(String phase, {int? bytes, int? totalBytes}) =>
+        _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes);
+
     if (playlist.isXtreamCodes) {
       final xcService = XtreamCodesService.instance;
       if (contentType == 'vod') {
@@ -1504,8 +1510,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           playlist.serverUrl!,
           playlist.username!,
           playlist.password!,
-          onPhase: (phase, {bytes, totalBytes}) =>
-              _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes),
+          onPhase: report,
         );
       }
       if (contentType == 'series') {
@@ -1513,8 +1518,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           playlist.serverUrl!,
           playlist.username!,
           playlist.password!,
-          onPhase: (phase, {bytes, totalBytes}) =>
-              _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes),
+          onPhase: report,
         );
       }
       return xcService.fetchLiveStreams(
@@ -1522,13 +1526,13 @@ class IptvResultsViewState extends State<IptvResultsView>
         playlist.username!,
         playlist.password!,
         numberingSourceKey: playlist.id,
-        onPhase: (phase, {bytes, totalBytes}) =>
-              _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes),
+        onPhase: report,
       );
     }
     return _iptvService.fetchPlaylist(
       playlist.url,
       numberingSourceKey: playlist.id,
+      onPhase: report,
     );
   }
 
@@ -1664,6 +1668,10 @@ class IptvResultsViewState extends State<IptvResultsView>
     // A superseded load's fetch keeps running to completion; its reports must
     // not relabel the load that replaced it.
     if (!mounted || ticket != _loadTicket) return;
+    // Only a BLOCKING load owns this display. A background revalidate runs the
+    // same fetch under the same ticket, and its progress belongs in the status
+    // chip, not in state the next spinner would inherit.
+    if (!_isLoading) return;
     final phaseChanged = phase != _loadPhase;
     _loadPhase = phase;
     _loadBytes = bytes;
@@ -2190,6 +2198,11 @@ class IptvResultsViewState extends State<IptvResultsView>
       // Mirrors the reset _loadPlaylist performs; the spinner covers the gap
       // exactly as it did when the load was synchronous.
       _isLoading = true;
+      // The spinner is up NOW but the load is 350ms away, so the status must
+      // reset with it — otherwise this window renders the previous load's
+      // phase and byte count against a stale start time, with the ticker
+      // already stopped: frozen, wrong text rather than merely old.
+      _beginLoadStatus();
       _allChannels = [];
       _filteredChannels = [];
       _categories = [];
