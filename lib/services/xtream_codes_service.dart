@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
 import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
+import 'iptv_load_phase.dart';
 
 /// Result of Xtream Codes authentication
 class XcAuthResult {
@@ -280,6 +281,7 @@ class XtreamCodesService {
     String username,
     String password, {
     String? numberingSourceKey,
+    IptvLoadPhase? onPhase,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -287,6 +289,7 @@ class XtreamCodesService {
       password,
       contentType: 'live',
       numberingSourceKey: numberingSourceKey,
+      onPhase: onPhase,
     );
   }
 
@@ -294,9 +297,16 @@ class XtreamCodesService {
   Future<IptvParseResult> fetchVodStreams(
     String serverUrl,
     String username,
-    String password,
-  ) {
-    return _fetchStreams(serverUrl, username, password, contentType: 'vod');
+    String password, {
+    IptvLoadPhase? onPhase,
+  }) {
+    return _fetchStreams(
+      serverUrl,
+      username,
+      password,
+      contentType: 'vod',
+      onPhase: onPhase,
+    );
   }
 
   /// Fetch series (the browse list, one entry per show), converted to
@@ -306,9 +316,16 @@ class XtreamCodesService {
   Future<IptvParseResult> fetchSeriesStreams(
     String serverUrl,
     String username,
-    String password,
-  ) {
-    return _fetchStreams(serverUrl, username, password, contentType: 'series');
+    String password, {
+    IptvLoadPhase? onPhase,
+  }) {
+    return _fetchStreams(
+      serverUrl,
+      username,
+      password,
+      contentType: 'series',
+      onPhase: onPhase,
+    );
   }
 
   /// Shared fetch pipeline for live and VOD content.
@@ -318,6 +335,7 @@ class XtreamCodesService {
     String password, {
     required String contentType,
     String? numberingSourceKey,
+    IptvLoadPhase? onPhase,
   }) async {
     final isLive = contentType == 'live';
     final isSeries = contentType == 'series';
@@ -358,10 +376,12 @@ class XtreamCodesService {
       // Kick off both requests in parallel, but only the stream list is
       // required: a category failure (network or malformed body) must not
       // take down the whole fetch.
+      onPhase?.call(IptvLoadPhases.contacting);
       final categoriesFuture = _tryGet(
         '$base&action=$categoriesAction',
         const Duration(seconds: 30),
       );
+      onPhase?.call(IptvLoadPhases.downloading);
       final streamsResponse = await _getWithRetry(
         '$base&action=$streamsAction',
         timeout: const Duration(seconds: 90),
@@ -383,6 +403,7 @@ class XtreamCodesService {
       // exists to remove. Only the raw bytes are touched; the decode rides
       // along to the worker inside the job.
       final streamsBytes = streamsResponse.bodyBytes;
+      onPhase?.call(IptvLoadPhases.processing, bytes: streamsBytes.length);
       // One local for "the categories response we can actually use", so the
       // bytes and the charset can never be derived from disagreeing
       // conditions.

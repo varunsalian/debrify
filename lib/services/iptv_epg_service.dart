@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/iptv_playlist.dart';
 import 'iptv_catalog_db.dart';
+import 'iptv_load_phase.dart';
 import 'xmltv_epg_source.dart';
 
 /// One programme in a channel's guide.
@@ -260,6 +261,7 @@ class IptvEpgService {
     // the parse isolate, per-URL bindings resolved from catalog rows — the
     // url→id maps below are then never retained.
     String? dbCatalogKey,
+    IptvLoadPhase? onPhase,
   }) async {
     clearM3uEpgContext();
     final url = epgUrl?.trim();
@@ -351,6 +353,7 @@ class IptvEpgService {
       tvgIds: ids,
       channelNames: wantedNames,
       dbPath: dbMode ? IptvCatalogDb.path : null,
+      onPhase: onPhase,
     );
     if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
     if (guide == null) return M3uEpgStatus.failed;

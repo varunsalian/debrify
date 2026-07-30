@@ -13,6 +13,7 @@ import '../browse/brand_accent.dart';
 import '../browse/browse_results_focus.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_catalog_key.dart';
+import '../../services/iptv_load_phase.dart';
 import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_service.dart';
 import '../../services/main_page_bridge.dart';
@@ -44,6 +45,15 @@ final RegExp _railResExp = RegExp(r'\((\d{3,4}[pi])\)', caseSensitive: false);
 
 /// State of the bottom-right background-refresh chip.
 enum _CatalogChipState { hidden, updating, success, failure }
+
+/// Who currently owns the single status chip, in priority order.
+///
+/// Background jobs overlap — the guide download starts when the list is
+/// presented, the maintenance pipeline two seconds later, and a refresh after
+/// that — so without a rank the last writer wins and the chip flickers between
+/// unrelated messages. News about the LIST itself outranks news about the
+/// guide, and a stage only clears the chip if it still holds it.
+enum _ChipOwner { none, guide, maintenance, refresh }
 
 /// Main view for IPTV M3U results, to be embedded in TorrentSearchScreen
 class IptvResultsView extends StatefulWidget {
@@ -135,7 +145,28 @@ class IptvResultsViewState extends State<IptvResultsView>
   // network fetch), so instant in-memory-cache revalidates never flash it.
   _CatalogChipState _chipState = _CatalogChipState.hidden;
   String _chipMessage = '';
+  // ── Blocking-load status ────────────────────────────────────────────────
+  // A first load of a big panel is several seconds behind a spinner, and
+  // silence reads as "frozen". These carry what is happening plus a real
+  // number when one exists.
+  //
+  // Deliberately NOT setState-ed per update: byte callbacks fire per network
+  // chunk, and repainting on each would be exactly the UI-isolate churn this
+  // page has spent so long shedding. They are plain fields, and [_loadTicker]
+  // repaints once a second — which also makes the elapsed clock tick.
+  String? _loadPhase;
+  int? _loadBytes;
+  int? _loadTotalBytes;
+  DateTime? _loadStartedAt;
+  Timer? _loadTicker;
+
+  /// Past this, a load is slow enough that the user deserves to be told it is
+  /// normal rather than left guessing.
+  static const _slowLoadHint = Duration(seconds: 10);
+
+  _ChipOwner _chipOwner = _ChipOwner.none;
   Timer? _chipShowTimer;
+  Timer? _maintenanceChipTimer;
   Timer? _chipHideTimer;
 
   // Progressive (Stremio-addon) loads: [_loadTicket] orphans a superseded
@@ -544,6 +575,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
     _searchDebounce?.cancel();
     _contentTypeDebounce?.cancel();
+    _loadTicker?.cancel();
+    _maintenanceChipTimer?.cancel();
     _chipShowTimer?.cancel();
     _chipHideTimer?.cancel();
     _scrollController.dispose();
@@ -571,6 +604,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   }) async {
     final ticket = ++_loadTicket;
     _lastProgressiveApply = null;
+    _beginLoadStatus();
     // A lingering refresh chip belongs to the outgoing playlist.
     _chipShowTimer?.cancel();
     _chipHideTimer?.cancel();
@@ -583,6 +617,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       _categories = [];
       _selectedCategory = null;
       _chipState = _CatalogChipState.hidden;
+      _chipOwner = _ChipOwner.none;
       _dbSnapshot = null;
       _dbGroupCounts = const {};
       // The outgoing catalog's instances are no use to the incoming one.
@@ -673,19 +708,21 @@ class IptvResultsViewState extends State<IptvResultsView>
       // provider could ingest while the previous page's surviving adoption or
       // refresh was still running — the overlap this all exists to prevent.
       result = await IptvCatalogDb.runExclusive(
-        () => _fetchCatalogFromNetwork(playlist, contentType),
+        () => _fetchCatalogFromNetwork(playlist, contentType, ticket),
       );
     } else {
-      result = await _fetchCatalogFromNetwork(playlist, contentType);
+      result = await _fetchCatalogFromNetwork(playlist, contentType, ticket);
     }
 
     if (!mounted || ticket != _loadTicket) return;
+    _onLoadPhase(ticket, IptvLoadPhases.preparing);
 
     if (result.hasError) {
       // The context lifecycle follows leaving the playlist, not load
       // success: a failed switch must still drop the previous playlist's
       // guide index (memory + wrong capability answers for its URLs).
       IptvEpgService.instance.clearM3uEpgContext();
+      _endLoadStatus();
       setState(() {
         _isLoading = false;
         _isLoadingMore = false;
@@ -801,6 +838,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // Focus nodes are created lazily per channel (keyed by URL) in the
     // grid's itemBuilder via _focusNodeFor.
 
+    _endLoadStatus();
     setState(() {
       _isLoading = false;
       _isLoadingMore = false;
@@ -862,6 +900,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         if (g.name != null && g.name!.isNotEmpty) g.name!: g.count,
     };
 
+    _endLoadStatus();
     setState(() {
       _isLoading = false;
       _isLoadingMore = false;
@@ -1012,20 +1051,43 @@ class IptvResultsViewState extends State<IptvResultsView>
     // pipeline queued behind one that already did the work finds nothing to do
     // and costs a few indexed reads.
     return IptvCatalogDb.runExclusive(() async {
-      await _runPendingMigrations(cacheKey, ticket);
-      if (!mounted || ticket != _loadTicket) return;
+      // Decided BEFORE the work so the chip can be scheduled up front, and so
+      // a launch with nothing outstanding stays completely silent — this is
+      // one-time work, and every subsequent launch must say nothing at all.
+      final snapBefore = IptvCatalogDb.snapshot(cacheKey);
+      final willNumber = snapBefore != null &&
+          snapBefore.channelCount > 0 &&
+          snapBefore.hasLiveChannels &&
+          !IptvCatalogDb.hasNumberingSource(playlist.id) &&
+          !IptvCatalogDb.adoptionRecentlyFailed(playlist.id);
+      final narrate = IptvCatalogDb.hasPendingMigrations || willNumber;
+      if (narrate) _scheduleMaintenanceChip(ticket);
+
+      var numbersMoved = await _runPendingMigrations(cacheKey, ticket);
+      if (!mounted || ticket != _loadTicket) {
+        _finishMaintenanceChip(narrate: narrate, numbersMoved: false);
+        return;
+      }
 
       final snap = IptvCatalogDb.snapshot(cacheKey);
-      if (snap == null || snap.channelCount == 0) return;
+      if (snap == null || snap.channelCount == 0) {
+        _finishMaintenanceChip(narrate: narrate, numbersMoved: numbersMoved);
+        return;
+      }
 
       final needsNumbering =
           snap.hasLiveChannels &&
           !IptvCatalogDb.hasNumberingSource(playlist.id) &&
           !IptvCatalogDb.adoptionRecentlyFailed(playlist.id);
       if (needsNumbering) {
-        await _adoptNumbering(playlist, cacheKey, ticket);
-        if (!mounted || ticket != _loadTicket) return;
+        numbersMoved =
+            await _adoptNumbering(playlist, cacheKey, ticket) || numbersMoved;
+        if (!mounted || ticket != _loadTicket) {
+          _finishMaintenanceChip(narrate: narrate, numbersMoved: false);
+          return;
+        }
       }
+      _finishMaintenanceChip(narrate: narrate, numbersMoved: numbersMoved);
 
       // Re-read staleness too: the catalog may have been refreshed by the
       // pipeline this one queued behind.
@@ -1043,23 +1105,88 @@ class IptvResultsViewState extends State<IptvResultsView>
     });
   }
 
+  /// Narrate the guide download — the longest single background job, and
+  /// until now completely silent.
+  ///
+  /// Lowest chip priority on purpose: news about the channel list (a refresh,
+  /// or the one-time numbering pass) always outranks news about the guide.
+  /// Throttled to whole megabytes rather than every chunk, since the chip is
+  /// small and a digit flickering ten times a second reads as broken.
+  void _onGuidePhase(int ticket, int? bytes, int? totalBytes) {
+    if (!mounted || ticket != _loadTicket || bytes == null) return;
+    final mb = bytes ~/ (1024 * 1024);
+    if (mb == _lastGuideMb) return;
+    _lastGuideMb = mb;
+    if (mb == 0) return; // nothing worth announcing for a small guide
+    final label = loadBytesLabel(bytes, totalBytes);
+    _showChip(
+      _CatalogChipState.updating,
+      label == null ? 'Loading TV guide…' : 'Loading TV guide… $label',
+      owner: _ChipOwner.guide,
+    );
+  }
+
+  int _lastGuideMb = -1;
+
+  /// Announce the one-time library preparation — but only if it lasts long
+  /// enough to be worth a word. Migration is normally ~45ms, and a chip that
+  /// flashes for one frame is noise, so this borrows the refresh chip's
+  /// delayed-show trick.
+  void _scheduleMaintenanceChip(int ticket) {
+    _maintenanceChipTimer?.cancel();
+    _maintenanceChipTimer = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted || ticket != _loadTicket) return;
+      _showChip(
+        _CatalogChipState.updating,
+        'Preparing channel numbers…',
+        owner: _ChipOwner.maintenance,
+      );
+    });
+  }
+
+  /// Close out the maintenance narration.
+  ///
+  /// [numbersMoved] is the whole reason this exists: when numbers actually
+  /// change, every row's label gains a "CH n" prefix at once, and an
+  /// unexplained mutation is worse than a slow one. When nothing moved, the
+  /// chip simply goes away without ever claiming something happened.
+  void _finishMaintenanceChip({
+    required bool narrate,
+    required bool numbersMoved,
+  }) {
+    _maintenanceChipTimer?.cancel();
+    if (!narrate) return;
+    if (numbersMoved) {
+      _showChip(
+        _CatalogChipState.success,
+        'Channel numbers ready',
+        autoHide: const Duration(milliseconds: 2200),
+        owner: _ChipOwner.maintenance,
+      );
+      return;
+    }
+    _hideChipIfOwned(_ChipOwner.maintenance);
+  }
+
   /// Apply any pending catalog-DB upgrade in the background, then show the
   /// result. Never rethrows: a migration that fails leaves rows exactly as
   /// they were (its transaction rolls back), and the page must keep working —
   /// throwing here would strand it on the spinner forever.
-  Future<void> _runPendingMigrations(String cacheKey, int ticket) async {
+  Future<bool> _runPendingMigrations(String cacheKey, int ticket) async {
     try {
       final applied = await IptvCatalogDb.ensureMigrations();
-      if (!applied || !mounted || ticket != _loadTicket) return;
+      if (!applied || !mounted || ticket != _loadTicket) return false;
       // Rows presented before the backfill landed hold null numbers; re-fault
       // them so the numbers show up. Skipped entirely when this load already
       // presented after the migration, or moved on to another catalog.
-      if (_dbSnapshot?.catalogKey != cacheKey) return;
+      if (_dbSnapshot?.catalogKey != cacheKey) return true;
       final fresh = IptvCatalogDb.snapshot(cacheKey);
       if (fresh != null) _rebuildDbFacades(fresh);
+      return true;
     } catch (e) {
       debugPrint('IptvResultsView: catalog migration failed: $e');
     }
+    return false;
   }
 
   /// Give a catalog stored before channel numbering existed its durable
@@ -1076,7 +1203,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// which also owns the refresh that may follow. It must not queue any
   /// further maintenance itself — that would wait on a gate its own caller is
   /// holding.
-  Future<void> _adoptNumbering(
+  Future<bool> _adoptNumbering(
     IptvPlaylist playlist,
     String cacheKey,
     int ticket,
@@ -1086,7 +1213,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         catalogKey: cacheKey,
         sourceKey: playlist.id,
       );
-      if (!mounted || ticket != _loadTicket) return;
+      if (!mounted || ticket != _loadTicket) return false;
       // Adoption normally confirms the numbers the v2 backfill already wrote,
       // in which case the rows on screen are correct and rebuilding them would
       // cost focus and scroll for nothing. Only a namespace that relinked to an
@@ -1094,6 +1221,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       if (corrected > 0) {
         final fresh = IptvCatalogDb.snapshot(cacheKey);
         if (fresh != null) _rebuildDbFacades(fresh);
+        return true;
       }
     } catch (e) {
       // Backed off inside adoptNumbering; the catalog is untouched and the
@@ -1101,6 +1229,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       // user about.
       debugPrint('IptvResultsView: numbering adoption failed: $e');
     }
+    return false;
   }
 
   /// Re-fault the visible rows from the DB at the SAME generation — for a
@@ -1154,7 +1283,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     IptvParseResult result;
     try {
-      result = await _fetchCatalogFromNetwork(playlist, contentType);
+      result = await _fetchCatalogFromNetwork(playlist, contentType, ticket);
     } catch (e) {
       result = IptvParseResult(
         channels: const [],
@@ -1366,6 +1495,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   Future<IptvParseResult> _fetchCatalogFromNetwork(
     IptvPlaylist playlist,
     String contentType,
+    int ticket,
   ) async {
     if (playlist.isXtreamCodes) {
       final xcService = XtreamCodesService.instance;
@@ -1374,6 +1504,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           playlist.serverUrl!,
           playlist.username!,
           playlist.password!,
+          onPhase: (phase, {bytes, totalBytes}) =>
+              _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes),
         );
       }
       if (contentType == 'series') {
@@ -1381,6 +1513,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           playlist.serverUrl!,
           playlist.username!,
           playlist.password!,
+          onPhase: (phase, {bytes, totalBytes}) =>
+              _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes),
         );
       }
       return xcService.fetchLiveStreams(
@@ -1388,6 +1522,8 @@ class IptvResultsViewState extends State<IptvResultsView>
         playlist.username!,
         playlist.password!,
         numberingSourceKey: playlist.id,
+        onPhase: (phase, {bytes, totalBytes}) =>
+              _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes),
       );
     }
     return _iptvService.fetchPlaylist(
@@ -1417,12 +1553,183 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
 
+  /// The blocking-load state. A bare spinner is indistinguishable from a hung
+  /// app, and on a 50k panel this screen is held for several seconds — so it
+  /// says which stage is running, carries a real number when one exists, and
+  /// runs a clock so there is always something moving even when the stage
+  /// itself is opaque (a buffered download, or the decode/ingest worker).
+  Widget _buildLoadingState(BuildContext context) {
+    final theme = Theme.of(context);
+    final phase = _loadPhase;
+    final startedAt = _loadStartedAt;
+    final elapsed = startedAt == null
+        ? Duration.zero
+        : DateTime.now().difference(startedAt);
+
+    final step = phase == null ? -1 : IptvLoadPhases.ordered.indexOf(phase);
+    final stepLabel = step < 0
+        ? null
+        : 'Step ${step + 1} of ${IptvLoadPhases.ordered.length}';
+
+    final meta = <String>[
+      if (_loadBytesLabel != null) _loadBytesLabel!,
+      if (elapsed.inSeconds > 0) formatLoadElapsed(elapsed),
+    ].join('  ·  ');
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 18),
+            Text(
+              phase ?? 'Loading…',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (stepLabel != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                stepLabel,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+            if (meta.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                meta,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+            // Only after the wait is genuinely long: saying this immediately
+            // would make every quick load look slow.
+            if (elapsed >= _slowLoadHint) ...[
+              const SizedBox(height: 14),
+              Text(
+                'Large playlists can take a minute on TV devices.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Begin (or restart) the blocking-load status for a fresh load.
+  void _beginLoadStatus() {
+    _loadPhase = null;
+    _loadBytes = null;
+    _loadTotalBytes = null;
+    _loadStartedAt = DateTime.now();
+    _lastGuideMb = -1;
+    _loadTicker?.cancel();
+    // One repaint a second: enough for a clock and a byte counter to look
+    // alive, cheap enough that a TV never notices it.
+    _loadTicker = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || !_isLoading) {
+        timer.cancel();
+        return;
+      }
+      setState(() {});
+    });
+  }
+
+  void _endLoadStatus() {
+    _loadTicker?.cancel();
+    _loadTicker = null;
+  }
+
+  /// Receives phase reports from the services. A changed PHASE repaints
+  /// immediately (four times a load); byte updates only update the fields and
+  /// ride the next tick.
+  void _onLoadPhase(
+    int ticket,
+    String phase, {
+    int? bytes,
+    int? totalBytes,
+  }) {
+    // A superseded load's fetch keeps running to completion; its reports must
+    // not relabel the load that replaced it.
+    if (!mounted || ticket != _loadTicket) return;
+    final phaseChanged = phase != _loadPhase;
+    _loadPhase = phase;
+    _loadBytes = bytes;
+    _loadTotalBytes = totalBytes;
+    if (phaseChanged && _isLoading) setState(() {});
+  }
+
+  @visibleForTesting
+  static String formatLoadBytes(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '$bytes B';
+  }
+
+  @visibleForTesting
+  static String formatLoadElapsed(Duration d) {
+    final minutes = d.inMinutes;
+    final seconds = d.inSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// "12.4 / 50.0 MB" when the transfer is observable, "42.1 MB" when only the
+  /// landed size is known, null when there is no honest number to show — a
+  /// buffered fetch that has not landed yet must not imply progress it cannot
+  /// measure.
+  @visibleForTesting
+  static String? loadBytesLabel(int? bytes, int? totalBytes) {
+    if (bytes == null) return null;
+    if (totalBytes != null && totalBytes > 0) {
+      return '${formatLoadBytes(bytes)} / ${formatLoadBytes(totalBytes)}';
+    }
+    if (bytes == 0) return null;
+    return formatLoadBytes(bytes);
+  }
+
+  String? get _loadBytesLabel => loadBytesLabel(_loadBytes, _loadTotalBytes);
+
+  /// Whether a stage owning [incoming] may take the chip from [current].
+  /// Pure, so the priority rule is testable without pumping the page.
+  @visibleForTesting
+  static bool chipClaimAllowed(int current, int incoming) =>
+      incoming >= current;
+
+  /// Priority ranks, exposed for the same reason.
+  @visibleForTesting
+  static int get chipRankNone => _ChipOwner.none.index;
+  @visibleForTesting
+  static int get chipRankGuide => _ChipOwner.guide.index;
+  @visibleForTesting
+  static int get chipRankMaintenance => _ChipOwner.maintenance.index;
+  @visibleForTesting
+  static int get chipRankRefresh => _ChipOwner.refresh.index;
+
   void _showChip(
     _CatalogChipState state,
     String message, {
     Duration? autoHide,
+    _ChipOwner owner = _ChipOwner.refresh,
   }) {
     if (!mounted) return;
+    // Outranked by whatever is already speaking: stay quiet rather than
+    // stomping it.
+    if (!chipClaimAllowed(_chipOwner.index, owner.index)) return;
+    _chipOwner = owner;
     _chipHideTimer?.cancel();
     setState(() {
       _chipState = state;
@@ -1433,7 +1740,19 @@ class IptvResultsViewState extends State<IptvResultsView>
         if (mounted && _chipState != _CatalogChipState.hidden) {
           setState(() => _chipState = _CatalogChipState.hidden);
         }
+        _chipOwner = _ChipOwner.none;
       });
+    }
+  }
+
+  /// Clear the chip only if [owner] still holds it — a stage that has been
+  /// superseded must not blank the message that replaced it.
+  void _hideChipIfOwned(_ChipOwner owner) {
+    if (_chipOwner != owner) return;
+    _chipHideTimer?.cancel();
+    _chipOwner = _ChipOwner.none;
+    if (mounted && _chipState != _CatalogChipState.hidden) {
+      setState(() => _chipState = _CatalogChipState.hidden);
     }
   }
 
@@ -1464,6 +1783,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     bool quiet = false,
   }) {
     final service = IptvEpgService.instance;
+    _lastGuideMb = -1;
     final isPlainM3u =
         !playlist.isFavorites &&
         !playlist.isContinueWatching &&
@@ -1473,6 +1793,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         playlist.isXtreamCodes && _selectedContentType == 'live';
     if (!isPlainM3u && !isXtreamLive) {
       service.clearM3uEpgContext();
+      _hideChipIfOwned(_ChipOwner.guide);
       return;
     }
     // A user-configured guide URL beats every derived source.
@@ -1526,9 +1847,14 @@ class IptvResultsViewState extends State<IptvResultsView>
             // DB-backed view: the guide stores its rows in iptv_catalog.db and
             // binds URLs through the catalog instead of whole-playlist maps.
             dbCatalogKey: _dbSnapshot?.catalogKey,
+            onPhase: (phase, {bytes, totalBytes}) =>
+                _onGuidePhase(ticket, bytes, totalBytes),
           ),
         )
         .then((status) {
+          // The guide is done one way or another — drop its chip if it is
+          // still the one speaking.
+          _hideChipIfOwned(_ChipOwner.guide);
           if (!mounted || ticket != _loadTicket) return;
           // Failure hints only for a guide the user configured themselves.
           // Header-derived url-tvg URLs are routinely dead in wild playlists —
@@ -1588,6 +1914,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     final wasFirstBatch = firstBatch;
     _lastProgressiveApply = now;
+    _endLoadStatus();
     setState(() {
       _isLoading = false; // first batch swaps the spinner for real rows
       _isLoadingMore = true;
@@ -3379,7 +3706,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     // Loading
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildLoadingState(context);
     }
 
     // Error

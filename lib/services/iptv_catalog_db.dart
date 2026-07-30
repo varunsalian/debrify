@@ -522,6 +522,12 @@ class IptvCatalogDb {
     return result;
   }
 
+  /// Whether a row-level upgrade is still outstanding. One database-header
+  /// read, so the page can decide whether the work is worth narrating before
+  /// committing to say anything.
+  static bool get hasPendingMigrations =>
+      isOpen && _schemaVersionOf(_requireDb()) < _schemaVersion;
+
   /// Returns true when this call actually applied an upgrade — the caller uses
   /// that to refresh rows it may have already rendered unnumbered.
   static Future<bool> ensureMigrations() async {

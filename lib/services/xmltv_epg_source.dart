@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:xml/xml_events.dart';
 
 import 'iptv_catalog_db.dart';
+import 'iptv_load_phase.dart';
 
 /// The filtered guide for one playlist: programmes per XMLTV channel id,
 /// plus the name→id resolutions the parser made for channels that matched by
@@ -121,6 +122,7 @@ class XmltvEpgSource {
     required Set<String> tvgIds,
     required Set<String> channelNames,
     String? dbPath,
+    IptvLoadPhase? onPhase,
   }) {
     if (tvgIds.isEmpty && channelNames.isEmpty) return Future.value(null);
     // In-flight coalescing keys on the exact request (URL + id/name sets);
@@ -133,7 +135,7 @@ class XmltvEpgSource {
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
     final future =
-        _load(epgUrl, tvgIds, channelNames, dbPath).whenComplete(() {
+        _load(epgUrl, tvgIds, channelNames, dbPath, onPhase).whenComplete(() {
       _inFlight.remove(key);
     });
     _inFlight[key] = future;
@@ -145,6 +147,7 @@ class XmltvEpgSource {
     Set<String> tvgIds,
     Set<String> channelNames,
     String? dbPath,
+    IptvLoadPhase? onPhase,
   ) async {
     // One stored guide per URL, overwritten in place — keying on the id
     // set too would mint a new multi-MB orphan on every channel-list churn
@@ -157,7 +160,7 @@ class XmltvEpgSource {
 
     if (dbPath != null) {
       return _loadDbMode(epgUrl, tvgIds, channelNames, dbPath, guideKey,
-          cacheFile);
+          cacheFile, onPhase);
     }
 
     // Fresh snapshot → done, no network at all.
@@ -233,6 +236,7 @@ class XmltvEpgSource {
     String dbPath,
     String guideKey,
     File legacyFile,
+    IptvLoadPhase? onPhase,
   ) async {
     var info = IptvCatalogDb.epgGuideInfo(guideKey);
 
@@ -314,6 +318,7 @@ class XmltvEpgSource {
       channelNames,
       dbPath: dbPath,
       guideKey: guideKey,
+      onPhase: onPhase,
     );
     if (guide == null) {
       _lastFailureAt[epgUrl] = DateTime.now();
@@ -363,6 +368,7 @@ class XmltvEpgSource {
     Set<String> channelNames, {
     String? dbPath,
     String? guideKey,
+    IptvLoadPhase? onPhase,
   }) async {
     final client = http.Client();
     File? tempFile;
@@ -395,6 +401,14 @@ class XmltvEpgSource {
         await for (final chunk
             in response.stream.timeout(const Duration(seconds: 60))) {
           written += chunk.length;
+          // Already a streaming loop with a running total — the guide is the
+          // longest single download in the whole IPTV flow, so this is the one
+          // place a genuinely live number is free.
+          onPhase?.call(
+            IptvLoadPhases.downloading,
+            bytes: written,
+            totalBytes: declared,
+          );
           if (written > _maxDownloadBytes ||
               DateTime.now().difference(startedAt) > _downloadDeadline) {
             debugPrint('XmltvEpgSource: download aborted (size/deadline)');

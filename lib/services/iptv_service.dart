@@ -6,6 +6,7 @@ import '../models/iptv_playlist.dart';
 import '../utils/m3u_parser.dart';
 import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
+import 'iptv_load_phase.dart';
 
 /// Service for fetching and managing IPTV M3U playlists
 class IptvService {
@@ -37,6 +38,7 @@ class IptvService {
     String url, {
     bool forceRefresh = false,
     String? numberingSourceKey,
+    IptvLoadPhase? onPhase,
   }) async {
     // With the catalog database open, the parse worker ingests straight
     // into it and this service's in-memory cache is bypassed — freshness
@@ -55,6 +57,7 @@ class IptvService {
 
     debugPrint('IptvService: Fetching playlist from $url');
 
+    onPhase?.call(IptvLoadPhases.contacting);
     final client = http.Client();
     try {
       final request = http.Request('GET', Uri.parse(url));
@@ -86,9 +89,21 @@ class IptvService {
       // aborts early instead of buffering the whole payload.
       final startedAt = DateTime.now();
       final builder = BytesBuilder(copy: false);
+      onPhase?.call(
+        IptvLoadPhases.downloading,
+        bytes: 0,
+        totalBytes: declaredLength,
+      );
       await for (final chunk
           in streamed.stream.timeout(const Duration(seconds: 60))) {
         builder.add(chunk);
+        // Fired per chunk; the page stores it and repaints on its own 1Hz
+        // tick, so this never costs a frame.
+        onPhase?.call(
+          IptvLoadPhases.downloading,
+          bytes: builder.length,
+          totalBytes: declaredLength,
+        );
         if (DateTime.now().difference(startedAt) > _fetchDeadline) {
           return IptvParseResult(
             channels: [],
@@ -107,7 +122,9 @@ class IptvService {
         }
       }
 
-      final content = M3uParser.decodeBytes(builder.takeBytes());
+      final bytes = builder.takeBytes();
+      onPhase?.call(IptvLoadPhases.processing, bytes: bytes.length);
+      final content = M3uParser.decodeBytes(bytes);
 
       final result = await _parse(
         content,
