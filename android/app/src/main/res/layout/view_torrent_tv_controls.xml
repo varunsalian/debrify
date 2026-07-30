@@ -181,6 +181,7 @@
 
             <!-- ══ DIVIDER ══ -->
             <View
+                android:id="@+id/debrify_controls_left_divider"
                 android:layout_width="1dp"
                 android:layout_height="18dp"
                 android:layout_marginStart="6dp"
@@ -196,6 +197,7 @@
 
             <!-- ══ DIVIDER ══ -->
             <View
+                android:id="@+id/debrify_controls_right_divider"
                 android:layout_width="1dp"
                 android:layout_height="18dp"
                 android:layout_marginStart="6dp"
@@ -240,6 +242,16 @@
                 android:drawableStart="@drawable/ic_night_mode"
                 android:text="Night"
                 android:layout_marginEnd="0dp" />
+
+            <!-- Live IPTV placeholder; positioned at runtime and intentionally
+                 has no action until direct channel-number jumping is added. -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/iptv_jump_channel_button"
+                style="@style/CinemaControlButton"
+                android:drawableStart="@drawable/ic_next_channel"
+                android:text="Jump"
+                android:contentDescription="Jump to channel"
+                android:visibility="gone" />
 
         </LinearLayout>
 

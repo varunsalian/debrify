@@ -141,6 +141,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvPrevButton: AppCompatButton? = null
     private var iptvNextButton: AppCompatButton? = null
     private var iptvGuideButton: AppCompatButton? = null
+    private var iptvJumpButton: AppCompatButton? = null
+    private var originalControlDockOrder: List<View> = emptyList()
     private var audioButton: AppCompatButton? = null
     private var subtitleButton: AppCompatButton? = null
     private var aspectButton: AppCompatButton? = null
@@ -1882,6 +1884,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvNextButton = nextButton
         iptvPrevButton = prevButton
         iptvGuideButton = playlistButton
+        iptvJumpButton = playerView.findViewById(R.id.iptv_jump_channel_button)
+        playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)?.let { dock ->
+            if (originalControlDockOrder.isEmpty()) {
+                originalControlDockOrder =
+                    List(dock.childCount) { index -> dock.getChildAt(index) }
+            }
+        }
 
         // Time display views (Cinema Mode)
         debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display)  // Legacy (hidden)
@@ -1943,6 +1952,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         applyAppleTvAnimation(nextButton)
         applyAppleTvAnimation(prevButton)
         applyAppleTvAnimation(randomButton)
+        applyAppleTvAnimation(iptvJumpButton)
 
         val extendTimerOnFocus = View.OnFocusChangeListener { _, hasFocus ->
             if (hasFocus && controlsMenuVisible) {
@@ -1969,6 +1979,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         nightModeButton?.onFocusChangeListener = extendTimerOnFocus
         updateNightModeButtonLabel()
+
+        // Reserved for direct channel-number entry. It is deliberately a
+        // focusable no-op for now so the live dock can keep Play/Pause exactly
+        // centered without promising unfinished behavior.
+        iptvJumpButton?.setOnClickListener {}
+        iptvJumpButton?.onFocusChangeListener = extendTimerOnFocus
 
         audioButton?.setOnClickListener {
             if (USE_UNIFIED_MENU && unifiedMenu != null) {
@@ -5458,6 +5474,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             nightModeButton,
             iptvPrevButton,
             iptvNextButton,
+            iptvJumpButton,
             playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
         )
         buttons.forEach {
@@ -5487,12 +5504,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun updateIptvControlPresentation(entry: IptvChannelEntry?) {
         val live = entry?.isLive != false
         val vodVisibility = if (live) View.GONE else View.VISIBLE
-        if (!live) restoreCinemaIptvControlStyle()
+        if (live) {
+            arrangeLiveIptvControlDock()
+        } else {
+            restoreCinemaIptvControlStyle()
+        }
         cinemaProgressContainer?.visibility = vodVisibility
         debrifyTimeCurrent?.visibility = vodVisibility
         debrifyTimeTotal?.visibility = vodVisibility
         speedButton?.visibility = vodVisibility
-        nightModeButton?.visibility = vodVisibility
+        nightModeButton?.visibility = View.VISIBLE
+        iptvJumpButton?.visibility = if (live) View.VISIBLE else View.GONE
         iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
         if (!live && iptvGuideVisible) hideIptvGuide()
         if (live) {
@@ -5505,7 +5527,54 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** Live IPTV uses a balanced nine-action dock:
+     *  Audio · Subs · Aspect | CH- · Play/Pause · CH+ | Guide · Jump · Night.
+     *  The XML order remains the standard cinema/VOD order; only the live
+     *  presentation is rearranged, so movies and episodes keep their old UX. */
+    private fun arrangeLiveIptvControlDock() {
+        val dock =
+            playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)
+                ?: return
+        val desired = listOfNotNull(
+            audioButton,
+            subtitleButton,
+            aspectButton,
+            playerView.findViewById<View>(R.id.debrify_controls_left_divider),
+            iptvPrevButton,
+            pauseButton,
+            iptvNextButton,
+            playerView.findViewById<View>(R.id.debrify_controls_right_divider),
+            iptvGuideButton,
+            iptvJumpButton,
+            nightModeButton,
+        )
+        replaceControlDockOrder(dock, desired)
+    }
+
+    private fun restoreOriginalControlDockOrder() {
+        val dock =
+            playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)
+                ?: return
+        if (originalControlDockOrder.isNotEmpty()) {
+            replaceControlDockOrder(dock, originalControlDockOrder)
+        }
+    }
+
+    private fun replaceControlDockOrder(dock: LinearLayout, leading: List<View>) {
+        // Keep hidden/format-specific controls attached after the requested
+        // order. GONE children consume no space, but retaining them lets the
+        // same dock switch back to VOD without reinflating the controller.
+        val order = leading + originalControlDockOrder.filterNot { it in leading }
+        val alreadyApplied =
+            dock.childCount == order.size &&
+                order.indices.all { index -> dock.getChildAt(index) === order[index] }
+        if (alreadyApplied) return
+        dock.removeAllViews()
+        order.forEach { dock.addView(it) }
+    }
+
     private fun restoreCinemaIptvControlStyle() {
+        restoreOriginalControlDockOrder()
         playerView.findViewById<View>(R.id.debrify_controls_buttons)
             ?.setBackgroundResource(R.drawable.cinema_dock_bg)
         val standardButtons = listOfNotNull(
@@ -5517,6 +5586,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvPrevButton,
             iptvNextButton,
             iptvGuideButton,
+            iptvJumpButton,
         )
         standardButtons.forEach {
             it.setBackgroundResource(R.drawable.cinema_button_bg)
