@@ -637,45 +637,6 @@ class IptvCatalogDb {
     } catch (_) {}
     return const [];
   }
-
-  // ── Worker-side snapshot access ──────────────────────────────────────────
-  //
-  // A CatalogSnapshot binds to a live [Database], which can't cross isolates.
-  // A worker (e.g. the global-search isolate) opens its OWN connection from
-  // [path] via [withConnection] and pins snapshots to it with [snapshotOn].
-  // Nothing here uses any optional SQLite feature — plain reads only.
-
-  /// Runs [body] with a throwaway connection opened on [dbPath], disposing it
-  /// afterward. For worker isolates that were handed [IptvCatalogDb.path].
-  static T withConnection<T>(String dbPath, T Function(Database db) body) {
-    final db = _openConnection(dbPath);
-    try {
-      return body(db);
-    } finally {
-      db.dispose();
-    }
-  }
-
-  /// A snapshot pinned to an explicit (catalogKey, generation) on [db] — for
-  /// worker-side readers whose caller already resolved the generation on the
-  /// UI connection. Only the fields the read path uses are populated; catalog
-  /// metadata (channelCount, categories, epg, …) is left at defaults because
-  /// search/count/page never touch it.
-  static CatalogSnapshot snapshotOn(
-    Database db,
-    String catalogKey,
-    int generation,
-  ) =>
-      CatalogSnapshot._(
-        db: db,
-        catalogKey: catalogKey,
-        generation: generation,
-        channelCount: 0,
-        contentDigest: '',
-        categories: const [],
-        epgUrl: null,
-        ingestedAt: 0,
-      );
 }
 
 /// A read view pinned to one committed generation of one catalog.

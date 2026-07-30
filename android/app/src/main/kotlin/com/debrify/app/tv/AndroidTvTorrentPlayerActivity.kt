@@ -5528,9 +5528,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
         })
-        // Submit-only catalog search: the full-catalog scan (globalSearch across
-        // all sources, or a paged browse of one source) fires when the user
-        // commits the query with the search / enter key — not on every keystroke,
+        // Submit-only catalog search: the paged browse of the current source
+        // fires when the user commits the query with the search / enter key —
+        // not on every keystroke,
         // which is what froze the player on six-figure catalogs.
         iptvGuideSearch?.setOnEditorActionListener { _, actionId, event ->
             val isSubmit = actionId == EditorInfo.IME_ACTION_SEARCH ||
@@ -5540,7 +5540,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     event.action == KeyEvent.ACTION_UP)
             if (isSubmit) {
                 requestIptvBrowse(
-                    action = if (iptvSourceId == "all") "globalSearch" else "browse",
+                    action = "browse",
                     query = iptvGuideSearch?.text?.toString()?.trim().orEmpty(),
                 )
                 true
@@ -5640,7 +5640,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun refreshIptvBrowserChrome(title: String? = null) {
-        iptvSourceButton?.text = if (iptvSourceId == "all") "All sources" else iptvSourceName
+        iptvSourceButton?.text = iptvSourceName
         iptvCategoryButton?.text = iptvSelectedCategory ?: "All categories"
         iptvGuideTitle?.text = title ?: when (iptvContentType) {
             "vod" -> "Movies"
@@ -5662,13 +5662,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun selectIptvContentType(contentType: String) {
-        if (iptvContentType == contentType && iptvSourceId != "all") return
+        if (iptvContentType == contentType) return
         iptvContentType = contentType
         iptvSelectedCategory = null
         refreshIptvBrowserChrome()
-        requestIptvBrowse(
-            action = if (iptvSourceId == "all") "globalSearch" else "browse",
-        )
+        requestIptvBrowse(action = "browse")
     }
 
     private fun selectIptvSource(source: IptvSourceEntry) {
@@ -5690,23 +5688,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun showIptvSourcePicker() {
         if (iptvSources.isEmpty()) return
-        val options = mutableListOf("All sources")
-        options.addAll(iptvSources.map { it.name })
+        val options = iptvSources.map { it.name }
         AlertDialog.Builder(this)
             .setTitle("Choose source")
             .setItems(options.toTypedArray()) { _, index ->
-                if (index == 0) {
-                    iptvSourceId = "all"
-                    iptvSourceName = "All sources"
-                    iptvSelectedCategory = null
-                    iptvCategories.clear()
-                    if (iptvContentType == "episodes") iptvContentType = "series"
-                    iptvGuideSearch?.setText("")
-                    refreshIptvBrowserChrome()
-                    iptvGuideSearch?.requestFocus()
-                } else {
-                    selectIptvSource(iptvSources[index - 1])
-                }
+                selectIptvSource(iptvSources[index])
             }
             .show()
     }
@@ -5784,9 +5770,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             dialog.dismiss()
             iptvSelectedCategory = category.takeUnless { it == allLabel }
             refreshIptvBrowserChrome()
-            requestIptvBrowse(
-                action = if (iptvSourceId == "all") "globalSearch" else "browse",
-            )
+            requestIptvBrowse(action = "browse")
         }
         categoryList.adapter = adapter
 

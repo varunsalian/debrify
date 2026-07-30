@@ -17,7 +17,6 @@ import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_catalog_cache.dart';
 import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_service.dart';
-import '../../services/iptv_global_search.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_iptv_service.dart';
 import '../../services/stremio_service.dart';
@@ -25,7 +24,6 @@ import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
-import '../../screens/iptv/iptv_global_search_page.dart';
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
@@ -226,9 +224,6 @@ class IptvResultsViewState extends State<IptvResultsView>
   );
   final FocusNode _contentTypeFocusNode = FocusNode(
     debugLabel: 'iptv-content-type-filter',
-  );
-  final FocusNode _globalSearchFocusNode = FocusNode(
-    debugLabel: 'iptv-global-search-chip',
   );
 
   /// Per-category channel counts for the current catalog (redesign labels).
@@ -564,7 +559,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     _playlistFilterFocusNode.dispose();
     _categoryFilterFocusNode.dispose();
     _contentTypeFocusNode.dispose();
-    _globalSearchFocusNode.dispose();
     _previewShown.dispose();
     _previewShowing.dispose();
     _previewEpoch.dispose();
@@ -2000,7 +1994,6 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// of ms right on OK. A window this size is far more guide than anyone
   /// DPADs through while still launching instantly.
   static const int _kMaxPlayerChannels = 1500;
-  IptvGlobalSearchIndex? _playerGlobalSearchIndex;
   List<IptvChannel> _playerSeriesEpisodes = const [];
   String? _playerSeriesEpisodeSourceId;
   String? _playerSeriesTitle;
@@ -2114,58 +2107,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (!mounted) return null;
     final action = request['action'] as String? ?? 'browse';
     final query = (request['query'] as String? ?? '').trim();
-
-    if (action == 'globalSearch') {
-      if (query.isEmpty) {
-        return {
-          'sourceId': 'all',
-          'sourceName': 'All sources',
-          'contentType': request['contentType'] ?? 'live',
-          'categories': const <String>[],
-          'sources': _playerSourcePayload(),
-          'channels': const <Map<String, dynamic>>[],
-        };
-      }
-      final index = _playerGlobalSearchIndex ??=
-          await IptvGlobalSearchIndex.load();
-      if (!mounted) return null;
-      // Run the catalog scan on a worker isolate — the in-player "search all"
-      // used to call the synchronous search() here, which froze the UI on a
-      // six-figure catalog exactly like the Search-all page did. A worker
-      // failure falls back to the inline scan, then to empty.
-      IptvGlobalSearchResults results;
-      try {
-        results = await index.searchAsync(query);
-      } catch (_) {
-        try {
-          results = index.search(query);
-        } catch (_) {
-          results = const IptvGlobalSearchResults(
-            live: [], vod: [], series: [],
-            liveTotal: 0, vodTotal: 0, seriesTotal: 0,
-          );
-        }
-      }
-      if (!mounted) return null;
-      final requestedType = request['contentType'] as String?;
-      final hits = switch (requestedType) {
-        'vod' => results.vod,
-        'series' => results.series,
-        _ => results.live,
-      };
-      final entries = [
-        for (final hit in hits)
-          (channel: hit.channel, source: hit.source.playlist),
-      ];
-      return {
-        'sourceId': 'all',
-        'sourceName': 'All sources',
-        'contentType': requestedType ?? 'live',
-        'categories': const <String>[],
-        'sources': _playerSourcePayload(),
-        'channels': await _playerChannelPayload(entries),
-      };
-    }
 
     final sourceId = request['sourceId'] as String? ?? _selectedPlaylist?.id;
     IptvPlaylist? source;
@@ -2824,24 +2765,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (focused) _clearPreview();
   }
 
-  /// Open the cross-source global search page. The preview is emptied first
-  /// for the same reason [_openSeriesDetail] empties it: playback launched
-  /// from the covered route must never race a backdrop left running
-  /// underneath. On return, freshly watched items land in the shelf/bars.
-  void _openGlobalSearch() {
-    _clearPreview();
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) =>
-                IptvGlobalSearchPage(isTelevision: widget.isTelevision),
-          ),
-        )
-        .then((_) {
-          if (mounted) _refreshAfterPlayback();
-        });
-  }
-
   void _navigateToSettings() {
     // Captured for the EPG-URL-edit case below: _loadSettings only reloads
     // the playlist when the SELECTION changes, so an edit to the current
@@ -3009,10 +2932,6 @@ class IptvResultsViewState extends State<IptvResultsView>
           contentTypeFocusNode: _contentTypeFocusNode,
           onUpArrowPressed: widget.onUpArrowFromFilters,
           onDownArrowPressed: _focusFirstChannel,
-          onGlobalSearch: _redesignEnabled ? _openGlobalSearch : null,
-          globalSearchFocusNode: _redesignEnabled
-              ? _globalSearchFocusNode
-              : null,
         ),
 
         // Content
@@ -3118,16 +3037,6 @@ class IptvResultsViewState extends State<IptvResultsView>
             }
           },
         ),
-        // Redesign adds the global-search entry point beside the sources
-        // dropdown. Its own focus node — the sources dropdown took the
-        // "first filter" node above.
-        if (_redesignEnabled)
-          _QuietSearchChip(
-            focusNode: _globalSearchFocusNode,
-            onPressed: _openGlobalSearch,
-            onUpArrowPressed: widget.onUpArrowFromFilters,
-            onDownArrowPressed: _focusFirstChannel,
-          ),
         if (_selectedPlaylist?.isXtreamCodes ?? false)
           StremioDropdown<String>(
             label: 'type',
@@ -3721,110 +3630,6 @@ class IptvResultsViewState extends State<IptvResultsView>
         ),
         Expanded(child: grid),
       ],
-    );
-  }
-}
-
-/// The quiet filter row's global-search pill (redesign): same bare-segment
-/// language as the quiet dropdowns beside it, opens the cross-source search
-/// page. Carries the row's "first filter" focus node — see the call site.
-class _QuietSearchChip extends StatefulWidget {
-  final FocusNode focusNode;
-  final VoidCallback onPressed;
-  final VoidCallback? onUpArrowPressed;
-  final VoidCallback? onDownArrowPressed;
-
-  const _QuietSearchChip({
-    required this.focusNode,
-    required this.onPressed,
-    this.onUpArrowPressed,
-    this.onDownArrowPressed,
-  });
-
-  @override
-  State<_QuietSearchChip> createState() => _QuietSearchChipState();
-}
-
-class _QuietSearchChipState extends State<_QuietSearchChip> {
-  bool _focused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_onFocusChange);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocusChange);
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (mounted) setState(() => _focused = widget.focusNode.hasFocus);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (isActivateKey(event.logicalKey)) {
-          widget.onPressed();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-            widget.onUpArrowPressed != null) {
-          widget.onUpArrowPressed!();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-            widget.onDownArrowPressed != null) {
-          widget.onDownArrowPressed!();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
-          decoration: BoxDecoration(
-            color: _focused
-                ? kSeeAllAccent.withValues(alpha: 0.30)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-            // Constant thickness — only the color changes on focus, so the
-            // row never reflows on DPAD moves (quiet-chip house rule).
-            border: Border.all(
-              width: 1.2,
-              color: _focused
-                  ? kSeeAllAccent2.withValues(alpha: 0.45)
-                  : Colors.transparent,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.travel_explore_rounded,
-                size: 14,
-                color: _focused ? Colors.white : kSeeAllAccent2,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                'Search all',
-                style: TextStyle(
-                  color: _focused ? Colors.white : kSeeAllAccent2,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

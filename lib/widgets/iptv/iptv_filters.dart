@@ -55,11 +55,6 @@ class IptvFiltersBar extends StatelessWidget {
   final VoidCallback? onUpArrowPressed;
   final VoidCallback? onDownArrowPressed;
 
-  /// Opens the cross-source global search page (redesign). Null hides the
-  /// chip entirely — the bar renders exactly as before the redesign.
-  final VoidCallback? onGlobalSearch;
-  final FocusNode? globalSearchFocusNode;
-
   const IptvFiltersBar({
     super.key,
     required this.playlists,
@@ -81,8 +76,6 @@ class IptvFiltersBar extends StatelessWidget {
     this.contentTypeFocusNode,
     this.onUpArrowPressed,
     this.onDownArrowPressed,
-    this.onGlobalSearch,
-    this.globalSearchFocusNode,
   });
 
   @override
@@ -98,16 +91,12 @@ class IptvFiltersBar extends StatelessWidget {
           // Hide channel count on small screens (< 400px)
           final showChannelCount = constraints.maxWidth >= 400;
 
-          final hasGlobalSearch = onGlobalSearch != null;
-
           // Determine DPAD right-arrow targets from playlist dropdown
           VoidCallback? playlistRightArrow;
           if (showContentTypeFilter) {
             playlistRightArrow = () => contentTypeFocusNode?.requestFocus();
           } else if (hasCategories) {
             playlistRightArrow = () => categoryFocusNode?.requestFocus();
-          } else if (hasGlobalSearch) {
-            playlistRightArrow = () => globalSearchFocusNode?.requestFocus();
           }
 
           // Determine DPAD left-arrow target from category dropdown
@@ -116,17 +105,6 @@ class IptvFiltersBar extends StatelessWidget {
             categoryLeftArrow = () => contentTypeFocusNode?.requestFocus();
           } else {
             categoryLeftArrow = () => playlistFocusNode?.requestFocus();
-          }
-
-          // The search-all chip sits at the row's end; LEFT walks back into
-          // whatever neighbor actually exists.
-          VoidCallback? globalSearchLeftArrow;
-          if (hasCategories) {
-            globalSearchLeftArrow = () => categoryFocusNode?.requestFocus();
-          } else if (showContentTypeFilter) {
-            globalSearchLeftArrow = () => contentTypeFocusNode?.requestFocus();
-          } else {
-            globalSearchLeftArrow = () => playlistFocusNode?.requestFocus();
           }
 
           return Row(
@@ -157,9 +135,7 @@ class IptvFiltersBar extends StatelessWidget {
                   onLeftArrowPressed: () => playlistFocusNode?.requestFocus(),
                   onRightArrowPressed: hasCategories
                       ? () => categoryFocusNode?.requestFocus()
-                      : hasGlobalSearch
-                          ? () => globalSearchFocusNode?.requestFocus()
-                          : null,
+                      : null,
                 ),
               ],
               const SizedBox(width: 8),
@@ -176,23 +152,9 @@ class IptvFiltersBar extends StatelessWidget {
                     onUpArrowPressed: onUpArrowPressed,
                     onDownArrowPressed: onDownArrowPressed,
                     onLeftArrowPressed: categoryLeftArrow,
-                    onRightArrowPressed: hasGlobalSearch
-                        ? () => globalSearchFocusNode?.requestFocus()
-                        : null,
+                    onRightArrowPressed: null,
                   ),
                 ),
-
-              // Search-all-sources chip (redesign)
-              if (hasGlobalSearch) ...[
-                const SizedBox(width: 8),
-                _GlobalSearchChip(
-                  onPressed: onGlobalSearch!,
-                  focusNode: globalSearchFocusNode,
-                  onUpArrowPressed: onUpArrowPressed,
-                  onDownArrowPressed: onDownArrowPressed,
-                  onLeftArrowPressed: globalSearchLeftArrow,
-                ),
-              ],
 
               // Channel count or loading indicator (hidden on small screens)
               if (showChannelCount) ...[
@@ -876,101 +838,6 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
 
             const SizedBox(height: 16),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Compact boxed chip that opens the cross-source global search page. Same
-/// glass-chip language as the dropdowns beside it; icon-only, because the
-/// bar is already the page's tightest row.
-class _GlobalSearchChip extends StatefulWidget {
-  final VoidCallback onPressed;
-  final FocusNode? focusNode;
-  final VoidCallback? onUpArrowPressed;
-  final VoidCallback? onDownArrowPressed;
-  final VoidCallback? onLeftArrowPressed;
-
-  const _GlobalSearchChip({
-    required this.onPressed,
-    this.focusNode,
-    this.onUpArrowPressed,
-    this.onDownArrowPressed,
-    this.onLeftArrowPressed,
-  });
-
-  @override
-  State<_GlobalSearchChip> createState() => _GlobalSearchChipState();
-}
-
-class _GlobalSearchChipState extends State<_GlobalSearchChip> {
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode?.addListener(_onFocusChange);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode?.removeListener(_onFocusChange);
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    setState(() => _isFocused = widget.focusNode?.hasFocus ?? false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (isActivateKey(event.logicalKey)) {
-          widget.onPressed();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-            widget.onUpArrowPressed != null) {
-          widget.onUpArrowPressed!();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-            widget.onDownArrowPressed != null) {
-          widget.onDownArrowPressed!();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-            widget.onLeftArrowPressed != null) {
-          widget.onLeftArrowPressed!();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: Tooltip(
-          message: 'Search all sources',
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-            decoration: BoxDecoration(
-              color: kSeeAllPanel,
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(
-                width: 2,
-                color: _isFocused ? kSeeAllAccent : kSeeAllLine,
-              ),
-            ),
-            child: const Icon(
-              Icons.travel_explore_rounded,
-              size: 18,
-              color: kSeeAllAccent2,
-            ),
-          ),
         ),
       ),
     );
