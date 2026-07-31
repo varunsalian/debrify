@@ -2623,9 +2623,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     !_isAndroidTv && constraints.maxWidth >= 600;
                 final nonTvIndices = _sidebarOrderedIndices(visibleIndices);
                 final nonTvSelected = nonTvIndices.indexOf(_selectedIndex);
-                // Touch tablets (iPad / Android tablet in landscape) have no
-                // mouse hover to reveal labels, so expand the rail and show
-                // every label. True desktop keeps the slim hover-reveal rail.
+                // Touch tablets (iPad / Android tablet in landscape) get the
+                // wider rail. True desktop keeps the slim rail.
                 final expandDesktopSidebar =
                     !kIsWeb && (Platform.isAndroid || Platform.isIOS);
                 final desktopSidebarWidth = expandDesktopSidebar
