@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -491,9 +492,48 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool get _iptvZapBannerOwnsIdentity =>
       _currentIptvChannel?.isLive == true;
 
+  /// Bumped whenever the guide reports a browse the user drove (a category
+  /// pick, a search, a source change). An in-flight re-anchor that predates
+  /// the change must not land: it would reset the ring and the persisted
+  /// category, silently undoing what the user just asked for.
+  int _iptvGuideContextGeneration = 0;
+
   void _persistIptvGuideContext(IptvGuideContext context) {
     if (!mounted) return;
+    _iptvGuideContextGeneration++;
     setState(() => _iptvGuideContextOverride = context);
+  }
+
+  /// Make the guide's selected category follow the playing channel.
+  ///
+  /// The native player re-anchors its browsing context to the playing
+  /// channel's group on every tune and every pick. Here the category only
+  /// ever moved when the user chose one, so after zapping — or after picking
+  /// a channel from a different category — reopening the guide showed a
+  /// category that no longer contained what was on screen.
+  void _anchorIptvGuideCategory(IptvChannel channel, {Object? categories}) {
+    if (!mounted || !channel.isLive) return;
+    final group = channel.group?.trim();
+    final category = (group == null || group.isEmpty) ? null : group;
+    final current = _iptvGuideContextOverride;
+    final nextCategories = categories is List
+        ? categories.whereType<String>().toList()
+        : (current?.categories ?? widget.iptvCategories ?? const <String>[]);
+    if (current != null &&
+        current.selectedCategory == category &&
+        listEquals(nextCategories, current.categories)) {
+      return;
+    }
+    setState(() {
+      _iptvGuideContextOverride = IptvGuideContext(
+        categories: nextCategories,
+        sourceId: current?.sourceId ?? widget.iptvSourceId,
+        // Same fallback the sheet applies to a nameless source.
+        sourceName: current?.sourceName ?? widget.iptvSourceName ?? 'IPTV',
+        selectedCategory: category,
+        contentType: current?.contentType ?? widget.iptvContentType ?? 'live',
+      );
+    });
   }
 
   void _cancelPendingIptvCatchup({bool hideFeedback = true}) {
@@ -1502,6 +1542,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               _controlsVisible.value = false;
               _prepareIptvBannerData(iptvChannel);
               _raiseIptvZapBanner();
+              // Anchor the browsing context to what is playing, the way the
+              // native player bootstraps it. Both halves matter: the category
+              // alone would label the guide with a group the launch window
+              // does not match, and the list would then shrink to it the
+              // moment anything re-filtered.
+              _anchorIptvGuideCategory(iptvChannel);
+              unawaited(
+                _reanchorIptvRingToCategory(
+                  iptvChannel,
+                  switchTicket: _iptvSwitchTicket,
+                ),
+              );
             } else {
               // Show channel badge when player is ready (if enabled)
               if (widget.showChannelName && _channelBadgeText != null) {
@@ -2947,8 +2999,103 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   ) async {
     if (index < 0 || index >= channels.length) return;
     _cancelPendingIptvCatchup();
+    final channel = channels[index];
+    // Adopt the visible list first so playback starts immediately; the
+    // re-anchor below then replaces it with the channel's own category.
     _iptvChannelsOverride = List<IptvChannel>.from(channels);
-    await _switchToIptvChannel(index);
+    // Take this tune's generation from the call itself. _switchToIptvChannel
+    // bumps the ticket synchronously before its first await, and it returns
+    // normally when a newer tune supersedes it — so reading the ticket AFTER
+    // the await would read the newer tune's value and defeat every staleness
+    // check downstream.
+    final switchFuture = _switchToIptvChannel(index);
+    final switchTicket = _iptvSwitchTicket;
+    await switchFuture;
+    if (!mounted || switchTicket != _iptvSwitchTicket) return;
+    unawaited(
+      _reanchorIptvRingToCategory(channel, switchTicket: switchTicket),
+    );
+  }
+
+  /// Rebuild the channel ring around [channel] from its own category.
+  ///
+  /// The native guide does this on every pick (`beginIptvCategoryZapSession`):
+  /// the list you navigate afterwards is the channel's category, never the
+  /// list you happened to pick from. Without it, choosing a channel out of a
+  /// search left the search matches standing in as the entire channel list —
+  /// so the guide reopened onto a handful of unrelated channels, and the
+  /// category shown alongside them belonged to the previous selection.
+  ///
+  /// Best effort by design: playback has already started, so a failed or
+  /// unhelpful page simply leaves the adopted list in place, which is what
+  /// the native fallback does too.
+  Future<void> _reanchorIptvRingToCategory(
+    IptvChannel channel, {
+    required int switchTicket,
+  }) async {
+    final provider = widget.iptvBrowseProvider;
+    if (provider == null || !channel.isLive) return;
+    if (switchTicket != _iptvSwitchTicket) return;
+    final category = channel.group?.trim();
+    final contextGeneration = _iptvGuideContextGeneration;
+
+    Map<String, dynamic>? result;
+    try {
+      result = await provider({
+        'action': 'zapPage',
+        'sourceId': _iptvGuideContextOverride?.sourceId ?? widget.iptvSourceId,
+        'contentType': 'live',
+        'category': (category == null || category.isEmpty) ? null : category,
+        'query': '',
+        'anchorUrl': channel.url,
+        'anchorName': channel.name,
+        'offset': 0,
+        // Deliberately larger than any page size: the provider clamps this to
+        // its own per-launch maximum, which is the size the launch list
+        // already had. A default zap page is a fraction of that, and unlike
+        // the native guide this one has no scroll-prefetch to grow a small
+        // window — asking for the maximum keeps the ring anchored AND whole.
+        'limit': 1 << 24,
+      });
+    } catch (error) {
+      debugPrint('Player: IPTV ring re-anchor failed: $error');
+      return;
+    }
+    if (!mounted || result == null) return;
+    // A newer zap owns the ring now — installing this page would drop the
+    // viewer onto the wrong channel's neighbours.
+    if (switchTicket != _iptvSwitchTicket) return;
+    // The user browsed while this was in flight. Their category is the
+    // current intent; this page predates it.
+    if (contextGeneration != _iptvGuideContextGeneration) return;
+    // Last line of defence: whatever else moved, the ring must only ever be
+    // rebuilt around the channel that is actually playing.
+    final playing = _currentIptvChannel;
+    if (playing == null ||
+        playing.url != channel.url ||
+        playing.name != channel.name) {
+      return;
+    }
+
+    final raw = result['channels'];
+    if (raw is! List) return;
+    final page = [
+      for (final entry in raw.whereType<Map>())
+        iptvChannelFromBrowsePayload(Map<String, dynamic>.from(entry)),
+    ];
+    final playingIndex = page.indexWhere(
+      (candidate) =>
+          candidate.url == channel.url && candidate.name == channel.name,
+    );
+    // The page has to contain what is playing, or the ring would no longer
+    // describe the channel on screen.
+    if (playingIndex < 0) return;
+
+    setState(() {
+      _iptvChannelsOverride = page;
+      _currentIptvIndex = playingIndex;
+    });
+    _anchorIptvGuideCategory(channel, categories: result['categories']);
   }
 
   /// Turn an archived EPG programme into a finite, seekable IPTV item in the
@@ -3285,6 +3432,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (channel.isLive) {
       _prepareIptvBannerData(channel);
       _raiseIptvZapBanner();
+      // The guide follows what is playing, so reopening it lands on the
+      // category the current channel actually belongs to.
+      _anchorIptvGuideCategory(channel);
     } else {
       _hideIptvZapBanner();
     }
