@@ -117,6 +117,11 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   /// interrupted is parked here and restored when the search is cleared.
   bool _allCategorySearch = false;
   String? _categoryBeforeSearch;
+
+  /// The query the loaded list actually answers. The "press enter" prompt is
+  /// only true of a query that has been typed but not yet submitted — once
+  /// the results are in, the header goes back to counting them.
+  String _submittedQuery = '';
   bool _browseLoading = false;
   String? _browseError;
   int _browseTicket = 0;
@@ -180,7 +185,14 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     _animController.forward();
 
     _searchFocusNode.addListener(() {
-      if (_searchFocusNode.hasFocus && _focusZone != _FocusZone.search) {
+      if (!_searchFocusNode.hasFocus) return;
+      // Entering the field widens the scope to every category, exactly when
+      // the native guide does it (beginIptvAllCategorySearch on focus). Doing
+      // it only on submit meant the typed filter still had the category
+      // applied, so a channel from anywhere else could not appear and the
+      // search read as broken.
+      _beginAllCategorySearch();
+      if (_focusZone != _FocusZone.search) {
         setState(() => _focusZone = _FocusZone.search);
       }
     });
@@ -202,7 +214,19 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   // ─── Filtering ───────────────────────────────────────────────────────
 
   void _applyFilters() {
-    final query = _searchController.text.trim().toLowerCase();
+    // Typing does NOT narrow the list. The loaded channels are a page of the
+    // source, so filtering them as you type empties the list for anything
+    // that simply is not on this page — which reads as "no such channel"
+    // when the channel exists and the query has just never been run. The
+    // native guide leaves the list alone until the query is submitted and
+    // says so in the header; this now matches.
+    //
+    // Sheets with no browse provider are the exception: a series' episode
+    // list has no source to submit to, so there local filtering IS the
+    // search.
+    final query = widget.browseProvider == null
+        ? _searchController.text.trim().toLowerCase()
+        : '';
     setState(() {
       _filteredChannels = _channels.where((c) {
         if (_favoritesOnly && !_favoriteUrls.contains(c.url)) return false;
@@ -265,24 +289,38 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     if (mounted && _favoritesOnly) _applyFilters();
   }
 
-  /// Search the whole source, not just the selected category.
+  /// Park the current category and widen the scope to the whole source.
   ///
-  /// Matches the native guide: search is a temporary all-categories browsing
-  /// context ([beginIptvAllCategorySearch] there). Confining it to the
-  /// selected category made the obvious search — pick "Sports", look for
-  /// "BBC" — return nothing, with no hint that a filter was suppressing it.
-  /// The category is remembered and restored when the search is cleared.
+  /// Search is a temporary all-categories browsing context, entered the
+  /// moment the field takes focus — the same trigger as the native guide's
+  /// `beginIptvAllCategorySearch`. Left scoped to the selected category, the
+  /// obvious search (pick "Sports", look for "BBC") returned nothing with no
+  /// hint a filter was suppressing it. The category is remembered and put
+  /// back when the search is cleared or the guide closes.
+  ///
+  /// Deliberately does not re-browse: the native guide leaves the visible list
+  /// alone until the query is submitted, and refetching on every focus would
+  /// throw away the list the user is looking at.
+  void _beginAllCategorySearch() {
+    if (_allCategorySearch) return;
+    _allCategorySearch = true;
+    _categoryBeforeSearch = _selectedCategory;
+    if (_selectedCategory == null) return;
+    setState(() => _selectedCategory = null);
+    _applyFilters();
+    _notifyContextChanged();
+  }
+
+  /// Run the typed query against the whole source. Submitting is the only
+  /// thing that searches — typing never does.
   Future<void> _submitSearch() async {
     final query = _searchController.text.trim();
     if (query.isEmpty) {
       await _clearSearch();
       return;
     }
-    if (!_allCategorySearch) {
-      _allCategorySearch = true;
-      _categoryBeforeSearch = _selectedCategory;
-    }
-    setState(() => _selectedCategory = null);
+    _beginAllCategorySearch();
+    _submittedQuery = query;
     await _requestBrowse(category: null, query: query);
   }
 
@@ -294,6 +332,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   /// "All" over a category-scoped channel ring. The native guide restores the
   /// same way on close (`restoreIptvCategoryAfterSearch` in `hideIptvGuide`).
   void _handleClose() {
+    _submittedQuery = '';
     if (_allCategorySearch) {
       _selectedCategory = _categoryBeforeSearch;
       _allCategorySearch = false;
@@ -306,6 +345,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   /// Drop the query and put back whatever category the search interrupted.
   Future<void> _clearSearch() async {
     _searchController.clear();
+    _submittedQuery = '';
     if (!_allCategorySearch) {
       if (widget.browseProvider == null) {
         _applyFilters();
@@ -333,6 +373,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     // undone by a later restore.
     _allCategorySearch = false;
     _categoryBeforeSearch = null;
+    _submittedQuery = '';
     _searchController.clear();
     if (widget.browseProvider == null) {
       _applyFilters();
@@ -354,6 +395,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     // filter on this one, which can match nothing at all.
     _allCategorySearch = false;
     _categoryBeforeSearch = null;
+    _submittedQuery = '';
     _searchController.clear();
     await _requestBrowse(sourceId: id, category: null, query: '');
   }
@@ -779,6 +821,14 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 Text(
                   _compactPane == _CompactPane.schedule && compact
                       ? (_scheduleChannel?.name ?? 'Select a channel')
+                      // Typing does not search — submitting does. Without
+                      // saying so, a typed query that changes nothing on
+                      // screen reads as a search that found nothing. Native
+                      // puts the same prompt in the same place.
+                      : (widget.browseProvider != null &&
+                            _searchController.text.trim().isNotEmpty &&
+                            _searchController.text.trim() != _submittedQuery)
+                      ? 'Press enter to search all channels'
                       : '${_filteredChannels.length} of ${_channels.length} channels',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.35),
@@ -986,6 +1036,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
             ),
           ),
           onChanged: (_) {
+            // Rebuilds for the header prompt and the clear button. With a
+            // provider the list is untouched until submit; without one this
+            // is the only search there is.
             _applyFilters();
           },
           onSubmitted: (_) => unawaited(_submitSearch()),
@@ -1180,6 +1233,14 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
 
   Widget _buildChannelList({required bool compact}) {
     if (_filteredChannels.isEmpty) {
+      // The list can only be empty here because a submitted search (or a
+      // category) came back with nothing. If the user has since typed a NEW
+      // query, saying "no channels found" would again describe a search that
+      // was never run — point at the submit instead.
+      final pending =
+          widget.browseProvider != null &&
+          _searchController.text.trim().isNotEmpty &&
+          _searchController.text.trim() != _submittedQuery;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1192,14 +1253,16 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.satellite_alt_rounded,
+                pending
+                    ? Icons.search_rounded
+                    : Icons.satellite_alt_rounded,
                 color: Colors.white.withValues(alpha: 0.1),
                 size: 32,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'No channels found',
+              pending ? 'Search all channels' : 'No channels found',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 15,
@@ -1208,12 +1271,32 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
             ),
             const SizedBox(height: 6),
             Text(
-              'Try a different search term',
+              pending
+                  ? 'Nothing loaded matches "${_searchController.text.trim()}" —'
+                        ' press enter to search the whole source'
+                  : 'Try a different search term',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.2),
                 fontSize: 12,
               ),
             ),
+            if (pending) ...[
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: () => unawaited(_submitSearch()),
+                icon: const Icon(Icons.search_rounded, size: 17),
+                label: const Text('Search all channels'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF7C5CFF),
+                  foregroundColor: Colors.white,
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       );

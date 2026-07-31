@@ -195,6 +195,147 @@ void main() {
     expect(requests.last['category'], 'Category 2');
   });
 
+  // Native widens the scope the moment the field takes focus
+  // (beginIptvAllCategorySearch on the focus listener), not on submit. Doing
+  // it only on submit left the typed filter still scoped to the category, so
+  // a channel from any other category could not appear and search read as
+  // broken.
+  testWidgets('focusing search resets the category to All before typing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: IptvChannelSheet(
+            channels: channels(),
+            currentIndex: 0,
+            onChannelSelected: (_, __) async {},
+            onClose: () {},
+            categories: categories,
+            selectedCategory: 'Category 2',
+            sourceName: 'Test Source',
+            browseProvider: (request) async => {
+              'sourceId': 'src',
+              'sourceName': 'Test Source',
+              'contentType': 'live',
+              'selectedCategory': request['category'],
+              'categories': categories,
+              'channels': const <Map<String, dynamic>>[],
+              'sources': const <Map<String, dynamic>>[],
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Category 2'), findsOneWidget); // the category dropdown
+
+    // Focus alone, before a single keystroke.
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Category 2'), findsNothing);
+    expect(find.text('All'), findsOneWidget);
+  });
+
+  // Filtering the loaded page as the user typed emptied the list for any
+  // channel that simply was not on this page, and then reported "no channels
+  // found" for a query that had never been run. Native leaves the list alone
+  // until submit.
+  testWidgets('typing does not filter the list when a source can be searched', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: IptvChannelSheet(
+            channels: channels(),
+            currentIndex: 0,
+            onChannelSelected: (_, __) async {},
+            onClose: () {},
+            categories: categories,
+            sourceName: 'Test Source',
+            browseProvider: (request) async => null,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    // Channel 3 is not the playing one, so it appears only as a list row.
+    expect(find.text('Channel 3'), findsOneWidget);
+
+    // A query that matches none of the loaded channels.
+    await tester.enterText(find.byType(TextField).first, 'kannada');
+    await tester.pump();
+
+    expect(
+      find.text('Channel 3'),
+      findsOneWidget,
+      reason: 'the loaded list must survive an unsubmitted query',
+    );
+    expect(find.text('No channels found'), findsNothing);
+  });
+
+  // Without a provider there is nothing to submit to — a series episode list
+  // has only its own channels, so there local filtering IS the search.
+  testWidgets('typing still filters a sheet that has no browse provider', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await pumpSheet(tester);
+    expect(find.text('Channel 3'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, 'Channel 2');
+    await tester.pump();
+
+    expect(find.text('Channel 3'), findsNothing);
+    // Present at least once: the match is a list row, and the schedule pane
+    // header names it too.
+    expect(find.text('Channel 2'), findsWidgets);
+  });
+
+  testWidgets('a typed query tells the user it has not searched the source', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: IptvChannelSheet(
+            channels: channels(),
+            currentIndex: 0,
+            onChannelSelected: (_, __) async {},
+            onClose: () {},
+            categories: categories,
+            sourceName: 'Test Source',
+            browseProvider: (request) async => null,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('channels'), findsWidgets);
+
+    await tester.enterText(find.byType(TextField).first, 'bbc');
+    await tester.pump();
+
+    expect(find.text('Press enter to search all channels'), findsOneWidget);
+  });
+
   // A submitted search persists selectedCategory: null to the player while the
   // category it interrupted lives only in sheet state. Closing without
   // restoring it would dispose the only record, reopening the guide on "All"
