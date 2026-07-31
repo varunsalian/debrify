@@ -2612,56 +2612,46 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   );
                 }
 
-                // Non-TV above phone width: persistent left sidebar. This also
-                // absorbs the old 600–1000 "mid-width" band that used to get
-                // the retired AppBar/PremiumTopNav top bar.
+                // Keep one stable non-TV content tree across the phone-width
+                // breakpoint. Previously the mobile Stack and desktop Row
+                // lived in separate return branches, so rotating a phone past
+                // 600 px disposed the active page (and rotating back created it
+                // again), losing local screen state. Only the navigation chrome
+                // is conditional now; the active page remains the first child
+                // of the same Stack/SafeArea chain at every non-TV width.
                 final isDesktopWide =
                     !_isAndroidTv && constraints.maxWidth >= 600;
-                if (isDesktopWide) {
-                  final sidebarIndices = _sidebarOrderedIndices(visibleIndices);
-                  final sidebarSelected = sidebarIndices.indexOf(
-                    _selectedIndex,
-                  );
-                  return Scaffold(
-                    backgroundColor: Colors.transparent,
-                    body: Row(
-                      children: [
-                        DesktopSidebarNav(
-                          // Touch tablets (iPad / Android tablet in landscape)
-                          // have no mouse hover to reveal labels, so expand the
-                          // rail and show every label. True desktop keeps the
-                          // slim hover-reveal icon rail.
-                          expanded:
-                              !kIsWeb && (Platform.isAndroid || Platform.isIOS),
-                          currentIndex: sidebarSelected == -1
-                              ? 0
-                              : sidebarSelected,
-                          entries: [
-                            for (final index in sidebarIndices)
-                              DesktopNavEntry(
-                                _icons[index],
-                                _titles[index],
-                                _navSectionForIndex(index),
-                              ),
-                          ],
-                          onTap: (relativeIndex) {
-                            final actualIndex = sidebarIndices[relativeIndex];
-                            _onItemTapped(actualIndex);
-                          },
-                        ),
-                        Expanded(
-                          // Clip so nothing in the page (e.g. a horizontally
-                          // scrolled poster row) can ever paint over the sidebar.
-                          child: ClipRect(
-                            child: SafeArea(
-                              left: false,
-                              child: Stack(
-                                children: [
-                                  // Page fills the whole area so its own
-                                  // background covers the animated backdrop.
-                                  Positioned.fill(child: _buildAnimatedPage()),
-                                  // Invisible top strip keeps the frameless
-                                  // window draggable now that the AppBar is gone.
+                final nonTvIndices = _sidebarOrderedIndices(visibleIndices);
+                final nonTvSelected = nonTvIndices.indexOf(_selectedIndex);
+                // Touch tablets (iPad / Android tablet in landscape) have no
+                // mouse hover to reveal labels, so expand the rail and show
+                // every label. True desktop keeps the slim hover-reveal rail.
+                final expandDesktopSidebar =
+                    !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+                final desktopSidebarWidth = expandDesktopSidebar
+                    ? DesktopSidebarNav.expandedWidth
+                    : DesktopSidebarNav.width;
+
+                return Scaffold(
+                  backgroundColor: Colors.transparent,
+                  body: Stack(
+                    children: [
+                      // This exact element chain stays mounted while rotating.
+                      // Moving it sideways with Positioned changes constraints
+                      // without changing the identity of the active page.
+                      Positioned.fill(
+                        left: isDesktopWide ? desktopSidebarWidth : 0,
+                        child: ClipRect(
+                          child: SafeArea(
+                            left: !isDesktopWide,
+                            child: Stack(
+                              children: [
+                                // Page fills the whole area so its own
+                                // background covers the animated backdrop.
+                                Positioned.fill(child: _buildAnimatedPage()),
+                                // Invisible top strip keeps frameless desktop
+                                // windows draggable now that the AppBar is gone.
+                                if (isDesktopWide)
                                   const Positioned(
                                     top: 0,
                                     left: 0,
@@ -2670,31 +2660,40 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                       child: SizedBox(height: 26),
                                     ),
                                   ),
-                                ],
-                              ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                }
-
-                // Mobile (phone-width, non-TV): floating nav menu, grouped
-                // into the same sections as the rails.
-                final mobileIndices = _sidebarOrderedIndices(visibleIndices);
-                final mobileSelected = mobileIndices.indexOf(_selectedIndex);
-                return Scaffold(
-                  backgroundColor: Colors.transparent,
-                  body: Stack(
-                    children: [
-                      SafeArea(child: _buildAnimatedPage()),
-                      MobileFloatingNav(
-                          currentIndex: mobileSelected == -1
-                              ? 0
-                              : mobileSelected,
+                      ),
+                      if (isDesktopWide)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: DesktopSidebarNav(
+                            expanded: expandDesktopSidebar,
+                            currentIndex: nonTvSelected == -1
+                                ? 0
+                                : nonTvSelected,
+                            entries: [
+                              for (final index in nonTvIndices)
+                                DesktopNavEntry(
+                                  _icons[index],
+                                  _titles[index],
+                                  _navSectionForIndex(index),
+                                ),
+                            ],
+                            onTap: (relativeIndex) {
+                              final actualIndex = nonTvIndices[relativeIndex];
+                              _onItemTapped(actualIndex);
+                            },
+                          ),
+                        ),
+                      if (!isDesktopWide)
+                        MobileFloatingNav(
+                          currentIndex: nonTvSelected == -1 ? 0 : nonTvSelected,
                           items: [
-                            for (final index in mobileIndices)
+                            for (final index in nonTvIndices)
                               MobileNavItem(
                                 _icons[index],
                                 _titles[index],
@@ -2702,7 +2701,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               ),
                           ],
                           onTap: (relativeIndex) {
-                            final actualIndex = mobileIndices[relativeIndex];
+                            final actualIndex = nonTvIndices[relativeIndex];
                             _onItemTapped(actualIndex);
                           },
                           onRemoteControlTap: () {
