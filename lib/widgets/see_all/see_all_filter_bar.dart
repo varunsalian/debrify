@@ -10,6 +10,9 @@ import 'see_all_theme.dart';
 /// a single "Filters" button that opens them in a bottom sheet. Any [leading]
 /// control (the Discover Source selector) stays inline, since changing it swaps
 /// the whole panel and shouldn't be buried in a sheet.
+///
+/// [quiet] opts out of that entirely: the whisper line is already the compact
+/// form, so it renders inline at every width.
 class SeeAllFilterBar extends StatefulWidget {
   final bool isTelevision;
 
@@ -30,10 +33,11 @@ class SeeAllFilterBar extends StatefulWidget {
   /// collapsed button. 0 hides the badge.
   final int activeCount;
 
-  /// Quiet styling (Discover TV): the equal-width column row of boxed pills
-  /// becomes a single left-packed line of bare text segments separated by dots,
-  /// sitting directly on the glass stage. The chips themselves must be built
-  /// quiet too (StremioDropdown.quiet).
+  /// Quiet styling (Discover TV, and the IPTV two-pane guide column): the
+  /// equal-width column row of boxed pills becomes a single left-packed line of
+  /// bare text segments separated by dots, sitting directly on the glass stage.
+  /// The chips themselves must be built quiet too (StremioDropdown.quiet).
+  /// A quiet bar never collapses into the Filters button — see [build].
   final bool quiet;
 
   const SeeAllFilterBar({
@@ -160,49 +164,58 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
     _sheetSetState = null;
   }
 
+  List<Widget> _items() => <Widget>[
+    if (widget.leading != null) widget.leading!,
+    ...widget.buildChips(),
+    if (widget.trailing != null) widget.trailing!,
+  ];
+
   @override
   Widget build(BuildContext context) {
+    // Quiet: a left-packed text line, dot-separated — the grid owns the
+    // canvas, the filters whisper above it. A single row of intrinsic units,
+    // NOT a flex Row: Flexible caps every segment at an equal share even when
+    // siblings leave slack, truncating "Continue Watching" beside a roomy
+    // "All". Every value renders in full and the bar NEVER wraps — a rare
+    // too-wide combo scrolls horizontally instead (on TV each segment pulls
+    // itself into view on DPAD focus), so the filters can't fold onto a second
+    // line and push the grid down.
+    //
+    // Checked before [isTelevision] because the line is already the compact
+    // form: collapsing it into a Filters button costs a click to read what is
+    // in plain sight, and off TV that only ever happened in a two-pane whose
+    // guide column sits below _narrowMax while the window itself is wide. The
+    // phone's IPTV filter bar stays inline at any width; this matches it.
+    if (widget.quiet) {
+      final items = _items();
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0)
+                Container(
+                  width: 3,
+                  height: 3,
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              items[i],
+            ],
+          ],
+        ),
+      );
+    }
     // TV: one row, equal-width columns (leading + each chip share the width
     // evenly). The dropdowns fill their column and pin the chevron right (see
     // StremioDropdown), so it reads as a deliberate bar instead of a ragged
     // 2-row wrap. No collapse on TV — sheets are a pointer-only affordance.
     if (widget.isTelevision) {
-      final items = <Widget>[
-        if (widget.leading != null) widget.leading!,
-        ...widget.buildChips(),
-        if (widget.trailing != null) widget.trailing!,
-      ];
-      // Quiet (Discover): a left-packed text line, dot-separated — the grid
-      // owns the canvas, the filters whisper above it. A single row of
-      // intrinsic units, NOT a flex Row: Flexible caps every segment at an
-      // equal share even when siblings leave slack, truncating "Continue
-      // Watching" beside a roomy "All". Every value renders in full and the
-      // bar NEVER wraps — a rare too-wide combo scrolls horizontally instead
-      // (each segment pulls itself into view on DPAD focus), so the filters
-      // can't fold onto a second line and push the grid down.
-      if (widget.quiet) {
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < items.length; i++) ...[
-                if (i > 0)
-                  Container(
-                    width: 3,
-                    height: 3,
-                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                items[i],
-              ],
-            ],
-          ),
-        );
-      }
+      final items = _items();
       return Row(
         children: [
           for (var i = 0; i < items.length; i++) ...[
