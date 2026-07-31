@@ -22,6 +22,7 @@ import '../services/alldebrid_service.dart';
 import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
+import '../utils/iptv_player_paging.dart';
 import '../services/episode_info_service.dart';
 import '../services/movie_metadata_service.dart';
 import '../models/iptv_playlist.dart';
@@ -91,6 +92,29 @@ class _SeasonEpisodeSelection {
   final int episode;
 
   const _SeasonEpisodeSelection({required this.season, required this.episode});
+}
+
+/// One page of a live IPTV category, as the browse provider returns it.
+///
+/// [offset] is the page's absolute position inside [category] and [total] is
+/// how many channels that category holds — the pair that tells the end of a
+/// loaded window apart from the end of the category itself.
+class _IptvZapPage {
+  final List<IptvChannel> channels;
+  final int offset;
+  final int total;
+  final String? sourceId;
+  final String? category;
+  final List<String> categories;
+
+  const _IptvZapPage({
+    required this.channels,
+    required this.offset,
+    required this.total,
+    required this.sourceId,
+    required this.category,
+    required this.categories,
+  });
 }
 
 /// Monotonic ownership gate for asynchronous IPTV replay lookups.
@@ -489,8 +513,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Live IPTV presents its identity in the bottom zap banner, so the corner
   /// title/channel badges stand down: they said the same thing twice, and the
   /// right-hand one was painted from launch state a zap never refreshed.
-  bool get _iptvZapBannerOwnsIdentity =>
-      _currentIptvChannel?.isLive == true;
+  bool get _iptvZapBannerOwnsIdentity => _currentIptvChannel?.isLive == true;
 
   /// Bumped whenever the guide reports a browse the user drove (a category
   /// pick, a search, a source change). An in-flight re-anchor that predates
@@ -514,11 +537,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _anchorIptvGuideCategory(IptvChannel channel, {Object? categories}) {
     if (!mounted || !channel.isLive) return;
     final group = channel.group?.trim();
-    final category = (group == null || group.isEmpty) ? null : group;
+    _applyIptvGuideCategory(
+      (group == null || group.isEmpty) ? null : group,
+      categories is List ? categories.whereType<String>().toList() : null,
+    );
+  }
+
+  /// Point the guide at [category] verbatim, without inferring it from a
+  /// channel. A zap that crossed a category boundary knows the category it
+  /// landed in from the response — including the null the "All"/uncategorized
+  /// wrap lands on, which no single channel's group can express.
+  ///
+  /// Deliberately does NOT bump [_iptvGuideContextGeneration]: that counter
+  /// means "the user browsed", and an in-flight zap prefetch reading it must
+  /// not be invalidated by the zap's own bookkeeping.
+  void _applyIptvGuideCategory(String? category, List<String>? categories) {
+    if (!mounted) return;
     final current = _iptvGuideContextOverride;
-    final nextCategories = categories is List
-        ? categories.whereType<String>().toList()
-        : (current?.categories ?? widget.iptvCategories ?? const <String>[]);
+    final nextCategories =
+        categories ??
+        (current?.categories ?? widget.iptvCategories ?? const <String>[]);
     if (current != null &&
         current.selectedCategory == category &&
         listEquals(nextCategories, current.categories)) {
@@ -1548,12 +1586,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // does not match, and the list would then shrink to it the
               // moment anything re-filtered.
               _anchorIptvGuideCategory(iptvChannel);
-              unawaited(
-                _reanchorIptvRingToCategory(
-                  iptvChannel,
-                  switchTicket: _iptvSwitchTicket,
-                ),
-              );
+              // Arms the zap ladder for the launch channel. Routed through the
+              // shared helper so a zap arriving before this lands re-arms it
+              // instead of leaving the ladder inactive for the session.
+              _ensureIptvZapPagingArmed();
             } else {
               // Show channel badge when player is ready (if enabled)
               if (widget.showChannelName && _channelBadgeText != null) {
@@ -3002,6 +3038,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final channel = channels[index];
     // Adopt the visible list first so playback starts immediately; the
     // re-anchor below then replaces it with the channel's own category.
+    // A browse result is not a page of any category, so the zap window's
+    // coordinates stop describing the ring until the re-anchor lands.
+    _resetIptvZapPaging();
     _iptvChannelsOverride = List<IptvChannel>.from(channels);
     // Take this tune's generation from the call itself. _switchToIptvChannel
     // bumps the ticket synchronously before its first await, and it returns
@@ -3012,9 +3051,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final switchTicket = _iptvSwitchTicket;
     await switchFuture;
     if (!mounted || switchTicket != _iptvSwitchTicket) return;
-    unawaited(
-      _reanchorIptvRingToCategory(channel, switchTicket: switchTicket),
-    );
+    unawaited(_reanchorIptvRingToCategory(channel, switchTicket: switchTicket));
   }
 
   /// Rebuild the channel ring around [channel] from its own category.
@@ -3050,12 +3087,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         'anchorUrl': channel.url,
         'anchorName': channel.name,
         'offset': 0,
-        // Deliberately larger than any page size: the provider clamps this to
-        // its own per-launch maximum, which is the size the launch list
-        // already had. A default zap page is a fraction of that, and unlike
-        // the native guide this one has no scroll-prefetch to grow a small
-        // window — asking for the maximum keeps the ring anchored AND whole.
-        'limit': 1 << 24,
+        // A full page rather than the native player's 200: unlike the native
+        // guide this one has no scroll-prefetch to grow a small window, so the
+        // ring has to arrive anchored AND whole. Anything past the provider's
+        // own maximum is clamped there.
+        'limit': _kIptvZapPageSize,
       });
     } catch (error) {
       debugPrint('Player: IPTV ring re-anchor failed: $error');
@@ -3077,13 +3113,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    final raw = result['channels'];
-    if (raw is! List) return;
-    final page = [
-      for (final entry in raw.whereType<Map>())
-        iptvChannelFromBrowsePayload(Map<String, dynamic>.from(entry)),
-    ];
-    final playingIndex = page.indexWhere(
+    final page = _parseIptvZapPage(result);
+    if (page == null) return;
+    final playingIndex = page.channels.indexWhere(
       (candidate) =>
           candidate.url == channel.url && candidate.name == channel.name,
     );
@@ -3091,11 +3123,522 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // describe the channel on screen.
     if (playingIndex < 0) return;
 
+    _clearIptvZapBoundaryCache();
     setState(() {
-      _iptvChannelsOverride = page;
+      _iptvChannelsOverride = page.channels;
       _currentIptvIndex = playingIndex;
+      // Where this window sits in the category. Zapping past its edge needs
+      // both numbers: without them the window's end and the category's end
+      // are indistinguishable, and a category larger than one page would
+      // cross into the next category partway through.
+      _iptvZapWindowOffset = page.offset;
+      _iptvZapCategoryTotal = page.total;
+      // Binds every later boundary request to the source this ring came from,
+      // however far the guide wanders afterwards.
+      _iptvZapSourceId =
+          page.sourceId ??
+          _iptvGuideContextOverride?.sourceId ??
+          widget.iptvSourceId;
+      _iptvZapCategory = page.category;
+      if (page.categories.isNotEmpty) _iptvZapCategories = page.categories;
+      _iptvZapPagingActive = true;
     });
     _anchorIptvGuideCategory(channel, categories: result['categories']);
+  }
+
+  // ── Live channel zapping ─────────────────────────────────────────────────
+  //
+  // Port of the native player's zap ladder (`zapIptvChannel`): step inside the
+  // loaded window, page through the rest of the category at the window's
+  // edges, and cross into the adjacent category when the category itself runs
+  // out — wrapping at the last one. The browse provider already speaks this
+  // protocol (native drove it), so the only thing this side has to carry is
+  // where the window sits and what is already on its way.
+  //
+  // One deliberate divergence: native trims its hidden window to 600 rows to
+  // keep a TV's adapter light, and re-fetches what it dropped. Here the same
+  // list backs the guide, which has no scroll-prefetch to refill it, so
+  // trimming would silently shrink the guide instead.
+
+  /// Page size asked of the browse provider. It clamps to its own per-launch
+  /// maximum, so drift here changes only how many rows arrive, never
+  /// correctness: an overlapping backward page merges, a short one just
+  /// leaves more to fetch.
+  static const int _kIptvZapPageSize = 1500;
+
+  /// How close to the window's edge counts as "about to need what's next".
+  static const int _kIptvZapEdgeMargin = 12;
+
+  /// Absolute position, within the active category, of the first channel of
+  /// [_effectiveIptvChannels].
+  int _iptvZapWindowOffset = 0;
+
+  /// How many channels the active category holds in total; the window is a
+  /// slice of it.
+  int _iptvZapCategoryTotal = 0;
+
+  /// The ring came from a paged response, so [_iptvZapWindowOffset] and
+  /// [_iptvZapCategoryTotal] describe it. False for the launch window or a
+  /// browse result standing in — zapping then just wraps inside the list,
+  /// which is what native does before its paging session starts.
+  bool _iptvZapPagingActive = false;
+
+  /// The source and category the ring belongs to. Kept apart from the guide's
+  /// selection on purpose: browsing can move the guide to another source or
+  /// category — and leave it there without ever tuning — while the ring keeps
+  /// describing what is playing. Asking the guide's source for the ring's
+  /// category would fetch a category that source may not even have.
+  String? _iptvZapSourceId;
+  String? _iptvZapCategory;
+  List<String> _iptvZapCategories = const [];
+
+  int _iptvZapRequestTicket = 0;
+  bool _iptvZapRequestInFlight = false;
+
+  /// Presses that arrived while a page was loading. Crossing a page or a
+  /// category is a round trip, so holding the key down has to queue rather
+  /// than drop.
+  final List<int> _iptvZapPendingInputs = [];
+  bool _iptvZapDrainingInputs = false;
+
+  /// The adjacent category, fetched before it is needed so crossing one costs
+  /// no more than stepping inside the current one.
+  String? _iptvZapCachedOriginCategory;
+  int _iptvZapCachedDirection = 0;
+  _IptvZapPage? _iptvZapCachedPage;
+
+  /// Live IPTV with somewhere to zap to — either more than one channel in the
+  /// ring, or a paged context that can fetch more.
+  bool get _canZapIptvChannel =>
+      _currentIptvChannel?.isLive == true &&
+      ((_effectiveIptvChannels?.length ?? 0) > 1 || _iptvZapPagingActive);
+
+  void _clearIptvZapBoundaryCache() {
+    _iptvZapCachedOriginCategory = null;
+    _iptvZapCachedDirection = 0;
+    _iptvZapCachedPage = null;
+  }
+
+  /// The ring is about to stop being a page of a category. Bumping the request
+  /// ticket strands anything in flight: it would otherwise merge a page of the
+  /// old category into the new ring at positions that mean nothing there.
+  void _resetIptvZapPaging() {
+    _iptvZapPagingActive = false;
+    _iptvZapWindowOffset = 0;
+    _iptvZapCategoryTotal = 0;
+    _iptvZapSourceId = null;
+    _iptvZapCategory = null;
+    _iptvZapRequestTicket++;
+    _iptvZapRequestInFlight = false;
+    _iptvZapPendingInputs.clear();
+    _clearIptvZapBoundaryCache();
+  }
+
+  /// A re-anchor is out arming the ladder, so a burst of presses can't stack
+  /// full-category queries behind it.
+  bool _iptvZapArmingPaging = false;
+
+  /// Arm the ladder around whatever live channel is playing now.
+  ///
+  /// The launch bootstrap re-anchors the channel the player opened with, but a
+  /// zap landing before that response does moves the switch ticket on and the
+  /// response is dropped. Nothing else would re-arm it, so the ladder would sit
+  /// inactive and zapping would circle the launch window until the user opened
+  /// the guide and retuned. Retrying from the zap itself closes that: the first
+  /// press after a lost bootstrap arms the ladder for the channel it landed on.
+  void _ensureIptvZapPagingArmed() {
+    if (_iptvZapPagingActive || _iptvZapArmingPaging) return;
+    if (widget.iptvBrowseProvider == null) return;
+    final channel = _currentIptvChannel;
+    if (channel == null || !channel.isLive) return;
+    _iptvZapArmingPaging = true;
+    unawaited(
+      _reanchorIptvRingToCategory(
+        channel,
+        switchTicket: _iptvSwitchTicket,
+      ).whenComplete(() => _iptvZapArmingPaging = false),
+    );
+  }
+
+  /// Previous/next channel in guide order.
+  void _zapIptvChannel(int delta) {
+    final channels = _effectiveIptvChannels;
+    final current = _currentIptvChannel;
+    if (channels == null || current == null || !current.isLive) return;
+    if (!_iptvZapPagingActive && channels.length < 2) return;
+    final from = _currentIptvIndex.clamp(0, channels.length - 1);
+    final next = from + delta;
+
+    if (!_iptvZapPagingActive) {
+      // No paged context: the ring is all there is, so wrap inside it.
+      unawaited(
+        _switchToIptvChannel((next + channels.length) % channels.length),
+      );
+      // Tuning has already moved the index and the switch ticket, so this arms
+      // the ladder around the channel just landed on.
+      _ensureIptvZapPagingArmed();
+      return;
+    }
+
+    if (next >= 0 && next < channels.length) {
+      unawaited(_switchToIptvChannel(next));
+      unawaited(_prefetchIptvZapPage(delta));
+      unawaited(_prefetchAdjacentIptvCategory(delta));
+      return;
+    }
+
+    final firstAbsolute = _iptvZapWindowOffset;
+    final lastAbsolute = _iptvZapWindowOffset + channels.length - 1;
+    final hasAnotherPage = delta > 0
+        ? lastAbsolute + 1 < _iptvZapCategoryTotal
+        : firstAbsolute > 0;
+    if (hasAnotherPage) {
+      // The category continues past the window. Hold the press until the page
+      // it needs has landed, then replay it against the grown ring.
+      _queuePendingIptvZapInput(delta);
+      unawaited(_prefetchIptvZapPage(delta));
+      return;
+    }
+
+    if (_consumeCachedAdjacentIptvCategory(delta)) return;
+    unawaited(_requestAdjacentIptvCategory(delta));
+  }
+
+  /// One page request at a time, like native: a second in-flight request would
+  /// race the first into the ring with no way to order the two.
+  Future<_IptvZapPage?> _requestIptvZapPage({
+    required String? category,
+    required int offset,
+    bool fromEnd = false,
+  }) async {
+    final provider = widget.iptvBrowseProvider;
+    if (provider == null || _iptvZapRequestInFlight) return null;
+    final ticket = ++_iptvZapRequestTicket;
+    final contextGeneration = _iptvGuideContextGeneration;
+    _iptvZapRequestInFlight = true;
+
+    Map<String, dynamic>? result;
+    try {
+      result = await provider({
+        'action': 'zapPage',
+        // The ring's own source, not the guide's — see [_iptvZapSourceId].
+        'sourceId':
+            _iptvZapSourceId ??
+            _iptvGuideContextOverride?.sourceId ??
+            widget.iptvSourceId,
+        'contentType': 'live',
+        'category': (category == null || category.isEmpty) ? null : category,
+        'query': '',
+        'offset': offset < 0 ? 0 : offset,
+        'limit': _kIptvZapPageSize,
+        'fromEnd': fromEnd,
+      });
+    } catch (error) {
+      debugPrint('Player: IPTV zap page failed: $error');
+    }
+    // A newer request (or a reset) owns the flag now — leave it to them.
+    if (ticket != _iptvZapRequestTicket) return null;
+    _iptvZapRequestInFlight = false;
+    if (!mounted || result == null) {
+      // Replaying queued presses against a ring that never grew would spin.
+      _iptvZapPendingInputs.clear();
+      return null;
+    }
+    // The user browsed while this was in flight; their category is the current
+    // intent and every queued press belonged to the old one.
+    if (contextGeneration != _iptvGuideContextGeneration) {
+      _iptvZapPendingInputs.clear();
+      return null;
+    }
+    return _parseIptvZapPage(result);
+  }
+
+  _IptvZapPage? _parseIptvZapPage(Map<String, dynamic> result) {
+    final raw = result['channels'];
+    if (raw is! List) return null;
+    final channels = [
+      for (final entry in raw.whereType<Map>())
+        iptvChannelFromBrowsePayload(Map<String, dynamic>.from(entry)),
+    ];
+    final rawOffset = result['pageOffset'];
+    final offset = rawOffset is num ? math.max(0, rawOffset.toInt()) : 0;
+    final rawTotal = result['totalChannels'];
+    final total = rawTotal is num ? rawTotal.toInt() : channels.length;
+    final rawSourceId = (result['sourceId'] as String?)?.trim();
+    final rawCategory = (result['selectedCategory'] as String?)?.trim();
+    final rawCategories = result['categories'];
+    return _IptvZapPage(
+      channels: channels,
+      offset: offset,
+      // A total that doesn't cover the page it came with would put the
+      // category's end behind the window's own last row.
+      total: math.max(total, offset + channels.length),
+      sourceId: (rawSourceId == null || rawSourceId.isEmpty)
+          ? null
+          : rawSourceId,
+      category: (rawCategory == null || rawCategory.isEmpty)
+          ? null
+          : rawCategory,
+      categories: rawCategories is List
+          ? [
+              for (final entry in rawCategories.whereType<String>())
+                if (entry.isNotEmpty) entry,
+            ]
+          : const [],
+    );
+  }
+
+  /// Replace the ring with [page]. The caller tunes afterwards, so the index
+  /// left behind here is only a starting point.
+  void _installIptvZapWindow(
+    _IptvZapPage page, {
+    required bool preservePlayingChannel,
+  }) {
+    if (page.channels.isEmpty) return;
+    if (page.category != _iptvZapCategory) _clearIptvZapBoundaryCache();
+    final playing = preservePlayingChannel ? _currentIptvChannel : null;
+    var index = 0;
+    if (playing != null) {
+      final found = page.channels.indexWhere(
+        (candidate) =>
+            candidate.url == playing.url && candidate.name == playing.name,
+      );
+      if (found >= 0) index = found;
+    }
+    setState(() {
+      _iptvChannelsOverride = page.channels;
+      _currentIptvIndex = index;
+      _iptvZapWindowOffset = page.offset;
+      _iptvZapCategoryTotal = page.total;
+      _iptvZapSourceId = page.sourceId ?? _iptvZapSourceId;
+      _iptvZapCategory = page.category;
+      if (page.categories.isNotEmpty) _iptvZapCategories = page.categories;
+      _iptvZapPagingActive = true;
+    });
+  }
+
+  /// Splice a freshly loaded page into the ring, growing the window rather
+  /// than replacing it — the channel on screen has to keep its place, and the
+  /// guide is looking at the same list.
+  void _mergeIptvZapPage(_IptvZapPage page) {
+    if (!_iptvZapPagingActive || page.channels.isEmpty) return;
+    if (page.category != _iptvZapCategory) return;
+    final channels = _effectiveIptvChannels;
+    if (channels == null || channels.isEmpty) return;
+
+    final windowStart = _iptvZapWindowOffset;
+    final merged = iptvMergeZapWindow(
+      window: channels,
+      windowOffset: windowStart,
+      page: page.channels,
+      pageOffset: page.offset,
+    );
+    // The page didn't touch the window — see iptvMergeZapWindow.
+    if (merged == null) return;
+
+    final playing = _currentIptvChannel;
+    var index = _currentIptvIndex + (windowStart - merged.offset);
+    if (playing != null) {
+      final found = merged.channels.indexWhere(
+        (candidate) =>
+            candidate.url == playing.url && candidate.name == playing.name,
+      );
+      if (found >= 0) index = found;
+    }
+    setState(() {
+      _iptvChannelsOverride = merged.channels;
+      _currentIptvIndex = index.clamp(0, merged.channels.length - 1);
+      _iptvZapWindowOffset = merged.offset;
+      _iptvZapCategoryTotal = math.max(
+        page.total,
+        merged.offset + merged.channels.length,
+      );
+      if (page.categories.isNotEmpty) _iptvZapCategories = page.categories;
+    });
+  }
+
+  /// Pull in the next page of the current category once zapping gets near the
+  /// window's edge.
+  Future<void> _prefetchIptvZapPage(int delta) async {
+    if (!_iptvZapPagingActive || _iptvZapRequestInFlight) return;
+    final channels = _effectiveIptvChannels;
+    if (channels == null || channels.isEmpty) return;
+    final firstAbsolute = _iptvZapWindowOffset;
+    final lastAbsolute = firstAbsolute + channels.length - 1;
+    final shouldLoad = delta > 0
+        ? lastAbsolute + 1 < _iptvZapCategoryTotal &&
+              _currentIptvIndex >= channels.length - _kIptvZapEdgeMargin
+        : firstAbsolute > 0 && _currentIptvIndex < _kIptvZapEdgeMargin;
+    if (!shouldLoad) return;
+
+    final page = await _requestIptvZapPage(
+      category: _iptvZapCategory,
+      offset: delta > 0
+          ? lastAbsolute + 1
+          : math.max(0, firstAbsolute - _kIptvZapPageSize),
+    );
+    if (!mounted || page == null) return;
+    _mergeIptvZapPage(page);
+    _drainPendingIptvZapInputs();
+  }
+
+  String? _adjacentIptvCategory(int delta, int attempt) =>
+      iptvAdjacentZapCategory(
+        categories: _iptvZapCategories,
+        current: _iptvZapCategory,
+        delta: delta,
+        attempt: attempt,
+      );
+
+  Future<void> _prefetchAdjacentIptvCategory(
+    int delta, {
+    int attempt = 1,
+  }) async {
+    // A cached page only answers the direction it was fetched for; turning
+    // around makes it the wrong end of the wrong category.
+    if (_iptvZapCachedPage != null && _iptvZapCachedDirection != delta) {
+      _clearIptvZapBoundaryCache();
+    }
+    if (!_iptvZapPagingActive ||
+        _iptvZapRequestInFlight ||
+        _iptvZapCategory == null ||
+        _iptvZapCachedPage != null) {
+      return;
+    }
+    final channels = _effectiveIptvChannels;
+    if (channels == null || channels.isEmpty) return;
+    final nearBoundary = delta > 0
+        ? _iptvZapWindowOffset + channels.length >= _iptvZapCategoryTotal &&
+              _currentIptvIndex >= channels.length - _kIptvZapEdgeMargin
+        : _iptvZapWindowOffset == 0 && _currentIptvIndex < _kIptvZapEdgeMargin;
+    if (!nearBoundary) return;
+
+    final target = _adjacentIptvCategory(delta, attempt);
+    if (target == null) return;
+    final origin = _iptvZapCategory;
+    final page = await _requestIptvZapPage(
+      category: target,
+      offset: 0,
+      fromEnd: delta < 0,
+    );
+    if (!mounted || page == null) return;
+    // Zapping moved on while this loaded; it is no longer the next category.
+    if (origin != _iptvZapCategory) return;
+    if (page.channels.isEmpty) {
+      await _prefetchAdjacentIptvCategory(delta, attempt: attempt + 1);
+      return;
+    }
+    _iptvZapCachedOriginCategory = origin;
+    _iptvZapCachedDirection = delta;
+    _iptvZapCachedPage = page;
+    _drainPendingIptvZapInputs();
+  }
+
+  /// Cross into the prefetched category with no round trip. Returns false when
+  /// nothing usable was cached, leaving the caller to fetch.
+  bool _consumeCachedAdjacentIptvCategory(int delta) {
+    final cached = _iptvZapCachedPage;
+    if (cached == null ||
+        cached.channels.isEmpty ||
+        _iptvZapCachedOriginCategory != _iptvZapCategory ||
+        _iptvZapCachedDirection != delta) {
+      return false;
+    }
+    _clearIptvZapBoundaryCache();
+    _enterIptvZapCategory(cached, delta);
+    unawaited(_prefetchAdjacentIptvCategory(delta));
+    return true;
+  }
+
+  /// Adopt [page] as the ring and tune the channel the zap was heading for:
+  /// going forwards that is the new category's first channel, going backwards
+  /// its last.
+  void _enterIptvZapCategory(_IptvZapPage page, int delta) {
+    _installIptvZapWindow(page, preservePlayingChannel: false);
+    unawaited(_switchToIptvChannel(delta > 0 ? 0 : page.channels.length - 1));
+    // After the tune, not before: the switch anchors the guide to the tuned
+    // channel's own group, and the response's category is the more accurate
+    // of the two (it can be the null of an uncategorized wrap, which no
+    // channel's group expresses).
+    _applyIptvGuideCategory(
+      page.category,
+      page.categories.isEmpty ? null : page.categories,
+    );
+    unawaited(_prefetchIptvZapPage(delta));
+  }
+
+  /// The category ran out. Load the adjacent one, skipping any that come back
+  /// empty, and give up once every category has been tried.
+  Future<void> _requestAdjacentIptvCategory(
+    int delta, {
+    int attempt = 1,
+  }) async {
+    if (_iptvZapRequestInFlight) {
+      _queuePendingIptvZapInput(delta);
+      return;
+    }
+    final hasCategories = _iptvZapCategories.any((c) => c.isNotEmpty);
+    if (_iptvZapCategory == null || !hasCategories) {
+      // An uncategorized/"All" context has no category boundary to cross:
+      // wrap by paging the opposite end of the same result set.
+      final page = await _requestIptvZapPage(
+        category: null,
+        offset: 0,
+        fromEnd: delta < 0,
+      );
+      if (!mounted || page == null || page.channels.isEmpty) {
+        // Nothing came back to zap into, so nothing will drain these either.
+        _iptvZapPendingInputs.clear();
+        return;
+      }
+      _enterIptvZapCategory(page, delta);
+      _drainPendingIptvZapInputs();
+      return;
+    }
+
+    // Null once the walk has been all the way round — every category was
+    // empty, so nothing will ever drain the queued presses.
+    final target = _adjacentIptvCategory(delta, attempt);
+    if (target == null) {
+      _iptvZapPendingInputs.clear();
+      return;
+    }
+    final page = await _requestIptvZapPage(
+      category: target,
+      offset: 0,
+      fromEnd: delta < 0,
+    );
+    if (!mounted || page == null) return;
+    if (page.channels.isEmpty) {
+      await _requestAdjacentIptvCategory(delta, attempt: attempt + 1);
+      return;
+    }
+    _enterIptvZapCategory(page, delta);
+    unawaited(_prefetchAdjacentIptvCategory(delta));
+    _drainPendingIptvZapInputs();
+  }
+
+  void _queuePendingIptvZapInput(int delta) {
+    if (_iptvZapPendingInputs.length >= 24) return;
+    _iptvZapPendingInputs.add(delta >= 0 ? 1 : -1);
+  }
+
+  void _drainPendingIptvZapInputs() {
+    if (_iptvZapDrainingInputs) return;
+    _iptvZapDrainingInputs = true;
+    try {
+      while (_iptvZapPendingInputs.isNotEmpty) {
+        final queued = _iptvZapPendingInputs.length;
+        _zapIptvChannel(_iptvZapPendingInputs.removeAt(0));
+        // Another round trip started: the rest drain when it lands.
+        if (_iptvZapRequestInFlight) break;
+        // The press went straight back on the queue without starting one, so
+        // nothing will arrive to move it along — stop instead of spinning.
+        if (_iptvZapPendingInputs.length >= queued) break;
+      }
+    } finally {
+      _iptvZapDrainingInputs = false;
+    }
   }
 
   /// Turn an archived EPG programme into a finite, seekable IPTV item in the
@@ -3153,6 +3696,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!_isCurrentIptvCatchupRequest(requestTicket)) return;
     _iptvCatchupRequests.complete(requestTicket);
     messenger.hideCurrentSnackBar();
+    // A replay is a single on-demand item, not a page of any category.
+    _resetIptvZapPaging();
     _iptvChannelsOverride = [replay];
     await _switchToIptvChannel(0);
   }
@@ -3433,8 +3978,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _prepareIptvBannerData(channel);
       _raiseIptvZapBanner();
       // The guide follows what is playing, so reopening it lands on the
-      // category the current channel actually belongs to.
-      _anchorIptvGuideCategory(channel);
+      // category the current channel actually belongs to. A paged ring is the
+      // exception: it already knows its own category from the response, which
+      // a single channel's group can't always express — an "All"/uncategorized
+      // window would keep narrowing the guide to whichever group it landed on.
+      if (!_iptvZapPagingActive) _anchorIptvGuideCategory(channel);
     } else {
       _hideIptvZapBanner();
     }
@@ -6898,6 +7446,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               return KeyEventResult.handled;
             }
 
+            // DPAD left/right zap channels on a live channel with the controls
+            // hidden — the same contract as the native player's
+            // isLiveIptvZapContext(). There is nothing to seek on a live
+            // stream, and with the dock up these keys belong to its buttons.
+            if (_canZapIptvChannel && !_controlsVisible.value) {
+              if (key == LogicalKeyboardKey.arrowRight) {
+                _zapIptvChannel(1);
+                return KeyEventResult.handled;
+              }
+              if (key == LogicalKeyboardKey.arrowLeft) {
+                _zapIptvChannel(-1);
+                return KeyEventResult.handled;
+              }
+            }
+
             // DPAD left/right seek 10s
             if (key == LogicalKeyboardKey.arrowLeft ||
                 key == LogicalKeyboardKey.mediaRewind) {
@@ -6989,8 +7552,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             }
             if (key == LogicalKeyboardKey.channelUp ||
                 key == LogicalKeyboardKey.pageUp) {
+              if (_canZapIptvChannel) {
+                _zapIptvChannel(1);
+                return KeyEventResult.handled;
+              }
               if (widget.requestNextChannel != null) {
                 _goToNextChannel();
+                return KeyEventResult.handled;
+              }
+            }
+            if (key == LogicalKeyboardKey.channelDown ||
+                key == LogicalKeyboardKey.pageDown) {
+              if (_canZapIptvChannel) {
+                _zapIptvChannel(-1);
                 return KeyEventResult.handled;
               }
             }
@@ -7253,12 +7827,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               }
                             },
                             // IPTV episode list (series/VOD) gets Next/Previous
-                            // that walk the season; falls back to the Debrify-TV
-                            // episode/playlist flow otherwise.
+                            // that walk the season; a live channel gets the
+                            // same pair as previous/next channel, which is the
+                            // only way to zap without a CH +/- key. Falls back
+                            // to the Debrify-TV episode/playlist flow.
                             onNext: _hasIptvNext
                                 ? () => _switchToIptvChannel(
                                     _currentIptvIndex + 1,
                                   )
+                                : _canZapIptvChannel
+                                ? () => _zapIptvChannel(1)
                                 : (_hasAnyNext ? _goToNextEpisode : null),
                             onNextChannel: widget.requestNextChannel != null
                                 ? _goToNextChannel
@@ -7267,10 +7845,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 ? () => _switchToIptvChannel(
                                     _currentIptvIndex - 1,
                                   )
+                                : _canZapIptvChannel
+                                ? () => _zapIptvChannel(-1)
                                 : (_hasPreviousEpisode()
                                       ? _goToPreviousEpisode
                                       : null),
-                            hasNext: _hasAnyNext || _hasIptvNext,
+                            hasNext:
+                                _hasAnyNext ||
+                                _hasIptvNext ||
+                                _canZapIptvChannel,
                             hasNextChannel: widget.requestNextChannel != null,
                             hasGuide:
                                 (_channelEntries.isNotEmpty &&
@@ -7284,7 +7867,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 ? _showStremioTvGuideOverlay
                                 : null,
                             hasPrevious:
-                                _hasPreviousEpisode() || _hasIptvPrevious,
+                                _hasPreviousEpisode() ||
+                                _hasIptvPrevious ||
+                                _canZapIptvChannel,
                             // A live channel has no timeline to scrub: the
                             // position/duration mpv reports is just the HLS
                             // rolling window, so the bar counts something
@@ -7293,7 +7878,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             // something here. Derived, not a launch arg, so
                             // zapping to on-demand brings it straight back.
                             hideSeekbar:
-                                widget.hideSeekbar || _iptvZapBannerOwnsIdentity,
+                                widget.hideSeekbar ||
+                                _iptvZapBannerOwnsIdentity,
                             // Same call the native dock makes for live.
                             hideSpeed: _iptvZapBannerOwnsIdentity,
                             // Shuffle picks from _activePlaylist, which an
