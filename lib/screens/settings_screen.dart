@@ -2669,17 +2669,16 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.player,
                       onTap: onOpenExternalPlayerSettings,
                     ),
-                    // Remote: shown on TV and desktop. Mobile keeps its
-                    // entry in the floating menu, so it's hidden here.
-                    if (!kIsWeb &&
-                        (isAndroidTv ||
-                            Platform.isWindows ||
-                            Platform.isMacOS ||
-                            Platform.isLinux))
-                      SettingsTile.spec(
-                        SettingsRows.remote,
-                        onTap: () async => onOpenRemoteControl(),
-                      ),
+                    // Remote is listed on every platform. It used to be hidden
+                    // off TV and desktop on the grounds that "mobile keeps its
+                    // entry in the floating menu" — but that menu is gated on
+                    // width (isDesktopWide, >= 600 px), not on platform, so a
+                    // tablet or a phone in landscape lost both entry points at
+                    // once and could only reach Remote through settings search.
+                    SettingsTile.spec(
+                      SettingsRows.remote,
+                      onTap: () async => onOpenRemoteControl(),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
