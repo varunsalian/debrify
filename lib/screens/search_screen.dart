@@ -1104,6 +1104,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // rebuilt on return; on TV a tab switch already reloads it fresh).
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.addHomeSettingsListener(_reloadForHomeSettings);
+      unawaited(_loadHomeDefaultView());
     }
     // Unified (non-TV) layout: drive the catalog Sources bar off search-field
     // focus, with a delayed hide so clicking the button doesn't yank it away
@@ -1123,7 +1124,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Restore a keyword search preserved from a prior tab visit (results +
     // scroll). If one restored, it carries its own filters, so don't overwrite
     // them with the saved defaults.
-    final restoredKeyword = _restoreKeywordState();
+    final restoredKeyword =
+        widget.isTelevision && !widget.searchMode && !widget.discoverMode
+        ? false
+        : _restoreKeywordState();
     // Seed keyword filters from the user's saved defaults (parity with the old
     // search screen). Harmless in variants that never expose keyword mode.
     if (!restoredKeyword) unawaited(_loadDefaultKeywordFilters());
@@ -1470,6 +1474,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// set-equality guard skips reloads for unrelated settings.
   Future<void> _reloadForHomeSettings() async {
     if (!mounted) return;
+    await _loadHomeDefaultView();
+    if (!mounted) return;
     final disabled = await StorageService.getHomeDisabledSections();
     if (!mounted) return;
     final unchanged =
@@ -1478,6 +1484,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (unchanged) return;
     setState(() => _homeDisabled = disabled);
     _load();
+  }
+
+  Future<void> _loadHomeDefaultView() async {
+    // Android TV has dedicated Home and Search tabs. Its Home is always the
+    // catalog board, regardless of a preference saved on another platform.
+    if (widget.isTelevision) {
+      if (_mode != _Mode.catalog) _switchMode(_Mode.catalog);
+      return;
+    }
+    final saved = await StorageService.getHomeDefaultSourceType();
+    if (!mounted || widget.searchMode || widget.discoverMode) return;
+    final mode = saved == 'keyword' ? _Mode.keyword : _Mode.catalog;
+    if (_mode != mode) _switchMode(mode);
   }
 
   Future<void> _load() async {
