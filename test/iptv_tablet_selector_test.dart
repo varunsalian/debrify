@@ -2,6 +2,7 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/widgets/iptv/iptv_centered_selector.dart';
 import 'package:debrify/widgets/iptv/iptv_epg_panel.dart';
 import 'package:debrify/widgets/iptv/iptv_results_view.dart';
+import 'package:debrify/widgets/see_all/see_all_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -77,6 +78,18 @@ void main() {
     final arrowBefore = tester.getCenter(
       find.byKey(const ValueKey('iptv-tablet-selector-arrow')),
     );
+    final arrow = tester.widget<Container>(
+      find.byKey(const ValueKey('iptv-tablet-selector-arrow')),
+    );
+    final arrowDecoration = arrow.decoration! as BoxDecoration;
+    expect(arrowDecoration.color, kSeeAllAccent.withValues(alpha: 0.18));
+    final arrowIcon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const ValueKey('iptv-tablet-selector-arrow')),
+        matching: find.byIcon(Icons.arrow_right_rounded),
+      ),
+    );
+    expect(arrowIcon.color, kSeeAllAccent2);
 
     await tester.tap(find.byKey(const ValueKey('selector-item-2')));
     await tester.pumpAndSettle();

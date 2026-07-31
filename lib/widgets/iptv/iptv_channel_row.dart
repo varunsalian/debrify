@@ -113,6 +113,10 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   bool _focused = false;
   bool _hovered = false;
   bool get _active => _focused || _hovered || widget.isPreviewSelected;
+  bool get _tabletPreviewActive =>
+      widget.isPreviewSelected && !_focused && !_hovered;
+  Color get _activeAccent =>
+      _tabletPreviewActive ? HomeTheme.chromeAccent : HomeTheme.focusGold;
 
   /// Touch phones/tablets have no hover, so the favourite affordance can't hide
   /// behind one — keep it visible there. Desktop reveals it on hover, TV on
@@ -194,16 +198,20 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       // Constant 2px border (transparent at rest) so focus never shifts layout.
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: _active ? const Color(0xFF141824) : Colors.transparent,
+        color: _active
+            ? (_tabletPreviewActive
+                  ? const Color(0xFF17132E)
+                  : const Color(0xFF141824))
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _active ? HomeTheme.focusGold : Colors.transparent,
+          color: _active ? _activeAccent : Colors.transparent,
           width: 2,
         ),
         boxShadow: _active
             ? [
                 BoxShadow(
-                  color: HomeTheme.focusGold.withValues(alpha: 0.28),
+                  color: _activeAccent.withValues(alpha: 0.28),
                   blurRadius: 20,
                   spreadRadius: 1,
                 ),
@@ -222,7 +230,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                 overflow: TextOverflow.fade,
                 style: TextStyle(
                   color: _active
-                      ? HomeTheme.focusGold
+                      ? _activeAccent
                       : Colors.white.withValues(alpha: 0.42),
                   fontSize: 12,
                   fontWeight: FontWeight.w800,

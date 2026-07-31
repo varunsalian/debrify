@@ -3814,13 +3814,19 @@ class IptvResultsViewState extends State<IptvResultsView>
                           ? null
                           : () => unawaited(_playChannel(ch)),
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF00E5FF),
-                        foregroundColor: const Color(0xFF061016),
-                        disabledBackgroundColor: Colors.white.withValues(
-                          alpha: 0.06,
+                        backgroundColor: kSeeAllAccent,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: kSeeAllPanel2.withValues(
+                          alpha: 0.72,
                         ),
                         disabledForegroundColor: Colors.white.withValues(
-                          alpha: 0.25,
+                          alpha: 0.30,
+                        ),
+                        overlayColor: kSeeAllAccent2.withValues(alpha: 0.18),
+                        shadowColor: kSeeAllAccent.withValues(alpha: 0.34),
+                        elevation: 0,
+                        side: BorderSide(
+                          color: kSeeAllAccent2.withValues(alpha: 0.46),
                         ),
                         minimumSize: const Size.fromHeight(46),
                         shape: RoundedRectangleBorder(
@@ -3846,7 +3852,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                     child: Text(
                       'Scroll channels through the arrow to preview',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.38),
+                        color: kSeeAllAccent2.withValues(alpha: 0.66),
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.1,
