@@ -25,6 +25,7 @@ import '../services/episode_info_service.dart';
 import '../services/movie_metadata_service.dart';
 import '../models/iptv_playlist.dart';
 import '../services/stremio_iptv_service.dart';
+import '../services/iptv_epg_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
@@ -88,6 +89,37 @@ class _SeasonEpisodeSelection {
   final int episode;
 
   const _SeasonEpisodeSelection({required this.season, required this.episode});
+}
+
+/// Monotonic ownership gate for asynchronous IPTV replay lookups.
+///
+/// Starting or cancelling a request makes every older ticket stale, preventing
+/// a slow catch-up probe from taking playback back after a newer user action.
+class IptvCatchupRequestGate {
+  int _generation = 0;
+  int? _activeTicket;
+
+  int begin() {
+    final ticket = ++_generation;
+    _activeTicket = ticket;
+    return ticket;
+  }
+
+  bool isCurrent(int ticket) =>
+      _activeTicket == ticket && _generation == ticket;
+
+  bool complete(int ticket) {
+    if (!isCurrent(ticket)) return false;
+    _activeTicket = null;
+    return true;
+  }
+
+  bool cancel() {
+    if (_activeTicket == null) return false;
+    _generation++;
+    _activeTicket = null;
+    return true;
+  }
 }
 
 /// A full-featured video player screen with playlist support and navigation controls.
@@ -156,6 +188,14 @@ class VideoPlayerScreen extends StatefulWidget {
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
+  final List<String>? iptvCategories;
+  final String? iptvSourceId;
+  final String? iptvSourceName;
+  final String? iptvSelectedCategory;
+  final String? iptvContentType;
+  final List<Map<String, dynamic>>? iptvSources;
+  final Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
+  iptvBrowseProvider;
   // Stremio sources for in-player source switching
   final List<Torrent>? stremioSources;
   final int? stremioCurrentSourceIndex;
@@ -222,6 +262,13 @@ class VideoPlayerScreen extends StatefulWidget {
     this.contentTitle,
     this.iptvChannels,
     this.iptvStartIndex,
+    this.iptvCategories,
+    this.iptvSourceId,
+    this.iptvSourceName,
+    this.iptvSelectedCategory,
+    this.iptvContentType,
+    this.iptvSources,
+    this.iptvBrowseProvider,
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
@@ -405,6 +452,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // IPTV channel sheet state
   bool _showIptvChannelSheet = false;
   int _currentIptvIndex = 0;
+  List<IptvChannel>? _iptvChannelsOverride;
+  IptvGuideContext? _iptvGuideContextOverride;
+  final IptvCatchupRequestGate _iptvCatchupRequests = IptvCatchupRequestGate();
+
+  /// The guide may replace the launch window after a source/category/search
+  /// request. Playback always reads this effective list so the selected row,
+  /// resume key, title, headers, and later episode navigation stay aligned.
+  List<IptvChannel>? get _effectiveIptvChannels =>
+      _iptvChannelsOverride ?? widget.iptvChannels;
+
+  void _persistIptvGuideContext(IptvGuideContext context) {
+    if (!mounted) return;
+    setState(() => _iptvGuideContextOverride = context);
+  }
+
+  void _cancelPendingIptvCatchup({bool hideFeedback = true}) {
+    if (!_iptvCatchupRequests.cancel()) return;
+    if (hideFeedback && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    }
+  }
+
+  int _beginIptvCatchupRequest() {
+    _cancelPendingIptvCatchup();
+    return _iptvCatchupRequests.begin();
+  }
+
+  bool _isCurrentIptvCatchupRequest(int ticket) =>
+      mounted && _iptvCatchupRequests.isCurrent(ticket);
 
   // Stremio source sheet state
   bool _showSourceSheet = false;
@@ -1593,7 +1669,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // just left a black screen with a spinner, indistinguishable from "the app
     // is broken". (The Stremio ladder reports for itself — see the probing
     // guard in the handler.)
-    if (widget.iptvChannels != null) {
+    if (_effectiveIptvChannels != null) {
       _iptvErrorSub = _player.stream.error.listen(_onIptvStreamError);
     }
 
@@ -1830,7 +1906,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // IPTV: use current channel name
-    final iptvChannels = widget.iptvChannels;
+    final iptvChannels = _effectiveIptvChannels;
     if (iptvChannels != null &&
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
@@ -1866,7 +1942,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // IPTV: use current channel group as subtitle
-    final iptvChannels = widget.iptvChannels;
+    final iptvChannels = _effectiveIptvChannels;
     if (iptvChannels != null &&
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
@@ -2796,7 +2872,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Show IPTV channel sheet overlay
   void _showIptvChannelSheetOverlay() {
-    final channels = widget.iptvChannels;
+    final channels = _effectiveIptvChannels;
     if (channels == null || channels.isEmpty) return;
     setState(() {
       _showIptvChannelSheet = true;
@@ -2806,9 +2882,82 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Hide IPTV channel sheet overlay
   void _hideIptvChannelSheet() {
+    _cancelPendingIptvCatchup();
     setState(() {
       _showIptvChannelSheet = false;
     });
+  }
+
+  /// A full-catalog guide result is not necessarily part of the launch
+  /// window. Adopt the result set before tuning so every player read uses the
+  /// selected channel's real index and metadata.
+  Future<void> _switchToIptvGuideChannel(
+    List<IptvChannel> channels,
+    int index,
+  ) async {
+    if (index < 0 || index >= channels.length) return;
+    _cancelPendingIptvCatchup();
+    _iptvChannelsOverride = List<IptvChannel>.from(channels);
+    await _switchToIptvChannel(index);
+  }
+
+  /// Turn an archived EPG programme into a finite, seekable IPTV item in the
+  /// current player. The normal IPTV switching path remains responsible for
+  /// headers, transition feedback, tracks, and resume identity.
+  Future<void> _playIptvCatchup(
+    IptvChannel channel,
+    EpgProgramme programme,
+  ) async {
+    final requestTicket = _beginIptvCatchupRequest();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Preparing replay of "${programme.title}"…'),
+        duration: const Duration(seconds: 30),
+      ),
+    );
+    String? url;
+    try {
+      url = await IptvEpgService.instance.catchupUrl(channel.url, programme);
+    } catch (error) {
+      debugPrint('Player: IPTV replay lookup failed: $error');
+    }
+    if (!_isCurrentIptvCatchupRequest(requestTicket)) return;
+    if (url == null) {
+      _iptvCatchupRequests.complete(requestTicket);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Replay is not available')),
+      );
+      return;
+    }
+
+    final sourceId =
+        channel.attributes['source_playlist_id'] ??
+        _iptvGuideContextOverride?.sourceId ??
+        widget.iptvSourceId;
+    final replay = IptvChannel(
+      name: programme.title,
+      url: url,
+      logoUrl: channel.logoUrl,
+      group: channel.name,
+      contentType: 'vod',
+      httpHeaders: channel.httpHeaders,
+      attributes: {if (sourceId != null) 'source_playlist_id': sourceId},
+    );
+    await StorageService.recordIptvWatch(
+      replay.url,
+      channelName: replay.name,
+      logoUrl: replay.logoUrl,
+      group: replay.group,
+      playlistId: sourceId,
+      httpHeaders: replay.httpHeaders,
+    );
+    if (!_isCurrentIptvCatchupRequest(requestTicket)) return;
+    _iptvCatchupRequests.complete(requestTicket);
+    messenger.hideCurrentSnackBar();
+    _iptvChannelsOverride = [replay];
+    await _switchToIptvChannel(0);
   }
 
   /// Monotonic ticket for IPTV channel switches. The Stremio candidate ladder
@@ -2842,7 +2991,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// whole IPTV section being broken.
   void _onIptvStreamError(String error) {
     if (!mounted || _iptvErrorsMuted) return;
-    final channels = widget.iptvChannels;
+    final channels = _effectiveIptvChannels;
     if (channels == null) return;
 
     final now = DateTime.now();
@@ -2917,7 +3066,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// sheet wants the whole candidate list — fetch it (cache hit from the
   /// launch resolve) and populate the override for the starting channel.
   void _initIptvStremioSources() {
-    final channels = widget.iptvChannels;
+    final channels = _effectiveIptvChannels;
     final idx = widget.iptvStartIndex ?? 0;
     if (channels == null || idx < 0 || idx >= channels.length) return;
     final channel = channels[idx];
@@ -2933,10 +3082,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Switch to IPTV channel at given index
-  /// The IPTV channel currently playing (from [widget.iptvChannels]), or null
+  /// The IPTV channel currently playing, or null
   /// when not in an IPTV context or the index is out of range.
   IptvChannel? get _currentIptvChannel {
-    final chans = widget.iptvChannels;
+    final chans = _effectiveIptvChannels;
     if (chans == null ||
         _currentIptvIndex < 0 ||
         _currentIptvIndex >= chans.length) {
@@ -2953,7 +3102,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// series_id the launcher stamps onto episode channels.
   bool get _hasIptvNext =>
       _isIptvSeriesContext &&
-      _currentIptvIndex + 1 < (widget.iptvChannels?.length ?? 0);
+      _currentIptvIndex + 1 < (_effectiveIptvChannels?.length ?? 0);
 
   bool get _hasIptvPrevious =>
       _isIptvSeriesContext && _currentIptvIndex - 1 >= 0;
@@ -3056,8 +3205,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _switchToIptvChannel(int index) async {
-    final channels = widget.iptvChannels;
+    final channels = _effectiveIptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
+    _cancelPendingIptvCatchup();
     final ticket = ++_iptvSwitchTicket;
     // This switch owns the error gate now (a superseded ladder's state doesn't
     // survive). Muted until the new media is opened below; the burst debounce
@@ -5136,6 +5286,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    _iptvCatchupRequests.cancel();
     // Detach from PiP (disarms auto-enter); ignored if a newer player already
     // took ownership, so route replacement can't disarm the incoming screen.
     PipService.detach(this);
@@ -5255,7 +5406,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // another channel and its position would be filed under the first one's
     // name. Key on the channel actually playing instead. (Identical to the
     // fallback until the user zaps, so existing resume points still resolve.)
-    final iptvChannels = widget.iptvChannels;
+    final iptvChannels = _effectiveIptvChannels;
     if (iptvChannels != null &&
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
@@ -5548,7 +5699,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // that window would file the old movie's position under the new channel's
     // key, which the Continue-watching shelf would then show as real progress.
     // Nothing is lost by skipping: the next tick saves once the switch lands.
-    if (widget.iptvChannels != null && _isTransitioning) {
+    if (_effectiveIptvChannels != null && _isTransitioning) {
       return;
     }
 
@@ -6281,12 +6432,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 _showStremioTvGuideOverlay();
                 return KeyEventResult.handled;
               }
+              if (_effectiveIptvChannels?.isNotEmpty == true) {
+                _showIptvChannelSheetOverlay();
+                return KeyEventResult.handled;
+              }
             }
 
             // C -> IPTV channel sheet
             if (key == LogicalKeyboardKey.keyC) {
-              if (widget.iptvChannels != null &&
-                  widget.iptvChannels!.isNotEmpty) {
+              if (_effectiveIptvChannels?.isNotEmpty == true) {
                 _showIptvChannelSheetOverlay();
                 return KeyEventResult.handled;
               }
@@ -6772,11 +6926,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             onRandom: () =>
                                 unawaited(_showRandomPlaybackMenu()),
                             hasIptvChannels:
-                                widget.iptvChannels != null &&
-                                widget.iptvChannels!.isNotEmpty,
+                                _effectiveIptvChannels?.isNotEmpty == true,
                             onShowIptvChannels:
-                                widget.iptvChannels != null &&
-                                    widget.iptvChannels!.isNotEmpty
+                                _effectiveIptvChannels?.isNotEmpty == true
                                 ? _showIptvChannelSheetOverlay
                                 : null,
                             hasStremioSources:
@@ -6849,15 +7001,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 // IPTV channel sheet overlay
                 if (_showIptvChannelSheet &&
-                    widget.iptvChannels != null &&
-                    widget.iptvChannels!.isNotEmpty &&
+                    _effectiveIptvChannels?.isNotEmpty == true &&
                     !inPip)
                   Positioned.fill(
                     child: IptvChannelSheet(
-                      channels: widget.iptvChannels!,
+                      channels: _effectiveIptvChannels!,
                       currentIndex: _currentIptvIndex,
-                      onChannelSelected: _switchToIptvChannel,
+                      onChannelSelected: _switchToIptvGuideChannel,
+                      onPlayProgramme: _playIptvCatchup,
                       onClose: _hideIptvChannelSheet,
+                      categories:
+                          _iptvGuideContextOverride?.categories ??
+                          widget.iptvCategories ??
+                          const [],
+                      sourceId: _iptvGuideContextOverride == null
+                          ? widget.iptvSourceId
+                          : _iptvGuideContextOverride!.sourceId,
+                      sourceName: _iptvGuideContextOverride == null
+                          ? widget.iptvSourceName
+                          : _iptvGuideContextOverride!.sourceName,
+                      selectedCategory: _iptvGuideContextOverride == null
+                          ? widget.iptvSelectedCategory
+                          : _iptvGuideContextOverride!.selectedCategory,
+                      contentType:
+                          _iptvGuideContextOverride?.contentType ??
+                          widget.iptvContentType ??
+                          'live',
+                      sources: widget.iptvSources ?? const [],
+                      browseProvider: widget.iptvBrowseProvider,
+                      onContextChanged: _persistIptvGuideContext,
                     ),
                   ),
                 // Stremio source sheet overlay

@@ -19,10 +19,12 @@ final RegExp _resExp = RegExp(r'\((\d{3,4}[pi])\)', caseSensitive: false);
 
 const Color _liveDot = Color(0xFF34D399); // emerald — a calm "on air" cue
 
-/// Row height for live channels (a square logo chip) and for on-demand items
-/// (a 2:3 poster). The grid needs these to size its tiles, so they live here
-/// next to the art they describe.
+/// Row heights for live channels (a square logo chip) and on-demand items
+/// (a 2:3 poster). Narrow live rows get a little more height so a wrapped
+/// channel name and its category can coexist without clipping. The grid needs
+/// these to size its tiles, so they live here next to the art they describe.
 const double kIptvRowExtent = 74;
+const double kIptvNarrowRowExtent = 84;
 const double kIptvPosterRowExtent = 95;
 
 /// Row height for live channels when the rows carry their own EPG block
@@ -159,6 +161,8 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     final ch = widget.channel;
     final isLive = ch.isLive;
     final brand = brandAccentFor(ch.name);
+    final isNarrow =
+        !widget.isTelevision && MediaQuery.sizeOf(context).width < 600;
 
     // Pull the resolution out of the name into the sub-line; show a clean name.
     final resMatch = _resExp.firstMatch(ch.name);
@@ -265,7 +269,11 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                     Flexible(
                       child: Text(
                         displayName,
-                        maxLines: 1,
+                        // Phone-width rows have enough height for a second
+                        // title line. Keeping the desktop/TV row to one line
+                        // preserves its denser guide rhythm, while narrow
+                        // windows no longer discard most of a channel name.
+                        maxLines: isNarrow ? 2 : 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white.withValues(

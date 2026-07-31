@@ -92,4 +92,39 @@ void main() {
 
     expect(taps, 0, reason: 'an abandoned press must not play');
   });
+
+  testWidgets('channel names can wrap to two lines on narrow devices', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const name = 'UK: SKY SPORT MAIN EVENT EXTRA';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: kIptvNarrowRowExtent,
+            child: IptvChannelRow(
+              channel: IptvChannel(
+                name: name,
+                url: 'http://h/live/u/p/1.ts',
+                duration: -1,
+                contentType: 'live',
+                channelNumber: 123,
+                group: 'Sports',
+              ),
+              onTap: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final title = tester.widget<Text>(find.text(name));
+    expect(title.maxLines, 2);
+    expect(tester.takeException(), isNull);
+  });
 }

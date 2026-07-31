@@ -4011,6 +4011,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // the horizontal space isn't wasted; a single column on phones and in the
     // TV two-pane's guide column (which is roughly phone-width anyway).
     final w = MediaQuery.of(context).size.width;
+    final narrowRows = !widget.isTelevision && w < 600;
     final hPadding = tvPane ? 10.0 : (w >= 900 ? 28.0 : 12.0);
     final maxCrossAxisExtent = tvPane ? 720.0 : 440.0;
     const crossAxisSpacing = 12.0;
@@ -4066,6 +4067,8 @@ class IptvResultsViewState extends State<IptvResultsView>
                     ? kIptvPosterRowExtent
                     : epgRows
                     ? kIptvEpgRowExtent
+                    : narrowRows
+                    ? kIptvNarrowRowExtent
                     : kIptvRowExtent,
                 mainAxisSpacing: 4,
                 crossAxisSpacing: crossAxisSpacing,
