@@ -7279,6 +7279,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvChannelAdapter?.updateChannels(channels)
         refreshIptvBrowserChrome()
         updateIptvGuideCurrentName()
+        refreshIptvZapBannerPosition()
     }
 
     private fun mergeIptvZapPage(
@@ -7312,6 +7313,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentIptvIndex = window.indexOfFirst { it.isCurrent }.coerceAtLeast(0)
         iptvChannelAdapter?.updateChannels(window)
         refreshIptvBrowserChrome()
+        refreshIptvZapBannerPosition()
     }
 
     private fun boundedHiddenIptvZapWindow(
@@ -7729,128 +7731,301 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     // ── IPTV zap banner ──────────────────────────────────────────────────
-    // Fullscreen channel-change feedback: channel identity, what's airing
-    // now (with a progress bar) and next, plus the key hints that make
-    // zapping and the guide discoverable at all. Built in code and attached
-    // to the content view on first use; EPG fields ride the same
-    // ensureIptvChannelEpg flow the guide rows use, so a banner appearance
-    // also warms the guide's data.
+    // Channel-change feedback as a broadcast lower third: a scrim instead of
+    // a card, so the picture stays whole. Channel identity anchors left, what
+    // is on anchors right, a key-hint rail sits above the bottom edge, and the
+    // elapsed rule runs the full width of the screen where it reads as part of
+    // the broadcast rather than part of a dialog. Built in code and attached to
+    // the content view on first use; EPG fields ride the same
+    // ensureIptvChannelEpg flow the guide rows use, so a banner appearance also
+    // warms the guide's data.
 
-    private var iptvZapBanner: LinearLayout? = null
+    private var iptvZapBanner: FrameLayout? = null
+    private var iptvZapBannerLogo: android.widget.ImageView? = null
+    private var iptvZapBannerLetter: TextView? = null
+    private var iptvZapBannerNumber: TextView? = null
     private var iptvZapBannerName: TextView? = null
     private var iptvZapBannerMeta: TextView? = null
     private var iptvZapBannerNow: TextView? = null
+    private var iptvZapBannerTimes: TextView? = null
     private var iptvZapBannerNext: TextView? = null
-    private var iptvZapBannerHint: TextView? = null
-    private var iptvZapBannerProgress: android.widget.ProgressBar? = null
+    private var iptvZapBannerProgress: ProgressBar? = null
+    private var iptvZapBannerHintChannel: View? = null
+    private var iptvZapBannerHintJump: View? = null
+
+    /** The channel the visible banner is describing. A paging window installed
+     *  after the banner appeared changes this channel's position and the
+     *  category total, so the banner needs a way back to its own entry. */
+    private var iptvZapBannerEntry: IptvChannelEntry? = null
     private val iptvZapBannerHideToken = Any()
 
-    private fun ensureIptvZapBanner(): LinearLayout {
+    private val iptvZapAccent = Color.parseColor("#00E5FF")
+
+    private fun zapText(
+        size: Float,
+        alpha: Int,
+        bold: Boolean = false,
+        mono: Boolean = false,
+    ) = TextView(this).apply {
+        textSize = size
+        setTextColor(Color.argb(alpha, 255, 255, 255))
+        typeface = when {
+            mono && bold -> Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            mono -> Typeface.MONOSPACE
+            bold -> Typeface.DEFAULT_BOLD
+            else -> Typeface.DEFAULT
+        }
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+    }
+
+    /** One rail entry: keycaps followed by what pressing them does. */
+    private fun zapHint(caps: List<String>, label: String): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        caps.forEach { cap ->
+            row.addView(
+                zapText(10f, 190, mono = true).apply {
+                    text = cap
+                    setPadding(dp(5), 0, dp(5), dp(1))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(3).toFloat()
+                        setColor(Color.TRANSPARENT)
+                        setStroke(dp(1), Color.argb(66, 255, 255, 255))
+                    }
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { rightMargin = dp(4) },
+            )
+        }
+        row.addView(
+            zapText(10.5f, 102).apply {
+                text = label
+                isAllCaps = true
+                letterSpacing = 0.1f
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = dp(3) },
+        )
+        return row
+    }
+
+    private fun ensureIptvZapBanner(): FrameLayout {
         iptvZapBanner?.let { return it }
-        val accent = Color.parseColor("#00E5FF")
 
-        fun label(size: Float, alpha: Int, bold: Boolean = false) =
-            TextView(this).apply {
-                textSize = size
-                setTextColor(Color.argb(alpha, 255, 255, 255))
-                if (bold) typeface = Typeface.DEFAULT_BOLD
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
+        val match = ViewGroup.LayoutParams.MATCH_PARENT
+        val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+
+        val banner = FrameLayout(this).apply {
+            visibility = View.GONE
+            elevation = dp(8).toFloat()
+        }
+
+        // The scrim replaces the old card: it darkens what sits under the text
+        // without drawing a box the eye has to read around.
+        banner.addView(
+            View(this).apply {
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(
+                        Color.argb(0, 4, 6, 12),
+                        Color.argb(184, 4, 6, 12),
+                        Color.argb(240, 4, 6, 12),
+                    ),
+                )
+            },
+            FrameLayout.LayoutParams(match, match),
+        )
+
+        // ── channel identity (left) ──
+        val logo = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            visibility = View.GONE
+        }
+        val letter = zapText(30f, 255, bold = true).apply { gravity = Gravity.CENTER }
+        val tile = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.argb(38, 255, 255, 255), Color.argb(13, 255, 255, 255)),
+            ).apply {
+                cornerRadius = dp(10).toFloat()
+                setStroke(dp(1), Color.argb(41, 255, 255, 255))
             }
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+        }
+        tile.addView(logo, FrameLayout.LayoutParams(match, match))
+        tile.addView(letter, FrameLayout.LayoutParams(match, match))
 
-        val name = label(19f, 255, bold = true)
-        val meta = label(11.5f, 150)
-        val now = label(13.5f, 230).apply { visibility = View.GONE }
-        val next = label(12f, 155).apply { visibility = View.GONE }
-        val hint = label(10f, 115).apply { letterSpacing = 0.06f }
-        val bar = android.widget.ProgressBar(
+        val number = zapText(27f, 255, bold = true, mono = true).apply {
+            setTextColor(iptvZapAccent)
+        }
+        val name = zapText(31f, 255, bold = true)
+        val nameRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.BOTTOM
+        }
+        nameRow.addView(
+            number,
+            LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(12) },
+        )
+        nameRow.addView(name, LinearLayout.LayoutParams(0, wrap, 1f))
+
+        val liveTag = zapText(11.5f, 255, bold = true).apply {
+            text = "● LIVE"
+            setTextColor(Color.parseColor("#FF6470"))
+            letterSpacing = 0.12f
+        }
+        val meta = zapText(11.5f, 143).apply {
+            isAllCaps = true
+            letterSpacing = 0.09f
+        }
+        val metaRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        metaRow.addView(
+            liveTag,
+            LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(9) },
+        )
+        metaRow.addView(meta, LinearLayout.LayoutParams(0, wrap, 1f))
+
+        val ident = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        ident.addView(nameRow, LinearLayout.LayoutParams(match, wrap))
+        ident.addView(
+            metaRow,
+            LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(5) },
+        )
+
+        // ── what's on (right) ──
+        val now = zapText(17f, 255, bold = true).apply {
+            gravity = Gravity.END
+            maxWidth = dp(380)
+        }
+        val times = zapText(11.5f, 153, mono = true).apply {
+            gravity = Gravity.END
+            maxWidth = dp(380)
+        }
+        val next = zapText(12.5f, 133).apply {
+            gravity = Gravity.END
+            maxWidth = dp(380)
+        }
+        val programme = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
+        }
+        programme.addView(now, LinearLayout.LayoutParams(wrap, wrap))
+        programme.addView(
+            times,
+            LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(4) },
+        )
+        programme.addView(
+            next,
+            LinearLayout.LayoutParams(wrap, wrap).apply { topMargin = dp(4) },
+        )
+
+        // The identity column carries the weight, so a long channel name
+        // ellipsizes before it can squeeze the programme out of the frame.
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.BOTTOM
+        }
+        body.addView(tile, LinearLayout.LayoutParams(dp(68), dp(68)))
+        body.addView(
+            ident,
+            LinearLayout.LayoutParams(0, wrap, 1f).apply { leftMargin = dp(20) },
+        )
+        body.addView(
+            programme,
+            LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(24) },
+        )
+        banner.addView(
+            body,
+            FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+                leftMargin = dp(48)
+                rightMargin = dp(48)
+                bottomMargin = dp(58)
+            },
+        )
+
+        // ── key hints ──
+        // On its own line, so nothing it shares a row with can push it out when
+        // a channel name runs long or the programme column empties.
+        val hintChannel = zapHint(listOf("◀", "▶"), "Channel")
+        val hintGuide = zapHint(listOf("▲"), "Guide")
+        val hintJump = zapHint(listOf("HOLD ▲"), "Channel number")
+        val rail = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        // Trailing margins rather than leading ones: when a hint is dropped
+        // because its key does nothing on this channel, the one after it still
+        // starts flush with the banner's 48 dp inset.
+        rail.addView(
+            hintChannel,
+            LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(20) },
+        )
+        rail.addView(hintGuide, LinearLayout.LayoutParams(wrap, wrap))
+        rail.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+        rail.addView(hintJump, LinearLayout.LayoutParams(wrap, wrap))
+        banner.addView(
+            rail,
+            FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+                leftMargin = dp(48)
+                rightMargin = dp(48)
+                bottomMargin = dp(16)
+            },
+        )
+
+        // ── elapsed rule, screen edge to screen edge ──
+        val bar = ProgressBar(
             this, null, android.R.attr.progressBarStyleHorizontal
         ).apply {
             max = 1000
             progressTintList =
-                android.content.res.ColorStateList.valueOf(accent)
+                android.content.res.ColorStateList.valueOf(iptvZapAccent)
             progressBackgroundTintList = android.content.res.ColorStateList
-                .valueOf(Color.argb(46, 255, 255, 255))
-            visibility = View.GONE
+                .valueOf(Color.argb(33, 255, 255, 255))
         }
-
-        val banner = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(15), dp(24), dp(14))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
-                setColor(Color.argb(234, 11, 13, 23))
-                setStroke(dp(1), Color.argb(28, 255, 255, 255))
-            }
-            elevation = dp(8).toFloat()
-            visibility = View.GONE
-        }
-        fun add(view: View, topDp: Int, height: Int = ViewGroup.LayoutParams.WRAP_CONTENT) {
-            banner.addView(
-                view,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, height
-                ).apply { topMargin = dp(topDp) },
-            )
-        }
-        add(name, 0)
-        add(meta, 2)
-        add(now, 10)
-        add(bar, 7, dp(3))
-        add(next, 7)
-        add(hint, 12)
+        banner.addView(bar, FrameLayout.LayoutParams(match, dp(4), Gravity.BOTTOM))
 
         val root = findViewById<ViewGroup>(android.R.id.content)
         root.addView(
             banner,
-            android.widget.FrameLayout.LayoutParams(
-                dp(430), ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = android.view.Gravity.BOTTOM or android.view.Gravity.START
-                leftMargin = dp(28)
-                bottomMargin = dp(28)
+            android.widget.FrameLayout.LayoutParams(match, dp(250)).apply {
+                gravity = Gravity.BOTTOM
             },
         )
 
         iptvZapBanner = banner
+        iptvZapBannerLogo = logo
+        iptvZapBannerLetter = letter
+        iptvZapBannerNumber = number
         iptvZapBannerName = name
         iptvZapBannerMeta = meta
         iptvZapBannerNow = now
+        iptvZapBannerTimes = times
         iptvZapBannerNext = next
-        iptvZapBannerHint = hint
         iptvZapBannerProgress = bar
+        iptvZapBannerHintChannel = hintChannel
+        iptvZapBannerHintJump = hintJump
         return banner
     }
 
     private fun showIptvZapBanner(entry: IptvChannelEntry) {
-        // Never over the guide: a zap from inside the guide updates the
-        // guide's own header instead, and the banner would otherwise paint
-        // on top of the list (it's the topmost child of the content view).
-        if (iptvGuideVisible) return
+        // Never over the guide or the controls dock. The banner is the topmost
+        // child of the content view and now spans the full width, so it would
+        // simply cover either one; a zap from inside the guide updates the
+        // guide's own header instead.
+        if (iptvGuideVisible || controlsMenuVisible) return
         val banner = ensureIptvZapBanner()
-        iptvZapBannerName?.text = entry.displayName
-        val channelTotal =
-            if (iptvZapPagingActive && iptvZapCategoryTotal > 0) {
-                iptvZapCategoryTotal
-            } else {
-                iptvChannels.size
-            }
-        val meta = buildList {
-            // "CH" reads wrong on an episode/movie list — plain position there.
-            add(
-                if (entry.isLive) {
-                    val number = entry.channelNumber ?: (entry.index + 1)
-                    "CH $number  •  ${entry.index + 1}/$channelTotal"
-                }
-                else "${entry.index + 1} of ${iptvChannels.size}"
-            )
-            entry.group?.takeIf { it.isNotEmpty() }?.let { add(it) }
-        }.joinToString("   •   ")
-        iptvZapBannerMeta?.text = meta
-        // LEFT/RIGHT only zap on live channels — don't teach it on episode/
-        // movie lists, where those keys still seek.
-        iptvZapBannerHint?.text =
-            if (entry.isLive) "◀ ▶  Channel      ▲  Guide" else "▲  Guide"
+        iptvZapBannerEntry = entry
+        paintIptvZapBannerIdentity(entry)
         paintIptvZapBannerEpg(entry) // whatever is already known paints now
         // The same lazy fetch the guide rows use — a fresh answer repaints
         // the banner via the isCurrent hook in ensureIptvChannelEpg.
@@ -7870,46 +8045,189 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hideIptvZapBanner() {
         val banner = iptvZapBanner ?: return
+        iptvZapBannerEntry = null
         banner.animate().cancel()
         banner.animate().alpha(0f).setDuration(180).withEndAction {
             banner.visibility = View.GONE
         }.start()
     }
 
+    /** Logo, channel number and name — the parts that only change on a zap. */
+    private fun paintIptvZapBannerIdentity(entry: IptvChannelEntry) {
+        val letter = iptvZapBannerLetter ?: return
+        val logo = iptvZapBannerLogo ?: return
+
+        val firstLetter = entry.name.firstOrNull()?.uppercase() ?: "?"
+        if (entry.logoUrl.isNullOrEmpty()) {
+            logo.visibility = View.GONE
+            letter.text = firstLetter
+            letter.visibility = View.VISIBLE
+        } else {
+            letter.visibility = View.GONE
+            logo.visibility = View.VISIBLE
+            com.bumptech.glide.Glide.with(this)
+                .load(entry.logoUrl)
+                .centerInside()
+                .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                    override fun onLoadFailed(
+                        e: com.bumptech.glide.load.engine.GlideException?,
+                        model: Any?,
+                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        logo.visibility = View.GONE
+                        letter.text = firstLetter
+                        letter.visibility = View.VISIBLE
+                        return true
+                    }
+                    override fun onResourceReady(
+                        resource: android.graphics.drawable.Drawable,
+                        model: Any,
+                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                        dataSource: com.bumptech.glide.load.DataSource,
+                        isFirstResource: Boolean
+                    ): Boolean = false
+                })
+                .into(logo)
+        }
+
+        iptvZapBannerNumber?.text =
+            (entry.channelNumber ?: (entry.index + 1)).toString()
+        iptvZapBannerName?.text = entry.displayName
+        paintIptvZapBannerPosition(entry)
+    }
+
+    /** Category, position within it, and which key hints are honest here. */
+    private fun paintIptvZapBannerPosition(entry: IptvChannelEntry) {
+        val total = if (iptvZapPagingActive && iptvZapCategoryTotal > 0) {
+            iptvZapCategoryTotal
+        } else {
+            iptvChannels.size
+        }
+        val locale = java.util.Locale.getDefault()
+        val parts = buildList {
+            entry.group?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
+            if (total > 0) {
+                add(
+                    String.format(locale, "%,d", entry.index + 1) +
+                        " of " + String.format(locale, "%,d", total)
+                )
+            }
+        }
+        iptvZapBannerMeta?.text =
+            if (parts.isEmpty()) "" else "·  " + parts.joinToString("  ·  ")
+
+        // Only teach a key that actually does something on this channel: with a
+        // single channel and no paging there is nothing to zap to, and the jump
+        // dialog refuses a favourites source outright.
+        val canZap = iptvChannels.size > 1 || iptvZapPagingActive
+        iptvZapBannerHintChannel?.visibility =
+            if (canZap) View.VISIBLE else View.GONE
+        val activeSource = iptvSources.firstOrNull { it.id == iptvZapSourceId }
+        iptvZapBannerHintJump?.visibility =
+            if (canZap && activeSource?.isFavorites != true) View.VISIBLE else View.GONE
+    }
+
     /** Paint the banner's now/next lines from [entry]'s EPG fields. */
     private fun paintIptvZapBannerEpg(entry: IptvChannelEntry) {
         val nowView = iptvZapBannerNow ?: return
+        val timesView = iptvZapBannerTimes ?: return
         val nextView = iptvZapBannerNext ?: return
         val bar = iptvZapBannerProgress ?: return
+
         val nowTitle = entry.epgNowTitle
-        if (entry.isLive && nowTitle != null) {
-            nowView.text =
-                "${formatEpgTime(entry.epgNowStartMs)} – " +
-                    "${formatEpgTime(entry.epgNowStopMs)}    $nowTitle"
-            nowView.visibility = View.VISIBLE
-            val total = entry.epgNowStopMs - entry.epgNowStartMs
-            if (total > 0) {
-                val frac = (System.currentTimeMillis() - entry.epgNowStartMs)
-                    .toDouble() / total
-                bar.progress = (frac.coerceIn(0.0, 1.0) * 1000).toInt()
-                bar.visibility = View.VISIBLE
-            } else {
-                bar.visibility = View.GONE
-            }
+        if (nowTitle != null) {
+            nowView.text = nowTitle
+            nowView.setTextColor(Color.WHITE)
+            nowView.typeface = Typeface.DEFAULT_BOLD
         } else {
-            nowView.visibility = View.GONE
-            bar.visibility = View.GONE
+            // A channel with no guide still deserves a whole banner — say which
+            // of the two silences this is rather than leaving a gap.
+            nowView.text =
+                if (entry.epgLoading) "Loading guide…" else "No guide data"
+            nowView.setTextColor(Color.argb(107, 255, 255, 255))
+            nowView.typeface = Typeface.DEFAULT
         }
+
+        val start = entry.epgNowStartMs
+        val stop = entry.epgNowStopMs
+        val runtime = stop - start
+        if (nowTitle != null && runtime > 0) {
+            val nowMs = System.currentTimeMillis()
+            val remaining = stop - nowMs
+            val tail =
+                if (remaining > 60_000L) "  ·  ${formatIptvRemaining(remaining)} left"
+                else ""
+            timesView.text =
+                "${formatEpgTime(start)} – ${formatEpgTime(stop)}$tail"
+            timesView.visibility = View.VISIBLE
+            val elapsed = (nowMs - start).coerceIn(0L, runtime)
+            bar.progress = ((elapsed.toDouble() / runtime) * 1000).toInt()
+        } else {
+            timesView.visibility = View.GONE
+            // The rule stays — an empty track still reads as the edge of the
+            // broadcast, where hiding it would make the banner look truncated.
+            bar.progress = 0
+        }
+
         val nextTitle = entry.epgNextTitle
-        if (entry.isLive && nextTitle != null) {
-            val at = if (entry.epgNextStartMs > 0) {
-                "${formatEpgTime(entry.epgNextStartMs)}  "
-            } else ""
-            nextView.text = "Next:  $at$nextTitle"
+        if (nowTitle != null && nextTitle != null) {
+            val at =
+                if (entry.epgNextStartMs > 0) "${formatEpgTime(entry.epgNextStartMs)}  ·  "
+                else ""
+            nextView.text = "Next  $at$nextTitle"
             nextView.visibility = View.VISIBLE
         } else {
             nextView.visibility = View.GONE
         }
+    }
+
+    /** "36 min" / "1 hr 12 min" — what is left of a programme's runtime. */
+    private fun formatIptvRemaining(ms: Long): String {
+        val minutes = (ms / 60_000L).coerceAtLeast(0L)
+        if (minutes < 60) return "$minutes min"
+        val hours = minutes / 60
+        val rest = minutes % 60
+        return if (rest == 0L) "$hours hr" else "$hours hr $rest min"
+    }
+
+    /** A window install or merge renumbers this channel and can change the
+     *  category total. Repaint a banner that is still on screen instead of
+     *  leaving it showing whatever the launcher's list implied. */
+    private fun refreshIptvZapBannerPosition() {
+        val banner = iptvZapBanner ?: return
+        if (banner.visibility != View.VISIBLE) return
+        val shown = iptvZapBannerEntry ?: return
+        val playing = iptvChannels.getOrNull(currentIptvIndex)
+        val entry = if (
+            playing != null && playing.url == shown.url && playing.name == shown.name
+        ) playing else shown
+        if (entry !== shown) adoptIptvEpg(from = shown, to = entry)
+        iptvZapBannerEntry = entry
+        paintIptvZapBannerPosition(entry)
+        paintIptvZapBannerEpg(entry)
+    }
+
+    /**
+     * Hand known now/next data to a replacement entry for the same channel.
+     *
+     * A window install swaps in fresh [IptvChannelEntry] objects, and the new
+     * one carries no EPG. Without this, repainting from it flips a banner that
+     * is already showing the programme back to "No guide data" until the
+     * refetch lands — a visible regression on the very first tune, where the
+     * bootstrap window always arrives a moment after the banner. Only real data
+     * moves across: adopting a blank answer would suppress [to]'s own fetch.
+     */
+    private fun adoptIptvEpg(from: IptvChannelEntry, to: IptvChannelEntry) {
+        if (from.epgNowTitle == null || to.epgLoaded) return
+        to.epgNowTitle = from.epgNowTitle
+        to.epgNowStartMs = from.epgNowStartMs
+        to.epgNowStopMs = from.epgNowStopMs
+        to.epgNextTitle = from.epgNextTitle
+        to.epgNextStartMs = from.epgNextStartMs
+        // Claim "loaded" only when nothing is already on its way; an in-flight
+        // fetch will overwrite these with its own, fresher answer.
+        if (!to.epgLoading) to.epgLoaded = true
     }
 
     /**
