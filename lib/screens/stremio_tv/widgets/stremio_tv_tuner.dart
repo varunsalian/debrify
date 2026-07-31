@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart'
+    show ValueListenable, defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -158,6 +160,12 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   /// of setState-ing the whole tuner and re-running every dial card.
   final ValueNotifier<String?> _activeId = ValueNotifier<String?>(null);
 
+  /// Channel id currently CENTRED in the dial (touch layout only). Kept apart
+  /// from [_activeId] because the centre ring has to track the finger frame by
+  /// frame while the expensive Stage swap stays behind [_setActive]'s settle
+  /// debounce.
+  final ValueNotifier<String?> _centredId = ValueNotifier<String?>(null);
+
   /// Latest focused channel id, awaiting the focus-settle debounce before it
   /// becomes [_activeId] and triggers the heavy Stage swap.
   String? _pendingId;
@@ -177,6 +185,20 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   /// mapped to horizontal offset, and mouse/trackpad drag is enabled below.
   final ScrollController _dialScroll = ScrollController();
 
+  /// True when the wide layout is being driven by a finger — i.e. a tablet.
+  ///
+  /// The Stage follows [_activeId], which in the wide layout is only ever
+  /// written by D-pad focus or desktop mouse hover. A touch tablet has
+  /// neither, so without this the hero stays pinned to the first channel
+  /// forever. In this mode the dial itself becomes the selector: it centre-
+  /// snaps, and whichever card sits in the middle drives the Stage.
+  ///
+  /// TV keeps focus-driven surfing and desktop keeps hover preview, untouched.
+  bool get _touchDial =>
+      !widget.isTelevision &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
+
   @override
   void initState() {
     super.initState();
@@ -184,7 +206,47 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     _rebuildIndex();
     _activeId.value =
         widget.channels.isNotEmpty ? widget.channels.first.id : null;
+    _centredId.value = _activeId.value;
+    _dialScroll.addListener(_onDialScroll);
     _syncTick();
+  }
+
+  /// Touch layout: adopt the card nearest the dial's centre as we scroll. The
+  /// centre-padding below makes `offset == index * extent` the exact centring
+  /// offset, so the lookup is a divide instead of a hit test.
+  void _onDialScroll() {
+    if (!_touchDial || !_dialScroll.hasClients) return;
+    final channels = widget.channels;
+    if (channels.isEmpty) return;
+    final i = (_dialScroll.offset / _dialItemExtent)
+        .round()
+        .clamp(0, channels.length - 1);
+    final c = channels[i];
+    // The ring follows immediately; the Stage swap stays debounced (and
+    // neighbour backdrops pre-warmed) by _setActive's settle timer.
+    if (_centredId.value != c.id) _centredId.value = c.id;
+    _setActive(c);
+  }
+
+  /// Settle the dial onto the nearest card once a touch scroll comes to rest.
+  ///
+  /// Snapping at the END of the fling rather than clamping each card as it
+  /// passes is what lets a flick coast across a long channel list; a per-item
+  /// snap would make a 200-channel dial feel like dragging through treacle.
+  /// The animation lands exactly on target, so the ScrollEndNotification it
+  /// emits in turn is a no-op and this can't loop.
+  void _snapDial() {
+    if (!_touchDial || !_dialScroll.hasClients) return;
+    if (widget.channels.isEmpty) return;
+    final pos = _dialScroll.position;
+    final target = ((pos.pixels / _dialItemExtent).round() * _dialItemExtent)
+        .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+    if ((target - pos.pixels).abs() < 0.5) return;
+    _dialScroll.animateTo(
+      target,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   /// Start/stop the 15s live-broadcast tick per the Auto-refresh setting.
@@ -225,7 +287,17 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
       _activeId.value =
           widget.channels.isNotEmpty ? widget.channels.first.id : null;
       _pendingId = _activeId.value;
+      _centredId.value = _activeId.value;
       _settle?.cancel();
+    }
+    // Touch: the displayed list can change under a stationary dial (a search
+    // edit re-filters it), which silently remaps index → channel without
+    // moving the scroll offset — so no scroll notification would fire to
+    // correct the centre. Re-derive it once the new list has laid out.
+    if (_touchDial) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onDialScroll();
+      });
     }
   }
 
@@ -246,7 +318,9 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     _tick?.cancel();
     _settle?.cancel();
     _activeId.dispose();
+    _centredId.dispose();
     _pageController.dispose();
+    _dialScroll.removeListener(_onDialScroll);
     _dialScroll.dispose();
     super.dispose();
   }
@@ -399,8 +473,17 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   /// build an off-screen card so it can actually receive focus.
   static const double _dialItemExtent = 138.0 + 16.0;
 
-  /// Leading horizontal padding of the dial [ListView].
+  /// Leading horizontal padding of the dial [ListView] on TV / desktop.
   static const double _dialLeadingPad = 32.0;
+
+  /// Leading padding of the dial for a [viewport]-wide slot. Touch centres the
+  /// strip — half a viewport minus half a card at each end — so the first and
+  /// last channels can both reach the middle, and so `offset == index * extent`
+  /// is exactly the centring offset (which both [_onDialScroll] and [_snapDial]
+  /// rely on). TV / desktop keep the flush-left shelf.
+  double _dialLeadingPadFor(double viewport) => _touchDial
+      ? ((viewport - _dialItemExtent) / 2).clamp(0.0, double.infinity)
+      : _dialLeadingPad;
 
   /// Move D-pad focus to the channel at [realIndex] in [StremioTvTuner.allChannels],
   /// scrolling the dial so its card is mounted first. Returns false when the
@@ -444,7 +527,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     if (!_dialScroll.hasClients) return;
     final pos = _dialScroll.position;
     final viewport = pos.viewportDimension;
-    final target = (_dialLeadingPad +
+    final target = (_dialLeadingPadFor(viewport) +
             dialIndex * _dialItemExtent +
             _dialItemExtent / 2 -
             viewport / 2)
@@ -794,7 +877,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
               if (active == null) return const SizedBox.shrink();
               widget.ensureLoaded(active);
               final np = _nowPlaying(active);
-              return _Stage(
+              final stage = _Stage(
                 channel: active,
                 ident: _identFor(active),
                 nowPlaying: np,
@@ -803,6 +886,18 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                 hideNowPlaying: widget.hideNowPlaying,
                 isTelevision: widget.isTelevision,
                 loading: widget.loadingChannelIds.contains(active.id),
+              );
+              // Touch: the hero is the biggest target on screen and, until
+              // now, the only inert one — tapping it plays what it is showing,
+              // long-press opens the same quick actions as a dial card. TV and
+              // desktop keep playing from the dial (OK / click), where focus
+              // already lives.
+              if (!_touchDial) return stage;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => widget.onPlay(active),
+                onLongPress: () => _openActions(active),
+                child: stage,
               );
             },
           ),
@@ -858,34 +953,56 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                     PointerDeviceKind.stylus,
                   },
                 ),
-                child: ListView.builder(
-                  controller: _dialScroll,
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  itemCount: dial.length,
-                  itemBuilder: (context, i) {
-                    final channel = dial[i];
-                    widget.ensureLoaded(channel);
-                    final node = _nodeFor(channel)!;
-                    final np = _nowPlaying(channel);
-                    return _DialCard(
-                      key: ValueKey(channel.id),
-                      channel: channel,
-                      ident: _identFor(channel),
-                      focusNode: node,
-                      nowPlaying: np,
-                      displayProgress: _displayProgress(channel, np),
-                      hideNowPlaying: widget.hideNowPlaying,
-                      loading: widget.loadingChannelIds.contains(channel.id),
-                      isTelevision: widget.isTelevision,
-                      onFocused: () => _setActive(channel),
-                      onSelect: () => widget.onPlay(channel),
-                      onLongPress: () => _openActions(channel),
-                      onLeft: () => _surf(channel, i, -1),
-                      onRight: () => _surf(channel, i, 1),
-                      onUp: widget.onFocusHeader,
-                    );
+                // Touch: settle onto the nearest card when the fling stops, so
+                // the dial always comes to rest on the channel the Stage above
+                // is showing.
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (n) {
+                    if (n.depth == 0 && n is ScrollEndNotification) _snapDial();
+                    return false;
                   },
+                  // The centre padding (touch only) is a function of the dial's
+                  // own width, so it has to be measured here rather than from
+                  // the page constraints.
+                  child: LayoutBuilder(
+                    builder: (context, dialConstraints) => ListView.builder(
+                      controller: _dialScroll,
+                      scrollDirection: Axis.horizontal,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: _dialLeadingPadFor(dialConstraints.maxWidth),
+                      ),
+                      itemCount: dial.length,
+                      itemBuilder: (context, i) {
+                        final channel = dial[i];
+                        widget.ensureLoaded(channel);
+                        final node = _nodeFor(channel)!;
+                        final np = _nowPlaying(channel);
+                        return _DialCard(
+                          key: ValueKey(channel.id),
+                          channel: channel,
+                          ident: _identFor(channel),
+                          focusNode: node,
+                          nowPlaying: np,
+                          displayProgress: _displayProgress(channel, np),
+                          hideNowPlaying: widget.hideNowPlaying,
+                          loading: widget.loadingChannelIds.contains(channel.id),
+                          isTelevision: widget.isTelevision,
+                          // Touch only: the centred card wears the gold ring so
+                          // the selection is visible before you scroll. Null on
+                          // TV / desktop keeps the cards independent of the
+                          // active id, so surfing never re-runs them.
+                          centredId: _touchDial ? _centredId : null,
+                          touchSelect: _touchDial,
+                          onFocused: () => _setActive(channel),
+                          onSelect: () => widget.onPlay(channel),
+                          onLongPress: () => _openActions(channel),
+                          onLeft: () => _surf(channel, i, -1),
+                          onRight: () => _surf(channel, i, 1),
+                          onUp: widget.onFocusHeader,
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1826,6 +1943,24 @@ class _DialCard extends StatefulWidget {
   /// TV shows a "press DOWN for options" hint on the focused card; desktop
   /// shows a "right-click" hint on hover. Distinguishes the two.
   final bool isTelevision;
+
+  /// Touch layout: the dial's currently centred channel id — i.e. the channel
+  /// the Stage above is showing. That card lights the same gold treatment
+  /// D-pad focus and mouse hover light, since it means the same thing.
+  ///
+  /// The card subscribes itself rather than being rebuilt by an ancestor
+  /// ValueListenableBuilder, so a centre change repaints the two cards whose
+  /// state actually flipped instead of every mounted card in the strip — a
+  /// fling across a long dial crosses a lot of cards. Null on TV / desktop,
+  /// where focus and hover already drive this and the cards deliberately don't
+  /// depend on the active id at all.
+  final ValueListenable<String?>? centredId;
+
+  /// Touch layout: a tap plays outright and must NOT take keyboard focus —
+  /// focus would leave a second, contradictory gold ring behind on a card the
+  /// Stage isn't showing, and its ensureVisible would fight the snap.
+  final bool touchSelect;
+
   final VoidCallback onFocused;
   final VoidCallback onSelect;
   final VoidCallback onLongPress;
@@ -1843,6 +1978,8 @@ class _DialCard extends StatefulWidget {
     required this.hideNowPlaying,
     required this.loading,
     required this.isTelevision,
+    required this.centredId,
+    required this.touchSelect,
     required this.onFocused,
     required this.onSelect,
     required this.onLongPress,
@@ -1862,6 +1999,44 @@ class _DialCardState extends State<_DialCard> {
   /// hero above, and lights the same gold treatment — without stealing the
   /// keyboard focus that DPAD navigation relies on.
   bool _hovered = false;
+
+  /// Touch layout: this card is the one centred in the dial. Mirrored into
+  /// state so only a real flip costs a rebuild.
+  bool _centred = false;
+
+  bool get _isCentred =>
+      widget.centredId != null && widget.centredId!.value == widget.channel.id;
+
+  @override
+  void initState() {
+    super.initState();
+    _centred = _isCentred;
+    widget.centredId?.addListener(_onCentredChanged);
+  }
+
+  void _onCentredChanged() {
+    final now = _isCentred;
+    if (now != _centred && mounted) setState(() => _centred = now);
+  }
+
+  @override
+  void didUpdateWidget(_DialCard old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.centredId, widget.centredId)) {
+      old.centredId?.removeListener(_onCentredChanged);
+      widget.centredId?.addListener(_onCentredChanged);
+    }
+    // A recycled card can arrive carrying a different channel, so re-derive
+    // rather than trusting the mirrored flag. No setState — we're already in a
+    // rebuild.
+    _centred = _isCentred;
+  }
+
+  @override
+  void dispose() {
+    widget.centredId?.removeListener(_onCentredChanged);
+    super.dispose();
+  }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     final k = e.logicalKey;
@@ -1897,8 +2072,9 @@ class _DialCardState extends State<_DialCard> {
     final item = widget.nowPlaying?.item;
     final poster = item?.poster ?? item?.background;
     final ident = widget.ident;
-    // DPAD focus OR desktop hover drive the same "active" visual + hero preview.
-    final bool active = _focused || _hovered;
+    // DPAD focus, desktop hover, or (touch) sitting centred in the dial all
+    // mean "this is the channel on the Stage" — one visual for all three.
+    final bool active = _focused || _hovered || _centred;
 
     final card = Focus(
       focusNode: widget.focusNode,
@@ -1916,7 +2092,7 @@ class _DialCardState extends State<_DialCard> {
       },
       child: GestureDetector(
         onTap: () {
-          widget.focusNode.requestFocus();
+          if (!widget.touchSelect) widget.focusNode.requestFocus();
           widget.onSelect();
         },
         onLongPress: widget.onLongPress,
@@ -2181,6 +2357,11 @@ class _DialCardState extends State<_DialCard> {
       child: MouseRegion(
         onEnter: (_) {
           if (!mounted) return;
+          // In the touch layout the dial's centre is the single selector: an
+          // iPad trackpad hovering a card must not light a SECOND gold ring on
+          // a channel the Stage isn't showing, nor pull the Stage away from the
+          // centred card.
+          if (widget.touchSelect) return;
           if (!_hovered) setState(() => _hovered = true);
           widget.onFocused();
         },

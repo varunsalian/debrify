@@ -131,6 +131,46 @@ class PremiumizeService {
     return results.isNotEmpty && results.first;
   }
 
+  /// Strict single-item cache check for user-facing decisions.
+  ///
+  /// Unlike [isCached], this throws when Premiumize cannot determine the cache
+  /// state, so callers do not present an API or network failure as a cache miss.
+  static Future<bool> isCachedStrict(String apiKey, String item) async {
+    final body = StringBuffer('apikey=${Uri.encodeQueryComponent(apiKey)}')
+      ..write('&items%5B%5D=${Uri.encodeQueryComponent(item)}');
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/cache/check'),
+            headers: const {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body.toString(),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Premiumize cache check failed: ${response.statusCode}',
+        );
+      }
+      final payload = await decodeJsonAsync(response.body);
+      if (payload is! Map || payload['status']?.toString() != 'success') {
+        final message = payload is Map
+            ? payload['message']?.toString() ?? 'unknown error'
+            : 'unexpected response';
+        throw Exception('Premiumize cache check failed: $message');
+      }
+      final values = payload['response'];
+      if (values is! List || values.isEmpty || values.first is! bool) {
+        throw Exception('Premiumize cache check returned an invalid response');
+      }
+      return values.first == true;
+    } catch (e) {
+      debugPrint('PremiumizeService: strict cache/check failed: $e');
+      rethrow;
+    }
+  }
+
   /// Re-resolves ready-to-use direct download links for the torrent identified
   /// by [infohash]. Convenience wrapper around [directDownload] that builds the
   /// magnet for the caller. Used to refresh playlist links at playback time.

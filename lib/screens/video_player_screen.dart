@@ -25,6 +25,7 @@ import '../services/episode_info_service.dart';
 import '../services/movie_metadata_service.dart';
 import '../models/iptv_playlist.dart';
 import '../services/stremio_iptv_service.dart';
+import '../services/iptv_epg_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
@@ -88,6 +89,37 @@ class _SeasonEpisodeSelection {
   final int episode;
 
   const _SeasonEpisodeSelection({required this.season, required this.episode});
+}
+
+/// Monotonic ownership gate for asynchronous IPTV replay lookups.
+///
+/// Starting or cancelling a request makes every older ticket stale, preventing
+/// a slow catch-up probe from taking playback back after a newer user action.
+class IptvCatchupRequestGate {
+  int _generation = 0;
+  int? _activeTicket;
+
+  int begin() {
+    final ticket = ++_generation;
+    _activeTicket = ticket;
+    return ticket;
+  }
+
+  bool isCurrent(int ticket) =>
+      _activeTicket == ticket && _generation == ticket;
+
+  bool complete(int ticket) {
+    if (!isCurrent(ticket)) return false;
+    _activeTicket = null;
+    return true;
+  }
+
+  bool cancel() {
+    if (_activeTicket == null) return false;
+    _generation++;
+    _activeTicket = null;
+    return true;
+  }
 }
 
 /// A full-featured video player screen with playlist support and navigation controls.
@@ -156,6 +188,14 @@ class VideoPlayerScreen extends StatefulWidget {
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
+  final List<String>? iptvCategories;
+  final String? iptvSourceId;
+  final String? iptvSourceName;
+  final String? iptvSelectedCategory;
+  final String? iptvContentType;
+  final List<Map<String, dynamic>>? iptvSources;
+  final Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
+  iptvBrowseProvider;
   // Stremio sources for in-player source switching
   final List<Torrent>? stremioSources;
   final int? stremioCurrentSourceIndex;
@@ -222,6 +262,13 @@ class VideoPlayerScreen extends StatefulWidget {
     this.contentTitle,
     this.iptvChannels,
     this.iptvStartIndex,
+    this.iptvCategories,
+    this.iptvSourceId,
+    this.iptvSourceName,
+    this.iptvSelectedCategory,
+    this.iptvContentType,
+    this.iptvSources,
+    this.iptvBrowseProvider,
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
@@ -353,7 +400,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     String formattedNumber = '';
     if (numberSource != null) {
-      final int safeNumber = numberSource.clamp(0, 999).toInt();
+      final int safeNumber = numberSource < 0 ? 0 : numberSource;
       formattedNumber = 'CH ${safeNumber.toString().padLeft(2, '0')}';
     }
     if (!hasName) {
@@ -405,6 +452,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // IPTV channel sheet state
   bool _showIptvChannelSheet = false;
   int _currentIptvIndex = 0;
+  List<IptvChannel>? _iptvChannelsOverride;
+  IptvGuideContext? _iptvGuideContextOverride;
+  final IptvCatchupRequestGate _iptvCatchupRequests = IptvCatchupRequestGate();
+
+  /// The guide may replace the launch window after a source/category/search
+  /// request. Playback always reads this effective list so the selected row,
+  /// resume key, title, headers, and later episode navigation stay aligned.
+  List<IptvChannel>? get _effectiveIptvChannels =>
+      _iptvChannelsOverride ?? widget.iptvChannels;
+
+  void _persistIptvGuideContext(IptvGuideContext context) {
+    if (!mounted) return;
+    setState(() => _iptvGuideContextOverride = context);
+  }
+
+  void _cancelPendingIptvCatchup({bool hideFeedback = true}) {
+    if (!_iptvCatchupRequests.cancel()) return;
+    if (hideFeedback && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    }
+  }
+
+  int _beginIptvCatchupRequest() {
+    _cancelPendingIptvCatchup();
+    return _iptvCatchupRequests.begin();
+  }
+
+  bool _isCurrentIptvCatchupRequest(int ticket) =>
+      mounted && _iptvCatchupRequests.isCurrent(ticket);
 
   // Stremio source sheet state
   bool _showSourceSheet = false;
@@ -578,6 +654,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // (independent dedup guard + heartbeat; the two trackers never share state).
   bool _simklScrobbleEnabled = false;
   bool _launchSimklPercentSpent = false;
+  // Per-episode Simkl cross-device snapshot ("season_episode" → 0-100),
+  // refreshed by the launcher and used when switching episodes in-session.
+  Map<String, double>? _simklEpisodeProgress;
   String? _simklLastScrobbleAction;
   Timer? _simklHeartbeatTimer;
   // Keeps the analytics session alive during long, interaction-free playback.
@@ -927,7 +1006,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// (null, null), so this only blocks the series case. (Trakt has the same
   /// latent gap; this guard is Simkl-only per the no-touch-Trakt convention.)
   bool _simklSeriesSEUnresolved(({int? season, int? episode}) se) =>
-      widget.contentType == 'series' && (se.season == null || se.episode == null);
+      widget.contentType == 'series' &&
+      (se.season == null || se.episode == null);
 
   void _simklScrobble(String action) {
     if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
@@ -1074,15 +1154,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Await BEFORE reading _currentIndex/season/episode below, so that if the
     // user advances to a different episode while this is in flight, we key
     // off the episode that's actually current when the fetch resolves.
-    _traktEpisodeProgress ??=
-        await StorageService.getEpisodeTraktProgress(imdbId: imdbId);
+    _traktEpisodeProgress ??= await StorageService.getEpisodeTraktProgress(
+      imdbId: imdbId,
+    );
 
     int? season;
     int? episode;
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist != null && seriesPlaylist.isSeries) {
       final playlist = _activePlaylist;
-      if (playlist == null || _currentIndex < 0 || _currentIndex >= playlist.length) {
+      if (playlist == null ||
+          _currentIndex < 0 ||
+          _currentIndex >= playlist.length) {
         return null;
       }
       // Must be the CURRENT episode — no orElse-to-first fallback, or we'd seek to
@@ -1107,6 +1190,48 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (season == null || episode == null) return null;
 
     return _traktEpisodeProgress!['${season}_$episode'];
+  }
+
+  /// Current episode's Simkl snapshot percent. This mirrors the Trakt lookup
+  /// above but remains independently stored so remote unwatch changes never
+  /// mutate local playback history.
+  Future<double?> _currentEpisodeSimklPercent() async {
+    final imdbId = widget.contentImdbId;
+    if (imdbId == null || imdbId.isEmpty) return null;
+
+    // Await before resolving the episode identity for the same race-safety as
+    // [_currentEpisodeTraktPercent].
+    _simklEpisodeProgress ??= await StorageService.getEpisodeSimklProgress(
+      imdbId: imdbId,
+    );
+
+    int? season;
+    int? episode;
+    final seriesPlaylist = _seriesPlaylist;
+    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+      final playlist = _activePlaylist;
+      if (playlist == null ||
+          _currentIndex < 0 ||
+          _currentIndex >= playlist.length) {
+        return null;
+      }
+      SeriesEpisode? currentEpisode;
+      for (final candidate in seriesPlaylist.allEpisodes) {
+        if (candidate.originalIndex == _currentIndex) {
+          currentEpisode = candidate;
+          break;
+        }
+      }
+      if (currentEpisode == null) return null;
+      season = currentEpisode.seriesInfo.season;
+      episode = currentEpisode.seriesInfo.episode;
+    } else if (_effectiveContentType == 'series') {
+      season = _effectiveContentSeason;
+      episode = _effectiveContentEpisode;
+    }
+    if (season == null || episode == null) return null;
+
+    return _simklEpisodeProgress!['${season}_$episode'];
   }
 
   /// Load an external audio track to play alongside a video-only stream
@@ -1544,7 +1669,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // just left a black screen with a spinner, indistinguishable from "the app
     // is broken". (The Stremio ladder reports for itself — see the probing
     // guard in the handler.)
-    if (widget.iptvChannels != null) {
+    if (_effectiveIptvChannels != null) {
       _iptvErrorSub = _player.stream.error.listen(_onIptvStreamError);
     }
 
@@ -1781,11 +1906,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // IPTV: use current channel name
-    final iptvChannels = widget.iptvChannels;
+    final iptvChannels = _effectiveIptvChannels;
     if (iptvChannels != null &&
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
-      return iptvChannels[_currentIptvIndex].name;
+      return iptvChannels[_currentIptvIndex].numberedName;
     }
 
     // Final fallback
@@ -1817,7 +1942,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // IPTV: use current channel group as subtitle
-    final iptvChannels = widget.iptvChannels;
+    final iptvChannels = _effectiveIptvChannels;
     if (iptvChannels != null &&
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
@@ -2455,7 +2580,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Update subtitle style settings
   void _onSubtitleStyleChanged(SubtitleSettingsData settings) {
-    final offsetChanged = _subtitleSettings?.syncOffsetMs != settings.syncOffsetMs;
+    final offsetChanged =
+        _subtitleSettings?.syncOffsetMs != settings.syncOffsetMs;
     setState(() {
       _subtitleSettings = settings;
     });
@@ -2499,16 +2625,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (externalPath != null) {
       return SubtitleLinePickerOverlay(
         subtitleFilePath: externalPath,
-        getCurrentPositionMs: () =>
-            _player.state.position.inMilliseconds,
+        getCurrentPositionMs: () => _player.state.position.inMilliseconds,
         currentOffsetMs: _subtitleSettings?.syncOffsetMs ?? 0,
         onOffsetChanged: (ms) async {
           await SubtitleSettingsService.instance.setSyncOffsetMs(ms);
           _applySubtitleSyncOffset(ms);
           if (mounted) {
             setState(() {
-              _subtitleSettings =
-                  _subtitleSettings?.copyWith(syncOffsetMs: ms);
+              _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: ms);
             });
           }
         },
@@ -2534,7 +2658,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _applySubtitleSyncOffset(clamped);
       if (mounted) {
         setState(() {
-          _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: clamped);
+          _subtitleSettings = _subtitleSettings?.copyWith(
+            syncOffsetMs: clamped,
+          );
         });
       }
     }
@@ -2746,7 +2872,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Show IPTV channel sheet overlay
   void _showIptvChannelSheetOverlay() {
-    final channels = widget.iptvChannels;
+    final channels = _effectiveIptvChannels;
     if (channels == null || channels.isEmpty) return;
     setState(() {
       _showIptvChannelSheet = true;
@@ -2756,9 +2882,82 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Hide IPTV channel sheet overlay
   void _hideIptvChannelSheet() {
+    _cancelPendingIptvCatchup();
     setState(() {
       _showIptvChannelSheet = false;
     });
+  }
+
+  /// A full-catalog guide result is not necessarily part of the launch
+  /// window. Adopt the result set before tuning so every player read uses the
+  /// selected channel's real index and metadata.
+  Future<void> _switchToIptvGuideChannel(
+    List<IptvChannel> channels,
+    int index,
+  ) async {
+    if (index < 0 || index >= channels.length) return;
+    _cancelPendingIptvCatchup();
+    _iptvChannelsOverride = List<IptvChannel>.from(channels);
+    await _switchToIptvChannel(index);
+  }
+
+  /// Turn an archived EPG programme into a finite, seekable IPTV item in the
+  /// current player. The normal IPTV switching path remains responsible for
+  /// headers, transition feedback, tracks, and resume identity.
+  Future<void> _playIptvCatchup(
+    IptvChannel channel,
+    EpgProgramme programme,
+  ) async {
+    final requestTicket = _beginIptvCatchupRequest();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Preparing replay of "${programme.title}"…'),
+        duration: const Duration(seconds: 30),
+      ),
+    );
+    String? url;
+    try {
+      url = await IptvEpgService.instance.catchupUrl(channel.url, programme);
+    } catch (error) {
+      debugPrint('Player: IPTV replay lookup failed: $error');
+    }
+    if (!_isCurrentIptvCatchupRequest(requestTicket)) return;
+    if (url == null) {
+      _iptvCatchupRequests.complete(requestTicket);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Replay is not available')),
+      );
+      return;
+    }
+
+    final sourceId =
+        channel.attributes['source_playlist_id'] ??
+        _iptvGuideContextOverride?.sourceId ??
+        widget.iptvSourceId;
+    final replay = IptvChannel(
+      name: programme.title,
+      url: url,
+      logoUrl: channel.logoUrl,
+      group: channel.name,
+      contentType: 'vod',
+      httpHeaders: channel.httpHeaders,
+      attributes: {if (sourceId != null) 'source_playlist_id': sourceId},
+    );
+    await StorageService.recordIptvWatch(
+      replay.url,
+      channelName: replay.name,
+      logoUrl: replay.logoUrl,
+      group: replay.group,
+      playlistId: sourceId,
+      httpHeaders: replay.httpHeaders,
+    );
+    if (!_isCurrentIptvCatchupRequest(requestTicket)) return;
+    _iptvCatchupRequests.complete(requestTicket);
+    messenger.hideCurrentSnackBar();
+    _iptvChannelsOverride = [replay];
+    await _switchToIptvChannel(0);
   }
 
   /// Monotonic ticket for IPTV channel switches. The Stremio candidate ladder
@@ -2792,7 +2991,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// whole IPTV section being broken.
   void _onIptvStreamError(String error) {
     if (!mounted || _iptvErrorsMuted) return;
-    final channels = widget.iptvChannels;
+    final channels = _effectiveIptvChannels;
     if (channels == null) return;
 
     final now = DateTime.now();
@@ -2802,8 +3001,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _lastIptvErrorShown = now;
 
-    final name =
-        (_currentIptvIndex >= 0 && _currentIptvIndex < channels.length)
+    final name = (_currentIptvIndex >= 0 && _currentIptvIndex < channels.length)
         ? channels[_currentIptvIndex].name
         : 'This channel';
     debugPrint('Player: IPTV stream error on "$name": $error');
@@ -2868,7 +3066,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// sheet wants the whole candidate list — fetch it (cache hit from the
   /// launch resolve) and populate the override for the starting channel.
   void _initIptvStremioSources() {
-    final channels = widget.iptvChannels;
+    final channels = _effectiveIptvChannels;
     final idx = widget.iptvStartIndex ?? 0;
     if (channels == null || idx < 0 || idx >= channels.length) return;
     final channel = channels[idx];
@@ -2884,11 +3082,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Switch to IPTV channel at given index
-  /// The IPTV channel currently playing (from [widget.iptvChannels]), or null
+  /// The IPTV channel currently playing, or null
   /// when not in an IPTV context or the index is out of range.
   IptvChannel? get _currentIptvChannel {
-    final chans = widget.iptvChannels;
-    if (chans == null || _currentIptvIndex < 0 ||
+    final chans = _effectiveIptvChannels;
+    if (chans == null ||
+        _currentIptvIndex < 0 ||
         _currentIptvIndex >= chans.length) {
       return null;
     }
@@ -2903,7 +3102,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// series_id the launcher stamps onto episode channels.
   bool get _hasIptvNext =>
       _isIptvSeriesContext &&
-      _currentIptvIndex + 1 < (widget.iptvChannels?.length ?? 0);
+      _currentIptvIndex + 1 < (_effectiveIptvChannels?.length ?? 0);
 
   bool get _hasIptvPrevious =>
       _isIptvSeriesContext && _currentIptvIndex - 1 >= 0;
@@ -3006,8 +3205,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _switchToIptvChannel(int index) async {
-    final channels = widget.iptvChannels;
+    final channels = _effectiveIptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
+    _cancelPendingIptvCatchup();
     final ticket = ++_iptvSwitchTicket;
     // This switch owns the error gate now (a superseded ladder's state doesn't
     // survive). Muted until the new media is opened below; the burst debounce
@@ -3022,6 +3222,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() {
       _isTransitioning = true;
       _currentIptvIndex = index;
+      _currentChannelNumber = channel.channelNumber ?? (index + 1);
     });
     _startTransitionOverlay();
 
@@ -3046,8 +3247,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // one produces playback — the same serial ladder the IPTV preview runs.
       // A zap is an explicit play intent, so a cached-empty resolve is
       // re-checked fresh instead of replaying a stale "nothing".
-      final candidates = await StremioIptvService.instance
-          .resolveCandidates(channel.url, refreshIfEmpty: true);
+      final candidates = await StremioIptvService.instance.resolveCandidates(
+        channel.url,
+        refreshIfEmpty: true,
+      );
       if (!mounted || ticket != _iptvSwitchTicket) return;
       // The candidates double as the source sheet's rows for this channel.
       _setIptvSources(channel.url, candidates);
@@ -3168,8 +3371,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('Player: stremio candidate failed to open: $e');
       finish(false);
     }
-    final ok = await completer.future
-        .timeout(timeout, onTimeout: () => false);
+    final ok = await completer.future.timeout(timeout, onTimeout: () => false);
     for (final s in subs) {
       unawaited(s.cancel());
     }
@@ -4276,8 +4478,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Premiumize cloud-browser lazy resolution: re-fetch a fresh direct link by
     // cloud item id (items saved from the cloud browser have no infohash).
-    if (entry.premiumizeItemId != null &&
-        entry.premiumizeItemId!.isNotEmpty) {
+    if (entry.premiumizeItemId != null && entry.premiumizeItemId!.isNotEmpty) {
       final apiKey = await StorageService.getPremiumizeApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing Premiumize API key');
@@ -5038,9 +5239,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!PipService.isOwner(this)) return;
     final w = _player.state.width ?? 0;
     final h = _player.state.height ?? 0;
-    unawaited(
-      PipService.setAutoEnter(true, aspectWidth: w, aspectHeight: h),
-    );
+    unawaited(PipService.setAutoEnter(true, aspectWidth: w, aspectHeight: h));
   }
 
   /// Keep the native side's play/pause icon, Next button and window aspect in
@@ -5087,6 +5286,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    _iptvCatchupRequests.cancel();
     // Detach from PiP (disarms auto-enter); ignored if a newer player already
     // took ownership, so route replacement can't disarm the incoming screen.
     PipService.detach(this);
@@ -5206,7 +5406,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // another channel and its position would be filed under the first one's
     // name. Key on the channel actually playing instead. (Identical to the
     // fallback until the user zaps, so existing resume points still resolve.)
-    final iptvChannels = widget.iptvChannels;
+    final iptvChannels = _effectiveIptvChannels;
     if (iptvChannels != null &&
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
@@ -5315,28 +5515,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         traktPct = await _currentEpisodeTraktPercent();
       }
     }
-    // Simkl candidate — the explicit launch percent only (no per-episode
-    // Simkl store yet; see the Simkl integration plan). Folded into the same
-    // candidate as Trakt's so the furthest of the two tracker promises wins,
-    // then the existing explicit-vs-local reconciliation below runs unchanged.
-    if (!preferLocalResume && simklFirstLoad) {
-      final simklPct = widget.simklProgressPercent;
+    // Simkl candidate: the explicit launch promise on first load, otherwise
+    // this episode's launch-time snapshot. Folded into the same candidate as
+    // Trakt so the furthest remote progress wins.
+    if (!preferLocalResume) {
+      final explicitSimklPct = simklFirstLoad
+          ? widget.simklProgressPercent
+          : null;
+      final simklPct = explicitSimklPct ?? await _currentEpisodeSimklPercent();
       if (simklPct != null && (traktPct == null || simklPct > traktPct)) {
         traktPct = simklPct;
-        explicitLaunch = true;
+        explicitLaunch = explicitSimklPct != null;
       }
     }
     final int traktMs =
-        (traktPct != null && traktPct > 0 && traktPct < 100 && dur > Duration.zero)
-            ? (dur.inMilliseconds * traktPct / 100).floor()
-            : 0;
+        (traktPct != null &&
+            traktPct > 0 &&
+            traktPct < 100 &&
+            dur > Duration.zero)
+        ? (dur.inMilliseconds * traktPct / 100).floor()
+        : 0;
 
     // Local candidate + speed/aspect restore (enhanced state preferred, else the
     // legacy resume store). Speed/aspect are restored regardless of the seek.
     int localMs = 0;
     final state =
         await _getEnhancedPlaybackState() ??
-            await StorageService.getVideoResume(_resumeKey);
+        await StorageService.getVideoResume(_resumeKey);
     if (state != null) {
       localMs = (state['positionMs'] ?? 0) as int;
       final speed = (state['speed'] ?? 1.0) as double;
@@ -5360,7 +5565,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    final loMs = VideoPlayerTimingConstants.minimumPlaybackPosition.inMilliseconds;
+    final loMs =
+        VideoPlayerTimingConstants.minimumPlaybackPosition.inMilliseconds;
     final hiMs = (dur.inMilliseconds * 0.9).floor();
     // The details-screen Resume promised THIS position — honour it outright when
     // seekable (matching the pre-rework launched-item behaviour), even over a
@@ -5493,7 +5699,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // that window would file the old movie's position under the new channel's
     // key, which the Continue-watching shelf would then show as real progress.
     // Nothing is lost by skipping: the next tick saves once the switch lands.
-    if (widget.iptvChannels != null && _isTransitioning) {
+    if (_effectiveIptvChannels != null && _isTransitioning) {
       return;
     }
 
@@ -6226,12 +6432,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 _showStremioTvGuideOverlay();
                 return KeyEventResult.handled;
               }
+              if (_effectiveIptvChannels?.isNotEmpty == true) {
+                _showIptvChannelSheetOverlay();
+                return KeyEventResult.handled;
+              }
             }
 
             // C -> IPTV channel sheet
             if (key == LogicalKeyboardKey.keyC) {
-              if (widget.iptvChannels != null &&
-                  widget.iptvChannels!.isNotEmpty) {
+              if (_effectiveIptvChannels?.isNotEmpty == true) {
                 _showIptvChannelSheetOverlay();
                 return KeyEventResult.handled;
               }
@@ -6432,419 +6641,447 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           child: ValueListenableBuilder<bool>(
             valueListenable: _controlsVisible,
             child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Video texture (media_kit renderer)
-              if (isReady && !_isTransitioning)
-                _getCustomAspectRatio() != null
-                    ? _buildCustomAspectRatioVideo()
-                    : mkv.Video(
-                        key: ValueKey(
-                          'video_elevation_${_subtitleSettings?.elevationIndex ?? 0}',
-                        ),
-                        controller: _videoController,
-                        controls: null,
-                        fit: _currentFit(),
-                        subtitleViewConfiguration: _buildSubtitleViewConfig(),
-                      )
-              else if (_isTransitioning)
-                // Black screen during transitions to hide previous frame
-                Container(color: Colors.black)
-              else
-                const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
-              // Transition overlay above video
-              if (_rainbowActive) _buildTransitionOverlay(),
-              if (_showStremioTvNextLoading)
-                _buildStremioTvNextLoadingOverlay(),
-              // Double-tap ripple
-              if (_ripple != null)
-                IgnorePointer(
-                  child: CustomPaint(painter: DoubleTapRipplePainter(_ripple!)),
-                ),
-              // HUDs
-              ValueListenableBuilder<SeekHudState?>(
-                valueListenable: _seekHud,
-                builder: (context, hud, _) {
-                  return IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: hud == null ? 0 : 1,
-                      duration: const Duration(milliseconds: 120),
-                      child: Center(
-                        child: hud == null
-                            ? const SizedBox.shrink()
-                            : SeekHud(hud: hud, format: _format),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              ValueListenableBuilder<VerticalHudState?>(
-                valueListenable: _verticalHud,
-                builder: (context, hud, _) {
-                  return IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: hud == null ? 0 : 1,
-                      duration: const Duration(milliseconds: 120),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 24),
-                          child: hud == null
-                              ? const SizedBox.shrink()
-                              : VerticalHud(hud: hud),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              ValueListenableBuilder<AspectRatioHudState?>(
-                valueListenable: _aspectRatioHud,
-                builder: (context, hud, _) {
-                  return IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: hud == null ? 0 : 1,
-                      duration: const Duration(milliseconds: 200),
-                      child: Align(
-                        alignment: Alignment.topRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 80, right: 24),
-                          child: hud == null
-                              ? const SizedBox.shrink()
-                              : AspectRatioHud(hud: hud),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              ValueListenableBuilder<bool>(
-                valueListenable: _speedHoldHud,
-                builder: (context, active, _) {
-                  return IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: active ? 1 : 0,
-                      duration: const Duration(milliseconds: 150),
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 80),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.fast_forward_rounded,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  '2× Speed',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
+              fit: StackFit.expand,
+              children: [
+                // Video texture (media_kit renderer)
+                if (isReady && !_isTransitioning)
+                  _getCustomAspectRatio() != null
+                      ? _buildCustomAspectRatioVideo()
+                      : mkv.Video(
+                          key: ValueKey(
+                            'video_elevation_${_subtitleSettings?.elevationIndex ?? 0}',
                           ),
-                        ),
-                      ),
+                          controller: _videoController,
+                          controls: null,
+                          fit: _currentFit(),
+                          subtitleViewConfiguration: _buildSubtitleViewConfig(),
+                        )
+                else if (_isTransitioning)
+                  // Black screen during transitions to hide previous frame
+                  Container(color: Colors.black)
+                else
+                  const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                // Transition overlay above video
+                if (_rainbowActive) _buildTransitionOverlay(),
+                if (_showStremioTvNextLoading)
+                  _buildStremioTvNextLoadingOverlay(),
+                // Double-tap ripple
+                if (_ripple != null)
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: DoubleTapRipplePainter(_ripple!),
                     ),
-                  );
-                },
-              ),
-              // Buffering indicator (OTT-style centered spinner)
-              ValueListenableBuilder<bool>(
-                valueListenable: _showBufferingIndicator,
-                builder: (context, show, _) {
-                  return IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: show ? 1 : 0,
-                      duration: show
-                          ? const Duration(milliseconds: 250)
-                          : const Duration(milliseconds: 200),
-                      child: const Center(child: BufferingIndicator()),
-                    ),
-                  );
-                },
-              ),
-              // Full-screen gesture layer (placed below controls)
-              if (!inPip)
-                GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTapDown: (d) => _lastTapLocal = d.localPosition,
-                onTap: () {
-                  // Disable single tap when both back button and options are hidden
-                  if (widget.hideBackButton && widget.hideOptions) {
-                    return;
-                  }
-                  final box = context.findRenderObject() as RenderBox?;
-                  if (box == null) return;
-                  final size = box.size;
-                  final pos = _lastTapLocal ?? Offset.zero;
-                  if (shouldToggleForTap(
-                    pos,
-                    size,
-                    controlsVisible: _controlsVisible.value,
-                  )) {
-                    _toggleControls();
-                  }
-                },
-                onDoubleTapDown: _handleDoubleTap,
-                onLongPressStart: _onLongPressStart,
-                onLongPressEnd: _onLongPressEnd,
-                onPanStart: _onPanStart,
-                onPanUpdate: _onPanUpdate,
-                onPanEnd: _onPanEnd,
-              ),
-              // Controls overlay (shown only when ready)
-              if (isReady && !inPip)
-                ValueListenableBuilder<bool>(
-                  valueListenable: _controlsVisible,
-                  builder: (context, visible, _) {
-                    return AnimatedOpacity(
-                      opacity: visible ? 1 : 0,
-                      duration: const Duration(milliseconds: 150),
-                      child: IgnorePointer(
-                        ignoring: !visible,
-                        child: Controls(
-                          title:
-                              widget.showVideoTitle && !widget.showChannelName
-                              ? _getCurrentEpisodeTitle()
-                              : '',
-                          subtitle:
-                              widget.showVideoTitle && !widget.showChannelName
-                              ? _getCurrentEpisodeSubtitle()
-                              : null,
-                          enhancedMetadata: _getEnhancedMetadata(),
-                          duration: duration,
-                          position: pos,
-                          isPlaying: _isPlaying,
-                          isReady: isReady,
-                          onPlayPause: _togglePlay,
-                          onBack: () => Navigator.of(context).pop(),
-                          onAspect: _cycleAspectMode,
-                          onSpeed: _changeSpeed,
-                          speed: _playbackSpeed,
-                          aspectMode: _aspectMode,
-                          isLandscape: _landscapeLocked,
-                          onRotate: _toggleOrientation,
-                          hasPlaylist:
-                              _activePlaylist != null &&
-                              _activePlaylist!.isNotEmpty,
-                          onShowPlaylist: () => _showPlaylistSheet(context),
-                          onShowTracks: () => _showTracksSheet(context),
-                          onSeekBarChangedStart: () {
-                            _isSeekingWithSlider = true;
-                          },
-                          onSeekBarChanged: (v) {
-                            final newPos = duration * v;
-                            _player.seek(newPos);
-                            _lastSliderSeekPos = newPos;
-                          },
-                          onSeekBarChangeEnd: () {
-                            _isSeekingWithSlider = false;
-                            _scheduleAutoHide();
-                            if (_lastSliderSeekPos != null) {
-                              _traktScrobbleSeek(_lastSliderSeekPos!);
-                              _simklScrobbleSeek(_lastSliderSeekPos!);
-                              _lastSliderSeekPos = null;
-                            }
-                          },
-                          // IPTV episode list (series/VOD) gets Next/Previous
-                          // that walk the season; falls back to the Debrify-TV
-                          // episode/playlist flow otherwise.
-                          onNext: _hasIptvNext
-                              ? () => _switchToIptvChannel(_currentIptvIndex + 1)
-                              : (_hasAnyNext ? _goToNextEpisode : null),
-                          onNextChannel: widget.requestNextChannel != null
-                              ? _goToNextChannel
-                              : null,
-                          onPrevious: _hasIptvPrevious
-                              ? () => _switchToIptvChannel(_currentIptvIndex - 1)
-                              : (_hasPreviousEpisode()
-                                    ? _goToPreviousEpisode
-                                    : null),
-                          hasNext: _hasAnyNext || _hasIptvNext,
-                          hasNextChannel: widget.requestNextChannel != null,
-                          hasGuide:
-                              (_channelEntries.isNotEmpty &&
-                                  widget.requestChannelById != null) ||
-                              _hasStremioTvGuide,
-                          onShowGuide:
-                              _channelEntries.isNotEmpty &&
-                                  widget.requestChannelById != null
-                              ? _showChannelGuideOverlay
-                              : _hasStremioTvGuide
-                              ? _showStremioTvGuideOverlay
-                              : null,
-                          hasPrevious: _hasPreviousEpisode() || _hasIptvPrevious,
-                          hideSeekbar: widget.hideSeekbar,
-                          hideOptions: widget.hideOptions,
-                          hideBackButton: widget.hideBackButton,
-                          onRandom: () => unawaited(_showRandomPlaybackMenu()),
-                          hasIptvChannels:
-                              widget.iptvChannels != null &&
-                              widget.iptvChannels!.isNotEmpty,
-                          onShowIptvChannels:
-                              widget.iptvChannels != null &&
-                                  widget.iptvChannels!.isNotEmpty
-                              ? _showIptvChannelSheetOverlay
-                              : null,
-                          hasStremioSources:
-                              _effectiveSources != null &&
-                              _effectiveSources!.isNotEmpty &&
-                              (_effectiveResolver != null ||
-                                  widget.resolveSourceToPlaylist != null),
-                          onShowStremioSources:
-                              _effectiveSources != null &&
-                                  _effectiveSources!.isNotEmpty &&
-                                  (_effectiveResolver != null ||
-                                      widget.resolveSourceToPlaylist != null)
-                              ? _showSourceSheetOverlay
-                              : null,
-                          showPipButton: PipService.isOwner(this),
-                          onPip: PipService.isOwner(this) ? _enterPip : null,
+                  ),
+                // HUDs
+                ValueListenableBuilder<SeekHudState?>(
+                  valueListenable: _seekHud,
+                  builder: (context, hud, _) {
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: hud == null ? 0 : 1,
+                        duration: const Duration(milliseconds: 120),
+                        child: Center(
+                          child: hud == null
+                              ? const SizedBox.shrink()
+                              : SeekHud(hud: hud, format: _format),
                         ),
                       ),
                     );
                   },
                 ),
-              // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
-              // Placed after controls to appear on top
-              if (widget.showVideoTitle && widget.showChannelName && !inPip)
-                Positioned(
-                  top: 20,
-                  left: 20,
-                  child: IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: _showTitleBadge ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeInOut,
-                      child: _buildTitleBadge(_getCurrentEpisodeTitle()),
-                    ),
-                  ),
-                ),
-              // Channel Badge with Glassy Blur Effect (top-right)
-              // Placed after controls to appear on top
-              if (widget.showChannelName &&
-                  channelBadgeText != null &&
-                  channelBadgeText.isNotEmpty &&
-                  !inPip)
-                Positioned(
-                  top: 20,
-                  right: 20,
-                  child: IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: _showChannelBadge ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeInOut,
-                      child: _buildChannelBadge(channelBadgeText),
-                    ),
-                  ),
-                ),
-              // PikPak retry overlay - non-blocking, positioned at bottom right
-              if (_isPikPakRetrying && _pikPakRetryMessage != null && !inPip)
-                PikPakRetryOverlay(message: _pikPakRetryMessage!),
-              // Channel guide overlay
-              if (_showChannelGuide && _channelEntries.isNotEmpty && !inPip)
-                Positioned.fill(
-                  child: ChannelGuide(
-                    channels: _channelEntries,
-                    currentChannelId: _currentChannelId,
-                    currentChannelNumber: _currentChannelNumber,
-                    onChannelSelected: _goToChannelById,
-                    onClose: _hideChannelGuideOverlay,
-                  ),
-                ),
-              // IPTV channel sheet overlay
-              if (_showIptvChannelSheet &&
-                  widget.iptvChannels != null &&
-                  widget.iptvChannels!.isNotEmpty &&
-                  !inPip)
-                Positioned.fill(
-                  child: IptvChannelSheet(
-                    channels: widget.iptvChannels!,
-                    currentIndex: _currentIptvIndex,
-                    onChannelSelected: _switchToIptvChannel,
-                    onClose: _hideIptvChannelSheet,
-                  ),
-                ),
-              // Stremio source sheet overlay
-              if (_showSourceSheet &&
-                  _effectiveSources != null &&
-                  _effectiveSources!.isNotEmpty &&
-                  (_effectiveResolver != null ||
-                      widget.resolveSourceToPlaylist != null) &&
-                  !inPip)
-                Positioned.fill(
-                  child: Builder(builder: (context) {
-                    // A Stremio TV channel switch replaces the sources
-                    // wholesale — the launch fetcher no longer matches the
-                    // content, so load-more is only offered pre-switch.
-                    final fetcher = _stremioSourcesOverride == null
-                        ? widget.seriesSourceFetcher
-                        : null;
-                    final se = _traktSeasonEpisode();
-                    return SourceSheet(
-                      sources: _effectiveSources!,
-                      currentSourceIndex: _currentSourceIndex,
-                      resolveSource: _buildSourceSheetResolver(),
-                      onSourceSelected: _handleSourceSelected,
-                      onClose: _hideSourceSheet,
-                      seriesFetcher: fetcher,
-                      currentSeason: se.season,
-                      currentEpisode: se.episode,
-                      onSourcesMerged: (merged) {
-                        if (!mounted) return;
-                        setState(() => _augmentedSources = merged);
-                      },
+                ValueListenableBuilder<VerticalHudState?>(
+                  valueListenable: _verticalHud,
+                  builder: (context, hud, _) {
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: hud == null ? 0 : 1,
+                        duration: const Duration(milliseconds: 120),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 24),
+                            child: hud == null
+                                ? const SizedBox.shrink()
+                                : VerticalHud(hud: hud),
+                          ),
+                        ),
+                      ),
                     );
-                  }),
+                  },
                 ),
-              // Stremio TV guide sheet overlay
-              if (_showStremioTvGuide && _hasStremioTvGuide && !inPip)
-                Positioned.fill(
-                  child: StremioTvGuideSheet(
-                    channels: _effectiveStremioTvChannels!,
-                    currentChannelId: _currentStremioTvChannelId,
-                    guideDataProvider: widget.stremioTvGuideDataProvider,
-                    channelSwitchProvider:
-                        widget.stremioTvChannelSwitchProvider!,
-                    onChannelSwitched: _switchToStremioTvChannel,
-                    onClose: _hideStremioTvGuide,
+                ValueListenableBuilder<AspectRatioHudState?>(
+                  valueListenable: _aspectRatioHud,
+                  builder: (context, hud, _) {
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: hud == null ? 0 : 1,
+                        duration: const Duration(milliseconds: 200),
+                        child: Align(
+                          alignment: Alignment.topRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 80, right: 24),
+                            child: hud == null
+                                ? const SizedBox.shrink()
+                                : AspectRatioHud(hud: hud),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: _speedHoldHud,
+                  builder: (context, active, _) {
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: active ? 1 : 0,
+                        duration: const Duration(milliseconds: 150),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 80),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.fast_forward_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    '2× Speed',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Buffering indicator (OTT-style centered spinner)
+                ValueListenableBuilder<bool>(
+                  valueListenable: _showBufferingIndicator,
+                  builder: (context, show, _) {
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: show ? 1 : 0,
+                        duration: show
+                            ? const Duration(milliseconds: 250)
+                            : const Duration(milliseconds: 200),
+                        child: const Center(child: BufferingIndicator()),
+                      ),
+                    );
+                  },
+                ),
+                // Full-screen gesture layer (placed below controls)
+                if (!inPip)
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTapDown: (d) => _lastTapLocal = d.localPosition,
+                    onTap: () {
+                      // Disable single tap when both back button and options are hidden
+                      if (widget.hideBackButton && widget.hideOptions) {
+                        return;
+                      }
+                      final box = context.findRenderObject() as RenderBox?;
+                      if (box == null) return;
+                      final size = box.size;
+                      final pos = _lastTapLocal ?? Offset.zero;
+                      if (shouldToggleForTap(
+                        pos,
+                        size,
+                        controlsVisible: _controlsVisible.value,
+                      )) {
+                        _toggleControls();
+                      }
+                    },
+                    onDoubleTapDown: _handleDoubleTap,
+                    onLongPressStart: _onLongPressStart,
+                    onLongPressEnd: _onLongPressEnd,
+                    onPanStart: _onPanStart,
+                    onPanUpdate: _onPanUpdate,
+                    onPanEnd: _onPanEnd,
                   ),
-                ),
-              // Subtitle sync overlay
-              if (_showSyncOverlay && !inPip) _buildSyncOverlay(),
-            ],
+                // Controls overlay (shown only when ready)
+                if (isReady && !inPip)
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _controlsVisible,
+                    builder: (context, visible, _) {
+                      return AnimatedOpacity(
+                        opacity: visible ? 1 : 0,
+                        duration: const Duration(milliseconds: 150),
+                        child: IgnorePointer(
+                          ignoring: !visible,
+                          child: Controls(
+                            title:
+                                widget.showVideoTitle && !widget.showChannelName
+                                ? _getCurrentEpisodeTitle()
+                                : '',
+                            subtitle:
+                                widget.showVideoTitle && !widget.showChannelName
+                                ? _getCurrentEpisodeSubtitle()
+                                : null,
+                            enhancedMetadata: _getEnhancedMetadata(),
+                            duration: duration,
+                            position: pos,
+                            isPlaying: _isPlaying,
+                            isReady: isReady,
+                            onPlayPause: _togglePlay,
+                            onBack: () => Navigator.of(context).pop(),
+                            onAspect: _cycleAspectMode,
+                            onSpeed: _changeSpeed,
+                            speed: _playbackSpeed,
+                            aspectMode: _aspectMode,
+                            isLandscape: _landscapeLocked,
+                            onRotate: _toggleOrientation,
+                            hasPlaylist:
+                                _activePlaylist != null &&
+                                _activePlaylist!.isNotEmpty,
+                            onShowPlaylist: () => _showPlaylistSheet(context),
+                            onShowTracks: () => _showTracksSheet(context),
+                            onSeekBarChangedStart: () {
+                              _isSeekingWithSlider = true;
+                            },
+                            onSeekBarChanged: (v) {
+                              final newPos = duration * v;
+                              _player.seek(newPos);
+                              _lastSliderSeekPos = newPos;
+                            },
+                            onSeekBarChangeEnd: () {
+                              _isSeekingWithSlider = false;
+                              _scheduleAutoHide();
+                              if (_lastSliderSeekPos != null) {
+                                _traktScrobbleSeek(_lastSliderSeekPos!);
+                                _simklScrobbleSeek(_lastSliderSeekPos!);
+                                _lastSliderSeekPos = null;
+                              }
+                            },
+                            // IPTV episode list (series/VOD) gets Next/Previous
+                            // that walk the season; falls back to the Debrify-TV
+                            // episode/playlist flow otherwise.
+                            onNext: _hasIptvNext
+                                ? () => _switchToIptvChannel(
+                                    _currentIptvIndex + 1,
+                                  )
+                                : (_hasAnyNext ? _goToNextEpisode : null),
+                            onNextChannel: widget.requestNextChannel != null
+                                ? _goToNextChannel
+                                : null,
+                            onPrevious: _hasIptvPrevious
+                                ? () => _switchToIptvChannel(
+                                    _currentIptvIndex - 1,
+                                  )
+                                : (_hasPreviousEpisode()
+                                      ? _goToPreviousEpisode
+                                      : null),
+                            hasNext: _hasAnyNext || _hasIptvNext,
+                            hasNextChannel: widget.requestNextChannel != null,
+                            hasGuide:
+                                (_channelEntries.isNotEmpty &&
+                                    widget.requestChannelById != null) ||
+                                _hasStremioTvGuide,
+                            onShowGuide:
+                                _channelEntries.isNotEmpty &&
+                                    widget.requestChannelById != null
+                                ? _showChannelGuideOverlay
+                                : _hasStremioTvGuide
+                                ? _showStremioTvGuideOverlay
+                                : null,
+                            hasPrevious:
+                                _hasPreviousEpisode() || _hasIptvPrevious,
+                            hideSeekbar: widget.hideSeekbar,
+                            hideOptions: widget.hideOptions,
+                            hideBackButton: widget.hideBackButton,
+                            onRandom: () =>
+                                unawaited(_showRandomPlaybackMenu()),
+                            hasIptvChannels:
+                                _effectiveIptvChannels?.isNotEmpty == true,
+                            onShowIptvChannels:
+                                _effectiveIptvChannels?.isNotEmpty == true
+                                ? _showIptvChannelSheetOverlay
+                                : null,
+                            hasStremioSources:
+                                _effectiveSources != null &&
+                                _effectiveSources!.isNotEmpty &&
+                                (_effectiveResolver != null ||
+                                    widget.resolveSourceToPlaylist != null),
+                            onShowStremioSources:
+                                _effectiveSources != null &&
+                                    _effectiveSources!.isNotEmpty &&
+                                    (_effectiveResolver != null ||
+                                        widget.resolveSourceToPlaylist != null)
+                                ? _showSourceSheetOverlay
+                                : null,
+                            showPipButton: PipService.isOwner(this),
+                            onPip: PipService.isOwner(this) ? _enterPip : null,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
+                // Placed after controls to appear on top
+                if (widget.showVideoTitle && widget.showChannelName && !inPip)
+                  Positioned(
+                    top: 20,
+                    left: 20,
+                    child: IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: _showTitleBadge ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOut,
+                        child: _buildTitleBadge(_getCurrentEpisodeTitle()),
+                      ),
+                    ),
+                  ),
+                // Channel Badge with Glassy Blur Effect (top-right)
+                // Placed after controls to appear on top
+                if (widget.showChannelName &&
+                    channelBadgeText != null &&
+                    channelBadgeText.isNotEmpty &&
+                    !inPip)
+                  Positioned(
+                    top: 20,
+                    right: 20,
+                    child: IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: _showChannelBadge ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOut,
+                        child: _buildChannelBadge(channelBadgeText),
+                      ),
+                    ),
+                  ),
+                // PikPak retry overlay - non-blocking, positioned at bottom right
+                if (_isPikPakRetrying && _pikPakRetryMessage != null && !inPip)
+                  PikPakRetryOverlay(message: _pikPakRetryMessage!),
+                // Channel guide overlay
+                if (_showChannelGuide && _channelEntries.isNotEmpty && !inPip)
+                  Positioned.fill(
+                    child: ChannelGuide(
+                      channels: _channelEntries,
+                      currentChannelId: _currentChannelId,
+                      currentChannelNumber: _currentChannelNumber,
+                      onChannelSelected: _goToChannelById,
+                      onClose: _hideChannelGuideOverlay,
+                    ),
+                  ),
+                // IPTV channel sheet overlay
+                if (_showIptvChannelSheet &&
+                    _effectiveIptvChannels?.isNotEmpty == true &&
+                    !inPip)
+                  Positioned.fill(
+                    child: IptvChannelSheet(
+                      channels: _effectiveIptvChannels!,
+                      currentIndex: _currentIptvIndex,
+                      onChannelSelected: _switchToIptvGuideChannel,
+                      onPlayProgramme: _playIptvCatchup,
+                      onClose: _hideIptvChannelSheet,
+                      categories:
+                          _iptvGuideContextOverride?.categories ??
+                          widget.iptvCategories ??
+                          const [],
+                      sourceId: _iptvGuideContextOverride == null
+                          ? widget.iptvSourceId
+                          : _iptvGuideContextOverride!.sourceId,
+                      sourceName: _iptvGuideContextOverride == null
+                          ? widget.iptvSourceName
+                          : _iptvGuideContextOverride!.sourceName,
+                      selectedCategory: _iptvGuideContextOverride == null
+                          ? widget.iptvSelectedCategory
+                          : _iptvGuideContextOverride!.selectedCategory,
+                      contentType:
+                          _iptvGuideContextOverride?.contentType ??
+                          widget.iptvContentType ??
+                          'live',
+                      sources: widget.iptvSources ?? const [],
+                      browseProvider: widget.iptvBrowseProvider,
+                      onContextChanged: _persistIptvGuideContext,
+                    ),
+                  ),
+                // Stremio source sheet overlay
+                if (_showSourceSheet &&
+                    _effectiveSources != null &&
+                    _effectiveSources!.isNotEmpty &&
+                    (_effectiveResolver != null ||
+                        widget.resolveSourceToPlaylist != null) &&
+                    !inPip)
+                  Positioned.fill(
+                    child: Builder(
+                      builder: (context) {
+                        // A Stremio TV channel switch replaces the sources
+                        // wholesale — the launch fetcher no longer matches the
+                        // content, so load-more is only offered pre-switch.
+                        final fetcher = _stremioSourcesOverride == null
+                            ? widget.seriesSourceFetcher
+                            : null;
+                        final se = _traktSeasonEpisode();
+                        return SourceSheet(
+                          sources: _effectiveSources!,
+                          currentSourceIndex: _currentSourceIndex,
+                          resolveSource: _buildSourceSheetResolver(),
+                          onSourceSelected: _handleSourceSelected,
+                          onClose: _hideSourceSheet,
+                          seriesFetcher: fetcher,
+                          currentSeason: se.season,
+                          currentEpisode: se.episode,
+                          onSourcesMerged: (merged) {
+                            if (!mounted) return;
+                            setState(() => _augmentedSources = merged);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                // Stremio TV guide sheet overlay
+                if (_showStremioTvGuide && _hasStremioTvGuide && !inPip)
+                  Positioned.fill(
+                    child: StremioTvGuideSheet(
+                      channels: _effectiveStremioTvChannels!,
+                      currentChannelId: _currentStremioTvChannelId,
+                      guideDataProvider: widget.stremioTvGuideDataProvider,
+                      channelSwitchProvider:
+                          widget.stremioTvChannelSwitchProvider!,
+                      onChannelSwitched: _switchToStremioTvChannel,
+                      onClose: _hideStremioTvGuide,
+                    ),
+                  ),
+                // Subtitle sync overlay
+                if (_showSyncOverlay && !inPip) _buildSyncOverlay(),
+              ],
             ),
             builder: (context, controlsVisible, child) {
               // Hide the desktop mouse pointer once controls fade out; any
@@ -7720,13 +7957,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final restoreToken = _addonSubtitleFetchToken;
 
     try {
-      debugPrint('SubAuto: _restoreTrackPreferences entered (token=$restoreToken)');
+      debugPrint(
+        'SubAuto: _restoreTrackPreferences entered (token=$restoreToken)',
+      );
       // Wait for subtitle tracks to be parsed from the media file
       // media_kit initially only has 'auto' and 'no' placeholder tracks
       await _waitForSubtitleTracks(token: restoreToken);
 
       if (restoreToken != _addonSubtitleFetchToken) {
-        debugPrint('SubAuto: restore aborted after track wait (content changed)');
+        debugPrint(
+          'SubAuto: restore aborted after track wait (content changed)',
+        );
         return;
       }
 
@@ -7750,7 +7991,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       // Bail out if content changed during preferences fetch
       if (restoreToken != _addonSubtitleFetchToken) {
-        debugPrint('SubAuto: restore aborted (content changed during prefs fetch)');
+        debugPrint(
+          'SubAuto: restore aborted (content changed during prefs fetch)',
+        );
         return;
       }
 
@@ -7813,7 +8056,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // (explicit off for this series) is always honored.
             final defaultLang =
                 await StorageService.getDefaultSubtitleLanguage();
-            final conflictsWithDefault = subtitleTrackId != 'no' &&
+            final conflictsWithDefault =
+                subtitleTrackId != 'no' &&
                 defaultLang != null &&
                 (defaultLang == 'off' ||
                     !(LanguageMapper.matchesLanguage(
@@ -8001,10 +8245,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // No file extension in the path (e.g. YouTube's timedtext endpoint) —
         // fall back to the format carried in the `fmt`/`format` query param so
         // the temp file gets the right extension for libmpv's demuxer.
-        final fmt = (uri.queryParameters['fmt'] ??
-                uri.queryParameters['format'] ??
-                '')
-            .toLowerCase();
+        final fmt =
+            (uri.queryParameters['fmt'] ?? uri.queryParameters['format'] ?? '')
+                .toLowerCase();
         if (fmt == 'vtt') {
           ext = 'vtt';
         } else if (fmt == 'ttml') {
@@ -8212,9 +8455,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
 
       if (matchingSub == null) {
-        debugPrint(
-          'SubAuto: NO MATCH — no $targetLang among $availableLangs',
-        );
+        debugPrint('SubAuto: NO MATCH — no $targetLang among $availableLangs');
         return;
       }
 
@@ -8239,7 +8480,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return;
       }
       if (filePath == null) {
-        debugPrint('SubAuto: FAILED to download addon subtitle ${matchingSub.url}');
+        debugPrint(
+          'SubAuto: FAILED to download addon subtitle ${matchingSub.url}',
+        );
         return;
       }
 

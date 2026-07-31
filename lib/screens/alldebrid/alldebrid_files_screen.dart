@@ -8,6 +8,7 @@ import '../../services/storage_service.dart';
 import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/series_source_service.dart';
 import '../../models/alldebrid_magnet.dart';
 import '../../models/alldebrid_file.dart';
 import '../../models/alldebrid_link.dart';
@@ -34,8 +35,17 @@ enum _AdView { torrents, webDownloads }
 /// (CloudFileRow rows, CloudSegmentedTabs view switcher, CloudScaffold).
 class AllDebridFilesScreen extends StatefulWidget {
   final bool isPushedRoute;
+  final String? initialSearchQuery;
+  final bool selectSourceMode;
+  final Future<void> Function(SeriesSource)? onSourceSelected;
 
-  const AllDebridFilesScreen({super.key, this.isPushedRoute = false});
+  const AllDebridFilesScreen({
+    super.key,
+    this.isPushedRoute = false,
+    this.initialSearchQuery,
+    this.selectSourceMode = false,
+    this.onSourceSelected,
+  });
 
   @override
   State<AllDebridFilesScreen> createState() => _AllDebridFilesScreenState();
@@ -97,6 +107,12 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   void initState() {
     super.initState();
     AnalyticsService.screenView('alldebrid_files');
+    final initialQuery = widget.initialSearchQuery?.trim() ?? '';
+    if (initialQuery.isNotEmpty) {
+      _searchActive = true;
+      _searchQuery = initialQuery;
+      _searchController.text = initialQuery;
+    }
     if (widget.isPushedRoute) {
       // Pushed as a route (e.g. from the consolidated Cloud hub) — register a
       // pushed-route back handler so hardware/gesture Back navigates up within
@@ -1194,7 +1210,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         children: [
           const SizedBox(height: 8),
           if (_isAtRoot) _buildToolbar(),
-          if (_isAtRoot) _buildViewSelectorBar(),
+          if (_isAtRoot && !widget.selectSourceMode) _buildViewSelectorBar(),
           if (_isAtRoot && _searchActive) _buildSearchBar(),
           if (_isAtRoot && _selectionMode) _buildSelectionBar(),
           if (!_isAtRoot && _fileSearchActive) _buildFileSearchBar(),
@@ -1248,9 +1264,14 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 ),
                 SizedBox(width: isCompact ? 4 : 8),
               ],
+              if (widget.selectSourceMode)
+                const Text(
+                  'Select AllDebrid Source',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               const Spacer(),
               // Selection mode is torrents-only (it bulk-deletes magnets).
-              if (!isWeb && hasItems)
+              if (!widget.selectSourceMode && !isWeb && hasItems)
                 Tooltip(
                   message: _selectionMode ? 'Exit selection' : 'Select items',
                   child: IconButton(
@@ -1266,7 +1287,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
-              if (hasItems) ...[
+              if (!widget.selectSourceMode && hasItems) ...[
                 Tooltip(
                   message: isWeb ? 'Delete all links' : 'Delete all magnets',
                   child: IconButton(
@@ -1300,18 +1321,39 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                   ),
                 ),
               ],
-              Tooltip(
-                message: isWeb ? 'Add link' : 'Add magnet link',
-                child: IconButton(
-                  onPressed: isWeb ? _showAddLinkDialog : _showAddMagnetDialog,
-                  iconSize: iconSize,
-                  padding: iconPadding,
-                  constraints: iconConstraints,
-                  icon: const Icon(Icons.add_circle_outline),
-                  color: theme.colorScheme.primary,
-                  visualDensity: VisualDensity.compact,
+              if (widget.selectSourceMode && hasItems)
+                Tooltip(
+                  message: _searchActive ? 'Close search' : 'Search magnets',
+                  child: IconButton(
+                    focusNode: _toolbarSearchFocusNode,
+                    onPressed: _toggleSearch,
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: Icon(
+                      _searchActive
+                          ? Icons.search_off_rounded
+                          : Icons.search_rounded,
+                    ),
+                    color: _searchActive
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface,
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
-              ),
+              if (!widget.selectSourceMode)
+                Tooltip(
+                  message: isWeb ? 'Add link' : 'Add magnet link',
+                  child: IconButton(
+                    onPressed: isWeb ? _showAddLinkDialog : _showAddMagnetDialog,
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: const Icon(Icons.add_circle_outline),
+                    color: theme.colorScheme.primary,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
               Tooltip(
                 message: 'Refresh',
                 child: IconButton(
@@ -1615,6 +1657,34 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildMagnetCard(AllDebridMagnet m, int index) {
+    if (widget.selectSourceMode) {
+      return CloudFileRow(
+        kind: CloudRowKind.folder,
+        title: m.name.isEmpty ? '(unnamed)' : m.name,
+        meta: Formatters.formatFileSize(m.size),
+        badges: const [CloudRowBadge('Ready', CloudBadgeKind.ok)],
+        onTap: () async {
+          if (m.hash.trim().isEmpty) {
+            _snack('This AllDebrid magnet has no infohash to bind.',
+                isError: true);
+            return;
+          }
+          await widget.onSourceSelected?.call(
+            SeriesSource(
+              torrentHash: m.hash,
+              torrentName: m.name,
+              debridService: 'alldebrid',
+              debridTorrentId: m.id,
+              boundAt: DateTime.now().millisecondsSinceEpoch,
+            ),
+          );
+          if (!mounted) return;
+          Navigator.of(context).pop();
+        },
+        focusNode: index == 0 ? _firstItemFocusNode : null,
+      );
+    }
+
     // Same action set (labels, conditions) the old Open/Play pills + ⋮ menu
     // offered; the row's tap now carries Open for ready magnets.
     final actions = <CloudRowAction>[

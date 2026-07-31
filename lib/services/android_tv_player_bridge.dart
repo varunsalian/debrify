@@ -59,12 +59,15 @@ class AndroidTvPlayerBridge {
     String, {
     int? season,
     int? episode,
-  })? _moreSourcesProvider;
+  })?
+  _moreSourcesProvider;
   static Future<Map<String, dynamic>?> Function(List<String>)?
   _stremioTvGuideDataProvider;
   static Future<Map<String, dynamic>?> Function(String)?
   _stremioTvChannelSwitchProvider;
   static StremioTvNextProvider? _stremioTvNextProvider;
+  static Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
+  _iptvBrowseProvider;
 
   // Quick Play next episode result from Android TV player
   static Map<String, dynamic>? _quickPlayNextEpisodeResult;
@@ -191,7 +194,9 @@ class AndroidTvPlayerBridge {
             final m = call.arguments as Map;
             final key = m['seriesKey'] as String?;
             final lang = m['lang'] as String?;
-            if (key != null && key.isNotEmpty && lang != null &&
+            if (key != null &&
+                key.isNotEmpty &&
+                lang != null &&
                 lang.isNotEmpty) {
               await StorageService.setIptvSeriesAudioLanguage(key, lang);
             }
@@ -200,7 +205,8 @@ class AndroidTvPlayerBridge {
         case 'torboxPlaybackFinished':
         case 'realDebridPlaybackFinished':
         case 'streamPlaybackFinished':
-          _lastPlaybackHeartbeat = null; // reset so the next watch isn't throttled
+          _lastPlaybackHeartbeat =
+              null; // reset so the next watch isn't throttled
           final finished = _playbackFinishedCallback;
           _streamNextProvider = null;
           _channelSwitchProvider = null;
@@ -457,7 +463,8 @@ class AndroidTvPlayerBridge {
             );
           }
         case 'torrentPlaybackFinished':
-          _lastPlaybackHeartbeat = null; // reset so the next watch isn't throttled
+          _lastPlaybackHeartbeat =
+              null; // reset so the next watch isn't throttled
           final finishedTorrent = _torrentFinishedCallback;
           _torrentProgressCallback = null;
           _torrentFinishedCallback = null;
@@ -469,6 +476,7 @@ class AndroidTvPlayerBridge {
           _stremioTvGuideDataProvider = null;
           _stremioTvChannelSwitchProvider = null;
           _stremioTvNextProvider = null;
+          _iptvBrowseProvider = null;
           if (finishedTorrent != null) {
             try {
               await finishedTorrent();
@@ -560,6 +568,129 @@ class AndroidTvPlayerBridge {
             debugPrint('AndroidTvPlayerBridge: requestIptvEpg failed: $e');
             return <String, dynamic>{};
           }
+        case 'requestIptvBrowse':
+          final provider = _iptvBrowseProvider;
+          final rawArgs = call.arguments;
+          if (provider == null || rawArgs is! Map) return null;
+          try {
+            return await provider(Map<String, dynamic>.from(rawArgs));
+          } catch (e, stack) {
+            debugPrint(
+              'AndroidTvPlayerBridge: IPTV browse provider failed: $e\n$stack',
+            );
+            throw PlatformException(
+              code: 'iptv_browse_failed',
+              message: e.toString(),
+            );
+          }
+        case 'requestIptvCatchup':
+          final args = call.arguments;
+          if (args is! Map) return null;
+          final channelUrl = args['channelUrl'] as String?;
+          final startMs = (args['startMs'] as num?)?.toInt();
+          if (channelUrl == null || startMs == null) return null;
+          try {
+            final schedule = await IptvEpgService.instance.schedule(channelUrl);
+            EpgProgramme? programme;
+            for (final item in schedule) {
+              if (item.start.millisecondsSinceEpoch == startMs) {
+                programme = item;
+                break;
+              }
+            }
+            if (programme == null ||
+                !programme.hasArchive ||
+                !programme.stop.isBefore(DateTime.now())) {
+              return null;
+            }
+            final url = await IptvEpgService.instance.catchupUrl(
+              channelUrl,
+              programme,
+            );
+            if (url == null) return null;
+            final headers = <String, String>{};
+            final rawHeaders = args['httpHeaders'];
+            if (rawHeaders is Map) {
+              rawHeaders.forEach((key, value) {
+                if (key is String && value != null) {
+                  headers[key] = value.toString();
+                }
+              });
+            }
+            await StorageService.recordIptvWatch(
+              url,
+              channelName: programme.title,
+              logoUrl: args['logoUrl'] as String?,
+              group: args['channelName'] as String?,
+              playlistId: args['playlistId'] as String?,
+              httpHeaders: headers.isEmpty ? null : headers,
+            );
+            final resumePositions = await StorageService.getIptvResumePositions(
+              [url],
+            );
+            return <String, dynamic>{
+              'url': url,
+              'title': programme.title,
+              'resumePositionMs': resumePositions[url] ?? 0,
+            };
+          } catch (e) {
+            debugPrint('AndroidTvPlayerBridge: requestIptvCatchup failed: $e');
+            return null;
+          }
+        case 'recordIptvWatch':
+          final watchArgs = call.arguments;
+          if (watchArgs is! Map) return false;
+          final url = watchArgs['url'] as String?;
+          if (url == null || url.isEmpty) return false;
+          final headers = <String, String>{};
+          final rawHeaders = watchArgs['httpHeaders'];
+          if (rawHeaders is Map) {
+            rawHeaders.forEach((key, value) {
+              if (key is String && value != null) {
+                headers[key] = value.toString();
+              }
+            });
+          }
+          await StorageService.recordIptvWatch(
+            url,
+            channelName: watchArgs['name'] as String?,
+            logoUrl: watchArgs['logoUrl'] as String?,
+            group: watchArgs['group'] as String?,
+            playlistId: watchArgs['sourceId'] as String?,
+            httpHeaders: headers.isEmpty ? null : headers,
+            seriesId: watchArgs['seriesId'] as String?,
+            seriesName: watchArgs['seriesName'] as String?,
+            season: (watchArgs['season'] as num?)?.toInt(),
+            episode: (watchArgs['episode'] as num?)?.toInt(),
+            hasNextEpisode: watchArgs['hasNextEpisode'] as bool?,
+          );
+          return true;
+        case 'setIptvFavorite':
+          final favoriteArgs = call.arguments;
+          if (favoriteArgs is! Map) return false;
+          final url = favoriteArgs['url'] as String?;
+          final isFavorite = favoriteArgs['isFavorite'] == true;
+          if (url == null || url.isEmpty) return false;
+          final headers = <String, String>{};
+          final rawHeaders = favoriteArgs['httpHeaders'];
+          if (rawHeaders is Map) {
+            rawHeaders.forEach((key, value) {
+              if (key is String && value != null) {
+                headers[key] = value.toString();
+              }
+            });
+          }
+          await StorageService.setIptvChannelFavorited(
+            url,
+            isFavorite,
+            channelName: favoriteArgs['name'] as String?,
+            logoUrl: favoriteArgs['logoUrl'] as String?,
+            group: favoriteArgs['group'] as String?,
+            playlistId: favoriteArgs['sourceId'] as String?,
+            channelNumber: (favoriteArgs['channelNumber'] as num?)?.toInt(),
+            httpHeaders: headers,
+          );
+          return true;
         case 'reportIptvStreamResult':
           // Feedback from the native serial ladder: cache the URL that
           // actually played, or drop the stale candidate list when every
@@ -986,6 +1117,7 @@ class AndroidTvPlayerBridge {
     _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
     _stremioTvNextProvider = null;
+    _iptvBrowseProvider = null;
   }
 
   static void clearStreamProvider() {
@@ -994,6 +1126,7 @@ class AndroidTvPlayerBridge {
     _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
     _stremioTvNextProvider = null;
+    _iptvBrowseProvider = null;
   }
 
   static Future<bool> launchTorrentPlayback({
@@ -1011,6 +1144,8 @@ class AndroidTvPlayerBridge {
     Future<Map<String, dynamic>?> Function(String)?
     onRequestStremioTvChannelSwitch,
     StremioTvNextProvider? onRequestStremioTvNext,
+    Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
+    onRequestIptvBrowse,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -1030,6 +1165,7 @@ class AndroidTvPlayerBridge {
     _stremioTvGuideDataProvider = onRequestStremioTvGuideData;
     _stremioTvChannelSwitchProvider = onRequestStremioTvChannelSwitch;
     _stremioTvNextProvider = onRequestStremioTvNext;
+    _iptvBrowseProvider = onRequestIptvBrowse;
 
     // Clear any stale pending metadata from previous sessions
     _pendingMetadataUpdates = null;
@@ -1071,6 +1207,7 @@ class AndroidTvPlayerBridge {
     _stremioTvGuideDataProvider = null;
     _stremioTvChannelSwitchProvider = null;
     _stremioTvNextProvider = null;
+    _iptvBrowseProvider = null;
     return false;
   }
 

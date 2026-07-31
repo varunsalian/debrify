@@ -8,11 +8,18 @@ class SeriesSource {
   static const String localService = 'local';
   static const String localKindMovieFile = 'movie_file';
   static const String localKindSeriesFolder = 'series_folder';
+  static const String cloudKindFile = 'file';
+  static const String cloudKindFolder = 'folder';
 
   final String torrentHash;
   final String torrentName;
-  final String debridService; // 'rd', 'torbox', 'pikpak', 'local'
+  final String debridService;
   final String debridTorrentId;
+  // Provider-native cloud bindings (currently Premiumize/PikPak) do not expose
+  // an infohash. Their stable file/folder id lives in [debridTorrentId], while
+  // this discriminator tells playback how to resolve it without fabricating a
+  // magnet. Hash-backed RD/TorBox/AllDebrid records leave this null.
+  final String? cloudSourceKind;
   final int boundAt; // epoch millis
   final String? localPath;
   final String? localUri;
@@ -25,6 +32,7 @@ class SeriesSource {
     required this.torrentName,
     required this.debridService,
     required this.debridTorrentId,
+    this.cloudSourceKind,
     required this.boundAt,
     this.localPath,
     this.localUri,
@@ -34,6 +42,25 @@ class SeriesSource {
   });
 
   bool get isLocal => debridService == localService;
+  bool get isProviderNativeCloud =>
+      !isLocal &&
+      torrentHash.isEmpty &&
+      debridTorrentId.trim().isNotEmpty &&
+      (cloudSourceKind == cloudKindFile ||
+          cloudSourceKind == cloudKindFolder);
+
+  /// Stable identity used for dedupe, reorder keys, and removal. Existing
+  /// hash-backed bindings retain their exact behavior; only hashless cloud
+  /// bindings fall back to provider + kind + provider id.
+  String get bindingKey {
+    if (torrentHash.isNotEmpty) return 'hash:$torrentHash';
+    if (isLocal) {
+      final path = (localPath ?? debridTorrentId).trim();
+      return 'local:$path';
+    }
+    return 'cloud:$debridService:${cloudSourceKind ?? ''}:${debridTorrentId.trim()}';
+  }
+
   bool get isLocalMovieFile =>
       isLocal && (localKind == null || localKind == localKindMovieFile);
   bool get isLocalSeriesFolder => isLocal && localKind == localKindSeriesFolder;
@@ -49,6 +76,7 @@ class SeriesSource {
     'torrentName': torrentName,
     'debridService': debridService,
     'debridTorrentId': debridTorrentId,
+    if (cloudSourceKind != null) 'cloudSourceKind': cloudSourceKind,
     'boundAt': boundAt,
     if (localPath != null) 'localPath': localPath,
     if (localUri != null) 'localUri': localUri,
@@ -62,6 +90,7 @@ class SeriesSource {
     torrentName: json['torrentName'] as String? ?? '',
     debridService: json['debridService'] as String? ?? 'rd',
     debridTorrentId: json['debridTorrentId'] as String? ?? '',
+    cloudSourceKind: json['cloudSourceKind'] as String?,
     boundAt: json['boundAt'] as int? ?? 0,
     localPath: json['localPath'] as String?,
     localUri: json['localUri'] as String?,
@@ -111,13 +140,14 @@ class SeriesSourceService {
   }
 
   /// Add a source to the list (appends at end = lowest priority).
-  /// Deduplicates by torrentHash — if the same hash exists, it's replaced in-place.
+  /// Hash-backed sources dedupe exactly as before. Provider-native cloud
+  /// sources dedupe by provider + kind + stable provider id.
   static Future<void> addSource(String imdbId, SeriesSource source) async {
     final prefs = await SharedPreferences.getInstance();
     final sources = await getSources(imdbId);
-    // Replace if same hash already exists
+    // Replace if the same stable binding already exists.
     final existingIdx = sources.indexWhere(
-      (s) => s.torrentHash == source.torrentHash,
+      (s) => s.bindingKey == source.bindingKey,
     );
     if (existingIdx >= 0) {
       sources[existingIdx] = source;
@@ -135,6 +165,21 @@ class SeriesSourceService {
     final prefs = await SharedPreferences.getInstance();
     final sources = await getSources(imdbId);
     sources.removeWhere((s) => s.torrentHash == torrentHash);
+    if (sources.isEmpty) {
+      await prefs.remove('$_prefix$imdbId');
+    } else {
+      await _saveSources(prefs, imdbId, sources);
+    }
+  }
+
+  /// Remove one exact source, including a provider-native source with no hash.
+  static Future<void> removeSourceEntry(
+    String imdbId,
+    SeriesSource source,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final sources = await getSources(imdbId);
+    sources.removeWhere((s) => s.bindingKey == source.bindingKey);
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
     } else {

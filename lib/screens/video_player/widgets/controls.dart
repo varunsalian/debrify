@@ -387,8 +387,8 @@ class Controls extends StatelessWidget {
                             // IPTV Channels button
                             if (hasIptvChannels && onShowIptvChannels != null)
                               NetflixControlButton(
-                                icon: Icons.live_tv_rounded,
-                                label: 'Channels',
+                                icon: Icons.calendar_view_week_rounded,
+                                label: 'Guide',
                                 onPressed: onShowIptvChannels!,
                                 isCompact: true,
                               ),

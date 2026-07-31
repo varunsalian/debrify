@@ -80,6 +80,9 @@ import 'episodes_screen.dart';
 import 'stremio_tv/stremio_tv_service.dart';
 import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'torbox/torbox_downloads_screen.dart';
+import 'premiumize/premiumize_files_screen.dart';
+import 'alldebrid/alldebrid_files_screen.dart';
+import 'pikpak/pikpak_files_screen.dart';
 
 /// Stremio-style palette for the Search tab: an indigo/purple accent and a deep
 /// near-black indigo base behind the poster board.
@@ -311,8 +314,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   Set<String> _kwSelectedTorrent = {};
 
   /// True when the results list is being narrowed to TorBox-cached torrents
-  /// only (TorBox active, Real-Debrid not, TorBox cache-check on) — mirrors the
-  /// old screen's `_showingTorboxCachedOnly`. Drives the info banner.
+  /// only (TorBox is the sole usable debrid provider and its cache-check is on)
+  /// — mirrors the old screen's `_showingTorboxCachedOnly`. Drives the banner.
   bool _kwCachedOnly = false;
 
   // Bulk-selection state for keyword results (mirrors Home's multi-select).
@@ -342,11 +345,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   bool _kwPmOn = false;
   String? _kwTbKey;
   String? _kwPmKey;
-  bool _kwRdActive = false;
+  bool _kwOtherProviderActive = false;
 
-  /// Reads the TorBox/Premiumize cache-check gating (+ RD-active, for cached-
-  /// only mode) into the `_kw*` fields. Awaited at the top of each search so
-  /// the streaming batch checks see up-to-date settings.
+  /// Reads the cache-check gating and whether any usable non-TorBox provider
+  /// is active. Awaited at the top of each search so streaming batch checks
+  /// see up-to-date settings.
   Future<void> _loadKwCacheConfig() async {
     final r = await Future.wait([
       StorageService.getTorboxCacheCheckEnabled(),
@@ -357,15 +360,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       StorageService.getPremiumizeApiKey(),
       StorageService.getApiKey(),
       StorageService.getRealDebridIntegrationEnabled(),
+      StorageService.getAllDebridApiKey(),
+      StorageService.getAllDebridIntegrationEnabled(),
+      StorageService.getPikPakEnabled(),
     ]);
     final tbKey = r[2] as String?;
     final pmKey = r[5] as String?;
     final rdKey = r[6] as String?;
+    final adKey = r[8] as String?;
     _kwTbOn = (r[0] as bool) && (r[1] as bool) && (tbKey?.isNotEmpty ?? false);
     _kwPmOn = (r[3] as bool) && (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
     _kwTbKey = tbKey;
     _kwPmKey = pmKey;
-    _kwRdActive = (r[7] as bool) && (rdKey?.isNotEmpty ?? false);
+    final rdActive = (r[7] as bool) && (rdKey?.isNotEmpty ?? false);
+    final pmActive = (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
+    final adActive = (r[9] as bool) && (adKey?.isNotEmpty ?? false);
+    final pikpakActive = r[10] as bool;
+    _kwOtherProviderActive =
+        rdActive || pmActive || adActive || pikpakActive;
   }
 
   // ── Streaming keyword search (per-engine batches, Sources-list parity) ──
@@ -1092,6 +1104,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // rebuilt on return; on TV a tab switch already reloads it fresh).
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.addHomeSettingsListener(_reloadForHomeSettings);
+      unawaited(_loadHomeDefaultView());
     }
     // Unified (non-TV) layout: drive the catalog Sources bar off search-field
     // focus, with a delayed hide so clicking the button doesn't yank it away
@@ -1111,7 +1124,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Restore a keyword search preserved from a prior tab visit (results +
     // scroll). If one restored, it carries its own filters, so don't overwrite
     // them with the saved defaults.
-    final restoredKeyword = _restoreKeywordState();
+    final restoredKeyword =
+        widget.isTelevision && !widget.searchMode && !widget.discoverMode
+        ? false
+        : _restoreKeywordState();
     // Seed keyword filters from the user's saved defaults (parity with the old
     // search screen). Harmless in variants that never expose keyword mode.
     if (!restoredKeyword) unawaited(_loadDefaultKeywordFilters());
@@ -1458,6 +1474,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// set-equality guard skips reloads for unrelated settings.
   Future<void> _reloadForHomeSettings() async {
     if (!mounted) return;
+    await _loadHomeDefaultView();
+    if (!mounted) return;
     final disabled = await StorageService.getHomeDisabledSections();
     if (!mounted) return;
     final unchanged =
@@ -1466,6 +1484,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (unchanged) return;
     setState(() => _homeDisabled = disabled);
     _load();
+  }
+
+  Future<void> _loadHomeDefaultView() async {
+    // Android TV has dedicated Home and Search tabs. Its Home is always the
+    // catalog board, regardless of a preference saved on another platform.
+    if (widget.isTelevision) {
+      if (_mode != _Mode.catalog) _switchMode(_Mode.catalog);
+      return;
+    }
+    final saved = await StorageService.getHomeDefaultSourceType();
+    if (!mounted || widget.searchMode || widget.discoverMode) return;
+    final mode = saved == 'keyword' ? _Mode.keyword : _Mode.catalog;
+    if (_mode != mode) _switchMode(mode);
   }
 
   Future<void> _load() async {
@@ -5004,10 +5035,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Retry any hash still un-memoized (never dispatched, or a failed check).
     await _checkKeywordCache(full, token);
     if (!mounted || token != _kwSearchToken) return;
-    // Cached-only mode mirrors the old screen: when a TorBox cache-check ran
-    // this search and Real-Debrid is NOT configured, narrow the list to
-    // TorBox-cached torrents. RD users keep the full list (RD auto-adds uncached).
-    final cachedOnly = _kwTbRan && !_kwRdActive;
+    // Narrow to TorBox-cached torrents only when TorBox is the sole usable
+    // provider. Any other active provider may be able to handle a result that
+    // TorBox does not cache, so its rows must remain visible.
+    final cachedOnly = _kwTbRan && !_kwOtherProviderActive;
     if (cachedOnly != _kwCachedOnly) {
       // Cached-only mode toggles the visible set → full recompute.
       _kwCachedOnly = cachedOnly;
@@ -5448,7 +5479,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 item: item,
                 addon: addon,
                 isTelevision: widget.isTelevision,
-                showQuickPlay: !_pikpakOnly,
+                // PikPak quick-plays fine here: onResume → _onCatalogPlay →
+                // _playSelection → TorrentPlaybackService.playFromSelection
+                // already handles PikPak (same path the episode tiles use, which
+                // stay quick-play-enabled for PikPak-only). It queues an offline
+                // download and surfaces "still processing" if not ready — same
+                // behaviour as the tiles, so the hero button matches them.
+                showQuickPlay: true,
                 isTraktSource: isTraktSource,
                 heroTag: heroTag,
                 initialSeason: initialSeason,
@@ -5781,14 +5818,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                 itemCount: sources.length,
                                 itemBuilder: (context, index) =>
                                     _buildSourceListTile(
-                                      key: ValueKey(sources[index].torrentHash),
+                                      key: ValueKey(sources[index].bindingKey),
                                       source: sources[index],
                                       index: index,
                                       showDragHandle: false,
                                       onDelete: () async {
-                                        await SeriesSourceService.removeSourceByHash(
+                                        await SeriesSourceService.removeSourceEntry(
                                           imdbId,
-                                          sources[index].torrentHash,
+                                          sources[index],
                                         );
                                         await refreshInto(
                                           setDialogState,
@@ -5820,13 +5857,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     ),
                                 itemBuilder: (context, index) =>
                                     _buildSourceListTile(
-                                      key: ValueKey(sources[index].torrentHash),
+                                      key: ValueKey(sources[index].bindingKey),
                                       source: sources[index],
                                       index: index,
                                       onDelete: () async {
-                                        await SeriesSourceService.removeSourceByHash(
+                                        await SeriesSourceService.removeSourceEntry(
                                           imdbId,
-                                          sources[index].torrentHash,
+                                          sources[index],
                                         );
                                         await refreshInto(
                                           setDialogState,
@@ -5952,7 +5989,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// Add-source picker: Torrent Search (imdb) / Keyword Search (free-text) /
-  /// Local file / Real-Debrid / TorBox.
+  /// Local file plus every configured cloud provider.
   Future<void> _showAddSourcePicker(StremioMeta item) async {
     final imdbId = _imdbOf(item);
     if (imdbId == null) {
@@ -5964,8 +6001,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final navigator = Navigator.of(context);
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final premiumizeIntegration =
+        await StorageService.getPremiumizeIntegrationEnabled();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
     final rdEnabled = rdKey != null && rdKey.isNotEmpty;
     final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
+    final premiumizeEnabled = premiumizeIntegration &&
+        premiumizeKey != null &&
+        premiumizeKey.isNotEmpty;
+    final allDebridEnabled =
+        allDebridKey != null && allDebridKey.isNotEmpty;
     if (!mounted) return;
 
     final isMovie = item.type == 'movie';
@@ -5981,7 +6028,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
 
     // No cloud providers and no local option → go straight to torrent search.
-    if (!rdEnabled && !torboxEnabled && !supportsLocal) {
+    if (!rdEnabled &&
+        !torboxEnabled &&
+        !premiumizeEnabled &&
+        !allDebridEnabled &&
+        !pikpakEnabled &&
+        !supportsLocal) {
       _openBindSources(item);
       return;
     }
@@ -6010,6 +6062,41 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 builder: (_) => TorboxDownloadsScreen(
                   isPushedRoute: true,
                   initialSearchQuery: item.name,
+                  selectSourceMode: true,
+                  onSourceSelected: saveSource,
+                ),
+              ),
+            )
+          : null,
+      onPremiumize: premiumizeEnabled
+          ? () => navigator.push(
+              MaterialPageRoute(
+                builder: (_) => PremiumizeFilesScreen(
+                  isPushedRoute: true,
+                  initialSearchQuery: item.name,
+                  selectSourceMode: true,
+                  onSourceSelected: saveSource,
+                ),
+              ),
+            )
+          : null,
+      onAllDebrid: allDebridEnabled
+          ? () => navigator.push(
+              MaterialPageRoute(
+                builder: (_) => AllDebridFilesScreen(
+                  isPushedRoute: true,
+                  initialSearchQuery: item.name,
+                  selectSourceMode: true,
+                  onSourceSelected: saveSource,
+                ),
+              ),
+            )
+          : null,
+      onPikPak: pikpakEnabled
+          ? () => navigator.push(
+              MaterialPageRoute(
+                builder: (_) => PikPakFilesScreen(
+                  isPushedRoute: true,
                   selectSourceMode: true,
                   onSourceSelected: saveSource,
                 ),
@@ -9962,43 +10049,78 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     VoidCallback? onSeeAll,
   }) {
     final tv = widget.isTelevision;
+    final compact = !tv && MediaQuery.sizeOf(context).width < 480;
     return Padding(
       // Tighter vertically on TV so the current row's header + a peek of the
       // next row fit under the hero on short-canvas panels.
-      padding: EdgeInsets.fromLTRB(24, tv ? 14 : 22, 24, tv ? 10 : 12),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 16 : 24,
+        tv ? 14 : 22,
+        compact ? 16 : 24,
+        tv ? 10 : 12,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Text.rich(
-              TextSpan(
-                text: title,
-                children: [
-                  if (tag != null)
-                    TextSpan(
-                      text: '  ·  $tag',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.34),
-                        fontWeight: FontWeight.w600,
+            child: compact
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.92),
+                        ),
                       ),
+                      if (tag != null)
+                        Text(
+                          tag,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white.withValues(alpha: 0.38),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                    ],
+                  )
+                : Text.rich(
+                    TextSpan(
+                      text: title,
+                      children: [
+                        if (tag != null)
+                          TextSpan(
+                            text: '  ·  $tag',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.34),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                      ],
                     ),
-                ],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              // Poppins for the rail titles too, so headings share one display
-              // face; loosened from the old -0.2 tracking for the airier look.
-              // TV runs them quieter (15px) — the hero carries the weight, the
-              // row title just labels the shelf (Nuvio's row grammar).
-              style: GoogleFonts.poppins(
-                fontSize: tv ? 15 : 17,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0,
-                color: Colors.white.withValues(alpha: 0.92),
-              ),
-            ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    // Poppins for the rail titles too, so headings share one display
+                    // face; loosened from the old -0.2 tracking for the airier look.
+                    // TV runs them quieter (15px) — the hero carries the weight, the
+                    // row title just labels the shelf (Nuvio's row grammar).
+                    style: GoogleFonts.poppins(
+                      fontSize: tv ? 15 : 17,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                      color: Colors.white.withValues(alpha: 0.92),
+                    ),
+                  ),
           ),
-          if (onSeeAll != null && !tv) _SeeAllLink(onTap: onSeeAll),
+          if (onSeeAll != null && !tv)
+            _SeeAllLink(onTap: onSeeAll, compact: compact),
         ],
       ),
     );
@@ -12976,7 +13098,8 @@ class _StremioCardState extends State<_StremioCard> {
 /// posters. TV rails are chrome-free and paginate on scroll instead.
 class _SeeAllLink extends StatefulWidget {
   final VoidCallback onTap;
-  const _SeeAllLink({required this.onTap});
+  final bool compact;
+  const _SeeAllLink({required this.onTap, this.compact = false});
 
   @override
   State<_SeeAllLink> createState() => _SeeAllLinkState();
@@ -13007,7 +13130,7 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'See All',
+                widget.compact ? 'All' : 'See All',
                 style: TextStyle(
                   color: color,
                   fontSize: 12.5,

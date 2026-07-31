@@ -1,238 +1,607 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- IPTV Channel Guide Overlay — Premium redesign -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/iptv_guide_overlay"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#8C000000"
+    android:background="#72000000"
     android:visibility="gone">
 
-    <!-- Right-aligned panel -->
-    <FrameLayout
-        android:layout_width="480dp"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_gravity="end"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp"
+        android:layout_gravity="start"
+        android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:background="@drawable/iptv_guide_panel_bg"
-        android:elevation="12dp">
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp">
 
+        <!-- Premium Lean Rail -->
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:id="@+id/iptv_guide_panel"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@drawable/iptv_premium_panel_bg"
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/iptv_epg_panel"
+            app:layout_constraintHorizontal_bias="0"
+            app:layout_constraintHorizontal_chainStyle="packed"
+            app:layout_constraintHorizontal_weight="6"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_max="600dp">
 
-            <!-- Header -->
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingStart="24dp"
+                android:layout_width="68dp"
+                android:layout_height="match_parent"
+                android:background="#F5070A0C"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="18dp">
+
+                <TextView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="#FFF4F1E9"
+                    android:gravity="center"
+                    android:text="D"
+                    android:textColor="#FF101616"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_nav_browse"
+                    android:layout_width="50dp"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="18dp"
+                    android:background="@drawable/iptv_premium_nav_item_bg"
+                    android:drawableTop="@drawable/ic_guide"
+                    android:drawableTint="#FF101516"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:padding="6dp"
+                    android:text="BROWSE"
+                    android:textAllCaps="false"
+                    android:textColor="#FF101516"
+                    android:textSize="7sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_nav_search"
+                    android:layout_width="50dp"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/iptv_premium_nav_item_bg"
+                    android:drawableTop="@drawable/ic_search"
+                    android:drawableTint="#FF7D898E"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:padding="6dp"
+                    android:text="SEARCH"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="7sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_nav_favorites"
+                    android:layout_width="50dp"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/iptv_premium_nav_item_bg"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:padding="5dp"
+                    android:text="★&#10;SAVED"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="8sp" />
+
+                <Space
+                    android:layout_width="1dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_nav_sources"
+                    android:layout_width="50dp"
+                    android:layout_height="52dp"
+                    android:background="@drawable/iptv_premium_nav_item_bg"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:padding="5dp"
+                    android:text="≡&#10;SOURCES"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="8sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_nav_close"
+                    android:layout_width="50dp"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/iptv_premium_nav_item_bg"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:padding="5dp"
+                    android:text="←&#10;CLOSE"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="8sp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="#18FFFFFF" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingStart="20dp"
                 android:paddingEnd="20dp"
                 android:paddingTop="18dp"
                 android:paddingBottom="14dp">
 
-                <!-- Icon -->
-                <FrameLayout
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:background="@drawable/iptv_guide_icon_bg">
-
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_guide"
-                        android:tint="#FFFFFFFF" />
-                </FrameLayout>
-
                 <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginStart="12dp">
+                    android:id="@+id/iptv_mode_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:text="Live Channels"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="18sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="-0.02" />
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
-                    <TextView
-                        android:id="@+id/iptv_guide_count"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="1dp"
-                        android:textColor="#59FFFFFF"
-                        android:textSize="12sp"
-                        tools:text="11889 of 11889 channels" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="IPTV PLAYER"
+                            android:textColor="#FF48D7A0"
+                            android:textSize="9sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/iptv_guide_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="Live television"
+                            android:textColor="#FFF5F7F7"
+                            android:textSize="20sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/iptv_guide_count"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textColor="#FF859196"
+                            android:textSize="10sp"
+                            tools:text="2,486 channels across 3 sources" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/iptv_source_button"
+                        android:layout_width="150dp"
+                        android:layout_height="42dp"
+                        android:background="@drawable/iptv_premium_button_bg"
+                        android:drawableEnd="@drawable/ic_arrow_down"
+                        android:drawableTint="#FF8D989C"
+                        android:ellipsize="end"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:maxLines="1"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="10dp"
+                        android:textColor="#FFE4E8E9"
+                        android:textSize="11sp"
+                        tools:text="My Provider" />
                 </LinearLayout>
 
-                <!-- Close hint -->
-                <FrameLayout
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:background="@drawable/iptv_guide_close_bg">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="14dp"
+                    android:background="#FF070A0C"
+                    android:orientation="horizontal"
+                    android:padding="3dp">
 
-                    <ImageView
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:layout_gravity="center"
-                        android:src="@android:drawable/ic_menu_close_clear_cancel"
-                        android:tint="#80FFFFFF" />
-                </FrameLayout>
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/iptv_mode_live"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@drawable/iptv_premium_button_bg"
+                        android:focusable="true"
+                        android:text="● Live"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="11sp" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/iptv_filter_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="9dp"
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/iptv_guide_search"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@drawable/iptv_guide_search_bg"
+                        android:drawableStart="@drawable/ic_search"
+                        android:drawablePadding="8dp"
+                        android:drawableTint="#FF778388"
+                        android:hint="Search this source — press OK"
+                        android:imeOptions="actionSearch"
+                        android:inputType="text"
+                        android:maxLines="1"
+                        android:paddingStart="13dp"
+                        android:paddingEnd="12dp"
+                        android:textColor="#FFFFFFFF"
+                        android:textColorHint="#FF778388"
+                        android:textSize="12sp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/iptv_category_button"
+                        android:layout_width="150dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/iptv_premium_button_bg"
+                        android:drawableEnd="@drawable/ic_arrow_down"
+                        android:drawableTint="#FF8D989C"
+                        android:ellipsize="end"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:maxLines="1"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="10dp"
+                        android:text="All categories"
+                        android:textAllCaps="false"
+                        android:textColor="#FFE4E8E9"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <ProgressBar
+                    android:id="@+id/iptv_browse_loading"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="14dp"
+                    android:indeterminateTint="#FF48D7A0"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/iptv_guide_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:paddingBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="30dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="OK  Play"
+                        android:textColor="#FF7D898E"
+                        android:textSize="9sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="→  Schedule"
+                        android:textColor="#FF7D898E"
+                        android:textSize="9sp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="end"
+                        android:text="HOLD OK  Favorite"
+                        android:textColor="#FF7D898E"
+                        android:textSize="9sp" />
+                </LinearLayout>
             </LinearLayout>
+        </LinearLayout>
 
-            <!-- Now Playing Bar -->
+        <!-- Contextual EPG column -->
+        <LinearLayout
+            android:id="@+id/iptv_epg_panel"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginStart="12dp"
+            android:background="@drawable/iptv_premium_panel_bg"
+            android:orientation="vertical"
+            android:padding="20dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_weight="5"
+            app:layout_constraintStart_toEndOf="@id/iptv_guide_panel"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_max="500dp">
+
             <LinearLayout
-                android:id="@+id/iptv_guide_now_playing"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
+                android:layout_height="54dp"
                 android:gravity="center_vertical"
-                android:layout_marginStart="20dp"
-                android:layout_marginEnd="20dp"
-                android:layout_marginBottom="10dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/iptv_guide_now_playing_bg"
-                android:visibility="gone">
+                android:orientation="horizontal">
 
-                <!-- Equalizer icon placeholder -->
-                <View
-                    android:id="@+id/iptv_guide_eq_dot"
-                    android:layout_width="8dp"
-                    android:layout_height="8dp"
-                    android:background="@drawable/iptv_guide_eq_dot" />
-
-                <!-- Channel logo mini -->
                 <FrameLayout
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:layout_marginStart="10dp">
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/iptv_channel_logo_bg">
 
                     <ImageView
-                        android:id="@+id/iptv_guide_now_logo"
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
+                        android:id="@+id/iptv_epg_logo"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:scaleType="centerInside"
                         android:visibility="gone" />
 
                     <TextView
-                        android:id="@+id/iptv_guide_now_letter"
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
+                        android:id="@+id/iptv_epg_letter"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:gravity="center"
-                        android:textColor="#FF00E5FF"
-                        android:textSize="13sp"
+                        android:textColor="#FF101616"
+                        android:textSize="16sp"
                         android:textStyle="bold"
-                        android:background="#1500E5FF"
-                        tools:text="B" />
+                        tools:text="N" />
                 </FrameLayout>
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginStart="10dp">
+                    android:orientation="vertical">
 
                     <TextView
-                        android:id="@+id/iptv_guide_current_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="PROGRAMME GUIDE"
+                        android:textColor="#FF48D7A0"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/iptv_epg_channel_name"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="13sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:maxLines="1"
+                        android:layout_marginTop="2dp"
                         android:ellipsize="end"
-                        tools:text="Star Sports 1 HD" />
+                        android:maxLines="1"
+                        android:textColor="#FFF5F7F7"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        tools:text="News 24 International" />
 
                     <TextView
-                        android:id="@+id/iptv_guide_current_group"
+                        android:id="@+id/iptv_epg_channel_group"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="#4DFFFFFF"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="#FF859196"
                         android:textSize="10sp"
-                        android:maxLines="1"
-                        android:ellipsize="end"
-                        android:visibility="gone"
-                        tools:text="Sports" />
-
-                    <!-- EPG now/next for the playing channel -->
-                    <TextView
-                        android:id="@+id/iptv_guide_current_epg"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="1dp"
-                        android:textColor="#B300E5FF"
-                        android:textSize="10sp"
-                        android:maxLines="1"
-                        android:ellipsize="end"
-                        android:visibility="gone"
-                        tools:text="Now: NBA Finals  ›  Next: SportsCenter" />
+                        tools:text="International News · Channel 104" />
                 </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="16dp"
+                android:background="#FF070A0C"
+                android:orientation="horizontal"
+                android:padding="3dp">
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_epg_day_today"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/iptv_premium_button_bg"
+                    android:focusable="true"
+                    android:text="Today"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_epg_day_tomorrow"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/iptv_premium_button_bg"
+                    android:focusable="true"
+                    android:text="Tomorrow"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="11sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_epg_day_later"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/iptv_premium_button_bg"
+                    android:focusable="true"
+                    android:text="Later"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/iptv_epg_date"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="15dp"
+                android:paddingStart="4dp"
+                android:paddingBottom="9dp"
+                android:textColor="#FFE4E8E9"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                tools:text="Wednesday, 29 July" />
+
+            <ProgressBar
+                android:id="@+id/iptv_epg_loading"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="24dp"
+                android:indeterminateTint="#FF48D7A0"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/iptv_epg_empty"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="No programme information"
+                android:textColor="#FF7D898E"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/iptv_epg_list"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:paddingBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="←  Channels"
+                    android:textColor="#FF7D898E"
+                    android:textSize="9sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingTop="3dp"
-                    android:paddingBottom="3dp"
-                    android:text="PLAYING"
-                    android:textColor="#CC00E5FF"
-                    android:textSize="8sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.1"
-                    android:background="#2600E5FF" />
+                    android:text="OK  Replay when available"
+                    android:textColor="#FF7D898E"
+                    android:textSize="9sp" />
             </LinearLayout>
-
-            <!-- Search Bar -->
-            <EditText
-                android:id="@+id/iptv_guide_search"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:layout_marginStart="20dp"
-                android:layout_marginEnd="20dp"
-                android:layout_marginBottom="8dp"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:hint="Search channels or categories..."
-                android:textColor="#FFFFFFFF"
-                android:textColorHint="#40FFFFFF"
-                android:textSize="13sp"
-                android:background="@drawable/iptv_guide_search_bg"
-                android:imeOptions="actionSearch"
-                android:inputType="text"
-                android:maxLines="1"
-                android:drawableStart="@android:drawable/ic_menu_search"
-                android:drawablePadding="8dp"
-                android:drawableTint="#4DFFFFFF" />
-
-            <!-- Channel List -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/iptv_guide_list"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="8dp"
-                android:clipToPadding="false"
-                android:focusable="true"
-                android:focusableInTouchMode="true" />
-
         </LinearLayout>
-    </FrameLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Compact current-channel identity beside the channel browser -->
+    <LinearLayout
+        android:id="@+id/iptv_guide_now_playing"
+        android:layout_width="360dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp"
+        android:background="#E8090D0F"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/iptv_channel_logo_bg">
+
+            <ImageView
+                android:id="@+id/iptv_guide_now_logo"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:scaleType="centerInside"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/iptv_guide_now_letter"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:textColor="#FF101616"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                tools:text="N" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/iptv_guide_current_epg"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="LIVE"
+                android:textColor="#FFFF7272"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/iptv_guide_current_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#FFF5F7F7"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                tools:text="Global News Tonight" />
+
+            <TextView
+                android:id="@+id/iptv_guide_current_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#FF859196"
+                android:textSize="10sp"
+                tools:text="News 24 International · Channel 104" />
+        </LinearLayout>
+    </LinearLayout>
 </FrameLayout>

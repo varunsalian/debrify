@@ -33,6 +33,7 @@ import 'screens/stremio_tv/stremio_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
+import 'services/iptv_catalog_db.dart';
 import 'services/storage_service.dart';
 import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
@@ -51,6 +52,7 @@ import 'widgets/mobile_floating_nav.dart';
 import 'widgets/tv_ambient_art_stage.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
+import 'widgets/home/home_theme.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
@@ -76,12 +78,23 @@ Future<void> _capImageCache() async {
     // theme's page-transition builder reads on every route push.
     isTv = await PlatformUtil.isAndroidTV();
   } catch (_) {}
-  if (!isTv) return; // leave non-TV devices on the framework defaults
-  // Warm the Debrify-keyboard opt-out alongside the TV flag — TvTextField
-  // reads StorageService.tvKeyboardEnabledCached synchronously in build.
-  try {
-    await StorageService.getTvKeyboardEnabled();
-  } catch (_) {}
+  // When the TV probe FAILED (as opposed to answering "no"), cap any Android
+  // device: the asymmetry decides it. A phone mistakenly capped loses a
+  // little cache headroom; a 1 GB TV box mistakenly left on Flutter's stock
+  // 100 MB / 1000-image cache is an OOM kill. The probe failing at all is
+  // rare (early-startup channel hiccup), so phones almost never pay this.
+  final capAnyway =
+      !isTv && !kIsWeb && Platform.isAndroid && PlatformUtil.lastProbeFailed;
+  if (!isTv && !capAnyway) {
+    return; // leave non-TV devices on the framework defaults
+  }
+  if (isTv) {
+    // Warm the Debrify-keyboard opt-out alongside the TV flag — TvTextField
+    // reads StorageService.tvKeyboardEnabledCached synchronously in build.
+    try {
+      await StorageService.getTvKeyboardEnabled();
+    } catch (_) {}
+  }
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 140;
   // 56 MB: the Home hero decodes 1080-wide backdrops (~2.6 MB each) per rest
@@ -137,6 +150,15 @@ class _TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Backstop for async errors nothing awaited (fire-and-forget loads,
+  // .then chains without onError). Without a handler these are only printed
+  // by the default dispatcher — with one, they're logged consistently AND
+  // any future crash-reporting hook has a single place to attach. Returning
+  // true marks the error handled so it never doubles up in the console.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Unhandled async error: $error\n$stack');
+    return true;
+  };
   // Fire-and-forget: Pug's init does several platform-channel reads
   // (package_info/device_info/connectivity/timezone) + storage setup that are
   // slow on weak TV hardware. Never block first frame on analytics — it runs
@@ -164,12 +186,35 @@ Future<void> main() async {
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
+  // Prepare the paged IPTV catalog while the user is on the startup/home
+  // experience. The expensive file open and schema work run on a worker
+  // isolate after first paint; opening IPTV later shares this future or finds
+  // the DB ready.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_prewarmIptvCatalogDb());
+  });
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     windowManager.waitUntilReadyToShow().then((_) async {
       await windowManager.show();
       await windowManager.focus();
     });
+  }
+}
+
+Future<void> _prewarmIptvCatalogDb() async {
+  if (kIsWeb) return;
+  try {
+    // Most users never configure IPTV. Do not create a database or compete
+    // with Home startup IO unless a stored source could actually use the
+    // paged catalog.
+    if ((await StorageService.getIptvPlaylists()).isEmpty) return;
+    await IptvCatalogDb.open();
+  } catch (e) {
+    // Prewarming is an optimization. The IPTV page retries through the same
+    // open path and owns the user-visible error/loading state if it still
+    // cannot initialize.
+    debugPrint('IPTV catalog prewarm failed: $e');
   }
 }
 
@@ -2149,7 +2194,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return BrowseScreen(
           tabIndex: 13,
           hintText: 'Search channels...',
-          submitOnly: false,
+          // Submit-only: the in-page channel filter runs a full-scan COUNT on
+          // the UI isolate, so filter on the search key press, not on every
+          // keystroke — one scan per deliberate search, no per-keystroke storm.
+          submitOnly: true,
           isTelevision: _isAndroidTv,
           viewBuilder: (args) => IptvResultsView(
             key: args.resultKey,
@@ -2423,7 +2471,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             }
           },
           child: AnimatedPremiumBackground(
-            isTelevision: _isAndroidTv,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 // TV Layout: Sidebar + Content
@@ -2585,56 +2632,67 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   );
                 }
 
-                // Non-TV above phone width: persistent left sidebar. This also
-                // absorbs the old 600–1000 "mid-width" band that used to get
-                // the retired AppBar/PremiumTopNav top bar.
+                // Keep one stable non-TV content tree across the phone-width
+                // breakpoint. Previously the mobile Stack and desktop Row
+                // lived in separate return branches, so rotating a phone past
+                // 600 px disposed the active page (and rotating back created it
+                // again), losing local screen state. Only the navigation chrome
+                // is conditional now; the active page remains the first child
+                // of the same Stack/SafeArea chain at every non-TV width.
                 final isDesktopWide =
                     !_isAndroidTv && constraints.maxWidth >= 600;
-                if (isDesktopWide) {
-                  final sidebarIndices = _sidebarOrderedIndices(visibleIndices);
-                  final sidebarSelected = sidebarIndices.indexOf(
-                    _selectedIndex,
-                  );
-                  return Scaffold(
-                    backgroundColor: Colors.transparent,
-                    body: Row(
-                      children: [
-                        DesktopSidebarNav(
-                          // Touch tablets (iPad / Android tablet in landscape)
-                          // have no mouse hover to reveal labels, so expand the
-                          // rail and show every label. True desktop keeps the
-                          // slim hover-reveal icon rail.
-                          expanded:
-                              !kIsWeb && (Platform.isAndroid || Platform.isIOS),
-                          currentIndex: sidebarSelected == -1
-                              ? 0
-                              : sidebarSelected,
-                          entries: [
-                            for (final index in sidebarIndices)
-                              DesktopNavEntry(
-                                _icons[index],
-                                _titles[index],
-                                _navSectionForIndex(index),
-                              ),
-                          ],
-                          onTap: (relativeIndex) {
-                            final actualIndex = sidebarIndices[relativeIndex];
-                            _onItemTapped(actualIndex);
-                          },
-                        ),
-                        Expanded(
-                          // Clip so nothing in the page (e.g. a horizontally
-                          // scrolled poster row) can ever paint over the sidebar.
-                          child: ClipRect(
-                            child: SafeArea(
-                              left: false,
-                              child: Stack(
-                                children: [
-                                  // Page fills the whole area so its own
-                                  // background covers the animated backdrop.
-                                  Positioned.fill(child: _buildAnimatedPage()),
-                                  // Invisible top strip keeps the frameless
-                                  // window draggable now that the AppBar is gone.
+                final nonTvIndices = _sidebarOrderedIndices(visibleIndices);
+                final nonTvSelected = nonTvIndices.indexOf(_selectedIndex);
+                // Touch tablets (iPad / Android tablet in landscape) get the
+                // wider rail. True desktop keeps the slim rail.
+                final expandDesktopSidebar =
+                    !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+                final desktopSidebarWidth = expandDesktopSidebar
+                    ? DesktopSidebarNav.expandedWidth
+                    : DesktopSidebarNav.width;
+
+                return Scaffold(
+                  // Opaque page ink rather than transparent-to-the-wallpaper.
+                  //
+                  // The active page is inset by the SafeArea below, so a
+                  // transparent shell let the [AnimatedPremiumBackground] wash
+                  // — then an animated indigo→violet→cyan gradient — show
+                  // through the status-bar and home-indicator strips while the
+                  // page itself sat on near-black ink. On a phone those strips
+                  // are thin; on an iPad they're tall enough that the screen
+                  // read as three mismatched horizontal bands. (That wash is
+                  // static now: once this went opaque nothing could see it
+                  // move, so the animation was dropped.)
+                  //
+                  // #0D0B1A is already the app's de-facto ink (kStremioBg,
+                  // _kStremioBg, kSeeAllBg and HomeTheme.bg are all this exact
+                  // colour), so the strips now match every page that uses it and
+                  // sit within a hair of the few that don't. Safe to make opaque
+                  // because no non-TV page is translucent down to the wallpaper:
+                  // the one page that goes transparent on purpose is the glass
+                  // Home board, which is TV-gated (`_heroTrailerActive`).
+                  //
+                  // TV keeps its transparent shell above — TvAmbientArtStage is
+                  // the real background there.
+                  backgroundColor: HomeTheme.bg,
+                  body: Stack(
+                    children: [
+                      // This exact element chain stays mounted while rotating.
+                      // Moving it sideways with Positioned changes constraints
+                      // without changing the identity of the active page.
+                      Positioned.fill(
+                        left: isDesktopWide ? desktopSidebarWidth : 0,
+                        child: ClipRect(
+                          child: SafeArea(
+                            left: !isDesktopWide,
+                            child: Stack(
+                              children: [
+                                // Page fills the whole area so its own
+                                // background covers the animated backdrop.
+                                Positioned.fill(child: _buildAnimatedPage()),
+                                // Invisible top strip keeps frameless desktop
+                                // windows draggable now that the AppBar is gone.
+                                if (isDesktopWide)
                                   const Positioned(
                                     top: 0,
                                     left: 0,
@@ -2643,31 +2701,40 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                       child: SizedBox(height: 26),
                                     ),
                                   ),
-                                ],
-                              ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                }
-
-                // Mobile (phone-width, non-TV): floating nav menu, grouped
-                // into the same sections as the rails.
-                final mobileIndices = _sidebarOrderedIndices(visibleIndices);
-                final mobileSelected = mobileIndices.indexOf(_selectedIndex);
-                return Scaffold(
-                  backgroundColor: Colors.transparent,
-                  body: Stack(
-                    children: [
-                      SafeArea(child: _buildAnimatedPage()),
-                      MobileFloatingNav(
-                          currentIndex: mobileSelected == -1
-                              ? 0
-                              : mobileSelected,
+                      ),
+                      if (isDesktopWide)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: DesktopSidebarNav(
+                            expanded: expandDesktopSidebar,
+                            currentIndex: nonTvSelected == -1
+                                ? 0
+                                : nonTvSelected,
+                            entries: [
+                              for (final index in nonTvIndices)
+                                DesktopNavEntry(
+                                  _icons[index],
+                                  _titles[index],
+                                  _navSectionForIndex(index),
+                                ),
+                            ],
+                            onTap: (relativeIndex) {
+                              final actualIndex = nonTvIndices[relativeIndex];
+                              _onItemTapped(actualIndex);
+                            },
+                          ),
+                        ),
+                      if (!isDesktopWide)
+                        MobileFloatingNav(
+                          currentIndex: nonTvSelected == -1 ? 0 : nonTvSelected,
                           items: [
-                            for (final index in mobileIndices)
+                            for (final index in nonTvIndices)
                               MobileNavItem(
                                 _icons[index],
                                 _titles[index],
@@ -2675,7 +2742,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               ),
                           ],
                           onTap: (relativeIndex) {
-                            final actualIndex = mobileIndices[relativeIndex];
+                            final actualIndex = nonTvIndices[relativeIndex];
                             _onItemTapped(actualIndex);
                           },
                           onRemoteControlTap: () {

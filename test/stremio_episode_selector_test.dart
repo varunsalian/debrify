@@ -61,6 +61,78 @@ void main() {
       expect(index, isNull);
     });
 
+    test('verifies a single-file PikPak episode from its direct title', () {
+      expect(
+        StremioEpisodeSelector.namesContainEpisode(
+          ['Show.Name.S02E07.1080p.mkv', 'Show Name'],
+          season: 2,
+          episode: 7,
+        ),
+        isTrue,
+      );
+    });
+
+    test('verifies a single-file episode from the torrent-name fallback', () {
+      expect(
+        StremioEpisodeSelector.namesContainEpisode(
+          ['video.mkv', 'Show.Name.S03E04.2160p'],
+          season: 3,
+          episode: 4,
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'does not treat an unverified single file as the requested episode',
+      () {
+        expect(
+          StremioEpisodeSelector.namesContainEpisode(
+            ['video.mkv', 'Show.Name.Season.3.Complete'],
+            season: 3,
+            episode: 4,
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    test('accepts a generic single file when the torrent name is exact', () {
+      final index =
+          StremioEpisodeSelector.findEpisodeFileIndexWithSingleFileFallback(
+            ['video.mkv'],
+            sourceName: 'Show.Name.S02E07.1080p',
+            season: 2,
+            episode: 7,
+          );
+
+      expect(index, 0);
+    });
+
+    test('does not apply the torrent-name fallback to a multi-file pack', () {
+      final index =
+          StremioEpisodeSelector.findEpisodeFileIndexWithSingleFileFallback(
+            ['video-1.mkv', 'video-2.mkv'],
+            sourceName: 'Show.Name.S02E07.1080p',
+            season: 2,
+            episode: 7,
+          );
+
+      expect(index, isNull);
+    });
+
+    test('manifest episode match takes precedence over source fallback', () {
+      final index =
+          StremioEpisodeSelector.findEpisodeFileIndexWithSingleFileFallback(
+            ['Show.Name.S02E06.mkv', 'Show.Name.S02E07.mkv'],
+            sourceName: 'Show.Name.S02E06.1080p',
+            season: 2,
+            episode: 7,
+          );
+
+      expect(index, 1);
+    });
+
     test('picks the largest file index for movie-style selection', () {
       final index = StremioEpisodeSelector.findLargestFileIndex([
         100,

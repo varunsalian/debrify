@@ -8,6 +8,7 @@ import 'alldebrid_service.dart';
 import 'storage_service.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
+import '../widgets/not_cached_dialog.dart';
 
 /// Handles incoming magnet links and shared URLs, routing them to appropriate debrid service
 class MagnetLinkHandler {
@@ -493,10 +494,18 @@ class MagnetLinkHandler {
         }
       }
     } on TorrentNotCachedException catch (e) {
-      await DebridService.deleteTorrent(e.apiKey, e.torrentId);
       if (!context.mounted) return;
       Navigator.of(context).pop();
-      _showError('File is not readily available in Real Debrid');
+      final keep = await showNotCachedDialog(context, 'Real-Debrid');
+      if (!keep) {
+        await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+        return;
+      }
+      if (context.mounted) {
+        _showSuccess(
+          'Added — it will download on Real-Debrid. Play it once ready.',
+        );
+      }
     } catch (e) {
       if (!context.mounted) return;
       Navigator.of(context).pop(); // Close loading dialog
@@ -535,7 +544,30 @@ class MagnetLinkHandler {
       if (!success) {
         final error = (result['error'] ?? '').toString();
         if (error == 'DOWNLOAD_NOT_CACHED') {
-          _showError('Torrent is not cached on Torbox yet. Disable "add only if cached" in settings to force add.');
+          final keep = await showNotCachedDialog(context, 'TorBox');
+          if (!keep || !context.mounted) return;
+          _showLoadingDialog(torrentName, 'Torbox');
+          final queued = await TorboxService.createTorrent(
+            apiKey: apiKey,
+            magnet: magnetUri,
+            seed: true,
+            allowZip: true,
+            addOnlyIfCached: false,
+          );
+          if (!context.mounted) return;
+          Navigator.of(context).pop();
+          if (queued['success'] as bool? ?? false) {
+            _showSuccess(
+              'Added — it will download on TorBox. Play it once ready.',
+            );
+          } else {
+            final queueError = (queued['error'] ?? '').toString();
+            _showError(
+              queueError.isEmpty
+                  ? 'Failed to add torrent to TorBox.'
+                  : queueError,
+            );
+          }
         } else {
           _showError(error.isEmpty ? 'Failed to cache torrent on Torbox.' : error);
         }
@@ -678,9 +710,17 @@ class MagnetLinkHandler {
       return;
     }
 
-    _showLoadingDialog(torrentName, 'Premiumize');
-
     try {
+      _showLoadingDialog(torrentName, 'Premiumize');
+      final cached = await PremiumizeService.isCachedStrict(apiKey, magnetUri);
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      if (!cached) {
+        final keep = await showNotCachedDialog(context, 'Premiumize');
+        if (!keep || !context.mounted) return;
+      }
+
+      _showLoadingDialog(torrentName, 'Premiumize');
       await PremiumizeService.createTransfer(apiKey, magnetUri);
 
       if (!context.mounted) return;
@@ -731,13 +771,26 @@ class MagnetLinkHandler {
     _showLoadingDialog(torrentName, 'AllDebrid');
 
     try {
-      await AllDebridService.uploadMagnet(apiKey, magnetUri);
+      await AllDebridService.addMagnetAndResolveFiles(apiKey, magnetUri);
 
       if (!context.mounted) return;
       Navigator.of(context).pop();
 
       _showSuccess('Added to AllDebrid: $torrentName');
       onAllDebridAdded?.call();
+    } on AllDebridTorrentNotReadyException catch (e) {
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      final keep = await showNotCachedDialog(context, 'AllDebrid');
+      if (!keep) {
+        await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+        return;
+      }
+      if (context.mounted) {
+        _showSuccess(
+          'Added — it will download on AllDebrid. Play it once ready.',
+        );
+      }
     } catch (e) {
       if (!context.mounted) return;
       Navigator.of(context).pop();

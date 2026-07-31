@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
@@ -5,8 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
+import '../../services/debrify_image_cache.dart';
+import '../../services/iptv_epg_service.dart';
 import '../browse/brand_accent.dart';
 import '../home/home_theme.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 
 /// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)".
@@ -14,11 +19,18 @@ final RegExp _resExp = RegExp(r'\((\d{3,4}[pi])\)', caseSensitive: false);
 
 const Color _liveDot = Color(0xFF34D399); // emerald — a calm "on air" cue
 
-/// Row height for live channels (a square logo chip) and for on-demand items
-/// (a 2:3 poster). The grid needs these to size its tiles, so they live here
-/// next to the art they describe.
+/// Row heights for live channels (a square logo chip) and on-demand items
+/// (a 2:3 poster). Narrow live rows get a little more height so a wrapped
+/// channel name and its category can coexist without clipping. The grid needs
+/// these to size its tiles, so they live here next to the art they describe.
 const double kIptvRowExtent = 74;
+const double kIptvNarrowRowExtent = 84;
 const double kIptvPosterRowExtent = 95;
+
+/// Row height for live channels when the rows carry their own EPG block
+/// (now-playing title, progress bar, up-next line) — the redesign's guide
+/// look. Taller than [kIptvRowExtent] because the block is three lines.
+const double kIptvEpgRowExtent = 100;
 
 /// Compact guide-style list row for an IPTV channel: a small logo chip, the
 /// channel name, and a "category • resolution" sub-line. Scales far better than
@@ -29,11 +41,20 @@ class IptvChannelRow extends StatefulWidget {
   final bool isTelevision;
   final FocusNode? focusNode;
   final bool isFavorited;
+  final bool isPreviewSelected;
   final VoidCallback onTap;
   final ValueChanged<bool>? onFavoriteToggle;
 
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
+
+  /// Fired from dispose — tells the list this row no longer holds its cached
+  /// focus node. This is the ONLY reliable detachment signal: FocusNode.context
+  /// is assigned on attach and never reverts to null on detach, so the list
+  /// cannot infer "row gone" from the node itself, and retiring nodes on any
+  /// other evidence either leaks them (per row ever scrolled — the big-catalog
+  /// OOM) or disposes one still in use.
+  final VoidCallback? onDetached;
 
   /// Opens this channel's programme schedule. TV fires it on RIGHT (the only
   /// key a row has left: OK plays, hold-OK favourites, LEFT is the sidebar's);
@@ -59,6 +80,12 @@ class IptvChannelRow extends StatefulWidget {
   /// poster inside a short tile would overflow.
   final bool poster;
 
+  /// Show the channel's now/next EPG block inside the row (redesign). Decided
+  /// by the list for the same reason as [poster]: the grid's tile height is
+  /// all-or-nothing ([kIptvEpgRowExtent]). Rows whose channel has no guide
+  /// data fall back to the classic "category • resolution" sub-line.
+  final bool epg;
+
   const IptvChannelRow({
     super.key,
     required this.channel,
@@ -66,12 +93,15 @@ class IptvChannelRow extends StatefulWidget {
     this.isTelevision = false,
     this.focusNode,
     this.isFavorited = false,
+    this.isPreviewSelected = false,
     this.onFavoriteToggle,
     this.onFocused,
+    this.onDetached,
     this.onSchedule,
     this.scheduleOnRightKey = false,
     this.progress,
     this.poster = false,
+    this.epg = false,
   });
 
   @override
@@ -82,7 +112,11 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     with SingleTickerProviderStateMixin {
   bool _focused = false;
   bool _hovered = false;
-  bool get _active => _focused || _hovered;
+  bool get _active => _focused || _hovered || widget.isPreviewSelected;
+  bool get _tabletPreviewActive =>
+      widget.isPreviewSelected && !_focused && !_hovered;
+  Color get _activeAccent =>
+      _tabletPreviewActive ? HomeTheme.chromeAccent : HomeTheme.focusGold;
 
   /// Touch phones/tablets have no hover, so the favourite affordance can't hide
   /// behind one — keep it visible there. Desktop reveals it on hover, TV on
@@ -102,6 +136,14 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   );
   bool _favHoldFired = false;
 
+  /// Whether this row received the OK/select KEY-DOWN that a key-up belongs
+  /// to. The favoritable path plays on key-UP (to tell a quick press from a
+  /// hold), so without this a key-up that lands here after focus moved
+  /// mid-press — e.g. selecting a source collapses the rail onto this row
+  /// while OK is still held — would read as a tap and auto-play a channel
+  /// the user never pressed.
+  bool _sawSelectDown = false;
+
   @override
   void initState() {
     super.initState();
@@ -116,6 +158,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   @override
   void dispose() {
     _holdController.dispose();
+    widget.onDetached?.call();
     super.dispose();
   }
 
@@ -124,6 +167,8 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     final ch = widget.channel;
     final isLive = ch.isLive;
     final brand = brandAccentFor(ch.name);
+    final isNarrow =
+        !widget.isTelevision && MediaQuery.sizeOf(context).width < 600;
 
     // Pull the resolution out of the name into the sub-line; show a clean name.
     final resMatch = _resExp.firstMatch(ch.name);
@@ -131,9 +176,9 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     final displayName = resMatch == null
         ? ch.name
         : ch.name
-            .replaceRange(resMatch.start, resMatch.end, '')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
+              .replaceRange(resMatch.start, resMatch.end, '')
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .trim();
 
     final group = ch.group?.trim();
     final subParts = <String>[
@@ -153,16 +198,20 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       // Constant 2px border (transparent at rest) so focus never shifts layout.
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: _active ? const Color(0xFF141824) : Colors.transparent,
+        color: _active
+            ? (_tabletPreviewActive
+                  ? const Color(0xFF17132E)
+                  : const Color(0xFF141824))
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _active ? HomeTheme.focusGold : Colors.transparent,
+          color: _active ? _activeAccent : Colors.transparent,
           width: 2,
         ),
         boxShadow: _active
             ? [
                 BoxShadow(
-                  color: HomeTheme.focusGold.withValues(alpha: 0.28),
+                  color: _activeAccent.withValues(alpha: 0.28),
                   blurRadius: 20,
                   spreadRadius: 1,
                 ),
@@ -171,6 +220,26 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       ),
       child: Row(
         children: [
+          if (isLive && ch.channelNumber != null) ...[
+            SizedBox(
+              width: 45,
+              child: Text(
+                ch.channelNumber.toString(),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                style: TextStyle(
+                  color: _active
+                      ? _activeAccent
+                      : Colors.white.withValues(alpha: 0.42),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+          ],
           _LogoChip(
             logoUrl: ch.logoUrl,
             name: displayName,
@@ -210,7 +279,11 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                     Flexible(
                       child: Text(
                         displayName,
-                        maxLines: 1,
+                        // Phone-width rows have enough height for a second
+                        // title line. Keeping the desktop/TV row to one line
+                        // preserves its denser guide rhythm, while narrow
+                        // windows no longer discard most of a channel name.
+                        maxLines: isNarrow ? 2 : 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white.withValues(
@@ -224,7 +297,13 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                     ),
                   ],
                 ),
-                if (sub.isNotEmpty) ...[
+                if (widget.epg)
+                  // The EPG block owns the space under the name. It renders
+                  // the classic sub-line itself while it has nothing better —
+                  // so a channel without guide data looks exactly like before,
+                  // just with more air.
+                  _RowEpg(channel: ch, fallback: sub)
+                else if (sub.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
                     sub,
@@ -251,6 +330,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       focusNode: widget.focusNode,
       onFocusChange: (f) {
         setState(() => _focused = f);
+        if (!f) {
+          // Focus left mid-press — disarm so a later stray key-up can't play.
+          _sawSelectDown = false;
+          _favHoldFired = false;
+          _holdController.reset();
+        }
         if (f) {
           widget.onFocused?.call();
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -279,7 +364,8 @@ class _IptvChannelRowState extends State<IptvChannelRow>
           return KeyEventResult.handled;
         }
 
-        final isSelect = isActivateKey(event.logicalKey) ||
+        final isSelect =
+            isActivateKey(event.logicalKey) ||
             event.logicalKey == LogicalKeyboardKey.space;
         if (!isSelect) return KeyEventResult.ignored;
 
@@ -295,22 +381,33 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         }
 
         if (event is KeyDownEvent) {
+          _sawSelectDown = true;
           _favHoldFired = false;
           _holdController.forward(from: 0); // fills the heart over 500ms
           return KeyEventResult.handled;
         }
         if (event is KeyUpEvent) {
-          // Released before the fill completed → treat as a tap (play).
-          if (!_favHoldFired) widget.onTap();
+          // A press this row actually started, released before the hold
+          // completed → tap (play). A key-up with no matching key-down
+          // (focus arrived mid-press) is swallowed, never played.
+          final wasPress = _sawSelectDown && !_favHoldFired;
+          _sawSelectDown = false;
           _holdController.reset();
           _favHoldFired = false;
+          if (wasPress) widget.onTap();
           return KeyEventResult.handled;
         }
         // Swallow auto-repeat while the key is held.
         return KeyEventResult.handled;
       },
       child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
+        onEnter: (_) {
+          setState(() => _hovered = true);
+          // Pointer platforms: hovering IS the "focus" that drives the
+          // two-pane preview stage (the stage's own dwell debounces
+          // fly-overs). TV never mouses, so the guard is just clarity.
+          if (!widget.isTelevision) widget.onFocused?.call();
+        },
         onExit: (_) => setState(() => _hovered = false),
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
@@ -372,8 +469,11 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       if (widget.isFavorited) {
         return const Padding(
           padding: EdgeInsets.only(left: 8),
-          child: Icon(Icons.favorite_rounded,
-              size: 18, color: Color(0xFFF43F5E)),
+          child: Icon(
+            Icons.favorite_rounded,
+            size: 18,
+            color: Color(0xFFF43F5E),
+          ),
         );
       }
       return const SizedBox.shrink();
@@ -387,6 +487,292 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         favorited: widget.isFavorited,
         onTap: () => widget.onFavoriteToggle!(!widget.isFavorited),
       ),
+    );
+  }
+}
+
+/// The in-row now/next block (redesign): what's airing right now, how far in
+/// it is, and what's up next — the guide readable without focusing anything.
+///
+/// Paints synchronously from whatever the service already knows (an XMLTV
+/// guide answers locally and instantly — the common case, and no network is
+/// involved for it at all). Only a channel with no local answer needs a
+/// per-stream request, and those are deliberately rationed:
+///
+/// - **Dwell gate.** A row must stay mounted [_fetchDwell] before it asks
+///   for anything, so channels flying past under a scroll never queue work
+///   (their timer dies with them).
+/// - **Politeness budget.** At most [_maxConcurrentRowFetches] rows may have
+///   a request outstanding at once, app-wide. A row that finds the budget
+///   full re-arms instead of queuing, so a screenful fills in progressively
+///   rather than firing two dozen requests the instant scrolling stops.
+///
+/// Both exist because a big Xtream list has no XMLTV fallback to lean on:
+/// without rationing, browsing a 50k-channel guide would fire one
+/// `get_short_epg` per channel seen — enough to jank the UI decoding replies
+/// and enough for a panel to rate-limit the account.
+///
+/// A slow ticker advances the progress bar and rolls past programme
+/// boundaries; the service cache is the staleness oracle (a null peek means
+/// "time to re-ask").
+class _RowEpg extends StatefulWidget {
+  final IptvChannel channel;
+
+  /// The classic "category • resolution" sub-line, shown while there is no
+  /// guide data (not capable, still loading, or the guide has a gap).
+  final String fallback;
+
+  const _RowEpg({required this.channel, required this.fallback});
+
+  @override
+  State<_RowEpg> createState() => _RowEpgState();
+}
+
+class _RowEpgState extends State<_RowEpg> {
+  /// How long a row must sit still before it may ask the panel for guide
+  /// data — long enough that rows scrolled past never reach it. A remote
+  /// arrows through a list far slower than a finger flings one, and TV
+  /// hardware has the least headroom, so it waits longest.
+  static Duration get _fetchDwell => PlatformUtil.isAndroidTvCached
+      ? const Duration(milliseconds: 900)
+      : const Duration(milliseconds: 450);
+
+  /// First retry spacing when the budget below is full; successive misses
+  /// back off (doubling, capped) so a screenful waiting on a stalled panel
+  /// stops re-polling every second.
+  static const Duration _budgetRetry = Duration(milliseconds: 1200);
+  static const Duration _budgetRetryCap = Duration(seconds: 6);
+
+  /// App-wide ceiling on row-initiated guide requests in flight. This is a
+  /// UI-level politeness budget, distinct from the service's own transport
+  /// throttle: the rail card, the schedule pane and the player are never
+  /// gated by it, only the rows.
+  ///
+  /// Matched to the service's own transport concurrency (3) rather than set
+  /// above it: a row admitted beyond that just waits in the service's queue,
+  /// where it holds a UI slot while achieving nothing and can still time out
+  /// waiting. Equal means an admitted row goes straight to the wire.
+  static const int _maxConcurrentRowFetches = 3;
+  static int _rowFetchesInFlight = 0;
+
+  EpgNowNext? _data;
+  String? _forUrl;
+  Timer? _fetchDebounce;
+  Timer? _ticker;
+
+  /// Set while THIS row holds one of the budget slots, so the release path
+  /// can never double-decrement (dispose racing a completing fetch).
+  bool _holdsBudget = false;
+
+  /// Consecutive times this row found the budget full — drives the backoff.
+  int _budgetMisses = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+    // An XMLTV guide finishing its first download changes what every built
+    // row can show (only built rows listen — the grid recycles the rest).
+    IptvEpgService.instance.contextVersion.addListener(_onEpgContextChanged);
+    _ticker = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!mounted) return;
+      final ch = widget.channel;
+      if (!IptvEpgService.isEpgCapable(ch)) return;
+      final cached = IptvEpgService.instance.peekNowNext(ch.url);
+      if (cached == null) {
+        // Cache invalidated itself (programme ended / retry window passed).
+        _scheduleFetch();
+      } else if (!identical(cached, _data)) {
+        setState(() => _data = cached);
+      } else if (cached.now != null) {
+        setState(() {}); // repaint the progress bar
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(_RowEpg oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.channel.url != widget.channel.url) _sync();
+  }
+
+  @override
+  void dispose() {
+    IptvEpgService.instance.contextVersion.removeListener(_onEpgContextChanged);
+    _fetchDebounce?.cancel();
+    _ticker?.cancel();
+    // A row scrolled away mid-request must hand its slot back — the reply is
+    // still cached by the service, it just no longer has anyone to paint it.
+    _releaseBudget();
+    super.dispose();
+  }
+
+  void _releaseBudget() {
+    if (!_holdsBudget) return;
+    _holdsBudget = false;
+    _rowFetchesInFlight--;
+  }
+
+  void _onEpgContextChanged() {
+    if (mounted) _sync();
+  }
+
+  void _sync() {
+    _fetchDebounce?.cancel();
+    _budgetMisses = 0; // a fresh subject deserves a fresh ladder
+    final ch = widget.channel;
+    _forUrl = ch.url;
+    if (!IptvEpgService.isEpgCapable(ch)) {
+      if (_data != null) setState(() => _data = null);
+      return;
+    }
+    final cached = IptvEpgService.instance.peekNowNext(ch.url);
+    if (cached != null) {
+      setState(() => _data = cached);
+      return;
+    }
+    if (_data != null) setState(() => _data = null);
+    _scheduleFetch();
+  }
+
+  void _scheduleFetch([Duration? delay]) {
+    _fetchDebounce?.cancel();
+    _fetchDebounce = Timer(delay ?? _fetchDwell, _fetch);
+  }
+
+  /// Next budget retry: 1.2s, 2.4s, 4.8s, then capped. A whole screenful can
+  /// be waiting behind a stalled panel (a request can occupy a slot for tens
+  /// of seconds), and polling every 1.2s until it drains is pure wakeups on
+  /// hardware that can least afford them.
+  Duration _nextBudgetRetry() {
+    final ms = _budgetRetry.inMilliseconds * (1 << _budgetMisses.clamp(0, 3));
+    return ms >= _budgetRetryCap.inMilliseconds
+        ? _budgetRetryCap
+        : Duration(milliseconds: ms);
+  }
+
+  Future<void> _fetch() async {
+    final url = _forUrl;
+    if (url == null) return;
+
+    // A guide already in memory (XMLTV) answers without touching the
+    // network, so it must never be held behind the request budget.
+    final local = IptvEpgService.instance.peekNowNext(url);
+    if (local != null) {
+      if (mounted) setState(() => _data = local);
+      return;
+    }
+
+    // Re-entrancy: this row may ALREADY be awaiting a reply. Cancelling the
+    // debounce can't recall a timer that has fired, so a ticker tick or a
+    // contextVersion bump lands here while the first call is still in its
+    // await. One bool can only hand one slot back, so a second increment
+    // would leak a slot permanently (four leaks = no row ever fetches
+    // again). Let the outstanding call finish and check back.
+    if (_holdsBudget) {
+      _budgetMisses++;
+      _scheduleFetch(_nextBudgetRetry());
+      return;
+    }
+
+    if (_rowFetchesInFlight >= _maxConcurrentRowFetches) {
+      _budgetMisses++;
+      _scheduleFetch(_nextBudgetRetry()); // come back when a slot frees
+      return;
+    }
+    _budgetMisses = 0;
+    _holdsBudget = true;
+    _rowFetchesInFlight++;
+    try {
+      final result = await IptvEpgService.instance.nowNext(url);
+      if (!mounted || url != _forUrl) return;
+      if (!result.isEmpty) setState(() => _data = result);
+    } finally {
+      _releaseBudget();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = _data?.now;
+    final next = _data?.next;
+    if (now == null && next == null) {
+      // No guide data (yet): the classic sub-line keeps the row honest.
+      if (widget.fallback.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Text(
+          widget.fallback,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.52),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      );
+    }
+
+    final at = DateTime.now();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (now != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            now.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.74),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 5),
+          // Same bar the rail card draws, at row scale.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(1.5),
+            child: SizedBox(
+              height: 3,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: (now.progressAt(at) * 1000).round().clamp(0, 1000),
+                    child: const ColoredBox(color: HomeTheme.focusGold),
+                  ),
+                  Expanded(
+                    flex:
+                        1000 -
+                        (now.progressAt(at) * 1000).round().clamp(0, 1000),
+                    child: ColoredBox(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (next != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            '${TimeOfDay.fromDateTime(next.start).format(context)}'
+            '  ·  ${next.title}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.42),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -445,9 +831,7 @@ class _FavHint extends StatelessWidget {
                   ),
                 ),
               Icon(
-                done
-                    ? Icons.favorite_rounded
-                    : Icons.favorite_border_rounded,
+                done ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                 size: 16,
                 color: heartColor,
               ),
@@ -494,8 +878,10 @@ class _LogoChip extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color.alphaBlend(brand.withValues(alpha: 0.16),
-                const Color(0xFF1E2030)),
+            Color.alphaBlend(
+              brand.withValues(alpha: 0.16),
+              const Color(0xFF1E2030),
+            ),
             const Color(0xFF14141D),
           ],
         ),
@@ -511,6 +897,10 @@ class _LogoChip extends StatelessWidget {
             child: hasArt
                 ? CachedNetworkImage(
                     imageUrl: logoUrl!,
+                    // Dedicated disk store: the default manager holds 200
+                    // objects, so a big guide re-downloaded logos on every
+                    // scroll-back.
+                    cacheManager: DebrifyImageCache.iptvLogos,
                     fit: poster ? BoxFit.cover : BoxFit.contain,
                     // IPTV art is often 1000px+ going into a tiny slot —
                     // uncapped decodes janked scrolling and thrashed the TV's

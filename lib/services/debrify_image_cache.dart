@@ -25,4 +25,18 @@ class DebrifyImageCache {
       stalePeriod: const Duration(days: 30),
     ),
   );
+
+  /// Separate store for IPTV channel logos: tiny files, huge cardinality.
+  /// They used to ride the DEFAULT manager's 200-object store, so scrolling
+  /// a big guide re-downloaded every logo continuously; and sharing
+  /// [manager] instead would let one 50k-channel scroll evict every Home
+  /// backdrop and poster. A dedicated store keeps each surface's churn to
+  /// itself — 2000 logos at the typical 10-50 KB is tens of MB of disk, cap.
+  static final CacheManager iptvLogos = CacheManager(
+    Config(
+      'debrifyIptvLogoCache',
+      maxNrOfCacheObjects: 2000,
+      stalePeriod: const Duration(days: 30),
+    ),
+  );
 }

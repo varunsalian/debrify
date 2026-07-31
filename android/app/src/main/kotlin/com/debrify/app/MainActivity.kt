@@ -103,16 +103,37 @@ class MainActivity : FlutterActivity() {
     // Inline ExoPlayer for the ambient trailer backdrop on TV.
     private var tvTrailerPlayer: com.debrify.app.tv.TvTrailerTexturePlayer? = null
 
+    /** The player MethodChannel THIS instance registered into the static
+     *  registry — cleanup compares against it so a stale instance's teardown
+     *  can't clobber a newer engine's live channel. */
+    private var registeredTvPlayerChannel: MethodChannel? = null
+
     // Full-window layer UNDER the FlutterView hosting the trailer underlay
     // SurfaceView(s). See trailerUnderlayContainer().
     private var trailerUnderlayContainer: FrameLayout? = null
 
-    private fun isTelevision(): Boolean = try {
-        (getSystemService(UI_MODE_SERVICE) as UiModeManager)
-            .currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
-    } catch (e: Exception) {
-        false
+    /** True on Android TV, computed once. UI_MODE_TYPE_TELEVISION alone misses
+     *  some Google TV / Chromecast / Fire builds that report a non-TV UI mode,
+     *  dropping them onto the system IME and its broken DPAD typing
+     *  (flutter#177360); FEATURE_LEANBACK is present ONLY on TV devices, so it's
+     *  a safe widener. The two probes are independent — a throw in the UI-mode
+     *  cast must not skip the Leanback fallback (the whole point of widening). */
+    private val televisionDetected: Boolean by lazy {
+        val uiIsTv = try {
+            (getSystemService(UI_MODE_SERVICE) as? UiModeManager)?.currentModeType ==
+                Configuration.UI_MODE_TYPE_TELEVISION
+        } catch (e: Exception) {
+            false
+        }
+        val leanback = try {
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        } catch (e: Exception) {
+            false
+        }
+        uiIsTv || leanback
     }
+
+    private fun isTelevision(): Boolean = televisionDetected
 
     /** The Dart-owned setting (Settings → Home Page → Native Trailer Surface),
      *  read from the shared_preferences plugin's store. Must be checked here
@@ -362,6 +383,35 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         ActivityTracker.currentActivity = this
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        super.cleanUpFlutterEngine(flutterEngine)
+        // The trailer player's ExoPlayer listeners keep emitting onto this
+        // engine's messenger after detach; invokeMethod on a detached engine
+        // throws an UNCAUGHT RuntimeException on the main thread (process
+        // death). releaseAll() marks the player detached (emits become no-ops)
+        // and tears every instance down. Instance-scoped (unlike the static
+        // player channel below), so a stale activity's cleanup can't clobber a
+        // newer instance's player. onDestroy's call is then a no-op.
+        tvTrailerPlayer?.releaseAll()
+        tvTrailerPlayer = null
+        // The static player channel targets this engine's messenger. Once the
+        // engine detaches, invokeMethod on it goes into the void and its
+        // Result callback never fires — the native TV player's EPG bridge
+        // then hangs on every ask (with playback itself unaffected, so it
+        // presents as "EPG missing everywhere"). Null it so callers fail
+        // fast; a recreated MainActivity re-registers a live channel.
+        //
+        // ONLY when the registry still holds the channel THIS instance
+        // registered: Android doesn't order an old activity's teardown
+        // before a new instance's configureFlutterEngine, so a stale
+        // instance's cleanup must never clobber the fresh channel a newer
+        // engine just installed.
+        if (getAndroidTvPlayerChannel() === registeredTvPlayerChannel) {
+            setAndroidTvPlayerChannel(null)
+        }
+        registeredTvPlayerChannel = null
     }
 
     override fun onDestroy() {
@@ -760,13 +810,10 @@ class MainActivity : FlutterActivity() {
 					}
 				}
 				"isTelevision" -> {
-					try {
-						val uiModeManager = getSystemService(UI_MODE_SERVICE) as UiModeManager
-						val isTv = uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
-						result.success(isTv)
-					} catch (e: Exception) {
-						result.success(false)
-					}
+					// Single source of truth — includes the Leanback fallback so a
+					// device that reports a non-TV UI mode still gets the Debrify
+					// keyboard instead of the broken system IME (flutter#177360).
+					result.success(isTelevision())
 				}
 				"getDeviceName" -> {
 					try {
@@ -809,6 +856,7 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             ANDROID_TV_CHANNEL
         )
+        registeredTvPlayerChannel = tvChannel
         setAndroidTvPlayerChannel(tvChannel)
         tvChannel.setMethodCallHandler { call, result ->
             android.util.Log.d("DebrifyTV", "MainActivity: Method channel received: ${call.method}")

@@ -21,12 +21,27 @@ String _dayLabel(DateTime day) {
   if (delta == 1) return 'Tomorrow';
   if (delta == -1) return 'Yesterday';
   const weekdays = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
     'Sunday',
   ];
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
-    'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return '${weekdays[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
 }
@@ -43,7 +58,21 @@ String _dayLabel(DateTime day) {
 /// guide data — the rail simply looks like it did before EPG existed.
 class IptvRailEpgCard extends StatefulWidget {
   final IptvChannel? channel;
-  const IptvRailEpgCard({super.key, required this.channel});
+
+  /// Compact "now" treatment for the TV focus-stage overlay. The standard
+  /// desktop rail keeps its fuller now/next presentation.
+  final bool stageOverlay;
+
+  /// Tightens spacing and limits text to one line when the lower stage section
+  /// is short. Programme descriptions remain visible.
+  final bool dense;
+
+  const IptvRailEpgCard({
+    super.key,
+    required this.channel,
+    this.stageOverlay = false,
+    this.dense = false,
+  });
 
   @override
   State<IptvRailEpgCard> createState() => _IptvRailEpgCardState();
@@ -96,8 +125,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
 
   @override
   void dispose() {
-    IptvEpgService.instance.contextVersion
-        .removeListener(_onEpgContextChanged);
+    IptvEpgService.instance.contextVersion.removeListener(_onEpgContextChanged);
     _fetchDebounce?.cancel();
     _ticker?.cancel();
     super.dispose();
@@ -151,6 +179,98 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
     final now = data.now;
     final next = data.next;
     final at = DateTime.now();
+
+    if (widget.stageOverlay) {
+      if (now == null) {
+        if (next == null) return const SizedBox.shrink();
+        return Row(
+          children: [
+            const _EpgTag('NEXT', dim: true),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                next.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.78),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _clock(context, next.start),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.48),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        );
+      }
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _EpgTag('NOW'),
+              const Spacer(),
+              Text(
+                '${_clock(context, now.start)} – ${_clock(context, now.stop)}',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.52),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: widget.dense ? 3 : 7),
+          Text(
+            now.title,
+            maxLines: widget.dense ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: widget.dense ? 14 : 16,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
+            ),
+          ),
+          if (now.description.isNotEmpty) ...[
+            SizedBox(height: widget.dense ? 3 : 6),
+            if (widget.dense)
+              _OverflowMarqueeText(
+                text: now.description,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.58),
+                  fontSize: 10.5,
+                  height: 1.2,
+                ),
+              )
+            else
+              Text(
+                now.description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.58),
+                  fontSize: 11.5,
+                  height: 1.35,
+                ),
+              ),
+          ],
+          SizedBox(height: widget.dense ? 5 : 9),
+          _EpgProgressBar(progress: now.progressAt(at)),
+        ],
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -260,6 +380,116 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
   }
 }
 
+/// A restrained one-line marquee for the compact TV stage. It stays still when
+/// the full description fits, waits before moving, pauses at the end, then
+/// resets to the beginning before repeating in the same direction.
+class _OverflowMarqueeText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+
+  const _OverflowMarqueeText({required this.text, required this.style});
+
+  @override
+  State<_OverflowMarqueeText> createState() => _OverflowMarqueeTextState();
+}
+
+class _OverflowMarqueeTextState extends State<_OverflowMarqueeText> {
+  static const _initialPause = Duration(milliseconds: 1400);
+  static const _edgePause = Duration(milliseconds: 1100);
+  static const _pixelsPerSecond = 34.0;
+
+  final ScrollController _controller = ScrollController();
+  Timer? _pause;
+  int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _restart();
+  }
+
+  @override
+  void didUpdateWidget(_OverflowMarqueeText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text || oldWidget.style != widget.style) {
+      _restart();
+    }
+  }
+
+  void _restart() {
+    _generation++;
+    _pause?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_controller.hasClients) _controller.jumpTo(0);
+      _schedule(_initialPause, _generation);
+    });
+  }
+
+  void _schedule(Duration delay, int generation) {
+    _pause?.cancel();
+    _pause = Timer(delay, () => _scroll(generation));
+  }
+
+  Future<void> _scroll(int generation) async {
+    if (!mounted ||
+        generation != _generation ||
+        !_controller.hasClients ||
+        (MediaQuery.maybeOf(context)?.disableAnimations ?? false)) {
+      return;
+    }
+    final max = _controller.position.maxScrollExtent;
+    if (max <= 0.5) return;
+    final distance = (_controller.offset - max).abs();
+    final milliseconds = (distance / _pixelsPerSecond * 1000).round().clamp(
+      700,
+      14000,
+    );
+    try {
+      await _controller.animateTo(
+        max,
+        duration: Duration(milliseconds: milliseconds),
+        curve: Curves.linear,
+      );
+    } catch (_) {
+      return;
+    }
+    if (!mounted || generation != _generation) return;
+    _pause = Timer(_edgePause, () {
+      if (!mounted || generation != _generation || !_controller.hasClients) {
+        return;
+      }
+      _controller.jumpTo(0);
+      _schedule(_initialPause, generation);
+    });
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _pause?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        child: Text(
+          widget.text,
+          maxLines: 1,
+          softWrap: false,
+          style: widget.style,
+        ),
+      ),
+    );
+  }
+}
+
 /// Static two-bar placeholder — no shimmer on purpose (TV perf playbook:
 /// nothing animates unless it must).
 class _EpgSkeleton extends StatelessWidget {
@@ -268,13 +498,13 @@ class _EpgSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget bar(double w) => Container(
-          width: w,
-          height: 10,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(5),
-          ),
-        );
+      width: w,
+      height: 10,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(5),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -290,7 +520,9 @@ class _EpgTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = dim ? Colors.white.withValues(alpha: 0.35) : HomeTheme.focusGold;
+    final color = dim
+        ? Colors.white.withValues(alpha: 0.35)
+        : HomeTheme.focusGold;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
@@ -339,13 +571,13 @@ class _EpgProgressBar extends StatelessWidget {
 
 // ── Schedule (TV pane + phone sheet) ────────────────────────────────────────
 
-/// TV: the per-channel schedule that swaps into the two-pane layout's right
-/// side (the preview rail keeps playing on the left). DPAD up/down walks the
-/// programmes; BACK — or LEFT, the direction the guide list "went" — closes
-/// it and hands focus back to the row that opened it.
+/// The per-channel schedule that swaps into the two-pane layout's right side
+/// while the preview keeps playing. TV uses DPAD/BACK; large touch tablets get
+/// an explicit back control and tappable replay rows.
 class IptvSchedulePane extends StatelessWidget {
   final IptvChannel channel;
   final VoidCallback onClose;
+  final bool isTelevision;
 
   /// Replay a finished programme from the panel archive (Xtream catchup).
   /// Rows only offer it when [IptvEpgService.isCatchupAvailable] says so.
@@ -355,76 +587,94 @@ class IptvSchedulePane extends StatelessWidget {
     super.key,
     required this.channel,
     required this.onClose,
+    this.isTelevision = true,
     this.onPlayProgramme,
   });
 
   @override
   Widget build(BuildContext context) {
-    return FocusScope(
-      child: Focus(
-        canRequestFocus: false,
-        onKeyEvent: (node, event) {
-          if (event is! KeyDownEvent) return KeyEventResult.ignored;
-          final key = event.logicalKey;
-          if (key == LogicalKeyboardKey.goBack ||
-              key == LogicalKeyboardKey.escape ||
-              key == LogicalKeyboardKey.arrowLeft) {
-            onClose();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 14, 24, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    'TV GUIDE',
-                    style: TextStyle(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.9),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      channel.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) onClose();
+      },
+      child: FocusScope(
+        child: Focus(
+          canRequestFocus: false,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+            final key = event.logicalKey;
+            if (key == LogicalKeyboardKey.goBack ||
+                key == LogicalKeyboardKey.escape ||
+                key == LogicalKeyboardKey.arrowLeft) {
+              onClose();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 14, 24, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (!isTelevision)
+                      IconButton(
+                        key: const ValueKey('iptv-schedule-back'),
+                        tooltip: 'Back to channels',
+                        onPressed: onClose,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    Text(
+                      'TV GUIDE',
+                      style: TextStyle(
+                        color: HomeTheme.focusGold.withValues(alpha: 0.9),
+                        fontSize: 10,
                         fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'BACK to close',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        channel.numberedName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: EpgScheduleList(
-                  channel: channel,
-                  isTelevision: true,
-                  onPlayProgramme: onPlayProgramme,
+                    if (isTelevision) ...[
+                      const SizedBox(width: 10),
+                      Text(
+                        'BACK to close',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Expanded(
+                  child: EpgScheduleList(
+                    channel: channel,
+                    isTelevision: isTelevision,
+                    onPlayProgramme: onPlayProgramme,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -434,11 +684,14 @@ class IptvSchedulePane extends StatelessWidget {
 
 /// Phone/desktop: the same schedule as a modal bottom sheet. A replay tap
 /// closes the sheet before [onPlayProgramme] runs, so the player doesn't
-/// stack on top of it.
+/// stack on top of it. Also the TV fallback when the two-pane layout (and
+/// its in-place schedule pane) isn't active — pass [isTelevision] so the
+/// rows keep their DPAD focus handling there.
 Future<void> showIptvScheduleSheet(
   BuildContext context,
   IptvChannel channel, {
   void Function(EpgProgramme programme)? onPlayProgramme,
+  bool isTelevision = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -469,12 +722,15 @@ Future<void> showIptvScheduleSheet(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
               child: Row(
                 children: [
-                  Icon(Icons.calendar_view_day_rounded,
-                      size: 18, color: HomeTheme.focusGold.withValues(alpha: 0.9)),
+                  Icon(
+                    Icons.calendar_view_day_rounded,
+                    size: 18,
+                    color: HomeTheme.focusGold.withValues(alpha: 0.9),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      channel.name,
+                      channel.numberedName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -490,7 +746,7 @@ Future<void> showIptvScheduleSheet(
             Expanded(
               child: EpgScheduleList(
                 channel: channel,
-                isTelevision: false,
+                isTelevision: isTelevision,
                 onPlayProgramme: onPlayProgramme == null
                     ? null
                     : (programme) {
@@ -561,8 +817,9 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
   }
 
   Future<void> _load() async {
-    final programmes =
-        await IptvEpgService.instance.schedule(widget.channel.url);
+    final programmes = await IptvEpgService.instance.schedule(
+      widget.channel.url,
+    );
     if (!mounted) return;
 
     final now = DateTime.now();
@@ -635,8 +892,11 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.tv_off_rounded,
-                  size: 42, color: Colors.white.withValues(alpha: 0.25)),
+              Icon(
+                Icons.tv_off_rounded,
+                size: 42,
+                color: Colors.white.withValues(alpha: 0.25),
+              ),
               const SizedBox(height: 12),
               Text(
                 'No guide data for this channel',
@@ -686,14 +946,16 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
           }
           final programme = (item as _ProgrammeItem).programme;
           final onPlay = widget.onPlayProgramme;
-          final replayable = onPlay != null &&
+          final replayable =
+              onPlay != null &&
               IptvEpgService.isCatchupAvailable(widget.channel, programme);
           return _ScheduleRow(
             programme: programme,
             isNow: index == _nowIndex,
             isPast: !programme.stop.isAfter(now),
             isTelevision: widget.isTelevision,
-            autofocus: widget.isTelevision &&
+            autofocus:
+                widget.isTelevision &&
                 (index == _nowIndex || (_nowIndex == -1 && index == 1)),
             onPlay: replayable ? () => onPlay(programme) : null,
           );
@@ -748,8 +1010,8 @@ class _ScheduleRowState extends State<_ScheduleRow> {
         color: _focused
             ? const Color(0xFF141824)
             : (widget.isNow
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.transparent),
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.transparent),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: _focused ? HomeTheme.focusGold : Colors.transparent,
@@ -784,8 +1046,9 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: titleAlpha),
                     fontSize: 13.5,
-                    fontWeight:
-                        widget.isNow ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight: widget.isNow
+                        ? FontWeight.w700
+                        : FontWeight.w500,
                   ),
                 ),
                 if (widget.isNow) ...[

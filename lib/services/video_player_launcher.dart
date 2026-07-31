@@ -29,6 +29,7 @@ import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/alldebrid_service.dart';
+import '../utils/episode_progress_merge.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
 import '../services/movie_metadata_service.dart';
@@ -224,6 +225,18 @@ class VideoPlayerLaunchArgs {
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
+
+  /// The source's FULL category list, in provider order. Without it the player
+  /// derived categories from the windowed (~1500) channel list, so the picker
+  /// only ever showed the handful of groups in that window.
+  final List<String>? iptvCategories;
+  final String? iptvSourceId;
+  final String? iptvSourceName;
+  final String? iptvSelectedCategory;
+  final String? iptvContentType;
+  final List<Map<String, dynamic>>? iptvSources;
+  final Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
+  iptvBrowseProvider;
   // Stremio sources for in-player source switching
   final List<Torrent>? stremioSources;
   final int? stremioCurrentSourceIndex;
@@ -304,6 +317,13 @@ class VideoPlayerLaunchArgs {
     this.contentEpisode,
     this.iptvChannels,
     this.iptvStartIndex,
+    this.iptvCategories,
+    this.iptvSourceId,
+    this.iptvSourceName,
+    this.iptvSelectedCategory,
+    this.iptvContentType,
+    this.iptvSources,
+    this.iptvBrowseProvider,
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
@@ -362,6 +382,13 @@ class VideoPlayerLaunchArgs {
       contentTitle: contentTitle,
       iptvChannels: iptvChannels,
       iptvStartIndex: iptvStartIndex,
+      iptvCategories: iptvCategories,
+      iptvSourceId: iptvSourceId,
+      iptvSourceName: iptvSourceName,
+      iptvSelectedCategory: iptvSelectedCategory,
+      iptvContentType: iptvContentType,
+      iptvSources: iptvSources,
+      iptvBrowseProvider: iptvBrowseProvider,
       stremioSources: stremioSources,
       stremioCurrentSourceIndex: stremioCurrentSourceIndex,
       resolveStremioSource: resolveStremioSource,
@@ -498,10 +525,13 @@ class VideoPlayerLauncher {
 
         // Video format (Kotlin Android TV player) — only if no local state, so
         // we never clobber a real resume position.
-        final resumeId =
-            resumeIdForEntry(playlist[i], fallbackTitle: effectiveTitle);
-        final existingState =
-            await StorageService.getVideoPlaybackState(videoTitle: resumeId);
+        final resumeId = resumeIdForEntry(
+          playlist[i],
+          fallbackTitle: effectiveTitle,
+        );
+        final existingState = await StorageService.getVideoPlaybackState(
+          videoTitle: resumeId,
+        );
         if (existingState == null) {
           await StorageService.saveVideoPlaybackState(
             videoTitle: resumeId,
@@ -513,6 +543,47 @@ class VideoPlayerLauncher {
       }
     } catch (e) {
       debugPrint('VideoPlayerLauncher: Trakt watched seed failed: $e');
+    }
+  }
+
+  /// Refresh the player-only Simkl episode snapshot for [imdbId]. Unlike the
+  /// legacy Trakt seed above, this never writes remote completion into local
+  /// finished/resume state: every player surface reads this dedicated snapshot
+  /// and merges it with local + Trakt at display/resume time.
+  static Future<void> _seedSimklEpisodeProgress(String imdbId) async {
+    try {
+      final simkl = SimklService.instance;
+      if (!await simkl.isAuthenticated()) {
+        await StorageService.saveEpisodeSimklProgress(
+          imdbId: imdbId,
+          percents: const {},
+        );
+        return;
+      }
+
+      final results = await Future.wait([
+        simkl.fetchWatchedShowEpisodes(imdbId),
+        simkl.fetchEpisodePlaybackProgress(imdbId),
+      ]);
+      final watchedSet = results[0] as Set<String>;
+      final playbackMap = results[1] as Map<String, double>;
+
+      final percents = buildEpisodeTrackerSnapshot(
+        watched: watchedSet,
+        playback: playbackMap,
+      );
+      await StorageService.saveEpisodeSimklProgress(
+        imdbId: imdbId,
+        percents: percents,
+      );
+    } catch (e) {
+      // A failed refresh should not show a stale remote tick from an older
+      // launch. Local and Trakt state remain available.
+      await StorageService.saveEpisodeSimklProgress(
+        imdbId: imdbId,
+        percents: const {},
+      );
+      debugPrint('VideoPlayerLauncher: Simkl episode seed failed: $e');
     }
   }
 
@@ -623,6 +694,13 @@ class VideoPlayerLauncher {
           contentEpisode: args.contentEpisode,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
+          iptvCategories: args.iptvCategories,
+          iptvSourceId: args.iptvSourceId,
+          iptvSourceName: args.iptvSourceName,
+          iptvSelectedCategory: args.iptvSelectedCategory,
+          iptvContentType: args.iptvContentType,
+          iptvSources: args.iptvSources,
+          iptvBrowseProvider: args.iptvBrowseProvider,
           stremioSources: args.stremioSources,
           stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
           resolveStremioSource: args.resolveStremioSource,
@@ -706,6 +784,13 @@ class VideoPlayerLauncher {
           contentEpisode: args.contentEpisode,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
+          iptvCategories: args.iptvCategories,
+          iptvSourceId: args.iptvSourceId,
+          iptvSourceName: args.iptvSourceName,
+          iptvSelectedCategory: args.iptvSelectedCategory,
+          iptvContentType: args.iptvContentType,
+          iptvSources: args.iptvSources,
+          iptvBrowseProvider: args.iptvBrowseProvider,
           stremioSources: args.stremioSources,
           stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
           resolveStremioSource: args.resolveStremioSource,
@@ -759,20 +844,25 @@ class VideoPlayerLauncher {
       );
     }
 
-    // Seed the local finished-episodes store from Trakt so the in-player
-    // playlist shows Trakt-watched episodes. Runs for every series launch (all
-    // entry points), not just Home's bound-source path. Guarded to non-movie
-    // multi-file playlists — a non-series playlist simply parses no season/
-    // episode and writes nothing, so this also covers series with a null
-    // contentType (matching the old unconditional Home behavior).
+    // Refresh both trackers' per-episode snapshots before either player is
+    // launched. Trakt retains its legacy local-finished seed; Simkl stays in a
+    // dedicated replaceable store so remote "unwatched" changes cannot leave
+    // stale local completion behind.
     if (args.contentType != 'movie' &&
         args.contentImdbId != null &&
         (args.playlist?.length ?? 0) > 1) {
-      await _seedTraktWatchedEpisodes(
-        args.playlist!,
-        args.contentImdbId!,
-        args.contentTitle ?? args.title,
-      );
+      await Future.wait([
+        _seedTraktWatchedEpisodes(
+          args.playlist!,
+          args.contentImdbId!,
+          args.contentTitle ?? args.title,
+        ),
+        _seedSimklEpisodeProgress(args.contentImdbId!),
+      ]);
+    } else if (args.contentType == 'series' && args.contentImdbId != null) {
+      // Single-episode launches may grow into a pack through source switching,
+      // so have the Simkl snapshot ready for that in-session playlist too.
+      await _seedSimklEpisodeProgress(args.contentImdbId!);
     }
 
     AnalyticsService.trackInBackground('playback_started', <String, Object?>{
@@ -856,6 +946,58 @@ class VideoPlayerLauncher {
         onQuickPlayNextEpisode != null) {
       await onQuickPlayNextEpisode(result);
     }
+  }
+
+  /// Whether playback should leave the app entirely, per the user's default
+  /// player setting. Screens that build their own player route ask this before
+  /// spending work on in-app-only setup.
+  static Future<bool> isExternalPlayerDefault() async {
+    final mode = await StorageService.getDefaultPlayerMode();
+    return mode == 'external' || (mode == 'deovr' && Platform.isAndroid);
+  }
+
+  /// Hand a single already-resolved stream to the user's configured external
+  /// player, if — and only if — they set one as their default.
+  ///
+  /// This is the entry point for flows that build their own player route
+  /// instead of going through [push] (Debrify TV, which drives channel
+  /// rotation from its own screen state). Returns false when the default is
+  /// the in-app player, when the platform launch fails, or when the caller
+  /// passes an empty URL — the caller then continues to its own player exactly
+  /// as before, so this is always safe to call first.
+  ///
+  /// Only the URL and title travel to the other app: playlists, resume state
+  /// and "play next" callbacks are meaningless once playback leaves Debrify.
+  static Future<bool> launchExternalIfConfigured(
+    BuildContext context, {
+    required String videoUrl,
+    required String title,
+  }) async {
+    if (videoUrl.isEmpty) return false;
+
+    final mode = await StorageService.getDefaultPlayerMode();
+    final bool wantsDeoVR = mode == 'deovr' && Platform.isAndroid;
+    if (mode != 'external' && !wantsDeoVR) return false;
+    if (!context.mounted) return false;
+
+    final args = VideoPlayerLaunchArgs(videoUrl: videoUrl, title: title);
+
+    // Same pre-launch beat the in-app path uses: drop the auto-launch overlay
+    // before another activity comes to the front.
+    MainPageBridge.notifyPlayerLaunching();
+
+    final launched = wantsDeoVR
+        ? await _launchWithDeoVR(context, args)
+        : await _launchWithExternalPlayer(context, args);
+
+    if (!launched) return false;
+
+    // Control returns to Flutter without a route ever being pushed, so
+    // RouteAware can't tell screens when playback ended — same signal the
+    // launcher's own external path arms. See [push].
+    _notifyOnReturnFromExternalActivity();
+    MainPageBridge.notifyExternalPlayerLaunched();
+    return true;
   }
 
   /// Launch video with external player based on platform
@@ -1667,6 +1809,23 @@ class VideoPlayerLauncher {
             }
           }
 
+          final sourceTrackerMaps = args.contentImdbId != null
+              ? await Future.wait([
+                  StorageService.getEpisodeTraktProgress(
+                    imdbId: args.contentImdbId!,
+                  ),
+                  StorageService.getEpisodeSimklProgress(
+                    imdbId: args.contentImdbId!,
+                  ),
+                ])
+              : const <Map<String, double>>[];
+          final sourceTraktProgress = sourceTrackerMaps.isNotEmpty
+              ? sourceTrackerMaps[0]
+              : const <String, double>{};
+          final sourceSimklProgress = sourceTrackerMaps.length > 1
+              ? sourceTrackerMaps[1]
+              : const <String, double>{};
+
           // Convert PlaylistEntry list to Android TV PlaybackItem maps
           final items = <Map<String, dynamic>>[];
           for (int i = 0; i < playlistEntries.length; i++) {
@@ -1674,6 +1833,17 @@ class VideoPlayerLauncher {
             // Match by originalIndex to handle reordering
             final episode = episodeByIndex[i];
             final epInfo = episode?.episodeInfo;
+            final season = episode?.seriesInfo.season;
+            final episodeNumber = episode?.seriesInfo.episode;
+            final episodeKey = season != null && episodeNumber != null
+                ? '${season}_$episodeNumber'
+                : null;
+            final trackerPercent = episodeKey != null
+                ? furthestEpisodeTrackerPercent([
+                    sourceTraktProgress[episodeKey],
+                    sourceSimklProgress[episodeKey],
+                  ])
+                : null;
             items.add({
               'id': '${entry.title}_$i',
               // Mirror the resolver's own resumeId keying ('${title}_$i') so
@@ -1685,10 +1855,8 @@ class VideoPlayerLauncher {
               if (entry.hdVideoUrl != null) 'hdVideoUrl': entry.hdVideoUrl,
               if (entry.audioUrl != null) 'audioUrl': entry.audioUrl,
               'index': i,
-              if (episode?.seriesInfo.season != null)
-                'season': episode!.seriesInfo.season,
-              if (episode?.seriesInfo.episode != null)
-                'episode': episode!.seriesInfo.episode,
+              if (season != null) 'season': season,
+              if (episodeNumber != null) 'episode': episodeNumber,
               if (epInfo?.poster != null) 'artwork': epInfo!.poster,
               if (epInfo?.plot != null) 'description': epInfo!.plot,
               if (epInfo?.rating != null) 'rating': epInfo!.rating,
@@ -1697,6 +1865,8 @@ class VideoPlayerLauncher {
               'durationMs': 0,
               'updatedAt': 0,
               if (entry.provider != null) 'provider': entry.provider,
+              if (trackerPercent != null)
+                'traktProgressPercent': trackerPercent,
             });
           }
           debugPrint(
@@ -1731,32 +1901,41 @@ class VideoPlayerLauncher {
       // list back. Returning null (search failed) keeps the native button up
       // for a retry.
       final seriesFetcher = args.seriesSourceFetcher;
-      Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
-          moreSourcesProviderForTv;
+      Future<Map<String, dynamic>?> Function(
+        String, {
+        int? season,
+        int? episode,
+      })?
+      moreSourcesProviderForTv;
       if (seriesFetcher != null && currentStremioSources.isNotEmpty) {
-        moreSourcesProviderForTv = (String mode, {int? season, int? episode}) async {
-          // season/episode = what the native player is CURRENTLY on (a pack
-          // playlist auto-advances without relaunching); the fetcher falls
-          // back to the launch episode when absent.
-          final fetched =
-              await seriesFetcher.fetch(mode, season: season, episode: episode);
-          if (fetched == null) return null;
-          currentStremioSources = SeriesSourceFetcher.mergeSources(
-            currentStremioSources,
-            fetched,
-          );
-          debugPrint(
-            'VideoPlayerLauncher: load-more "$mode" → ${fetched.length} fetched, '
-            '${currentStremioSources.length} total sources',
-          );
-          return {
-            'stremioSources':
-                currentStremioSources.map((t) => t.toJson()).toList(),
-            'packsFetched': seriesFetcher.packsFetched,
-            'episodesFetched': seriesFetcher.episodesFetched,
-            'movieFetched': seriesFetcher.movieFetched,
-          };
-        };
+        moreSourcesProviderForTv =
+            (String mode, {int? season, int? episode}) async {
+              // season/episode = what the native player is CURRENTLY on (a pack
+              // playlist auto-advances without relaunching); the fetcher falls
+              // back to the launch episode when absent.
+              final fetched = await seriesFetcher.fetch(
+                mode,
+                season: season,
+                episode: episode,
+              );
+              if (fetched == null) return null;
+              currentStremioSources = SeriesSourceFetcher.mergeSources(
+                currentStremioSources,
+                fetched,
+              );
+              debugPrint(
+                'VideoPlayerLauncher: load-more "$mode" → ${fetched.length} fetched, '
+                '${currentStremioSources.length} total sources',
+              );
+              return {
+                'stremioSources': currentStremioSources
+                    .map((t) => t.toJson())
+                    .toList(),
+                'packsFetched': seriesFetcher.packsFetched,
+                'episodesFetched': seriesFetcher.episodesFetched,
+                'movieFetched': seriesFetcher.movieFetched,
+              };
+            };
       }
 
       // Build Stremio TV channel switch wrapper that updates mutable sources holder
@@ -1938,14 +2117,20 @@ class VideoPlayerLauncher {
       final channels = args.iptvChannels!;
       final startIndex = args.iptvStartIndex ?? 0;
 
-      // Build unique categories from channel groups
-      final categorySet = <String>{};
-      for (final c in channels) {
-        if (c.group != null && c.group!.isNotEmpty) {
-          categorySet.add(c.group!);
+      // The source's FULL category list (provider order). Only fall back to
+      // deriving from the windowed channels when the caller didn't supply it —
+      // deriving only ever saw the ~1500-channel window, so the picker showed a
+      // truncated set of categories.
+      var categories = args.iptvCategories ?? const <String>[];
+      if (categories.isEmpty) {
+        final categorySet = <String>{};
+        for (final c in channels) {
+          if (c.group != null && c.group!.isNotEmpty) {
+            categorySet.add(c.group!);
+          }
         }
+        categories = categorySet.toList()..sort();
       }
-      final categories = categorySet.toList()..sort();
 
       // Saved positions for the on-demand items in this payload, so a movie
       // picks up where it was left off — and so does one the user zaps to
@@ -1956,6 +2141,7 @@ class VideoPlayerLauncher {
         for (final c in channels)
           if (!c.isLive) c.url,
       ]);
+      final favoriteUrls = await StorageService.getIptvFavoriteChannelUrls();
 
       // Per-series audio memory: Xtream series episodes carry a series identity
       // (series_id + series_playlist_id) in their attributes. The native player
@@ -1973,9 +2159,21 @@ class VideoPlayerLauncher {
         }
       }
       if (seriesAudioKey != null) {
-        preferredAudioLang =
-            await StorageService.getIptvSeriesAudioLanguage(seriesAudioKey);
+        preferredAudioLang = await StorageService.getIptvSeriesAudioLanguage(
+          seriesAudioKey,
+        );
       }
+
+      final activeChannel = channels.isEmpty
+          ? null
+          : channels[startIndex.clamp(0, channels.length - 1)];
+      final inferredContentType = activeChannel == null
+          ? 'live'
+          : activeChannel.attributes['series_id']?.isNotEmpty == true
+          ? 'episodes'
+          : activeChannel.isLive
+          ? 'live'
+          : 'vod';
 
       final payload = <String, dynamic>{
         'mode': 'iptv',
@@ -1983,17 +2181,39 @@ class VideoPlayerLauncher {
         'title': args.title,
         'subtitle': args.subtitle ?? 'IPTV',
         'startIndex': startIndex,
+        if (args.iptvSourceId != null) 'sourceId': args.iptvSourceId,
+        if (args.iptvSourceName != null) 'sourceName': args.iptvSourceName,
+        if (args.iptvSelectedCategory != null)
+          'selectedCategory': args.iptvSelectedCategory,
+        'contentType': args.iptvContentType ?? inferredContentType,
+        if (args.iptvSources != null) 'sources': args.iptvSources,
         'channels': [
           for (final c in channels)
             {
               ...c.toJson(),
+              if (c.attributes['source_playlist_id']?.isNotEmpty == true)
+                'sourceId': c.attributes['source_playlist_id']
+              else if (c.attributes['series_playlist_id']?.isNotEmpty == true)
+                'sourceId': c.attributes['series_playlist_id'],
+              if (c.attributes['series_id']?.isNotEmpty == true)
+                'seriesId': c.attributes['series_id'],
+              if (c.attributes['series_name']?.isNotEmpty == true)
+                'seriesName': c.attributes['series_name'],
+              if (int.tryParse(c.attributes['season'] ?? '') != null)
+                'season': int.parse(c.attributes['season']!),
+              if (int.tryParse(c.attributes['episode'] ?? '') != null)
+                'episode': int.parse(c.attributes['episode']!),
+              if (c.attributes['has_next_episode'] != null)
+                'hasNextEpisode': c.attributes['has_next_episode'] == 'true',
+              'isFavorite': favoriteUrls.contains(c.url),
               if ((resumePositions[c.url] ?? 0) > 0)
                 'resumePositionMs': resumePositions[c.url],
             },
         ],
         'categories': categories,
         if (seriesAudioKey != null) 'seriesAudioKey': seriesAudioKey,
-        if (preferredAudioLang != null) 'preferredAudioLang': preferredAudioLang,
+        if (preferredAudioLang != null)
+          'preferredAudioLang': preferredAudioLang,
       };
 
       // Hide auto-launch overlay before launching player
@@ -2005,6 +2225,7 @@ class VideoPlayerLauncher {
         onFinished: () async {
           debugPrint('VideoPlayerLauncher: IPTV Android TV playback finished');
         },
+        onRequestIptvBrowse: args.iptvBrowseProvider,
       );
 
       return launched;
@@ -2884,8 +3105,7 @@ class VideoPlayerLauncher {
 
     // Premiumize cloud-browser lazy resolution: re-fetch a fresh direct link by
     // cloud item id (items saved from the cloud browser have no infohash).
-    if (entry.premiumizeItemId != null &&
-        entry.premiumizeItemId!.isNotEmpty) {
+    if (entry.premiumizeItemId != null && entry.premiumizeItemId!.isNotEmpty) {
       final apiKey = await StorageService.getPremiumizeApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing Premiumize API key');
@@ -3093,9 +3313,9 @@ class _AndroidTvPlaybackItem {
   final int updatedAt;
   final String? resumeId;
   final String? provider;
-  // Trakt cross-device progress for this episode (0-100), or null. Display-only
-  // fallback for the playlist bar + a resume source when there's no local
-  // position; the player converts it to ms once it knows the real duration.
+  // Cross-device progress for this episode (0-100), or null. The legacy field
+  // name is retained for the Kotlin payload, but the value is the furthest of
+  // Trakt and Simkl.
   final double? traktProgressPercent;
 
   const _AndroidTvPlaybackItem({
@@ -3351,14 +3571,21 @@ class _AndroidTvPlaybackPayloadBuilder {
     final seriesPlaylist = await _buildSeriesPlaylist(playlistEntries);
     final contentType = _determineContentType(seriesPlaylist, playlistEntries);
     final perItemStates = await _fetchPerItemPlaybackState(playlistEntries);
-    // Trakt cross-device per-episode progress ("season_episode" → 0-100), for
-    // the playlist bars + resuming any episode from Trakt (see the Kotlin
-    // player). Display-only fallback — local resume still wins. Keyed by the
-    // show's IMDb id (same id the seed wrote under).
-    final traktProgress = args.contentImdbId != null
-        ? await StorageService.getEpisodeTraktProgress(
-            imdbId: args.contentImdbId!,
-          )
+    // Cross-device per-episode progress ("season_episode" → 0-100) for playlist
+    // bars and in-session episode resume. The native payload retains its legacy
+    // `traktProgressPercent` field name, but each value is the furthest of Trakt
+    // and Simkl.
+    final trackerProgressMaps = args.contentImdbId != null
+        ? await Future.wait([
+            StorageService.getEpisodeTraktProgress(imdbId: args.contentImdbId!),
+            StorageService.getEpisodeSimklProgress(imdbId: args.contentImdbId!),
+          ])
+        : const <Map<String, double>>[];
+    final traktProgress = trackerProgressMaps.isNotEmpty
+        ? trackerProgressMaps[0]
+        : const <String, double>{};
+    final simklProgress = trackerProgressMaps.length > 1
+        ? trackerProgressMaps[1]
         : const <String, double>{};
     final startIndex = await _determineStartIndex(
       contentType,
@@ -3442,10 +3669,13 @@ class _AndroidTvPlaybackPayloadBuilder {
           updatedAt: resumeInfo.updatedAt,
           resumeId: resumeId,
           provider: entry.provider,
-          traktProgressPercent: (episodeInfo.seriesInfo.season != null &&
+          traktProgressPercent:
+              (episodeInfo.seriesInfo.season != null &&
                   episodeInfo.seriesInfo.episode != null)
-              ? traktProgress[
-                  '${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}']
+              ? furthestEpisodeTrackerPercent([
+                  traktProgress['${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}'],
+                  simklProgress['${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}'],
+                ])
               : null,
         ),
       );

@@ -49,9 +49,9 @@ Future<void> openXtreamSeries(
     return infoFuture ??= XtreamCodesService.instance
         .fetchSeriesInfo(serverUrl, username, password, seriesId)
         .then((result) {
-      if (result == null || result.episodes.isEmpty) infoFuture = null;
-      return result;
-    });
+          if (result == null || result.episodes.isEmpty) infoFuture = null;
+          return result;
+        });
   }
 
   // Shared per-refresh progress read: `'<S>-<E>'` → percent (0-100), with
@@ -76,9 +76,9 @@ Future<void> openXtreamSeries(
     return progressFuture = () async {
       final eps = (await info())?.episodes ?? const <XtreamSeriesEpisode>[];
       if (eps.isEmpty) return <String, double>{};
-      final byUrl = await StorageService.getIptvProgressForUrls(
-        [for (final e in eps) e.url],
-      );
+      final byUrl = await StorageService.getIptvProgressForUrls([
+        for (final e in eps) e.url,
+      ]);
       final map = <String, double>{};
       for (final e in eps) {
         final fraction = byUrl[e.url];
@@ -107,8 +107,7 @@ Future<void> openXtreamSeries(
     final percentByKey = await progress();
     int lastStarted = -1;
     for (var i = 0; i < ordered.length; i++) {
-      final p =
-          percentByKey['${ordered[i].season}-${ordered[i].episode}'] ?? 0;
+      final p = percentByKey['${ordered[i].season}-${ordered[i].episode}'] ?? 0;
       if (p > 0) lastStarted = i;
     }
     if (lastStarted < 0) return (started: false, target: ordered.first);
@@ -136,54 +135,52 @@ Future<void> openXtreamSeries(
   }
 
   Future<void> playEpisode(TraktEpisode episode) => guardedLaunch(() async {
-        final eps = (await info())?.episodes ?? const <XtreamSeriesEpisode>[];
-        XtreamSeriesEpisode? target;
-        // The tapped tile's own URL is authoritative: panels routinely list
-        // one episode number twice in a season (multi-part, SD+4K), and an
-        // S-E lookup would always land on the first of the pair.
-        final url = episode.playbackUrl;
-        if (url != null && url.isNotEmpty) {
-          for (final e in eps) {
-            if (e.url == url) {
-              target = e;
-              break;
-            }
-          }
+    final eps = (await info())?.episodes ?? const <XtreamSeriesEpisode>[];
+    XtreamSeriesEpisode? target;
+    // The tapped tile's own URL is authoritative: panels routinely list
+    // one episode number twice in a season (multi-part, SD+4K), and an
+    // S-E lookup would always land on the first of the pair.
+    final url = episode.playbackUrl;
+    if (url != null && url.isNotEmpty) {
+      for (final e in eps) {
+        if (e.url == url) {
+          target = e;
+          break;
         }
-        // S-E fallback for a URL that vanished from a refreshed episode list
-        // (panels renumber episode ids).
-        if (target == null) {
-          for (final e in eps) {
-            if (e.season == episode.season && e.episode == episode.number) {
-              target = e;
-              break;
-            }
-          }
+      }
+    }
+    // S-E fallback for a URL that vanished from a refreshed episode list
+    // (panels renumber episode ids).
+    if (target == null) {
+      for (final e in eps) {
+        if (e.season == episode.season && e.episode == episode.number) {
+          target = e;
+          break;
         }
-        if (target == null || !context.mounted) return;
-        await _launchEpisode(context, playlist, series, eps, target);
-      });
+      }
+    }
+    if (target == null || !context.mounted) return;
+    await _launchEpisode(context, playlist, series, eps, target);
+  });
 
   Future<void> resumeAndPlay() => guardedLaunch(() async {
-        final state = await resumeState();
-        final target = state.target;
-        if (!context.mounted) return;
-        if (target == null) {
-          // The page's primary CTA must never fail silently — on the phone
-          // stacked layout the episode pane's retry state can be off-screen.
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "Couldn't load episodes from the provider — try again",
-              ),
-            ),
-          );
-          return;
-        }
-        final eps = (await info())?.episodes ?? const <XtreamSeriesEpisode>[];
-        if (!context.mounted) return;
-        await _launchEpisode(context, playlist, series, eps, target);
-      });
+    final state = await resumeState();
+    final target = state.target;
+    if (!context.mounted) return;
+    if (target == null) {
+      // The page's primary CTA must never fail silently — on the phone
+      // stacked layout the episode pane's retry state can be off-screen.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't load episodes from the provider — try again"),
+        ),
+      );
+      return;
+    }
+    final eps = (await info())?.episodes ?? const <XtreamSeriesEpisode>[];
+    if (!context.mounted) return;
+    await _launchEpisode(context, playlist, series, eps, target);
+  });
 
   final releaseDate = series.attributes['releaseDate'];
   final rating = double.tryParse(series.attributes['rating'] ?? '');
@@ -229,7 +226,9 @@ Future<void> openXtreamSeries(
     if (eps.isEmpty) throw Exception('Series info unavailable');
     final bySeason = <int, List<TraktEpisode>>{};
     for (final e in eps) {
-      bySeason.putIfAbsent(e.season, () => []).add(
+      bySeason
+          .putIfAbsent(e.season, () => [])
+          .add(
             TraktEpisode(
               season: e.season,
               number: e.episode,
@@ -250,8 +249,7 @@ Future<void> openXtreamSeries(
         TraktSeason(
           number: entry.key,
           episodeCount: entry.value.length,
-          episodes: entry.value
-            ..sort((a, b) => a.number.compareTo(b.number)),
+          episodes: entry.value..sort((a, b) => a.number.compareTo(b.number)),
         ),
     ]..sort(seasonsSpecialsLast);
   }
@@ -322,25 +320,33 @@ Future<void> _launchEpisode(
   // landing order), NOT just the target's season — so Next / auto-advance
   // cross season boundaries (S1 finale → S2E1) instead of dead-ending.
   final ordered = [...all]..sort(_episodesSpecialsLast);
-  final channels = [
-    for (final e in ordered)
-      IptvChannel(
-        name: _episodeDisplayName(series.name, e),
-        url: e.url,
-        logoUrl: (e.thumbnailUrl?.isNotEmpty ?? false)
-            ? e.thumbnailUrl
-            : series.logoUrl,
-        group: series.name,
-        contentType: 'vod',
-        // Series identity so the player can key per-series audio memory the
-        // same way Continue Watching does (<playlistId>::<seriesId>), instead
-        // of the collision-prone display name.
-        attributes: {
-          if (seriesId.isNotEmpty) 'series_id': seriesId,
-          'series_playlist_id': playlist.id,
-        },
-      ),
-  ];
+  final channels = ordered.asMap().entries.map((entry) {
+    final index = entry.key;
+    final e = entry.value;
+    return IptvChannel(
+      name: _episodeDisplayName(series.name, e),
+      url: e.url,
+      logoUrl: (e.thumbnailUrl?.isNotEmpty ?? false)
+          ? e.thumbnailUrl
+          : series.logoUrl,
+      group: series.name,
+      contentType: 'vod',
+      // Series identity so the player can key per-series audio memory the
+      // same way Continue Watching does (<playlistId>::<seriesId>), instead
+      // of the collision-prone display name.
+      attributes: {
+        if (seriesId.isNotEmpty) 'series_id': seriesId,
+        'series_playlist_id': playlist.id,
+        'series_name': series.name,
+        'season': e.season.toString(),
+        'episode': e.episode.toString(),
+        'has_next_episode': ordered
+            .skip(index + 1)
+            .any((episode) => episode.season != 0)
+            .toString(),
+      },
+    );
+  }).toList();
   var index = ordered.indexWhere((e) => e.url == target.url);
   if (index < 0) index = 0;
 
@@ -379,7 +385,8 @@ Future<void> _launchEpisode(
 }
 
 String _episodeDisplayName(String seriesName, XtreamSeriesEpisode e) {
-  final code = 'S${e.season.toString().padLeft(2, '0')}'
+  final code =
+      'S${e.season.toString().padLeft(2, '0')}'
       'E${e.episode.toString().padLeft(2, '0')}';
   final title = e.title.trim();
   if (title.isEmpty) return '$seriesName · $code';

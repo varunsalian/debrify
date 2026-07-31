@@ -95,6 +95,9 @@ class IptvPlaylist {
 
 /// Represents an IPTV channel from an M3U playlist
 class IptvChannel {
+  /// Stable, provider-scoped number for live television. Null for VOD,
+  /// series, and sources that have not been numbered yet.
+  final int? channelNumber;
   final String name;
   final String url;
   final String? logoUrl;
@@ -110,6 +113,7 @@ class IptvChannel {
   final Map<String, String> httpHeaders;
 
   IptvChannel({
+    this.channelNumber,
     required this.name,
     required this.url,
     this.logoUrl,
@@ -151,7 +155,13 @@ class IptvChannel {
   /// Get tvg-name attribute if present
   String? get tvgName => attributes['tvg-name'];
 
+  /// UI label that keeps the provider's name intact for matching/search while
+  /// consistently exposing the assigned number anywhere a channel is named.
+  String get numberedName =>
+      channelNumber == null ? name : 'CH $channelNumber  $name';
+
   Map<String, dynamic> toJson() => {
+    if (channelNumber != null) 'channelNumber': channelNumber,
     'name': name,
     'url': url,
     if (logoUrl != null) 'logoUrl': logoUrl,
@@ -180,14 +190,39 @@ class IptvParseResult {
   /// over this.
   final String? epgUrl;
 
+  /// Set when the parse worker wrote this catalog straight into the catalog
+  /// DB instead of returning the channel list — [channels] is then empty by
+  /// design and consumers read via `IptvCatalogDb.snapshot(ingest.catalogKey)`.
+  final CatalogIngestReceipt? ingest;
+
   const IptvParseResult({
     required this.channels,
     required this.categories,
     this.error,
     this.warning,
     this.epgUrl,
+    this.ingest,
   });
 
   bool get hasError => error != null;
-  bool get isEmpty => channels.isEmpty;
+
+  /// "Nothing came back" — an ingested catalog with rows in the DB is not
+  /// empty even though [channels] is.
+  bool get isEmpty =>
+      channels.isEmpty && (ingest == null || ingest!.channelCount == 0);
+}
+
+/// Proof that a parse worker ingested a catalog into `iptv_catalog.db`:
+/// where it lives, how many rows, and the content digest (used by the
+/// revalidate path to decide "Up to date" vs a real refresh).
+class CatalogIngestReceipt {
+  final String catalogKey;
+  final int channelCount;
+  final String contentDigest;
+
+  const CatalogIngestReceipt({
+    required this.catalogKey,
+    required this.channelCount,
+    required this.contentDigest,
+  });
 }

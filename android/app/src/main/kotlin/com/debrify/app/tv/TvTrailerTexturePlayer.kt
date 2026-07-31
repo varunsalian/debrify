@@ -17,6 +17,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
@@ -69,11 +70,21 @@ class TvTrailerTexturePlayer(
 
     private val channel = MethodChannel(messenger, CHANNEL)
     private val main = Handler(Looper.getMainLooper())
-    private val players = HashMap<Long, Handle>()
+
+    /** Insertion-ordered so "the eldest underlay" is a well-defined victim for
+     *  the concurrency cap in [create]. */
+    private val players = LinkedHashMap<Long, Handle>()
 
     /** Underlay players have no texture entry to mint ids from — hand out
      *  negatives so they can never collide with texture ids. */
     private var nextUnderlayId = -1L
+
+    /** Set once [releaseAll] has run: the engine this channel targets is (or is
+     *  about to be) detached, and invokeMethod on it throws RuntimeException
+     *  from FlutterJNI — from a posted runnable that would be an UNCAUGHT
+     *  main-thread throw, i.e. process death. Checked in [emit]. */
+    @Volatile
+    private var detached = false
 
     init {
         channel.setMethodCallHandler(this)
@@ -149,9 +160,44 @@ class TvTrailerTexturePlayer(
         val underlay = call.argument<Boolean>("underlay") ?: false
 
         try {
-            val player = ExoPlayer.Builder(context).build()
+            // Previews/trailers never need broadcast-grade buffering: the stock
+            // DefaultLoadControl holds ~50s of media, which for a live HD IPTV
+            // channel is tens of MB of native allocator PER instance — a real
+            // OOM contributor on 1-2GB TV boxes. A few seconds is plenty for an
+            // ambient loop, and prioritizing time over size keeps the cap
+            // honest for high-bitrate streams.
+            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    /* minBufferMs = */ 4_000,
+                    /* maxBufferMs = */ 8_000,
+                    /* bufferForPlaybackMs = */ 1_000,
+                    /* bufferForPlaybackAfterRebufferMs = */ 2_000,
+                )
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
+            val player = ExoPlayer.Builder(context)
+                .setLoadControl(loadControl)
+                .build()
             val handle: Handle
             if (underlay) {
+                // Cap concurrent underlay players at 2: one active + one
+                // draining. The Dart side deliberately overlaps old and new for
+                // one frame on a retune (so the frame that drops the old
+                // surface renders first — hard one-at-a-time would black-flash
+                // every zap), but nothing legitimate needs a third. Without
+                // this cap a rapid channel-surf / dead-candidate ladder can
+                // stack live decoders until a single-instance-decoder SoC
+                // aborts natively. Victim = eldest; release immediately (not
+                // deferred) so its codec + buffers are actually gone before
+                // the new one allocates.
+                while (players.values.count { it.surfaceView != null } >= 2) {
+                    val eldest = players.values.first { it.surfaceView != null }
+                    android.util.Log.d(
+                        "TvTrailer",
+                        "underlay cap: evicting player ${eldest.id} for new create"
+                    )
+                    dispose(eldest.id, deferHeavy = false)
+                }
                 val container = underlayHost()
                 if (container == null) {
                     player.release()
@@ -280,6 +326,13 @@ class TvTrailerTexturePlayer(
                 private var hlsRetried = false
 
                 override fun onPlayerError(error: PlaybackException) {
+                    // A late error from a player that dispose() already removed
+                    // must not re-prepare it: its SurfaceView is detached and
+                    // its release is queued — restarting decode there is a
+                    // use-after-teardown. (dispose removes from [players]
+                    // synchronously, so membership is the authoritative
+                    // "still alive" check.)
+                    if (players[id] == null) return
                     if (!hlsRetried && audioUrl.isNullOrEmpty() &&
                         isUnrecognizedInputFormat(error)
                     ) {
@@ -357,16 +410,43 @@ class TvTrailerTexturePlayer(
     }
 
     private fun emit(event: String, id: Long, extra: Map<String, Any?> = emptyMap()) {
-        main.post {
-            val payload = HashMap<String, Any?>(extra.size + 1)
-            payload["id"] = id
-            payload.putAll(extra)
+        // Deliver inline when already on the main looper (every ExoPlayer
+        // listener callback is) — posting only widened the window in which the
+        // engine could detach between queueing and delivery.
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            deliver(event, id, extra)
+        } else {
+            main.post { deliver(event, id, extra) }
+        }
+    }
+
+    private fun deliver(event: String, id: Long, extra: Map<String, Any?>) {
+        // invokeMethod on a detached engine throws RuntimeException from
+        // FlutterJNI; outside a MethodCallHandler nothing catches it, so it
+        // would kill the process. An event with no listener is meaningless —
+        // drop it.
+        if (detached) return
+        val payload = HashMap<String, Any?>(extra.size + 1)
+        payload["id"] = id
+        payload.putAll(extra)
+        try {
             channel.invokeMethod(event, payload)
+        } catch (e: RuntimeException) {
+            android.util.Log.w("TvTrailer", "dropping '$event' after engine detach", e)
         }
     }
 
     private fun dispose(id: Long?, deferHeavy: Boolean = true) {
         val handle = players.remove(id ?: return) ?: return
+        // Detach the player from its render target BEFORE the view/surface is
+        // torn down: on OEM builds where SurfaceView destroys its surface
+        // synchronously in onDetachedFromWindow, a still-alive ExoPlayer
+        // otherwise holds a dead ANativeWindow until the deferred release —
+        // classic use-after-destroy geometry.
+        try {
+            handle.player.clearVideoSurface()
+        } catch (_: Exception) {
+        }
         // Underlay: drop the view (and its punched-through window region) NOW —
         // a view op that must run on the platform thread and should land in
         // the same frame as the teardown.
@@ -397,8 +477,12 @@ class TvTrailerTexturePlayer(
         if (deferHeavy) main.post(releaseHeavy) else releaseHeavy.run()
     }
 
-    /** Tear down every player and detach the channel (call from Activity destroy). */
+    /** Tear down every player and detach the channel (call from Activity
+     *  destroy AND from cleanUpFlutterEngine — any path where the engine
+     *  detaches without onDestroy must stop emits, or a late player event
+     *  throws into a dead messenger; see [deliver]). Idempotent. */
     fun releaseAll() {
+        detached = true
         players.keys.toList().forEach { dispose(it, deferHeavy = false) }
         channel.setMethodCallHandler(null)
     }

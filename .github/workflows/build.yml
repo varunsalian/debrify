@@ -229,6 +229,41 @@ jobs:
     - name: Build iOS (unsigned)
       run: flutter build ios --release --no-codesign
 
+    # --no-codesign emits Mach-Os with no LC_CODE_SIGNATURE, so __LINKEDIT has no
+    # room reserved for a signature. Sideloaders (AltStore/ldid, Sideloadly) abort
+    # with "ldid.cpp: _assert(): end >= size - 0x10". Ad-hoc signing reserves that
+    # space; the sideloader replaces the signature with the user's own cert.
+    - name: Ad-hoc sign for sideloading
+      run: |
+        set -euo pipefail
+        APP=build/ios/iphoneos/Runner.app
+        for d in "$APP"/Frameworks/*.dylib; do
+          [ -f "$d" ] && codesign -f -s - --timestamp=none "$d"
+        done
+        for f in "$APP"/Frameworks/*.framework; do
+          [ -d "$f" ] && codesign -f -s - --timestamp=none "$f"
+        done
+        codesign -f -s - --timestamp=none "$APP"
+
+        # Fail loudly rather than shipping an uninstallable IPA.
+        missing=0
+        check() {
+          if [ -f "$1" ] && [ "$(otool -l "$1" | grep -c LC_CODE_SIGNATURE)" -eq 0 ]; then
+            echo "::error::no LC_CODE_SIGNATURE in $1"
+            missing=$((missing + 1))
+          fi
+        }
+        check "$APP/Runner"
+        for d in "$APP"/Frameworks/*.dylib; do check "$d"; done
+        for f in "$APP"/Frameworks/*.framework; do
+          check "$f/$(basename "$f" .framework)"
+        done
+        if [ "$missing" -ne 0 ]; then
+          echo "::error::$missing binary(ies) left unsigned; IPA would not sideload"
+          exit 1
+        fi
+        echo "all binaries carry LC_CODE_SIGNATURE"
+
     - name: Create unsigned IPA (release)
       if: github.event_name == 'release'
       run: |

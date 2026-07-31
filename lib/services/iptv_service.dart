@@ -1,9 +1,13 @@
-import 'dart:typed_data' show BytesBuilder;
+import 'dart:isolate' show TransferableTypedData;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
 import '../utils/m3u_parser.dart';
+import 'iptv_catalog_key.dart';
+import 'iptv_catalog_db.dart';
+import 'iptv_load_phase.dart';
 
 /// Service for fetching and managing IPTV M3U playlists
 class IptvService {
@@ -31,9 +35,20 @@ class IptvService {
   static const _fetchDeadline = Duration(minutes: 2);
 
   /// Fetch and parse an M3U playlist from URL
-  Future<IptvParseResult> fetchPlaylist(String url, {bool forceRefresh = false}) async {
+  Future<IptvParseResult> fetchPlaylist(
+    String url, {
+    bool forceRefresh = false,
+    String? numberingSourceKey,
+    IptvLoadPhase? onPhase,
+  }) async {
+    // With the catalog database open, the parse worker ingests straight
+    // into it and this service's in-memory cache is bypassed — freshness
+    // policy moves to the caller (snapshot.ingestedAt).
+    final ingestToDb =
+        IptvCatalogDb.isOpen;
+
     // Check cache
-    if (!forceRefresh && _cache.containsKey(url)) {
+    if (!ingestToDb && !forceRefresh && _cache.containsKey(url)) {
       final cached = _cache[url]!;
       if (DateTime.now().difference(cached.fetchedAt) < _cacheDuration) {
         debugPrint('IptvService: Using cached playlist for $url');
@@ -43,6 +58,7 @@ class IptvService {
 
     debugPrint('IptvService: Fetching playlist from $url');
 
+    onPhase?.call(IptvLoadPhases.contacting);
     final client = http.Client();
     try {
       final request = http.Request('GET', Uri.parse(url));
@@ -74,9 +90,21 @@ class IptvService {
       // aborts early instead of buffering the whole payload.
       final startedAt = DateTime.now();
       final builder = BytesBuilder(copy: false);
+      onPhase?.call(
+        IptvLoadPhases.downloading,
+        bytes: 0,
+        totalBytes: declaredLength,
+      );
       await for (final chunk
           in streamed.stream.timeout(const Duration(seconds: 60))) {
         builder.add(chunk);
+        // Fired per chunk; the page stores it and repaints on its own 1Hz
+        // tick, so this never costs a frame.
+        onPhase?.call(
+          IptvLoadPhases.downloading,
+          bytes: builder.length,
+          totalBytes: declaredLength,
+        );
         if (DateTime.now().difference(startedAt) > _fetchDeadline) {
           return IptvParseResult(
             channels: [],
@@ -95,18 +123,31 @@ class IptvService {
         }
       }
 
-      final content = M3uParser.decodeBytes(builder.takeBytes());
+      final bytes = builder.takeBytes();
+      onPhase?.call(IptvLoadPhases.processing, bytes: bytes.length);
 
-      final result = await _parse(content);
-
-      // Cache the result
-      _cache[url] = _CachedPlaylist(
-        result: result,
-        fetchedAt: DateTime.now(),
+      final result = await _parseBytes(
+        bytes,
+        ingestCatalogKey: ingestToDb ? IptvCatalogKey.forUrl(url) : null,
+        numberingSourceKey: numberingSourceKey,
       );
-      _evictCache();
 
-      debugPrint('IptvService: Parsed ${result.channels.length} channels, ${result.categories.length} categories');
+      // An ingested result IS the cache — the rows are on disk and nothing
+      // big should linger on this heap.
+      if (result.ingest == null) {
+        _cache[url] = _CachedPlaylist(
+          result: result,
+          fetchedAt: DateTime.now(),
+        );
+        _evictCache();
+      }
+
+      debugPrint(
+        'IptvService: Parsed '
+        '${result.ingest?.channelCount ?? result.channels.length} channels, '
+        '${result.categories.length} categories'
+        '${result.ingest != null ? ' (ingested to catalog DB)' : ''}',
+      );
 
       return result;
     } catch (e) {
@@ -193,13 +234,133 @@ class IptvService {
     return result;
   }
 
-  /// Parse large playlists off the UI isolate to avoid freezing the app
-  Future<IptvParseResult> _parse(String content) async {
-    return content.length > 100 * 1024
+  /// Parse a downloaded playlist body. Above the inline threshold the raw
+  /// BYTES are handed to the worker as [TransferableTypedData] (moved, not
+  /// copied — the Xtream path's proven pattern) and UTF-8 decoding happens
+  /// THERE. Decoding on this isolate used to build a UTF-16 string up to 2×
+  /// the payload (a multi-second synchronous stall on a 50 MB playlist —
+  /// straight ANR territory) and `compute` then copied that whole string
+  /// again into the worker: ~250 MB peak across both heaps for a payload
+  /// the limit calls acceptable.
+  Future<IptvParseResult> _parseBytes(
+    Uint8List bytes, {
+    String? ingestCatalogKey,
+    String? numberingSourceKey,
+  }) async {
+    if (bytes.length <= _inlineParseBytes) {
+      return _parse(
+        M3uParser.decodeBytes(bytes),
+        ingestCatalogKey: ingestCatalogKey,
+        numberingSourceKey: numberingSourceKey,
+      );
+    }
+    if (ingestCatalogKey != null) {
+      final job = _M3uIngestJob(
+        bytes: TransferableTypedData.fromList([bytes]),
+        dbPath: IptvCatalogDb.path,
+        catalogKey: ingestCatalogKey,
+        numberingSourceKey: numberingSourceKey,
+      );
+      // Only the parse+ingest hop runs behind the process-wide catalog gate
+      // — never the download above it. Holding the gate across a network
+      // fetch (up to the 2-minute deadline) used to block settings
+      // deletions, EPG scans and migrations behind a slow server.
+      // Re-entrant: a caller already inside the gate runs this inline.
+      return IptvCatalogDb.runExclusive(() => compute(_parseAndIngestM3u, job));
+    }
+    // No-DB path (catalog DB unavailable): decode + parse in the worker. The
+    // parsed channels still copy back — unavoidable while this source stays
+    // materialized — but the decoded-string copy no longer does.
+    return compute(_decodeAndParseM3u, TransferableTypedData.fromList([bytes]));
+  }
+
+  /// Bodies at or under this size are parsed inline — isolate spin-up costs
+  /// more than the parse itself down there.
+  static const _inlineParseBytes = 100 * 1024;
+
+  /// Parse already-decoded M3U text off the UI isolate when large. With
+  /// [ingestCatalogKey] set, the worker also writes the catalog into the DB
+  /// and returns a receipt instead of the channel list. String-based entry
+  /// kept for the local-file path ([parseContent]), whose content is already
+  /// a String in storage.
+  Future<IptvParseResult> _parse(
+    String content, {
+    String? ingestCatalogKey,
+    String? numberingSourceKey,
+  }) async {
+    if (ingestCatalogKey != null) {
+      final job = _M3uIngestJob(
+        content: content,
+        dbPath: IptvCatalogDb.path,
+        catalogKey: ingestCatalogKey,
+        numberingSourceKey: numberingSourceKey,
+      );
+      // Gated for the same reason as the bytes path above.
+      return IptvCatalogDb.runExclusive(
+        () async => content.length > _inlineParseBytes
+            ? await compute(_parseAndIngestM3u, job)
+            : _parseAndIngestM3u(job),
+      );
+    }
+    return content.length > _inlineParseBytes
         ? await compute(M3uParser.parse, content)
         : M3uParser.parse(content);
   }
 }
+
+class _M3uIngestJob {
+  /// Exactly one of [bytes] / [content] is set. Bytes travel zero-copy
+  /// (transferable); a String would be deep-copied into the worker.
+  final TransferableTypedData? bytes;
+  final String? content;
+  final String dbPath;
+  final String catalogKey;
+  final String? numberingSourceKey;
+
+  const _M3uIngestJob({
+    this.bytes,
+    this.content,
+    required this.dbPath,
+    required this.catalogKey,
+    required this.numberingSourceKey,
+  });
+}
+
+/// Worker entry: decode (when bytes were transferred), parse AND ingest in
+/// one hop, so neither the decoded text nor the channel objects ever cross
+/// back to the UI isolate. An empty or failed parse is returned as-is and
+/// deliberately NOT ingested — a transient bad fetch must not wipe a
+/// previously good stored catalog.
+IptvParseResult _parseAndIngestM3u(_M3uIngestJob job) {
+  final content =
+      job.content ??
+      M3uParser.decodeBytes(job.bytes!.materialize().asUint8List());
+  final result = M3uParser.parse(content);
+  if (result.hasError || result.channels.isEmpty) return result;
+  final digest = IptvCatalogDb.ingest(
+    dbPath: job.dbPath,
+    catalogKey: job.catalogKey,
+    channels: result.channels,
+    categories: result.categories,
+    epgUrl: result.epgUrl,
+    numberingSourceKey: job.numberingSourceKey,
+  );
+  return IptvParseResult(
+    channels: const [],
+    categories: result.categories,
+    warning: result.warning,
+    epgUrl: result.epgUrl,
+    ingest: CatalogIngestReceipt(
+      catalogKey: job.catalogKey,
+      channelCount: result.channels.length,
+      contentDigest: digest,
+    ),
+  );
+}
+
+/// Worker entry for the no-DB path: decode transferred bytes and parse.
+IptvParseResult _decodeAndParseM3u(TransferableTypedData bytes) =>
+    M3uParser.parse(M3uParser.decodeBytes(bytes.materialize().asUint8List()));
 
 class _CachedPlaylist {
   final IptvParseResult result;
