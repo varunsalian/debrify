@@ -6460,6 +6460,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val token = ++iptvEpgToken
         iptvEpgEntry = entry
         iptvEpgVisible = true
+        // The floating now-playing card occupies the same right-hand space on
+        // compact TV viewports. Keep the schedule column completely exposed.
+        iptvGuideNowPlaying?.visibility = View.GONE
         iptvEpgDayOffset = 0
         iptvEpgPrograms = emptyList()
         iptvEpgPanel?.visibility = View.VISIBLE
@@ -6595,6 +6598,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvEpgVisible = false
         iptvEpgEntry = null
         iptvEpgPanel?.visibility = View.GONE
+        iptvGuideNowPlaying?.visibility =
+            if (iptvGuideVisible && currentIptvIndex in iptvChannels.indices) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
         iptvEpgPrograms = emptyList()
         iptvEpgAdapter?.updatePrograms(emptyList())
     }
@@ -6764,7 +6773,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (currentIptvIndex in iptvChannels.indices) {
             val ch = iptvChannels[currentIptvIndex]
             iptvGuideCurrentName?.text = ch.displayName
-            iptvGuideNowPlaying?.visibility = View.VISIBLE
+            iptvGuideNowPlaying?.visibility =
+                if (iptvEpgVisible) View.GONE else View.VISIBLE
 
             // Group
             if (ch.group != null && ch.group.isNotEmpty()) {

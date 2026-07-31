@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/iptv_guide_overlay"
     android:layout_width="match_parent"
@@ -7,22 +8,30 @@
     android:background="#72000000"
     android:visibility="gone">
 
-    <LinearLayout
-        android:layout_width="wrap_content"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
         android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp"
-        android:gravity="top"
-        android:orientation="horizontal">
+        android:layout_marginBottom="16dp">
 
         <!-- Premium Lean Rail -->
         <LinearLayout
-            android:layout_width="600dp"
-            android:layout_height="match_parent"
+            android:id="@+id/iptv_guide_panel"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
             android:background="@drawable/iptv_premium_panel_bg"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/iptv_epg_panel"
+            app:layout_constraintHorizontal_bias="0"
+            app:layout_constraintHorizontal_chainStyle="packed"
+            app:layout_constraintHorizontal_weight="6"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_max="600dp">
 
             <LinearLayout
                 android:layout_width="68dp"
@@ -324,13 +333,19 @@
         <!-- Contextual EPG column -->
         <LinearLayout
             android:id="@+id/iptv_epg_panel"
-            android:layout_width="500dp"
-            android:layout_height="match_parent"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
             android:layout_marginStart="12dp"
             android:background="@drawable/iptv_premium_panel_bg"
             android:orientation="vertical"
             android:padding="20dp"
-            android:visibility="gone">
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_weight="5"
+            app:layout_constraintStart_toEndOf="@id/iptv_guide_panel"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_max="500dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -510,9 +525,9 @@
                     android:textSize="9sp" />
             </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Compact current-channel identity while the EPG column is open -->
+    <!-- Compact current-channel identity beside the channel browser -->
     <LinearLayout
         android:id="@+id/iptv_guide_now_playing"
         android:layout_width="360dp"
