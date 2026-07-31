@@ -4246,9 +4246,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val overlay = controlsOverlay ?: return
         cancelScheduledHideControlsMenu()
 
-        // The IPTV zap banner sits above everything (added last to the
-        // content view) — clear it rather than let it cover the dock.
-        hideIptvZapBanner()
+        // The channel panel and the dock share the bottom strip, so they merge
+        // into one surface: the panel rides flush on top of the dock for as
+        // long as it is open. Non-live playback has no panel to merge.
+        val liveEntry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
+        if (liveEntry != null) {
+            showIptvZapBanner(liveEntry, docked = true)
+        } else {
+            hideIptvZapBanner()
+        }
 
         // Hide subtitles when controls menu is shown
         subtitleOverlay.visibility = View.GONE
@@ -4312,6 +4318,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hideControlsMenu() {
         val overlay = controlsOverlay ?: return
+
+        // The merged panel leaves with the dock it was riding on. A floating
+        // banner (raised by a zap) is left alone to finish its own timeout.
+        if (iptvZapBannerDocked) hideIptvZapBanner()
 
         overlay.animate().cancel()
 
@@ -7752,12 +7762,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvZapBannerProgress: ProgressBar? = null
     private var iptvZapBannerHintChannel: View? = null
     private var iptvZapBannerHintJump: View? = null
+    private var iptvZapBannerBody: View? = null
+    private var iptvZapBannerRail: View? = null
+
+    /** The banner is riding on top of the controls dock as one merged panel,
+     *  rather than floating over bare video after a zap. Docked, it has no
+     *  auto-hide (it belongs to the dock's lifetime) and drops the key hints,
+     *  whose keys move focus around the dock instead of zapping. */
+    private var iptvZapBannerDocked = false
+    private var iptvDockLayoutListenerAttached = false
 
     /** The channel the visible banner is describing. A paging window installed
      *  after the banner appeared changes this channel's position and the
      *  category total, so the banner needs a way back to its own entry. */
     private var iptvZapBannerEntry: IptvChannelEntry? = null
     private val iptvZapBannerHideToken = Any()
+    private val iptvZapBannerTickToken = Any()
 
     private val iptvZapAccent = Color.parseColor("#00E5FF")
 
@@ -8014,38 +8034,156 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvZapBannerProgress = bar
         iptvZapBannerHintChannel = hintChannel
         iptvZapBannerHintJump = hintJump
+        iptvZapBannerBody = body
+        iptvZapBannerRail = rail
         return banner
     }
 
-    private fun showIptvZapBanner(entry: IptvChannelEntry) {
-        // Never over the guide or the controls dock. The banner is the topmost
-        // child of the content view and now spans the full width, so it would
-        // simply cover either one; a zap from inside the guide updates the
-        // guide's own header instead.
-        if (iptvGuideVisible || controlsMenuVisible) return
+    /**
+     * Present [entry]'s channel panel.
+     *
+     * [docked] defaults to whether the controls dock is open, so every caller
+     * lands in the right home without knowing about the modes: a zap with the
+     * dock up repaints the dock's panel, and the same zap over bare video
+     * floats the banner. Only the guide takes the screen outright.
+     */
+    private fun showIptvZapBanner(
+        entry: IptvChannelEntry,
+        docked: Boolean = controlsMenuVisible,
+    ) {
+        // The banner is the topmost child of the content view and spans the
+        // full width, so it would simply cover the guide; a zap from inside
+        // the guide updates the guide's own header instead.
+        if (iptvGuideVisible) return
         val banner = ensureIptvZapBanner()
+        // Already on this surface: repaint in place. Re-running the entrance
+        // would flash the panel on every keypress that re-arms the dock.
+        val alreadyUp = banner.visibility == View.VISIBLE &&
+            iptvZapBannerDocked == docked
+        // Is this the same channel the panel is already describing? The dock
+        // re-arms itself on every play/pause and DPAD press, and repainting
+        // identity each time would re-run the logo's clear-and-fetch — a
+        // visible flicker on every keypress. Position still refreshes: a
+        // paging window can renumber the channel under a panel that stays up.
+        val previous = iptvZapBannerEntry
+        val sameChannel = previous != null &&
+            previous.url == entry.url && previous.name == entry.name
         iptvZapBannerEntry = entry
-        paintIptvZapBannerIdentity(entry)
+        iptvZapBannerDocked = docked
+        applyIptvZapBannerMode(docked)
+        if (sameChannel) {
+            paintIptvZapBannerPosition(entry)
+        } else {
+            paintIptvZapBannerIdentity(entry)
+        }
         paintIptvZapBannerEpg(entry) // whatever is already known paints now
         // The same lazy fetch the guide rows use — a fresh answer repaints
         // the banner via the isCurrent hook in ensureIptvChannelEpg.
         ensureIptvChannelEpg(entry)
 
-        banner.animate().cancel()
-        banner.visibility = View.VISIBLE
-        banner.alpha = 0f
-        banner.animate().alpha(1f).setDuration(160).start()
+        if (!alreadyUp) {
+            banner.animate().cancel()
+            banner.visibility = View.VISIBLE
+            banner.alpha = 0f
+            if (docked) {
+                // Ride the dock's entrance. It rises from +30 over 300ms, and
+                // a panel that stayed put would visibly detach from the thing
+                // it is supposed to be part of.
+                banner.translationY = 30f
+                banner.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(300)
+                    .setInterpolator(android.view.animation.DecelerateInterpolator(1.5f))
+                    .start()
+            } else {
+                banner.translationY = 0f
+                banner.animate().alpha(1f).setDuration(160).start()
+            }
+        }
         progressHandler.removeCallbacksAndMessages(iptvZapBannerHideToken)
+        // Docked, the panel belongs to the dock's lifetime — hideControlsMenu
+        // takes it down. Only the floating banner times itself out.
+        if (!docked) {
+            progressHandler.postAtTime(
+                { hideIptvZapBanner() },
+                iptvZapBannerHideToken,
+                android.os.SystemClock.uptimeMillis() + 4500,
+            )
+        }
+        // Only when the panel is (re)entering: the tick chain re-posts itself
+        // while visible, and re-scheduling on every repeat call would push the
+        // next tick out by another second each time, so it would never fire.
+        if (!alreadyUp) scheduleIptvZapBannerTick()
+    }
+
+    /**
+     * Sit the panel flush on top of the controls dock, or back over bare
+     * video.
+     *
+     * The dock's height is only known once it has been laid out, so a first
+     * show re-applies on the next layout pass rather than stacking the panel
+     * at the wrong offset.
+     */
+    private fun applyIptvZapBannerMode(docked: Boolean) {
+        val banner = iptvZapBanner ?: return
+        val dock = controlsOverlay
+        val dockHeight = if (docked) (dock?.height ?: 0) else 0
+        (banner.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            if (lp.bottomMargin != dockHeight) {
+                lp.bottomMargin = dockHeight
+                banner.layoutParams = lp
+            }
+        }
+        // The hints teach zapping; docked, those keys walk the dock's buttons.
+        iptvZapBannerRail?.visibility = if (docked) View.GONE else View.VISIBLE
+        // With the rail gone there is nothing between the text and the rule
+        // to leave room for.
+        (iptvZapBannerBody?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            val margin = if (docked) dp(16) else dp(58)
+            if (lp.bottomMargin != margin) {
+                lp.bottomMargin = margin
+                iptvZapBannerBody?.layoutParams = lp
+            }
+        }
+        // The dock's height is 0 until it has been laid out, and it changes
+        // with its own contents (the button row varies per channel). One
+        // listener keeps the panel sitting on it whatever it does.
+        if (docked && dock != null && !iptvDockLayoutListenerAttached) {
+            iptvDockLayoutListenerAttached = true
+            dock.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                if (iptvZapBannerDocked) applyIptvZapBannerMode(true)
+            }
+        }
+    }
+
+    /**
+     * Repaint the now/next block once a second while the banner is up.
+     *
+     * The elapsed rule and the "N min left" tail were computed once at paint
+     * time, so both sat frozen for the whole time the banner was on screen —
+     * a progress bar that visibly does not progress.
+     */
+    private fun scheduleIptvZapBannerTick() {
+        progressHandler.removeCallbacksAndMessages(iptvZapBannerTickToken)
         progressHandler.postAtTime(
-            { hideIptvZapBanner() },
-            iptvZapBannerHideToken,
-            android.os.SystemClock.uptimeMillis() + 4500,
+            {
+                val entry = iptvZapBannerEntry
+                if (entry != null && iptvZapBanner?.visibility == View.VISIBLE) {
+                    paintIptvZapBannerEpg(entry)
+                    scheduleIptvZapBannerTick()
+                }
+            },
+            iptvZapBannerTickToken,
+            android.os.SystemClock.uptimeMillis() + 1000,
         )
     }
 
     private fun hideIptvZapBanner() {
         val banner = iptvZapBanner ?: return
+        progressHandler.removeCallbacksAndMessages(iptvZapBannerTickToken)
         iptvZapBannerEntry = null
+        iptvZapBannerDocked = false
         banner.animate().cancel()
         banner.animate().alpha(0f).setDuration(180).withEndAction {
             banner.visibility = View.GONE
@@ -8058,12 +8196,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val logo = iptvZapBannerLogo ?: return
 
         val firstLetter = entry.name.firstOrNull()?.uppercase() ?: "?"
+        // Drop the outgoing channel's image before anything else. Without
+        // this, a zap between two channels that both have logos leaves the
+        // PREVIOUS logo sitting beside the new channel's name for as long as
+        // the new one takes to fetch — the banner showing two channels at
+        // once. The guide adapter clears for the same reason on rebind.
+        com.bumptech.glide.Glide.with(this).clear(logo)
+        logo.setImageDrawable(null)
         if (entry.logoUrl.isNullOrEmpty()) {
             logo.visibility = View.GONE
             letter.text = firstLetter
             letter.visibility = View.VISIBLE
         } else {
-            letter.visibility = View.GONE
+            // The letter holds the tile until the image actually lands, so the
+            // cleared slot is never just an empty box.
+            letter.text = firstLetter
+            letter.visibility = View.VISIBLE
             logo.visibility = View.VISIBLE
             com.bumptech.glide.Glide.with(this)
                 .load(entry.logoUrl)
@@ -8086,14 +8234,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
                         dataSource: com.bumptech.glide.load.DataSource,
                         isFirstResource: Boolean
-                    ): Boolean = false
+                    ): Boolean {
+                        // The image is here — retire the placeholder letter
+                        // that was holding the tile.
+                        letter.visibility = View.GONE
+                        return false
+                    }
                 })
                 .into(logo)
         }
 
         iptvZapBannerNumber?.text =
             (entry.channelNumber ?: (entry.index + 1)).toString()
-        iptvZapBannerName?.text = entry.displayName
+        // The RAW name: the number already has its own accent slot beside
+        // this, and displayName carries a "CH n" prefix of its own — pairing
+        // the two printed the number twice ("7  CH 7  Sky Sports"). The guide
+        // rows pair the same number view with entry.name for this reason.
+        iptvZapBannerName?.text = entry.name
         paintIptvZapBannerPosition(entry)
     }
 

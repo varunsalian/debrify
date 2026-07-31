@@ -64,6 +64,7 @@ import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/widgets/iptv_channel_sheet.dart';
+import 'video_player/widgets/iptv_zap_banner.dart';
 import 'video_player/widgets/source_sheet.dart';
 import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
@@ -426,6 +427,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _showTitleBadge = true;
   Timer? _titleBadgeTimer;
 
+  // IPTV zap banner (live channels) — the broadcast lower third.
+  //
+  // It has two homes. Floating over bare video after a zap, and embedded as
+  // the header of the controls dock (they share the bottom strip, so they
+  // merge into one panel rather than fight for it). The channel/EPG data
+  // below belongs to the playing channel and outlives either presentation.
+  bool _showIptvZapBanner = false;
+  // Kept in the tree until the fade-out finishes, then dropped — this screen
+  // rebuilds on every position tick, so an invisible banner would keep
+  // costing layout.
+  bool _iptvZapFloatingMounted = false;
+  IptvChannel? _iptvZapChannel;
+  EpgNowNext? _iptvZapEpg;
+  bool _iptvZapEpgLoading = false;
+  // The clock the banner's countdown and elapsed rule read. Ticked once a
+  // second only while the banner is up, so the rule advances on screen
+  // without costing a rebuild for the rest of the session.
+  DateTime _iptvZapClock = DateTime.now();
+  Timer? _iptvZapHideTimer;
+  Timer? _iptvZapTicker;
+  int _iptvZapEpgTicket = 0;
+
   DoubleTapRipple? _ripple;
   bool _panIgnore = false;
   int _currentIndex = 0;
@@ -461,6 +484,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// resume key, title, headers, and later episode navigation stay aligned.
   List<IptvChannel>? get _effectiveIptvChannels =>
       _iptvChannelsOverride ?? widget.iptvChannels;
+
+  /// Live IPTV presents its identity in the bottom zap banner, so the corner
+  /// title/channel badges stand down: they said the same thing twice, and the
+  /// right-hand one was painted from launch state a zap never refreshed.
+  bool get _iptvZapBannerOwnsIdentity =>
+      _currentIptvChannel?.isLive == true;
 
   void _persistIptvGuideContext(IptvGuideContext context) {
     if (!mounted) return;
@@ -695,6 +724,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     AnalyticsService.screenView('video_player');
     _startAnalyticsHeartbeat();
     _activePlaylist = widget.playlist;
+    // The dock and the zap banner share the bottom strip, and the dock is
+    // raised from several places that never go through _toggleControls
+    // (volume keys, pointer wake). Watching the notifier catches all of them.
+    _controlsVisible.addListener(_onControlsVisibilityChanged);
 
     // Launch-time subtitles (e.g. YouTube captions): wrap into a single loaded
     // provider group so they appear in the subtitle menu without an addon
@@ -1456,13 +1489,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _armPipAutoEnter();
           if (mounted) {
             setState(() {});
-            // Show channel badge when player is ready (if enabled)
-            if (widget.showChannelName && _channelBadgeText != null) {
-              _showChannelBadgeWithTimer();
-            }
-            // Show title badge when player is ready (if enabled and in Debrify TV)
-            if (widget.showVideoTitle && widget.showChannelName) {
-              _showTitleBadgeWithTimer();
+            // First tune on a live channel: the zap banner doubles as the
+            // "here's what's on" card, and it owns the identity instead of
+            // the corner badges.
+            final iptvChannel = _currentIptvChannel;
+            if (iptvChannel != null && iptvChannel.isLive) {
+              // The dock opens visible and nothing on this path auto-hides
+              // it, so it would both cover the banner and leave a live
+              // channel presenting a seek bar it cannot use. The banner is
+              // this tune's presentation; one tap brings the dock back.
+              _hideTimer?.cancel();
+              _controlsVisible.value = false;
+              _prepareIptvBannerData(iptvChannel);
+              _raiseIptvZapBanner();
+            } else {
+              // Show channel badge when player is ready (if enabled)
+              if (widget.showChannelName && _channelBadgeText != null) {
+                _showChannelBadgeWithTimer();
+              }
+              // Show title badge when player is ready (if enabled and in Debrify TV)
+              if (widget.showVideoTitle && widget.showChannelName) {
+                _showTitleBadgeWithTimer();
+              }
             }
           }
         },
@@ -2857,6 +2905,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('Player: No channels available for guide');
       return;
     }
+    _hideIptvZapBanner();
     setState(() {
       _showChannelGuide = true;
       _controlsVisible.value = false;
@@ -2874,6 +2923,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _showIptvChannelSheetOverlay() {
     final channels = _effectiveIptvChannels;
     if (channels == null || channels.isEmpty) return;
+    _hideIptvZapBanner();
     setState(() {
       _showIptvChannelSheet = true;
       _controlsVisible.value = false;
@@ -3223,8 +3273,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _isTransitioning = true;
       _currentIptvIndex = index;
       _currentChannelNumber = channel.channelNumber ?? (index + 1);
+      // The corner badge is painted from this pair; without the name it kept
+      // showing the launch channel under the new channel's number.
+      _currentChannelName = channel.name;
     });
     _startTransitionOverlay();
+    // Identity paints from the channel itself, so it is correct before a
+    // single byte of the new stream has arrived; the guide fills in behind it.
+    // Zapping to on-demand retires the panel outright — it has no live
+    // identity to present, and leaving it up would describe the wrong item.
+    if (channel.isLive) {
+      _prepareIptvBannerData(channel);
+      _raiseIptvZapBanner();
+    } else {
+      _hideIptvZapBanner();
+    }
 
     try {
       await _player.pause();
@@ -3383,6 +3446,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _showSourceSheetOverlay() {
     final sources = _effectiveSources;
     if (sources == null || sources.isEmpty) return;
+    _hideIptvZapBanner();
     setState(() {
       _showSourceSheet = true;
       _controlsVisible.value = false;
@@ -5312,6 +5376,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _manualSelectionResetTimer?.cancel();
     _channelBadgeTimer?.cancel();
     _titleBadgeTimer?.cancel();
+    _iptvZapHideTimer?.cancel();
+    _iptvZapTicker?.cancel();
+    _controlsVisible.removeListener(_onControlsVisibilityChanged);
     _controlsVisible.dispose();
     _seekHud.dispose();
     _verticalHud.dispose();
@@ -5868,6 +5935,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _controlsVisible.value = !_controlsVisible.value;
     if (_controlsVisible.value) {
       _scheduleAutoHide();
+      // Live IPTV keeps its identity in the banner — already dismissed by the
+      // visibility listener above — so the corner badges stay down.
+      if (_iptvZapBannerOwnsIdentity) return;
       // Show channel badge when controls appear (if enabled)
       if (widget.showChannelName && _channelBadgeText != null) {
         _showChannelBadgeWithTimer();
@@ -5897,6 +5967,130 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       },
     );
+  }
+
+  /// Adopt [channel] as the banner's subject and start its guide lookup.
+  ///
+  /// Called on the first tune and on every zap, whatever is on screen at the
+  /// time: the dock can be opened minutes later and must find the panel's
+  /// data already loaded.
+  void _prepareIptvBannerData(IptvChannel channel) {
+    if (!mounted || !channel.isLive) return;
+    final ticket = ++_iptvZapEpgTicket;
+    // Whatever the guide already knows paints immediately; the fetch below
+    // only ever upgrades it.
+    final known = IptvEpgService.instance.peekNowNext(channel.url);
+    setState(() {
+      _iptvZapChannel = channel;
+      _iptvZapEpg = known;
+      _iptvZapEpgLoading = known == null;
+      _iptvZapClock = DateTime.now();
+    });
+    if (known == null) unawaited(_loadIptvZapBannerEpg(channel, ticket));
+    // Zapping from VOD to live with the dock already open gives the panel its
+    // first channel here rather than at raise time — start its clock.
+    _syncIptvBannerTicker();
+  }
+
+  /// Float the banner over bare video and let it fade itself out.
+  void _raiseIptvZapBanner() {
+    if (!mounted || _iptvZapChannel == null) return;
+    // Anything the user deliberately opened keeps the frame. The dock is the
+    // exception it used to share this strip with: it now carries the same
+    // panel itself, so there is nothing to raise over it.
+    if (_showIptvChannelSheet ||
+        _showSourceSheet ||
+        _showChannelGuide ||
+        _controlsVisible.value) {
+      return;
+    }
+    setState(() {
+      _showIptvZapBanner = true;
+      _iptvZapFloatingMounted = true;
+    });
+    _iptvZapHideTimer?.cancel();
+    _iptvZapHideTimer = Timer(
+      const Duration(milliseconds: 4500),
+      _hideIptvZapBanner,
+    );
+    _syncIptvBannerTicker();
+  }
+
+  void _onControlsVisibilityChanged() {
+    // The dock carries its own copy of the panel, so the floating one goes the
+    // instant the dock opens. Fading it would cross-dissolve two copies of the
+    // same panel at two different heights.
+    if (_controlsVisible.value) _hideIptvZapBanner(immediate: true);
+    _syncIptvBannerTicker();
+  }
+
+  /// [immediate] skips the fade and unmounts in the same frame — for a handoff
+  /// to the dock's copy, where a fade would show both at once.
+  void _hideIptvZapBanner({bool immediate = false}) {
+    _iptvZapHideTimer?.cancel();
+    _iptvZapHideTimer = null;
+    final live = _showIptvZapBanner || (immediate && _iptvZapFloatingMounted);
+    if (mounted && live) {
+      setState(() {
+        _showIptvZapBanner = false;
+        if (immediate) _iptvZapFloatingMounted = false;
+      });
+    }
+    _syncIptvBannerTicker();
+  }
+
+  /// The panel's clock only has to run while the panel is on screen — in
+  /// either home. Without it the countdown and the elapsed rule sit frozen,
+  /// which is most obvious exactly where the dock is used: while paused,
+  /// where the position stream has stopped driving rebuilds.
+  void _syncIptvBannerTicker() {
+    final onScreen =
+        _iptvZapChannel != null &&
+        (_showIptvZapBanner ||
+            (_controlsVisible.value && _iptvZapBannerOwnsIdentity));
+    if (!onScreen) {
+      _iptvZapTicker?.cancel();
+      _iptvZapTicker = null;
+      return;
+    }
+    if (_iptvZapTicker != null) return;
+    _iptvZapTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _iptvZapClock = DateTime.now());
+      _refreshIptvBannerEpgIfEnded();
+    });
+  }
+
+  /// The dock can stay open past the end of the programme it is describing.
+  /// Re-ask once the current one has finished rather than leave a listing
+  /// that is quietly wrong.
+  void _refreshIptvBannerEpgIfEnded() {
+    if (_iptvZapEpgLoading) return;
+    final channel = _iptvZapChannel;
+    final current = _iptvZapEpg?.now;
+    if (channel == null || current == null) return;
+    if (current.stop.isAfter(DateTime.now())) return;
+    final ticket = ++_iptvZapEpgTicket;
+    setState(() => _iptvZapEpgLoading = true);
+    unawaited(_loadIptvZapBannerEpg(channel, ticket));
+  }
+
+  /// The same lazy now/next fetch the guide rows use. [ticket] is the banner's
+  /// generation: a zap that lands mid-flight owns the banner, so a late answer
+  /// for the previous channel is dropped rather than painted under the new
+  /// channel's name.
+  Future<void> _loadIptvZapBannerEpg(IptvChannel channel, int ticket) async {
+    EpgNowNext? result;
+    try {
+      result = await IptvEpgService.instance.nowNext(channel.url);
+    } catch (_) {
+      result = null;
+    }
+    if (!mounted || ticket != _iptvZapEpgTicket) return;
+    setState(() {
+      _iptvZapEpg = result;
+      _iptvZapEpgLoading = false;
+    });
   }
 
   void _showTitleBadgeWithTimer() {
@@ -6317,6 +6511,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       ChannelBadge(badgeText: badgeText);
 
   Widget _buildTitleBadge(String title) => TitleBadge(title: title);
+
+  /// The live-IPTV panel, or null when this playback has no channel identity
+  /// to present. [flush] embeds it in the controls dock; otherwise it floats.
+  Widget? _buildIptvInfoPanel({required bool flush}) {
+    final channel = _iptvZapChannel;
+    if (channel == null || !_iptvZapBannerOwnsIdentity) return null;
+    return IptvZapBanner(
+      channel: channel,
+      epg: _iptvZapEpg,
+      epgLoading: _iptvZapEpgLoading,
+      now: _iptvZapClock,
+      flush: flush,
+    );
+  }
 
   // Get the custom aspect ratio for specific modes
   double? _getCustomAspectRatio() =>
@@ -6844,6 +7052,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         child: IgnorePointer(
                           ignoring: !visible,
                           child: Controls(
+                            // Live IPTV leaves the top bar empty on purpose:
+                            // its identity is in the info panel below, and
+                            // repeating the channel in both corners is the
+                            // duplication this redesign set out to remove.
                             title:
                                 widget.showVideoTitle && !widget.showChannelName
                                 ? _getCurrentEpisodeTitle()
@@ -6852,6 +7064,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 widget.showVideoTitle && !widget.showChannelName
                                 ? _getCurrentEpisodeSubtitle()
                                 : null,
+                            // Merged into the dock: the channel panel rides on
+                            // top of the transport bar as one surface.
+                            infoPanel: _buildIptvInfoPanel(flush: true),
                             enhancedMetadata: _getEnhancedMetadata(),
                             duration: duration,
                             position: pos,
@@ -6920,7 +7135,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 : null,
                             hasPrevious:
                                 _hasPreviousEpisode() || _hasIptvPrevious,
-                            hideSeekbar: widget.hideSeekbar,
+                            // A live channel has no timeline to scrub: the
+                            // position/duration mpv reports is just the HLS
+                            // rolling window, so the bar counts something
+                            // meaningless and sits under the programme rule,
+                            // which is the progress that actually means
+                            // something here. Derived, not a launch arg, so
+                            // zapping to on-demand brings it straight back.
+                            hideSeekbar:
+                                widget.hideSeekbar || _iptvZapBannerOwnsIdentity,
+                            // Same call the native dock makes for live.
+                            hideSpeed: _iptvZapBannerOwnsIdentity,
+                            // Shuffle picks from _activePlaylist, which an
+                            // IPTV session never has — the button could only
+                            // ever open a menu that does nothing.
+                            hideRandom: _effectiveIptvChannels != null,
                             hideOptions: widget.hideOptions,
                             hideBackButton: widget.hideBackButton,
                             onRandom: () =>
@@ -6952,7 +7181,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
                 // Placed after controls to appear on top
-                if (widget.showVideoTitle && widget.showChannelName && !inPip)
+                if (widget.showVideoTitle &&
+                    widget.showChannelName &&
+                    !_iptvZapBannerOwnsIdentity &&
+                    !inPip)
                   Positioned(
                     top: 20,
                     left: 20,
@@ -6971,6 +7203,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 if (widget.showChannelName &&
                     channelBadgeText != null &&
                     channelBadgeText.isNotEmpty &&
+                    !_iptvZapBannerOwnsIdentity &&
                     !inPip)
                   Positioned(
                     top: 20,
@@ -6983,6 +7216,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         curve: Curves.easeInOut,
                         child: _buildChannelBadge(channelBadgeText),
                       ),
+                    ),
+                  ),
+                // IPTV zap banner, floating over bare video after a zap. When
+                // the dock is open this is absent — the same panel is inside
+                // it instead. Ahead of the sheets and the guide in the stack
+                // so anything the user opens draws over it.
+                if (_iptvZapFloatingMounted && !inPip)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: AnimatedOpacity(
+                      opacity: _showIptvZapBanner ? 1.0 : 0.0,
+                      duration: Duration(
+                        milliseconds: _showIptvZapBanner ? 160 : 180,
+                      ),
+                      curve: Curves.easeInOut,
+                      // Drop the subtree once it has faded out. This screen
+                      // rebuilds on every position tick, so leaving a
+                      // fully-transparent banner mounted would re-lay it out
+                      // for the rest of the session. Only the presentation
+                      // goes — the channel/EPG data stays for the dock.
+                      onEnd: () {
+                        if (!mounted || _showIptvZapBanner) return;
+                        setState(() => _iptvZapFloatingMounted = false);
+                      },
+                      child:
+                          _buildIptvInfoPanel(flush: false) ??
+                          const SizedBox.shrink(),
                     ),
                   ),
                 // PikPak retry overlay - non-blocking, positioned at bottom right
