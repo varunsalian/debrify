@@ -41,6 +41,7 @@ class IptvChannelRow extends StatefulWidget {
   final bool isTelevision;
   final FocusNode? focusNode;
   final bool isFavorited;
+  final bool isPreviewSelected;
   final VoidCallback onTap;
   final ValueChanged<bool>? onFavoriteToggle;
 
@@ -92,6 +93,7 @@ class IptvChannelRow extends StatefulWidget {
     this.isTelevision = false,
     this.focusNode,
     this.isFavorited = false,
+    this.isPreviewSelected = false,
     this.onFavoriteToggle,
     this.onFocused,
     this.onDetached,
@@ -110,7 +112,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     with SingleTickerProviderStateMixin {
   bool _focused = false;
   bool _hovered = false;
-  bool get _active => _focused || _hovered;
+  bool get _active => _focused || _hovered || widget.isPreviewSelected;
 
   /// Touch phones/tablets have no hover, so the favourite affordance can't hide
   /// behind one — keep it visible there. Desktop reveals it on hover, TV on
@@ -170,9 +172,9 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     final displayName = resMatch == null
         ? ch.name
         : ch.name
-            .replaceRange(resMatch.start, resMatch.end, '')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
+              .replaceRange(resMatch.start, resMatch.end, '')
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .trim();
 
     final group = ch.group?.trim();
     final subParts = <String>[
@@ -354,7 +356,8 @@ class _IptvChannelRowState extends State<IptvChannelRow>
           return KeyEventResult.handled;
         }
 
-        final isSelect = isActivateKey(event.logicalKey) ||
+        final isSelect =
+            isActivateKey(event.logicalKey) ||
             event.logicalKey == LogicalKeyboardKey.space;
         if (!isSelect) return KeyEventResult.ignored;
 
@@ -458,8 +461,11 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       if (widget.isFavorited) {
         return const Padding(
           padding: EdgeInsets.only(left: 8),
-          child: Icon(Icons.favorite_rounded,
-              size: 18, color: Color(0xFFF43F5E)),
+          child: Icon(
+            Icons.favorite_rounded,
+            size: 18,
+            color: Color(0xFFF43F5E),
+          ),
         );
       }
       return const SizedBox.shrink();
@@ -731,7 +737,8 @@ class _RowEpgState extends State<_RowEpg> {
                     child: const ColoredBox(color: HomeTheme.focusGold),
                   ),
                   Expanded(
-                    flex: 1000 -
+                    flex:
+                        1000 -
                         (now.progressAt(at) * 1000).round().clamp(0, 1000),
                     child: ColoredBox(
                       color: Colors.white.withValues(alpha: 0.12),
@@ -816,9 +823,7 @@ class _FavHint extends StatelessWidget {
                   ),
                 ),
               Icon(
-                done
-                    ? Icons.favorite_rounded
-                    : Icons.favorite_border_rounded,
+                done ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                 size: 16,
                 color: heartColor,
               ),
@@ -865,8 +870,10 @@ class _LogoChip extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color.alphaBlend(brand.withValues(alpha: 0.16),
-                const Color(0xFF1E2030)),
+            Color.alphaBlend(
+              brand.withValues(alpha: 0.16),
+              const Color(0xFF1E2030),
+            ),
             const Color(0xFF14141D),
           ],
         ),

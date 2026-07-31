@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart'
-    show kIsWeb, listEquals, setEquals;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, listEquals, setEquals;
 import 'package:flutter/material.dart';
 import '../../models/iptv_playlist.dart';
 import '../../services/debrify_image_cache.dart';
@@ -33,10 +33,19 @@ import '../see_all/see_all_theme.dart';
 import '../see_all/stremio_dropdown.dart';
 import '../../services/iptv_epg_service.dart';
 import 'db_channel_list.dart';
+import 'iptv_centered_selector.dart';
 import 'iptv_filters.dart';
 import 'iptv_channel_row.dart';
 import 'iptv_empty_state.dart';
 import 'iptv_epg_panel.dart';
+
+typedef _TabletChannelIdentity = ({
+  int? channelNumber,
+  String name,
+  String url,
+  String? group,
+  String? contentType,
+});
 
 /// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)"
 /// — pulled out of the rail's big title into its sub-line (the channel rows do
@@ -92,10 +101,30 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   /// Desktop gets the full two-pane experience too (redesign): source rail,
   /// embedded live preview, quiet filters — hover previews, click plays.
-  /// Phones/tablets deliberately keep the classic list: an autoplaying inline
-  /// stream on mobile costs data/battery and has no hover to drive it.
+  /// Large touch tablets use the same shell with a fixed center selector;
+  /// phones and constrained tablet windows keep the classic list.
   static final bool _isDesktop =
       !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+
+  static const double tabletTwoPaneMinWidth = 900;
+  static const double tabletTwoPaneMinHeight = 500;
+
+  static bool shouldUseTouchTabletTwoPane({
+    required bool redesignEnabled,
+    required bool isTelevision,
+    required bool isWeb,
+    required TargetPlatform platform,
+    required Size availableSize,
+  }) {
+    final touchPlatform =
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+    return redesignEnabled &&
+        !isTelevision &&
+        !isWeb &&
+        touchPlatform &&
+        availableSize.width >= tabletTwoPaneMinWidth &&
+        availableSize.height >= tabletTwoPaneMinHeight;
+  }
 
   // Current playlist data
   List<IptvChannel> _allChannels = [];
@@ -367,9 +396,9 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   String _lastSearchQuery = '';
 
-  /// Channel whose programme schedule is open. On TV it swaps the two-pane
-  /// layout's right side (guide list) for the schedule while the preview
-  /// keeps playing; phone/desktop use a bottom sheet and never set this.
+  /// Channel whose programme schedule is open. TV and large touch tablets
+  /// swap the two-pane layout's right side for the schedule while the preview
+  /// keeps playing; classic and desktop-pointer layouts use a bottom sheet.
   IptvChannel? _scheduleChannel;
 
   /// Whether the last build used the TV two-pane layout. The in-place
@@ -377,12 +406,23 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// canvas) RIGHT must open the bottom sheet instead, or it sets state
   /// nothing renders (a silent dead key).
   bool _tvTwoPaneActive = false;
+  bool _touchTabletTwoPaneActive = false;
+
+  /// The fixed tablet cursor owns a logical channel, not a List position.
+  /// Progressive Stremio batches and filters replace the List object while
+  /// retaining its rows; keeping both identity and the last index makes the
+  /// common append-only update O(1), while still finding a moved row.
+  int _tabletSelectedIndex = 0;
+  _TabletChannelIdentity? _tabletSelectedIdentity;
 
   /// The schedule action for a row, or null when the channel can't have
   /// guide data (no RIGHT-key handling, no calendar icon).
-  VoidCallback? _scheduleActionFor(IptvChannel channel) {
+  VoidCallback? _scheduleActionFor(
+    IptvChannel channel, {
+    bool inPlace = false,
+  }) {
     if (!IptvEpgService.isEpgCapable(channel)) return null;
-    if (widget.isTelevision && _tvTwoPaneActive) {
+    if (inPlace) {
       return () => _openSchedulePane(channel);
     }
     return () => showIptvScheduleSheet(
@@ -401,6 +441,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final channel = _scheduleChannel;
     if (channel == null) return;
     setState(() => _scheduleChannel = null);
+    if (!widget.isTelevision) return;
     // Hand focus back to the row that opened the schedule. Post-frame: the
     // grid (and the cached node's row) only exists again after this build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1158,7 +1199,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       // a launch with nothing outstanding stays completely silent — this is
       // one-time work, and every subsequent launch must say nothing at all.
       final snapBefore = IptvCatalogDb.snapshot(cacheKey);
-      final willNumber = snapBefore != null &&
+      final willNumber =
+          snapBefore != null &&
           snapBefore.channelCount > 0 &&
           snapBefore.hasLiveChannels &&
           !IptvCatalogDb.hasNumberingSource(playlist.id) &&
@@ -1584,8 +1626,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
     _lastLoadResult = displayed;
     if (storedPlaylist != null &&
-        IptvCatalogKey.forPlaylist(storedPlaylist, contentType) ==
-            cacheKey) {
+        IptvCatalogKey.forPlaylist(storedPlaylist, contentType) == cacheKey) {
       _updateEpgContext(storedPlaylist, displayed, ticket, quiet: true);
     }
 
@@ -1651,7 +1692,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
   }
 
-
   /// True when a background revalidate's result no longer belongs on screen.
   /// The ticket covers playlist switches (they bump it synchronously), but a
   /// content-type switch clears the list and only bumps the ticket after its
@@ -1668,9 +1708,6 @@ class IptvResultsViewState extends State<IptvResultsView>
       _isLoading ||
       _selectedPlaylist?.id != playlist.id ||
       (playlist.isXtreamCodes && _selectedContentType != contentType);
-
-
-
 
   /// The blocking-load state. A bare spinner is indistinguishable from a hung
   /// app, and on a 50k panel this screen is held for several seconds — so it
@@ -1774,12 +1811,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// Receives phase reports from the services. A changed PHASE repaints
   /// immediately (four times a load); byte updates only update the fields and
   /// ride the next tick.
-  void _onLoadPhase(
-    int ticket,
-    String phase, {
-    int? bytes,
-    int? totalBytes,
-  }) {
+  void _onLoadPhase(int ticket, String phase, {int? bytes, int? totalBytes}) {
     // A superseded load's fetch keeps running to completion; its reports must
     // not relabel the load that replaced it.
     if (!mounted || ticket != _loadTicket) return;
@@ -2029,7 +2061,9 @@ class IptvResultsViewState extends State<IptvResultsView>
           if (!quiet && hasManualUrl) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Couldn\'t load the TV guide — check the EPG URL.'),
+                content: Text(
+                  'Couldn\'t load the TV guide — check the EPG URL.',
+                ),
               ),
             );
           }
@@ -2876,6 +2910,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       // would purge A's replay; deleting A would strand the entry).
       final originPlaylistId = _originPlaylistIdFor(channel);
       final ticket = _loadTicket;
+      final replayFromInPlaceSchedule = _scheduleChannel?.url == channel.url;
       final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(
         SnackBar(
@@ -2892,16 +2927,13 @@ class IptvResultsViewState extends State<IptvResultsView>
       );
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
-      // Stale: the playlist reloaded/switched, or (TV two-pane) the schedule
-      // pane this replay was picked from is gone — a player appearing over
+      // Stale: the playlist reloaded/switched, or the in-place schedule pane
+      // this replay was picked from is gone — a player appearing over
       // whatever the user moved on to would read as the wrong programme
-      // launching itself. The pane check only applies to the pane flow:
-      // the TV-classic fallback replays from the bottom SHEET, where
-      // _scheduleChannel is never set and the guard would kill every replay.
+      // launching itself. Bottom-sheet replays capture false and skip this
+      // guard because [_scheduleChannel] is never set in that flow.
       if (ticket != _loadTicket) return;
-      if (widget.isTelevision &&
-          _tvTwoPaneActive &&
-          _scheduleChannel?.url != channel.url) {
+      if (replayFromInPlaceSchedule && _scheduleChannel?.url != channel.url) {
         return;
       }
       if (url == null) {
@@ -2951,7 +2983,11 @@ class IptvResultsViewState extends State<IptvResultsView>
         _previewRearmPending = true;
       }
       if (!widget.isTelevision && mounted) {
-        await _refreshAfterPlayback();
+        if (_touchTabletTwoPaneActive) {
+          _flushPreviewRearm();
+        } else {
+          await _refreshAfterPlayback();
+        }
       }
     } finally {
       _launchingChannel = false;
@@ -3113,7 +3149,11 @@ class IptvResultsViewState extends State<IptvResultsView>
     // launching player is the worst possible moment for it; the parked
     // re-arm below is the designated "we're back" hook and refreshes there.
     if (!widget.isTelevision) {
-      await _refreshAfterPlayback();
+      if (_touchTabletTwoPaneActive) {
+        _flushPreviewRearm();
+      } else {
+        await _refreshAfterPlayback();
+      }
     }
   }
 
@@ -3332,35 +3372,46 @@ class IptvResultsViewState extends State<IptvResultsView>
       return const Center(child: CircularProgressIndicator());
     }
 
-    // TV: two-pane — a live preview stage on the left (the focused channel
-    // plays embedded after a short dwell; OK still launches the full player),
-    // quiet filters + the channel guide on the right. Desktop (redesign) gets
-    // the same layout with pointer semantics: hovering a row retunes the
-    // preview, clicking plays. Falls back to the classic single-column
-    // layout on an implausibly narrow canvas; phones/tablets keep classic.
-    final Widget body;
-    if (widget.isTelevision || (_redesignEnabled && _isDesktop)) {
-      body = LayoutBuilder(
-        builder: (context, c) {
-          final twoPane = c.maxWidth >= 760 && c.maxHeight >= 380;
-          if (twoPane != _tvTwoPaneActive) {
-            // Never write state synchronously from the layout phase: key
-            // handlers (_scheduleActionFor, _playCatchup) branch on this
-            // flag, and a mid-layout flip left the first frame after a
-            // resize dispatching RIGHT-key handling against the previous
-            // layout's value. Post-frame keeps the flag one frame behind at
-            // worst, and only across an actual window resize.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _tvTwoPaneActive = twoPane;
-            });
-          }
-          if (!twoPane) return _buildClassic();
-          return _buildTvTwoPane(c);
-        },
-      );
-    } else {
-      body = _buildClassic();
-    }
+    // TV: focus selects the embedded preview. Desktop: hover selects and click
+    // watches. A large touch tablet gets the same two-pane shell but scrolls
+    // rows beneath a fixed center arrow; the settled row owns the preview and
+    // a separate stage button launches fullscreen. Constrained tablet windows
+    // and phones retain the classic page.
+    final Widget body = LayoutBuilder(
+      builder: (context, c) {
+        final touchTablet = shouldUseTouchTabletTwoPane(
+          redesignEnabled: _redesignEnabled,
+          isTelevision: widget.isTelevision,
+          isWeb: kIsWeb,
+          platform: defaultTargetPlatform,
+          availableSize: Size(c.maxWidth, c.maxHeight),
+        );
+        final eligible =
+            widget.isTelevision ||
+            (_redesignEnabled && (_isDesktop || touchTablet));
+        final twoPane = eligible && c.maxWidth >= 760 && c.maxHeight >= 380;
+        if (twoPane != _tvTwoPaneActive ||
+            touchTablet != _touchTabletTwoPaneActive) {
+          // Never write state synchronously from the layout phase: playback
+          // and schedule callbacks consult these flags. One post-frame of lag
+          // can only occur while the window is actively changing size.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final wasTouchTablet = _touchTabletTwoPaneActive;
+            _tvTwoPaneActive = twoPane;
+            _touchTabletTwoPaneActive = twoPane && touchTablet;
+            if (!twoPane &&
+                wasTouchTablet &&
+                _scheduleChannel != null &&
+                mounted) {
+              setState(() => _scheduleChannel = null);
+            }
+          });
+        }
+        if (!twoPane) return _buildClassic();
+        return _buildTvTwoPane(c, touchSelector: touchTablet);
+      },
+    );
     // The background-refresh chip floats over whichever layout is active.
     // passthrough: hand the parent's constraints to the body unmodified so
     // the wrap is provably layout-neutral.
@@ -3471,7 +3522,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   // ── TV two-pane ──────────────────────────────────────────────────────────
 
-  Widget _buildTvTwoPane(BoxConstraints c) {
+  Widget _buildTvTwoPane(BoxConstraints c, {required bool touchSelector}) {
     // Every source (Favorites, Continue watching, and each playlist) lives in
     // the header's Sources dropdown now — no left rail eating horizontal space.
     // TV uses a wider focus stage; desktop keeps the compact preview rail so a
@@ -3483,9 +3534,15 @@ class IptvResultsViewState extends State<IptvResultsView>
         : (paneW * 0.40).clamp(320.0, 470.0);
     final scheduleChannel = _scheduleChannel;
     return Row(
+      key: ValueKey(
+        touchSelector ? 'iptv-tablet-two-pane' : 'iptv-preview-two-pane',
+      ),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(width: stageW, child: _buildPreviewRail()),
+        SizedBox(
+          width: stageW,
+          child: _buildPreviewRail(touchSelector: touchSelector),
+        ),
         Expanded(
           // An open schedule covers the guide column in place — the preview
           // rail keeps playing, and BACK restores the list exactly as it
@@ -3507,7 +3564,12 @@ class IptvResultsViewState extends State<IptvResultsView>
                         padding: const EdgeInsets.fromLTRB(10, 14, 24, 4),
                         child: _buildQuietFilters(),
                       ),
-                      Expanded(child: _buildContent(tvPane: true)),
+                      Expanded(
+                        child: _buildContent(
+                          tvPane: true,
+                          touchSelector: touchSelector,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -3516,6 +3578,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                 IptvSchedulePane(
                   channel: scheduleChannel,
                   onClose: _closeSchedulePane,
+                  isTelevision: widget.isTelevision,
                   onPlayProgramme: (programme) =>
                       _playCatchup(scheduleChannel, programme),
                 ),
@@ -3637,7 +3700,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     // wouldn't flush via the lifecycle observer — the focus restore after its
     // route pops (or the user's next move) lands here instead.
     _flushPreviewRearm();
-    if (_previewShown.value?.url == channel.url) return;
+    final shown = _previewShown.value;
+    if (identical(shown, channel)) return;
     _previewShown.value = channel;
     _retunePreview(channel);
   }
@@ -3724,7 +3788,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     _previewShowing.value = false;
   }
 
-  Widget _buildPreviewRail() {
+  Widget _buildPreviewRail({required bool touchSelector}) {
     return Padding(
       padding: EdgeInsets.fromLTRB(_redesignEnabled ? 14 : 24, 16, 12, 16),
       child: ValueListenableBuilder<int>(
@@ -3741,18 +3805,67 @@ class IptvResultsViewState extends State<IptvResultsView>
                 _buildPreviewStage(ch, epoch),
                 const SizedBox(height: 16),
                 Expanded(child: _IptvRailInfo(channel: ch)),
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    'Hover a channel to preview  ·  Click to watch',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.2,
+                if (touchSelector) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      key: const ValueKey('iptv-tablet-watch-fullscreen'),
+                      onPressed: ch == null
+                          ? null
+                          : () => unawaited(_playChannel(ch)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF00E5FF),
+                        foregroundColor: const Color(0xFF061016),
+                        disabledBackgroundColor: Colors.white.withValues(
+                          alpha: 0.06,
+                        ),
+                        disabledForegroundColor: Colors.white.withValues(
+                          alpha: 0.25,
+                        ),
+                        minimumSize: const Size.fromHeight(46),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                      ),
+                      icon: Icon(
+                        ch?.contentType == 'series'
+                            ? Icons.video_library_rounded
+                            : Icons.fullscreen_rounded,
+                        size: 21,
+                      ),
+                      label: Text(
+                        ch?.contentType == 'series'
+                            ? 'Open series'
+                            : 'Watch fullscreen',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ),
-                ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 9),
+                    child: Text(
+                      'Scroll channels through the arrow to preview',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.38),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ),
+                ] else
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Hover a channel to preview  ·  Click to watch',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
               ],
             );
           },
@@ -3863,7 +3976,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
   }
 
-  Widget _buildContent({bool tvPane = false}) {
+  Widget _buildContent({bool tvPane = false, bool touchSelector = false}) {
     // Empty state when no playlists
     if (_playlists.isEmpty) {
       return IptvEmptyState(
@@ -4025,133 +4138,250 @@ class IptvResultsViewState extends State<IptvResultsView>
     // ONE height, so hoisting also makes the delegate and the rows agree by
     // construction instead of by coincidence.
     final epgRows = _epgRowsActive;
+    final rowExtent = _showsPosterRows
+        ? kIptvPosterRowExtent
+        : epgRows
+        ? kIptvEpgRowExtent
+        : narrowRows
+        ? kIptvNarrowRowExtent
+        : kIptvRowExtent;
 
-    final grid = LayoutBuilder(
-      builder: (context, constraints) {
-        // The delegate's own column math, replicated so rows can know
-        // whether they sit on the grid's right edge (those get the
-        // RIGHT-opens-schedule key; the rest keep plain traversal).
-        final crossExtent = (constraints.maxWidth - hPadding - padRight).clamp(
-          1.0,
-          double.infinity,
-        );
-        final columns = (crossExtent / (maxCrossAxisExtent + crossAxisSpacing))
-            .ceil()
-            .clamp(1, 100);
-        // Captured together so itemCount and the list the delegate indexes
-        // can never disagree: a RangeError in itemBuilder is exactly what a
-        // count-from-one-variable / rows-from-another split produces the
-        // day someone assigns _filteredChannels outside setState.
-        final channelList = _filteredChannels;
-        final itemCount = channelList.length;
+    final Widget channelBrowser = touchSelector
+        ? _buildTabletCenteredSelector(
+            _filteredChannels,
+            rowExtent: rowExtent,
+            epgRows: epgRows,
+          )
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              // The delegate's own column math, replicated so rows can know
+              // whether they sit on the grid's right edge (those get the
+              // RIGHT-opens-schedule key; the rest keep plain traversal).
+              final crossExtent = (constraints.maxWidth - hPadding - padRight)
+                  .clamp(1.0, double.infinity);
+              final columns =
+                  (crossExtent / (maxCrossAxisExtent + crossAxisSpacing))
+                      .ceil()
+                      .clamp(1, 100);
+              // Captured together so itemCount and the list the delegate indexes
+              // can never disagree: a RangeError in itemBuilder is exactly what a
+              // count-from-one-variable / rows-from-another split produces the
+              // day someone assigns _filteredChannels outside setState.
+              final channelList = _filteredChannels;
+              final itemCount = channelList.length;
 
-        // NOT wrapped in TvFocusScrollWrapper: this subtree has no ancestor
-        // Scrollable, so the wrapper's ensureVisible walk was a silent no-op
-        // — and each row already runs its own ensureVisible on focus, so the
-        // wrapper only ever risked a second, competing scroll animation.
-        return FocusTraversalGroup(
-            child: GridView.builder(
-              controller: _scrollController,
-              padding: EdgeInsets.fromLTRB(hPadding, 8, padRight, 24),
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: maxCrossAxisExtent,
-                // A grid has one tile height for every row, so the taller
-                // poster rows are all-or-nothing per view. On-demand lists are
-                // homogeneous in practice (the type dropdown splits live from
-                // movies, and both virtual shelves are single-kind). EPG rows
-                // (redesign) are taller again — now/next lives in the row.
-                mainAxisExtent: _showsPosterRows
-                    ? kIptvPosterRowExtent
-                    : epgRows
-                    ? kIptvEpgRowExtent
-                    : narrowRows
-                    ? kIptvNarrowRowExtent
-                    : kIptvRowExtent,
-                mainAxisSpacing: 4,
-                crossAxisSpacing: crossAxisSpacing,
-              ),
-              itemCount: itemCount,
-              itemBuilder: (context, index) {
-                final channel = channelList[index];
-                // Right edge = last column, or the final item of a partial
-                // last row (nothing exists to its right either way).
-                final rightEdge =
-                    index % columns == columns - 1 || index == itemCount - 1;
-                return IptvChannelRow(
-                  // ObjectKey, not ValueKey(url): duplicate URLs are legal in a
-                  // playlist, and sibling rows must never share a key (or the
-                  // focus node cached behind it — see _cardFocusNodes).
-                  key: ObjectKey(channel),
-                  channel: channel,
-                  isTelevision: widget.isTelevision,
-                  onTap: () => _playChannel(channel),
-                  focusNode: _focusNodeFor(channel),
-                  isFavorited: _favoriteUrls.contains(channel.url),
-                  // Series rows can't be starred: the favorites store replays
-                  // entries by URL, and a series' sentinel URL isn't playable
-                  // (nor are its credentials recoverable from the store).
-                  onFavoriteToggle: channel.contentType == 'series'
-                      ? null
-                      : (isFavorited) => _toggleFavorite(channel, isFavorited),
-                  onFocused: tvPane ? () => _onChannelFocused(channel) : null,
-                  onDetached: () => _onRowDetached(channel),
-                  onSchedule: _scheduleActionFor(channel),
-                  scheduleOnRightKey: rightEdge,
-                  progress: _progressByUrl[channel.url],
-                  poster: _showsPosterRows,
-                  epg: epgRows,
-                );
-              },
-            ),
-        );
-      },
-    );
-    if (!_isLoadingMore) return grid;
-
+              // NOT wrapped in TvFocusScrollWrapper: this subtree has no ancestor
+              // Scrollable, so the wrapper's ensureVisible walk was a silent no-op
+              // — and each row already runs its own ensureVisible on focus, so the
+              // wrapper only ever risked a second, competing scroll animation.
+              return FocusTraversalGroup(
+                child: GridView.builder(
+                  controller: _scrollController,
+                  padding: EdgeInsets.fromLTRB(hPadding, 8, padRight, 24),
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: maxCrossAxisExtent,
+                    mainAxisExtent: rowExtent,
+                    mainAxisSpacing: 4,
+                    crossAxisSpacing: crossAxisSpacing,
+                  ),
+                  itemCount: itemCount,
+                  itemBuilder: (context, index) {
+                    final channel = channelList[index];
+                    // Right edge = last column, or the final item of a partial
+                    // last row (nothing exists to its right either way).
+                    final rightEdge =
+                        index % columns == columns - 1 ||
+                        index == itemCount - 1;
+                    return IptvChannelRow(
+                      // ObjectKey, not ValueKey(url): duplicate URLs are legal
+                      // in a playlist and must keep independent row state.
+                      key: ObjectKey(channel),
+                      channel: channel,
+                      isTelevision: widget.isTelevision,
+                      onTap: () => _playChannel(channel),
+                      focusNode: _focusNodeFor(channel),
+                      isFavorited: _favoriteUrls.contains(channel.url),
+                      onFavoriteToggle: channel.contentType == 'series'
+                          ? null
+                          : (isFavorited) =>
+                                _toggleFavorite(channel, isFavorited),
+                      onFocused: tvPane
+                          ? () => _onChannelFocused(channel)
+                          : null,
+                      onDetached: () => _onRowDetached(channel),
+                      onSchedule: _scheduleActionFor(
+                        channel,
+                        inPlace: widget.isTelevision && tvPane,
+                      ),
+                      scheduleOnRightKey: rightEdge,
+                      progress: _progressByUrl[channel.url],
+                      poster: _showsPosterRows,
+                      epg: epgRows,
+                    );
+                  },
+                ),
+              );
+            },
+          );
     // Streamed load still running: a quiet, non-focusable line keeps the
     // visible (possibly filtered) rows honest about being a partial list.
     final subtle = Theme.of(context).colorScheme.onSurfaceVariant;
+    Widget buildProgressiveStatus() => Padding(
+      padding: EdgeInsets.fromLTRB(hPadding + 4, 6, hPadding, 0),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 11,
+            height: 11,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.6,
+              color: subtle.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              widget.searchQuery.isNotEmpty
+                  ? 'Still loading (${_allChannels.length} so far) — '
+                        'search results may be incomplete'
+                  : 'Still loading channels — '
+                        '${_allChannels.length} so far',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: subtle,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (touchSelector) {
+      // Keep this parent chain stable when the final progressive result hides
+      // the status line. Moving the selector from inside a Column to the root
+      // would dispose it even with a stable key and reset its scroll state.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _isLoadingMore ? buildProgressiveStatus() : const SizedBox.shrink(),
+          Expanded(
+            key: const ValueKey('iptv-tablet-selector-slot'),
+            child: channelBrowser,
+          ),
+        ],
+      );
+    }
+
+    if (!_isLoadingMore) return channelBrowser;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(hPadding + 4, 6, hPadding, 0),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 11,
-                height: 11,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.6,
-                  color: subtle.withValues(alpha: 0.7),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  widget.searchQuery.isNotEmpty
-                      ? 'Still loading (${_allChannels.length} so far) — '
-                            'search results may be incomplete'
-                      : 'Still loading channels — '
-                            '${_allChannels.length} so far',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: subtle,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(child: grid),
+        buildProgressiveStatus(),
+        Expanded(child: channelBrowser),
       ],
     );
+  }
+
+  Widget _buildTabletCenteredSelector(
+    List<IptvChannel> channels, {
+    required double rowExtent,
+    required bool epgRows,
+  }) {
+    final selection = _reconcileTabletSelection(channels);
+    return IptvCenteredSelector(
+      key: const ValueKey('iptv-tablet-centered-selector'),
+      itemCount: channels.length,
+      itemExtent: rowExtent,
+      initialIndex: selection.index,
+      selectionToken: selection.identity,
+      onSelected: (index) {
+        if (!mounted || index < 0 || index >= channels.length) return;
+        _selectTabletChannel(index, channels[index]);
+      },
+      itemBuilder: (context, index, selected, centerItem) {
+        final channel = channels[index];
+        final openSchedule = _scheduleActionFor(channel, inPlace: true);
+        return IptvChannelRow(
+          key: ObjectKey(channel),
+          channel: channel,
+          isPreviewSelected: selected,
+          onTap: centerItem,
+          isFavorited: _favoriteUrls.contains(channel.url),
+          onFavoriteToggle: channel.contentType == 'series'
+              ? null
+              : (isFavorited) => _toggleFavorite(channel, isFavorited),
+          onSchedule: openSchedule == null
+              ? null
+              : () {
+                  centerItem();
+                  _selectTabletChannel(index, channel);
+                  openSchedule();
+                },
+          progress: _progressByUrl[channel.url],
+          poster: _showsPosterRows,
+          epg: epgRows,
+        );
+      },
+    );
+  }
+
+  _TabletChannelIdentity _tabletIdentityOf(IptvChannel channel) => (
+    channelNumber: channel.channelNumber,
+    name: channel.name,
+    url: channel.url,
+    group: channel.group,
+    contentType: channel.contentType,
+  );
+
+  ({int index, _TabletChannelIdentity identity}) _reconcileTabletSelection(
+    List<IptvChannel> channels,
+  ) {
+    assert(channels.isNotEmpty);
+    final wanted = _tabletSelectedIdentity;
+    if (wanted != null) {
+      final previous = _tabletSelectedIndex;
+      if (previous >= 0 &&
+          previous < channels.length &&
+          _tabletIdentityOf(channels[previous]) == wanted) {
+        return (index: previous, identity: wanted);
+      }
+
+      // Materialized lists (including progressive Stremio snapshots) can
+      // cheaply find a row that moved after filtering. Never walk a paged DB
+      // facade here: that could fault tens of thousands of rows during build.
+      if (channels is! DbChannelList) {
+        for (var index = 0; index < channels.length; index++) {
+          if (_tabletIdentityOf(channels[index]) == wanted) {
+            _tabletSelectedIndex = index;
+            return (index: index, identity: wanted);
+          }
+        }
+      } else {
+        final shown = _previewShown.value;
+        final index = shown == null ? null : channels.indexOfInstance(shown);
+        if (index != null && _tabletIdentityOf(channels[index]) == wanted) {
+          _tabletSelectedIndex = index;
+          return (index: index, identity: wanted);
+        }
+      }
+    }
+
+    final identity = _tabletIdentityOf(channels.first);
+    _tabletSelectedIndex = 0;
+    _tabletSelectedIdentity = identity;
+    return (index: 0, identity: identity);
+  }
+
+  void _selectTabletChannel(int index, IptvChannel channel) {
+    _tabletSelectedIndex = index;
+    _tabletSelectedIdentity = _tabletIdentityOf(channel);
+    _onChannelFocused(channel);
   }
 }
 
