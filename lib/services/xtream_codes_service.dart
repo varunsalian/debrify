@@ -2,12 +2,26 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data' show BytesBuilder;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
 import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
 import 'iptv_load_phase.dart';
+
+/// A panel response crossed the buffering cap — the server's real answer,
+/// deliberately NOT one of the transient network failures the retry loop
+/// re-attempts.
+class _ResponseTooLargeException implements Exception {
+  final Uri uri;
+  _ResponseTooLargeException(this.uri);
+
+  @override
+  String toString() =>
+      'Response from ${uri.host} exceeded the '
+      '${XtreamCodesService._maxResponseBytes ~/ (1024 * 1024)} MB limit';
+}
 
 /// Result of Xtream Codes authentication
 class XcAuthResult {
@@ -64,11 +78,53 @@ class XtreamCodesService {
     return '$serverUrl/player_api.php?username=$user&password=$pass';
   }
 
+  /// Hard cap on any panel response this service will buffer. `http.get`
+  /// buffers the whole body with NO limit — a panel serving a runaway payload
+  /// (a mis-routed stream, a 300 MB VOD dump) would be pulled entirely onto a
+  /// low-RAM TV's heap before anyone could object. Generous on purpose: real
+  /// 50k-item panels ship 60-80 MB stream lists that must keep working; this
+  /// only stops the unbounded case. (The M3U path has capped at 50 MB since
+  /// day one — this is its Xtream counterpart.)
+  static const _maxResponseBytes = 100 * 1024 * 1024; // 100 MB
+
+  /// Streamed GET with [_maxResponseBytes] enforced chunk-by-chunk, so an
+  /// over-limit (or lying Content-Length) download aborts early instead of
+  /// buffering whole. [timeout] bounds the entire request, matching the old
+  /// `http.get(...).timeout(...)` semantics; a per-chunk stall trips it too.
+  Future<http.Response> _getCapped(String url, Duration timeout) async {
+    final client = http.Client();
+    try {
+      final uri = Uri.parse(url);
+      final request = http.Request('GET', uri);
+      request.headers.addAll(_headers);
+      final startedAt = DateTime.now();
+      final streamed = await client.send(request).timeout(timeout);
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in streamed.stream.timeout(timeout)) {
+        builder.add(chunk);
+        if (builder.length > _maxResponseBytes) {
+          throw _ResponseTooLargeException(uri);
+        }
+        if (DateTime.now().difference(startedAt) > timeout) {
+          throw TimeoutException('Response exceeded ${timeout.inSeconds}s', timeout);
+        }
+      }
+      return http.Response.bytes(
+        builder.takeBytes(),
+        streamed.statusCode,
+        headers: streamed.headers,
+        reasonPhrase: streamed.reasonPhrase,
+      );
+    } finally {
+      client.close();
+    }
+  }
+
   /// GET that reports failure as null instead of throwing, for requests whose
   /// results are optional.
   Future<http.Response?> _tryGet(String url, Duration timeout) async {
     try {
-      return await http.get(Uri.parse(url), headers: _headers).timeout(timeout);
+      return await _getCapped(url, timeout);
     } catch (e) {
       debugPrint('XtreamCodesService: Optional request failed ($url): $e');
       return null;
@@ -89,13 +145,15 @@ class XtreamCodesService {
   }) async {
     for (var attempt = 1; ; attempt++) {
       try {
-        return await http
-            .get(Uri.parse(url), headers: _headers)
-            .timeout(timeout);
+        return await _getCapped(url, timeout);
       } catch (e) {
-        final transient = e is TimeoutException ||
-            e is SocketException ||
-            e is http.ClientException;
+        // Over-cap is the server's real answer, not a hiccup — retrying
+        // would re-download the same oversized payload up to [attempts]
+        // times.
+        final transient = e is! _ResponseTooLargeException &&
+            (e is TimeoutException ||
+                e is SocketException ||
+                e is http.ClientException);
         if (!transient || attempt >= attempts) rethrow;
         final backoff = Duration(milliseconds: 500 * (1 << (attempt - 1)));
         debugPrint(
@@ -382,11 +440,14 @@ class XtreamCodesService {
         const Duration(seconds: 30),
       );
       onPhase?.call(IptvLoadPhases.downloading);
-      final streamsResponse = await _getWithRetry(
+      // Nullable locals on purpose: every reference to the response bodies is
+      // dropped before the worker runs (see below), so the async frame can't
+      // pin them for the whole decode+build.
+      http.Response? streamsResponse = await _getWithRetry(
         '$base&action=$streamsAction',
         timeout: const Duration(seconds: 90),
       );
-      final categoriesResponse = await categoriesFuture;
+      http.Response? categoriesResponse = await categoriesFuture;
 
       if (streamsResponse.statusCode != 200) {
         return IptvParseResult(
@@ -402,16 +463,19 @@ class XtreamCodesService {
       // decode is itself hundreds of milliseconds of the freeze this function
       // exists to remove. Only the raw bytes are touched; the decode rides
       // along to the worker inside the job.
-      final streamsBytes = streamsResponse.bodyBytes;
+      Uint8List? streamsBytes = streamsResponse.bodyBytes;
+      final streamsCharset = charsetOf(streamsResponse);
       onPhase?.call(IptvLoadPhases.processing, bytes: streamsBytes.length);
       // One local for "the categories response we can actually use", so the
       // bytes and the charset can never be derived from disagreeing
       // conditions.
-      final usableCategories =
+      http.Response? usableCategories =
           (categoriesResponse == null || categoriesResponse.statusCode != 200)
               ? null
               : categoriesResponse;
-      final categoriesBytes = usableCategories?.bodyBytes;
+      Uint8List? categoriesBytes = usableCategories?.bodyBytes;
+      final categoriesCharset =
+          usableCategories == null ? null : charsetOf(usableCategories);
 
       final encodedUser = Uri.encodeComponent(username);
       final encodedPass = Uri.encodeComponent(password);
@@ -459,9 +523,8 @@ class XtreamCodesService {
         categoriesBytes: categoriesBytes == null
             ? null
             : TransferableTypedData.fromList([categoriesBytes]),
-        streamsCharset: charsetOf(streamsResponse),
-        categoriesCharset:
-            usableCategories == null ? null : charsetOf(usableCategories),
+        streamsCharset: streamsCharset,
+        categoriesCharset: categoriesCharset,
         serverUrl: serverUrl,
         encodedUser: encodedUser,
         encodedPass: encodedPass,
@@ -481,9 +544,27 @@ class XtreamCodesService {
           streamsBytes.length + (categoriesBytes?.length ?? 0) >
               computeDecodeThreshold;
       if (useIsolate) isolateBuilds++;
-      final built = useIsolate
+      // Drop every reference to the response bodies BEFORE the worker runs.
+      // The transferable inside the job carries its own copy, so keeping
+      // these pinned here parked a second full payload (~60 MB on a big
+      // panel) on the UI heap for the entire decode+build — pure waste, and
+      // exactly the headroom a 1-2 GB TV box doesn't have.
+      streamsResponse = null;
+      categoriesResponse = null;
+      usableCategories = null;
+      streamsBytes = null;
+      categoriesBytes = null;
+      // When ingesting, only THIS decode+build+ingest hop runs behind the
+      // process-wide catalog gate — the download above never does. Holding
+      // the gate across a slow panel fetch used to block settings deletions
+      // and EPG work for up to the whole 90s timeout. Re-entrant: a caller
+      // already inside the gate runs it inline.
+      Future<IptvParseResult> runBuild() async => useIsolate
           ? await compute(_buildXtreamStreams, job)
           : _buildXtreamStreams(job);
+      final built = job.ingestCatalogKey != null
+          ? await IptvCatalogDb.runExclusive(runBuild)
+          : await runBuild();
 
       if (built.hasError) return built;
       final channels = built.channels;
@@ -1008,18 +1089,6 @@ class _StreamsJob {
 /// back, once.
 IptvParseResult _buildXtreamStreams(_StreamsJob job) {
   XtreamCodesService.buildsOnThisIsolate++;
-  final isLive = job.contentType == 'live';
-  final isSeries = job.contentType == 'series';
-
-  // The expensive UTF-8 pass now happens HERE, on the worker.
-  final streamsBody = XtreamCodesService.encodingForCharset(job.streamsCharset)
-      .decode(job.streamsBytes.materialize().asUint8List());
-
-  final (streamsData, streamsError) =
-      XtreamCodesService.decodeJsonListSync(streamsBody, 'streams');
-  if (streamsError != null) {
-    return IptvParseResult(channels: [], categories: [], error: streamsError);
-  }
 
   // Category id → name; channels degrade to ungrouped (with a user-visible
   // warning) when the panel couldn't serve them.
@@ -1053,6 +1122,37 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
       }
     }
   }
+
+  // Decode → JSON graph → channel objects, all inside one helper FRAME so
+  // the two big intermediates (the UTF-16 body, then the decoded maps —
+  // together several times the payload size for a 50k-item panel) are
+  // guaranteed dead before the ingest below allocates. They all used to
+  // coexist at the ingest call: bytes + body + graph + channels at once, the
+  // panel-sized OOM on 1-2 GB TV boxes.
+  final (channels, streamsError) = _streamChannelsFromJob(job, categoryMap);
+  if (streamsError != null) {
+    return IptvParseResult(channels: [], categories: [], error: streamsError);
+  }
+
+  return _finishXtreamBuild(job, channels!, categoryNames, warning);
+}
+
+/// Decode the streams payload and build every channel object. Its own frame
+/// on purpose: when it returns, the decoded body and the raw JSON graph are
+/// unreachable — only the compact channel list survives into the ingest.
+(List<IptvChannel>?, String?) _streamChannelsFromJob(
+  _StreamsJob job,
+  Map<String, String> categoryMap,
+) {
+  final isLive = job.contentType == 'live';
+  final isSeries = job.contentType == 'series';
+
+  // The expensive UTF-8 pass now happens HERE, on the worker.
+  final streamsBody = XtreamCodesService.encodingForCharset(job.streamsCharset)
+      .decode(job.streamsBytes.materialize().asUint8List());
+  final (streamsData, streamsError) =
+      XtreamCodesService.decodeJsonListSync(streamsBody, 'streams');
+  if (streamsError != null) return (null, streamsError);
 
   final channels = <IptvChannel>[];
   for (final stream in streamsData!) {
@@ -1157,7 +1257,17 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
       );
     }
   }
+  return (channels, null);
+}
 
+/// Ingest (when the catalog DB is in play) or hand the built list back —
+/// reached with only the finished channel list alive, never the raw payload.
+IptvParseResult _finishXtreamBuild(
+  _StreamsJob job,
+  List<IptvChannel> channels,
+  List<String> categoryNames,
+  String? warning,
+) {
   // Catalog database: write the rows here on the worker and hand back only a
   // receipt. An EMPTY list is deliberately NOT ingested — a flaky panel
   // returning nothing must not wipe a previously good stored catalog (the

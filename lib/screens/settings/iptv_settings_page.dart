@@ -599,36 +599,50 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // category) — without a snapshot the IPTV page falls back to a real
     // blocking fetch on next open, so a genuinely dead source finally shows
     // its error instead of ghost rows served from disk.
-    // Refetching a provider ingests its whole catalog, so it takes the same
-    // process-wide gate as every other whole-catalog job. The IPTV page may
-    // still be running maintenance for a catalog it presented before the user
-    // walked into settings, and on a low-end box those two must not overlap.
-    final result = await IptvCatalogDb.runExclusive(() async {
+    //
+    // Whole-catalog work (the delete here, the parse+ingest inside the
+    // fetch) runs behind the process-wide catalog gate — but the NETWORK
+    // download deliberately does not. Wrapping the whole refresh used to
+    // hold the gate for up to the fetch timeout, queueing every other
+    // catalog job (page maintenance, EPG scans, deletions) behind one slow
+    // panel. Maintenance that interleaves during the download re-checks its
+    // preconditions inside the gate, per the runExclusive contract.
+    IptvParseResult result;
+    try {
       if (playlist.isXtreamCodes) {
         XtreamCodesService.instance.clearCache(playlist.serverUrl);
-        await IptvCatalogDb.removeCatalogsByKeys(
-          IptvCatalogKey.allForXtream(
-            playlist.serverUrl!,
-            playlist.username ?? '',
+        await IptvCatalogDb.runExclusive(
+          () => IptvCatalogDb.removeCatalogsByKeys(
+            IptvCatalogKey.allForXtream(
+              playlist.serverUrl!,
+              playlist.username ?? '',
+            ),
           ),
         );
-        return XtreamCodesService.instance.fetchLiveStreams(
+        result = await XtreamCodesService.instance.fetchLiveStreams(
           playlist.serverUrl!,
-          playlist.username!,
-          playlist.password!,
+          playlist.username ?? '',
+          playlist.password ?? '',
+          numberingSourceKey: playlist.id,
+        );
+      } else {
+        IptvService.instance.clearCache(playlist.url);
+        await IptvCatalogDb.runExclusive(
+          () => IptvCatalogDb.removeCatalogsByKeys([
+            IptvCatalogKey.forUrl(playlist.url),
+          ]),
+        );
+        result = await IptvService.instance.fetchPlaylist(
+          playlist.url,
+          forceRefresh: true,
           numberingSourceKey: playlist.id,
         );
       }
-      IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys(
-        [IptvCatalogKey.forUrl(playlist.url)],
-      );
-      return IptvService.instance.fetchPlaylist(
-        playlist.url,
-        forceRefresh: true,
-        numberingSourceKey: playlist.id,
-      );
-    });
+    } catch (e) {
+      // A throw from the catalog delete (corrupt DB, locked file) used to be
+      // an unhandled async error with the row stuck on its spinner.
+      result = IptvParseResult(channels: [], categories: [], error: '$e');
+    }
 
     if (!mounted) return;
     setState(() => _refreshingIds.remove(playlist.id));

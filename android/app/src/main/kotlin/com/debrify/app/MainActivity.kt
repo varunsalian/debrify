@@ -387,6 +387,15 @@ class MainActivity : FlutterActivity() {
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         super.cleanUpFlutterEngine(flutterEngine)
+        // The trailer player's ExoPlayer listeners keep emitting onto this
+        // engine's messenger after detach; invokeMethod on a detached engine
+        // throws an UNCAUGHT RuntimeException on the main thread (process
+        // death). releaseAll() marks the player detached (emits become no-ops)
+        // and tears every instance down. Instance-scoped (unlike the static
+        // player channel below), so a stale activity's cleanup can't clobber a
+        // newer instance's player. onDestroy's call is then a no-op.
+        tvTrailerPlayer?.releaseAll()
+        tvTrailerPlayer = null
         // The static player channel targets this engine's messenger. Once the
         // engine detaches, invokeMethod on it goes into the void and its
         // Result callback never fires — the native TV player's EPG bridge

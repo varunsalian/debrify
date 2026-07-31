@@ -14,6 +14,14 @@ class PlatformUtil {
   /// reliably warm by the time playback starts). For UI that can't await.
   static bool get isAndroidTvCached => _isAndroidTVCached ?? false;
 
+  /// Whether the most recent [isAndroidTV] probe threw instead of answering.
+  /// Callers that gate MEMORY safety on TV detection (the image-cache cap)
+  /// must treat "the probe failed" differently from "definitely not a TV":
+  /// defaulting a 1 GB TV box to phone-sized caches because one early channel
+  /// call failed is an OOM, while the reverse merely costs a phone some cache.
+  static bool get lastProbeFailed => _lastProbeFailed;
+  static bool _lastProbeFailed = false;
+
   /// Check if the current device is an Android TV
   ///
   /// Returns `true` if running on Android TV, `false` otherwise.
@@ -35,10 +43,14 @@ class PlatformUtil {
     try {
       final result = await _channel.invokeMethod<bool>('isTelevision');
       _isAndroidTVCached = result ?? false;
+      _lastProbeFailed = false;
       return _isAndroidTVCached!;
     } catch (e) {
-      // If the method call fails, assume not TV
-      _isAndroidTVCached = false;
+      // Answer "not TV" for this call, but do NOT cache it: a transient
+      // early-startup failure (engine still attaching) would otherwise stick
+      // for the whole session and silently skip every TV-only accommodation.
+      // The next caller re-probes.
+      _lastProbeFailed = true;
       return false;
     }
   }

@@ -35,6 +35,13 @@ class DebrifyTvDatabase {
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
+      // Without this, sqflite THROWS on a version decrease (sideloading an
+      // older APK — routine on TV boxes) — and the throw surfaced inside
+      // IptvMediaStore._ensureMigrated, which swallows it and retries
+      // forever: favorites/history silently never load. This DB is
+      // favorites/history/resume bookkeeping, so rebuilding it from scratch
+      // beats a permanently wedged store.
+      onDowngrade: onDatabaseDowngradeDelete,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE tv_channels (

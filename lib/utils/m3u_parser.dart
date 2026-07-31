@@ -21,26 +21,12 @@ class M3uParser {
     if (content.startsWith('﻿')) {
       content = content.substring(1);
     }
-    final lines = content.split('\n').map((l) => l.trim()).toList();
     final channels = <IptvChannel>[];
     final categories = <String>{};
 
-    if (lines.isEmpty) {
-      return const IptvParseResult(
-        channels: [],
-        categories: [],
-        error: 'Empty playlist',
-      );
-    }
-
     // Check for M3U header (optional but common). It may declare the
     // playlist's XMLTV guide via url-tvg= / x-tvg-url=.
-    int startIndex = 0;
     String? epgUrl;
-    if (lines.first.startsWith('#EXTM3U')) {
-      startIndex = 1;
-      epgUrl = _parseHeaderEpgUrl(lines.first);
-    }
 
     String? currentName;
     String? currentLogo;
@@ -49,8 +35,26 @@ class M3uParser {
     Map<String, String> currentAttributes = {};
     Map<String, String> currentHeaders = {};
 
-    for (int i = startIndex; i < lines.length; i++) {
-      final line = lines[i];
+    // Lazily, never `split('\n').map(trim).toList()`: a 50 MB playlist is
+    // ~100k lines, and materializing every one as a fresh trimmed String
+    // held the file ~3× over (content + all lines + the channel list) at
+    // peak — a real OOM contributor on low-RAM TVs. LineSplitter.split
+    // yields one line at a time; consumed lines are collectable
+    // immediately, so peak is content + channels.
+    var sawAnyLine = false;
+    var isFirstLine = true;
+    for (var line in LineSplitter.split(content)) {
+      line = line.trim();
+      sawAnyLine = true;
+
+      if (isFirstLine) {
+        isFirstLine = false;
+        if (line.startsWith('#EXTM3U')) {
+          epgUrl = _parseHeaderEpgUrl(line);
+          continue;
+        }
+        // No header — fall through and treat it as a normal line.
+      }
 
       if (line.isEmpty || line.startsWith('#EXTGRP')) {
         continue;
@@ -109,6 +113,14 @@ class M3uParser {
         currentAttributes = {};
         currentHeaders = {};
       }
+    }
+
+    if (!sawAnyLine) {
+      return const IptvParseResult(
+        channels: [],
+        categories: [],
+        error: 'Empty playlist',
+      );
     }
 
     // Sort categories alphabetically

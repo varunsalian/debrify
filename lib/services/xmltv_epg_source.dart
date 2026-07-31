@@ -129,9 +129,21 @@ class XmltvEpgSource {
     // the stored guide below keys on the URL alone.
     final ids = tvgIds.toList()..sort();
     final names = channelNames.toList()..sort();
-    final key = md5
-        .convert(utf8.encode('$epgUrl\n${ids.join(',')}\n${names.join(',')}'))
-        .toString();
+    // Chunked md5, never one giant joined string: at 50k ids + names the
+    // joined key was a multi-MB transient String built on the UI isolate in
+    // the page-open turn, just to name an in-flight map entry.
+    final digestSink = _SingleDigestSink();
+    final byteSink = md5.startChunkedConversion(digestSink);
+    void addPart(String part) {
+      byteSink.add(utf8.encode(part));
+      byteSink.add(const [0x0A]);
+    }
+
+    addPart(epgUrl);
+    ids.forEach(addPart);
+    names.forEach(addPart);
+    byteSink.close();
+    final key = digestSink.value.toString();
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
     final future =
@@ -867,4 +879,17 @@ class _Snapshot {
           (guide.byId.isEmpty
               ? XmltvEpgSource._emptyCacheTtl
               : XmltvEpgSource._cacheTtl);
+}
+
+/// Terminal sink for a chunked md5 conversion — holds the single digest the
+/// hasher emits on close. (Avoids depending on package:convert's
+/// AccumulatorSink for one value.)
+class _SingleDigestSink implements Sink<Digest> {
+  late Digest value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
 }

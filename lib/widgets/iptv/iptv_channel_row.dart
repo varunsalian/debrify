@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
+import '../../services/debrify_image_cache.dart';
 import '../../services/iptv_epg_service.dart';
 import '../browse/brand_accent.dart';
 import '../home/home_theme.dart';
@@ -43,6 +44,14 @@ class IptvChannelRow extends StatefulWidget {
 
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
+
+  /// Fired from dispose — tells the list this row no longer holds its cached
+  /// focus node. This is the ONLY reliable detachment signal: FocusNode.context
+  /// is assigned on attach and never reverts to null on detach, so the list
+  /// cannot infer "row gone" from the node itself, and retiring nodes on any
+  /// other evidence either leaks them (per row ever scrolled — the big-catalog
+  /// OOM) or disposes one still in use.
+  final VoidCallback? onDetached;
 
   /// Opens this channel's programme schedule. TV fires it on RIGHT (the only
   /// key a row has left: OK plays, hold-OK favourites, LEFT is the sidebar's);
@@ -83,6 +92,7 @@ class IptvChannelRow extends StatefulWidget {
     this.isFavorited = false,
     this.onFavoriteToggle,
     this.onFocused,
+    this.onDetached,
     this.onSchedule,
     this.scheduleOnRightKey = false,
     this.progress,
@@ -140,6 +150,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   @override
   void dispose() {
     _holdController.dispose();
+    widget.onDetached?.call();
     super.dispose();
   }
 
@@ -863,6 +874,10 @@ class _LogoChip extends StatelessWidget {
             child: hasArt
                 ? CachedNetworkImage(
                     imageUrl: logoUrl!,
+                    // Dedicated disk store: the default manager holds 200
+                    // objects, so a big guide re-downloaded logos on every
+                    // scroll-back.
+                    cacheManager: DebrifyImageCache.iptvLogos,
                     fit: poster ? BoxFit.cover : BoxFit.contain,
                     // IPTV art is often 1000px+ going into a tiny slot —
                     // uncapped decodes janked scrolling and thrashed the TV's

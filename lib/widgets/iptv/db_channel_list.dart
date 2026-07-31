@@ -76,9 +76,16 @@ class DbChannelList extends ListBase<IptvChannel> {
   final LinkedHashMap<int, List<IptvChannel>> _pages = LinkedHashMap();
   final HashMap<IptvChannel, int> _indexOfInstance = HashMap.identity();
 
-  /// Kept alive by rows whose page got evicted while they were still built —
-  /// see the fallback in [operator []].
-  static final IptvChannel _missingRow = IptvChannel(name: '…', url: '');
+  /// Placeholder instances for indices whose page faulted short (stale
+  /// generation) — see the fallback in [operator []]. Per-INDEX and memoized,
+  /// never a single shared instance: the same index must return the same
+  /// instance across rebuilds (stable ObjectKey / focus node), and distinct
+  /// indices must never share one — the grid keys rows by ObjectKey and
+  /// caches focus nodes by instance identity, so one shared sentinel would
+  /// attach one FocusNode to many sibling Focus widgets at once (focus-tree
+  /// corruption) and hand duplicate keys to siblings. Bounded by how many
+  /// stale indices are actually visited before the view re-pins.
+  final HashMap<int, IptvChannel> _placeholders = HashMap();
 
   @override
   int get length => _length;
@@ -129,7 +136,10 @@ class DbChannelList extends ListBase<IptvChannel> {
         'DbChannelList: page ${pageIndex} short '
         '(${page.length} rows, wanted #$offsetInPage) — stale generation?',
       );
-      return _missingRow;
+      return _placeholders.putIfAbsent(
+        index,
+        () => IptvChannel(name: '…', url: ''),
+      );
     }
     return page[offsetInPage];
   }

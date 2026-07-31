@@ -1,4 +1,5 @@
-import 'dart:typed_data' show BytesBuilder;
+import 'dart:isolate' show TransferableTypedData;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -124,10 +125,9 @@ class IptvService {
 
       final bytes = builder.takeBytes();
       onPhase?.call(IptvLoadPhases.processing, bytes: bytes.length);
-      final content = M3uParser.decodeBytes(bytes);
 
-      final result = await _parse(
-        content,
+      final result = await _parseBytes(
+        bytes,
         ingestCatalogKey: ingestToDb ? IptvCatalogKey.forUrl(url) : null,
         numberingSourceKey: numberingSourceKey,
       );
@@ -234,9 +234,55 @@ class IptvService {
     return result;
   }
 
-  /// Parse large playlists off the UI isolate to avoid freezing the app.
-  /// With [ingestCatalogKey] set, the worker also writes the catalog into
-  /// the DB and returns a receipt instead of the channel list.
+  /// Parse a downloaded playlist body. Above the inline threshold the raw
+  /// BYTES are handed to the worker as [TransferableTypedData] (moved, not
+  /// copied — the Xtream path's proven pattern) and UTF-8 decoding happens
+  /// THERE. Decoding on this isolate used to build a UTF-16 string up to 2×
+  /// the payload (a multi-second synchronous stall on a 50 MB playlist —
+  /// straight ANR territory) and `compute` then copied that whole string
+  /// again into the worker: ~250 MB peak across both heaps for a payload
+  /// the limit calls acceptable.
+  Future<IptvParseResult> _parseBytes(
+    Uint8List bytes, {
+    String? ingestCatalogKey,
+    String? numberingSourceKey,
+  }) async {
+    if (bytes.length <= _inlineParseBytes) {
+      return _parse(
+        M3uParser.decodeBytes(bytes),
+        ingestCatalogKey: ingestCatalogKey,
+        numberingSourceKey: numberingSourceKey,
+      );
+    }
+    if (ingestCatalogKey != null) {
+      final job = _M3uIngestJob(
+        bytes: TransferableTypedData.fromList([bytes]),
+        dbPath: IptvCatalogDb.path,
+        catalogKey: ingestCatalogKey,
+        numberingSourceKey: numberingSourceKey,
+      );
+      // Only the parse+ingest hop runs behind the process-wide catalog gate
+      // — never the download above it. Holding the gate across a network
+      // fetch (up to the 2-minute deadline) used to block settings
+      // deletions, EPG scans and migrations behind a slow server.
+      // Re-entrant: a caller already inside the gate runs this inline.
+      return IptvCatalogDb.runExclusive(() => compute(_parseAndIngestM3u, job));
+    }
+    // No-DB path (catalog DB unavailable): decode + parse in the worker. The
+    // parsed channels still copy back — unavoidable while this source stays
+    // materialized — but the decoded-string copy no longer does.
+    return compute(_decodeAndParseM3u, TransferableTypedData.fromList([bytes]));
+  }
+
+  /// Bodies at or under this size are parsed inline — isolate spin-up costs
+  /// more than the parse itself down there.
+  static const _inlineParseBytes = 100 * 1024;
+
+  /// Parse already-decoded M3U text off the UI isolate when large. With
+  /// [ingestCatalogKey] set, the worker also writes the catalog into the DB
+  /// and returns a receipt instead of the channel list. String-based entry
+  /// kept for the local-file path ([parseContent]), whose content is already
+  /// a String in storage.
   Future<IptvParseResult> _parse(
     String content, {
     String? ingestCatalogKey,
@@ -249,36 +295,47 @@ class IptvService {
         catalogKey: ingestCatalogKey,
         numberingSourceKey: numberingSourceKey,
       );
-      return content.length > 100 * 1024
-          ? await compute(_parseAndIngestM3u, job)
-          : _parseAndIngestM3u(job);
+      // Gated for the same reason as the bytes path above.
+      return IptvCatalogDb.runExclusive(
+        () async => content.length > _inlineParseBytes
+            ? await compute(_parseAndIngestM3u, job)
+            : _parseAndIngestM3u(job),
+      );
     }
-    return content.length > 100 * 1024
+    return content.length > _inlineParseBytes
         ? await compute(M3uParser.parse, content)
         : M3uParser.parse(content);
   }
 }
 
 class _M3uIngestJob {
-  final String content;
+  /// Exactly one of [bytes] / [content] is set. Bytes travel zero-copy
+  /// (transferable); a String would be deep-copied into the worker.
+  final TransferableTypedData? bytes;
+  final String? content;
   final String dbPath;
   final String catalogKey;
   final String? numberingSourceKey;
 
   const _M3uIngestJob({
-    required this.content,
+    this.bytes,
+    this.content,
     required this.dbPath,
     required this.catalogKey,
     required this.numberingSourceKey,
   });
 }
 
-/// Worker entry: parse AND ingest in one hop, so the channel objects never
-/// cross back to the UI isolate. An empty or failed parse is returned as-is
-/// and deliberately NOT ingested — a transient bad fetch must not wipe a
+/// Worker entry: decode (when bytes were transferred), parse AND ingest in
+/// one hop, so neither the decoded text nor the channel objects ever cross
+/// back to the UI isolate. An empty or failed parse is returned as-is and
+/// deliberately NOT ingested — a transient bad fetch must not wipe a
 /// previously good stored catalog.
 IptvParseResult _parseAndIngestM3u(_M3uIngestJob job) {
-  final result = M3uParser.parse(job.content);
+  final content =
+      job.content ??
+      M3uParser.decodeBytes(job.bytes!.materialize().asUint8List());
+  final result = M3uParser.parse(content);
   if (result.hasError || result.channels.isEmpty) return result;
   final digest = IptvCatalogDb.ingest(
     dbPath: job.dbPath,
@@ -300,6 +357,10 @@ IptvParseResult _parseAndIngestM3u(_M3uIngestJob job) {
     ),
   );
 }
+
+/// Worker entry for the no-DB path: decode transferred bytes and parse.
+IptvParseResult _decodeAndParseM3u(TransferableTypedData bytes) =>
+    M3uParser.parse(M3uParser.decodeBytes(bytes.materialize().asUint8List()));
 
 class _CachedPlaylist {
   final IptvParseResult result;

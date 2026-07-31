@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
@@ -270,6 +271,11 @@ class IptvCatalogDb {
     'DROP TRIGGER IF EXISTS channels_fts_ai',
     'DROP TRIGGER IF EXISTS channels_fts_ad',
     'DROP TABLE IF EXISTS channels_fts',
+    // Superseded by idx_channels_grp_pos (covering: + position). CREATE
+    // INDEX IF NOT EXISTS is a silent no-op on an existing name, so the
+    // upgrade has to be a drop-old + create-new pair; dropping here is a
+    // no-op from the second open onward.
+    'DROP INDEX IF EXISTS idx_channels_grp',
   ];
   static const _schemaSql = [
     '''
@@ -312,8 +318,8 @@ class IptvCatalogDb {
       ON channels(catalog_key, generation, position)
     ''',
     '''
-      CREATE INDEX IF NOT EXISTS idx_channels_grp
-      ON channels(catalog_key, generation, grp)
+      CREATE INDEX IF NOT EXISTS idx_channels_grp_pos
+      ON channels(catalog_key, generation, grp, position)
     ''',
     '''
       CREATE INDEX IF NOT EXISTS idx_channels_url
@@ -469,7 +475,44 @@ class IptvCatalogDb {
   /// migrated data await separately.
   static Future<void> open() {
     if (_db != null) return Future.value();
-    return _opening ??= _open().whenComplete(() => _opening = null);
+    return _opening ??= _openWithRecovery().whenComplete(() => _opening = null);
+  }
+
+  /// [_open] with one delete-and-recreate retry. A catalog database that
+  /// cannot even be opened/prepared (power-cut mid-ingest corrupting the WAL
+  /// — a real outcome on TV boxes — bad sectors, a bad downgrade) used to
+  /// leave the IPTV page on its spinner forever: the throw escaped the
+  /// fire-and-forget load and there was no recovery path anywhere. The
+  /// catalog is a cache of provider data; deleting it loses nothing a
+  /// re-ingest can't restore, while keeping it bricks the page on every
+  /// launch.
+  ///
+  /// The delete runs behind [runExclusive] so no maintenance job can hold its
+  /// own connection to the file while it disappears (at first-open failure
+  /// none has run yet — worker jobs need [path] or a vended snapshot, both of
+  /// which require a successful open). Exactly one retry: a second failure is
+  /// surfaced to the caller's error UI, never looped on.
+  static Future<void> _openWithRecovery() async {
+    try {
+      await _open();
+    } catch (e) {
+      debugPrint('IptvCatalogDb: open failed ($e) — deleting and recreating');
+      await runExclusive(() async {
+        final dir =
+            debugDirectoryOverride ??
+            (await getApplicationDocumentsDirectory()).path;
+        final base = p.join(dir, _dbFileName);
+        for (final suffix in const ['', '-wal', '-shm']) {
+          try {
+            final file = File('$base$suffix');
+            if (file.existsSync()) file.deleteSync();
+          } catch (_) {
+            // Undeletable file: the retry below will fail and surface.
+          }
+        }
+      });
+      await _open();
+    }
   }
 
   /// Applies any pending row-level schema migration, on a worker isolate.
@@ -510,6 +553,14 @@ class IptvCatalogDb {
   /// operations (catalog deletion). Callers re-check their own preconditions
   /// inside, so a second pipeline for work the first already finished costs a
   /// couple of indexed reads instead of a duplicate scan.
+  ///
+  /// CAVEAT — the re-entrancy marker is a Zone value, and Zones are inherited
+  /// by EVERYTHING created inside the job: Timers, unawaited futures,
+  /// post-frame callbacks. Detached work spawned from a gated job therefore
+  /// runs "inline" FOREVER — outside the queue's serialization — even long
+  /// after the job released the gate. Fire-and-forget work started inside a
+  /// gated job that itself needs gating MUST be launched via `Zone.root.run`
+  /// (see _updateEpgContext in the results view for the pattern).
   static Future<T> runExclusive<T>(Future<T> Function() job) {
     if (Zone.current[#iptvCatalogMaintenance] == true) return job();
     final result = _maintenanceQueue.then((_) {
@@ -577,7 +628,7 @@ class IptvCatalogDb {
       db.execute('PRAGMA user_version = $_schemaVersion');
       db.execute('COMMIT');
     } catch (_) {
-      db.execute('ROLLBACK');
+      _rollbackQuietly(db);
       rethrow;
     }
     return _schemaVersion;
@@ -699,6 +750,43 @@ class IptvCatalogDb {
       // Idempotent; covers the first-ever ingest racing ahead of the UI-side
       // open().
       _createSchema(db);
+
+      // Overlapping ingests are serialized by [runExclusive] on the calling
+      // side (first load, revalidate and settings refresh all run gated), so
+      // reading the generation outside a transaction is sound. The orphan
+      // sweep in the first transaction below ALSO makes a crashed partial
+      // attempt at this generation harmless — a retry never merges with its
+      // leftovers.
+      final generation = _nextGeneration(db, catalogKey);
+
+      // Chunked, never one giant transaction. A 50k ingest used to run ~150k
+      // statements under a single BEGIN IMMEDIATE: the write lock was held
+      // for the entire run (every UI-side write then blocked into its 5s
+      // busy_timeout — an ANR window), the WAL had to grow to hold the whole
+      // generation, and one SQLITE_FULL threw the complete load away.
+      // Readers cannot observe a chunk boundary: the `catalogs` pointer row
+      // only lands in the FINAL transaction, and snapshots resolve rows
+      // through it.
+      db.execute('BEGIN IMMEDIATE');
+      Map<int, int> channelNumbers;
+      try {
+        db.execute(
+          'DELETE FROM channels WHERE catalog_key = ? AND generation >= ?',
+          [catalogKey, generation],
+        );
+        channelNumbers = numberingSourceKey == null
+            ? const <int, int>{}
+            : _assignChannelNumbers(
+                db,
+                sourceKey: numberingSourceKey,
+                channels: channels,
+              );
+        db.execute('COMMIT');
+      } catch (_) {
+        _rollbackQuietly(db);
+        rethrow;
+      }
+
       final insert = db.prepare('''
         INSERT INTO channels(
           catalog_key, generation, position, name, url, logo_url, grp,
@@ -706,75 +794,139 @@ class IptvCatalogDb {
           search_key, channel_number
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ''');
-      // IMMEDIATE takes the write lock up front, which is what makes the
-      // generation allocation below safe: two overlapping ingests of the
-      // SAME key (a revalidate racing a fresh load) serialize here instead
-      // of both reading the same current generation and interleaving two
-      // row-sets under one generation number. The second writer blocks
-      // (busy_timeout) until the first commits, then correctly reads the
-      // bumped generation.
-      db.execute('BEGIN IMMEDIATE');
       try {
-        final generation = _nextGeneration(db, catalogKey);
-        final channelNumbers = numberingSourceKey == null
-            ? const <int, int>{}
-            : _assignChannelNumbers(
-                db,
-                sourceKey: numberingSourceKey,
-                channels: channels,
-              );
-        for (var i = 0; i < channels.length; i++) {
-          final c = channels[i];
-          insert.execute([
-            catalogKey,
-            generation,
-            i,
-            c.name,
-            c.url,
-            c.logoUrl,
-            c.group,
-            c.duration,
-            c.contentType,
-            c.attributes.isEmpty ? null : jsonEncode(c.attributes),
-            c.httpHeaders.isEmpty ? null : jsonEncode(c.httpHeaders),
-            // Same haystack IptvChannel.searchKey builds — search behavior
-            // must not change when the query moves into SQL.
-            '${c.name.toLowerCase()}\n${c.group?.toLowerCase() ?? ''}',
-            channelNumbers[i],
-          ]);
+        var i = 0;
+        while (i < channels.length) {
+          var end = i + _ingestChunkRows;
+          if (end > channels.length) end = channels.length;
+          db.execute('BEGIN IMMEDIATE');
+          try {
+            for (; i < end; i++) {
+              final c = channels[i];
+              insert.execute([
+                catalogKey,
+                generation,
+                i,
+                c.name,
+                c.url,
+                c.logoUrl,
+                c.group,
+                c.duration,
+                c.contentType,
+                c.attributes.isEmpty ? null : jsonEncode(c.attributes),
+                c.httpHeaders.isEmpty ? null : jsonEncode(c.httpHeaders),
+                // Same haystack IptvChannel.searchKey builds — search
+                // behavior must not change when the query moves into SQL.
+                '${c.name.toLowerCase()}\n${c.group?.toLowerCase() ?? ''}',
+                channelNumbers[i],
+              ]);
+            }
+            db.execute('COMMIT');
+          } catch (_) {
+            _rollbackQuietly(db);
+            rethrow;
+          }
         }
-        db.execute(
-          'INSERT OR REPLACE INTO catalogs'
-          '(catalog_key, generation, channel_count, content_digest, '
-          'categories_json, epg_url, ingested_at) '
-          'VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [
-            catalogKey,
-            generation,
-            channels.length,
-            digest,
-            categories.isEmpty ? null : jsonEncode(categories),
-            epgUrl,
-            DateTime.now().millisecondsSinceEpoch,
-          ],
-        );
-        // Keep ONE previous generation alive: the UI holds a CatalogSnapshot
-        // pinned to it while this refresh commits, and sweeping it here would
-        // blank the rows on screen mid-scroll. The view re-pins to the new
-        // generation right after every refresh, so by the time a THIRD
-        // generation lands nobody can still be reading the first.
-        db.execute(
-          'DELETE FROM channels WHERE catalog_key = ? AND generation < ?',
-          [catalogKey, generation - 1],
-        );
-        db.execute('COMMIT');
+
+        // Publish + sweep last — this is the atomic generation switch.
+        db.execute('BEGIN IMMEDIATE');
+        try {
+          db.execute(
+            'INSERT OR REPLACE INTO catalogs'
+            '(catalog_key, generation, channel_count, content_digest, '
+            'categories_json, epg_url, ingested_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+              catalogKey,
+              generation,
+              channels.length,
+              digest,
+              categories.isEmpty ? null : jsonEncode(categories),
+              epgUrl,
+              DateTime.now().millisecondsSinceEpoch,
+            ],
+          );
+          // Keep ONE previous generation alive: the UI holds a
+          // CatalogSnapshot pinned to it while this refresh commits, and
+          // sweeping it here would blank the rows on screen mid-scroll. The
+          // view re-pins to the new generation right after every refresh, so
+          // by the time a THIRD generation lands nobody can still be reading
+          // the first.
+          db.execute(
+            'DELETE FROM channels WHERE catalog_key = ? AND generation < ?',
+            [catalogKey, generation - 1],
+          );
+          db.execute('COMMIT');
+        } catch (_) {
+          _rollbackQuietly(db);
+          rethrow;
+        }
       } catch (_) {
-        db.execute('ROLLBACK');
+        // Best-effort sweep of this attempt's already-committed chunks so
+        // nothing lingers; the defensive sweep above covers the cases where
+        // this never runs (process death).
+        try {
+          db.execute(
+            'DELETE FROM channels WHERE catalog_key = ? AND generation = ?',
+            [catalogKey, generation],
+          );
+        } catch (_) {}
         rethrow;
       } finally {
         insert.dispose();
       }
       return digest;
+    } finally {
+      db.dispose();
+    }
+  }
+
+  /// Rows per ingest sub-transaction. Small enough to keep any single
+  /// write-lock hold (and the WAL growth per commit) bounded; large enough
+  /// that per-transaction overhead stays negligible at 50k rows (~20
+  /// commits).
+  static const _ingestChunkRows = 2500;
+
+  /// ROLLBACK that never shadows the error being handled. If the failure
+  /// happened at COMMIT (disk full, corruption), SQLite has already ended
+  /// the transaction — a bare ROLLBACK then throws "cannot rollback - no
+  /// transaction is active" FROM THE CATCH BLOCK, replacing the original
+  /// exception before `rethrow` can run.
+  static void _rollbackQuietly(Database db) {
+    try {
+      db.execute('ROLLBACK');
+    } catch (_) {}
+  }
+
+  /// [CatalogSnapshot.groups] off the UI isolate: identical query, its own
+  /// worker connection. The GROUP BY walks the whole generation — with the
+  /// covering index it's an index-only scan, but at 50k rows on slow TV
+  /// flash that is still not work for the frame that builds the page. Every
+  /// page-open / revalidate caller awaits this; the synchronous
+  /// [CatalogSnapshot.groups] remains for the rare fallback reads.
+  static Future<List<CatalogGroup>> groupsAsync(CatalogSnapshot snap) {
+    return compute(
+      _readGroupsJob,
+      (dbPath: path, catalogKey: snap.catalogKey, generation: snap.generation),
+      debugLabel: 'iptv-catalog-groups',
+    );
+  }
+
+  static List<CatalogGroup> _readGroupsJob(
+    ({String dbPath, String catalogKey, int generation}) job,
+  ) {
+    final db = _openConnection(job.dbPath);
+    try {
+      final rows = db.select(
+        'SELECT grp, COUNT(*) AS c, MIN(position) AS first_pos '
+        'FROM channels WHERE catalog_key = ? AND generation = ? '
+        'GROUP BY grp ORDER BY first_pos',
+        [job.catalogKey, job.generation],
+      );
+      return [
+        for (final row in rows)
+          CatalogGroup(row['grp'] as String?, row['c'] as int),
+      ];
     } finally {
       db.dispose();
     }
@@ -1090,7 +1242,7 @@ class IptvCatalogDb {
       db.execute('COMMIT');
       return corrected;
     } catch (_) {
-      db.execute('ROLLBACK');
+      _rollbackQuietly(db);
       rethrow;
     }
   }
@@ -1301,7 +1453,7 @@ class IptvCatalogDb {
         );
         db.execute('COMMIT');
       } catch (_) {
-        db.execute('ROLLBACK');
+        _rollbackQuietly(db);
         rethrow;
       } finally {
         insert.dispose();
@@ -1607,7 +1759,7 @@ class IptvCatalogDb {
       }
       db.execute('COMMIT');
     } catch (_) {
-      db.execute('ROLLBACK');
+      _rollbackQuietly(db);
       rethrow;
     }
   }

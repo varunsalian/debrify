@@ -222,6 +222,17 @@ class IptvEpgService {
   final LinkedHashMap<String, _EpgBinding?> _bindingCache = LinkedHashMap();
   static const _maxBindingEntries = 600;
 
+  /// url → programme rows under the current guide context. The row lookup is
+  /// 1-4 indexed queries plus ~80 object allocations, and it used to run on
+  /// EVERY call — per visible row per build, again from each row's 60s
+  /// ticker: constant synchronous SQLite + GC pressure inside the build
+  /// phase. Rows only change when a guide ingest republishes the context
+  /// (which clears this), so caching them is sound. Misses cached too —
+  /// uncovered channels are exactly the ones every build re-asks about.
+  final LinkedHashMap<String, List<EpgProgramme>?> _programmeCache =
+      LinkedHashMap();
+  static const _maxProgrammeEntries = 300;
+
   /// Guards the claim-then-await in [setM3uEpgContext]. A playlist-key
   /// comparison couldn't: two overlapping loads of the SAME playlist
   /// (refresh) would pass a key-equality check, letting the older download
@@ -371,6 +382,9 @@ class IptvEpgService {
       _xmltvGuideKey = guide.guideKey;
       _epgDbCatalogKey = dbCatalogKey;
       _xmltvNameToId = guide.nameToId;
+      // A republished context can carry a freshly re-ingested guide — rows
+      // cached under the old one are stale now.
+      _programmeCache.clear();
       contextVersion.value++;
       return M3uEpgStatus.matched;
     }
@@ -439,6 +453,7 @@ class IptvEpgService {
     _xmltvGuideKey = null;
     _epgDbCatalogKey = null;
     _bindingCache.clear();
+    _programmeCache.clear();
     if (hadContext) contextVersion.value++;
   }
 
@@ -483,6 +498,31 @@ class IptvEpgService {
     String channelUrl,
   ) {
     if (!IptvCatalogDb.isOpen) return null;
+    final cacheKey = '$guideKey\n$channelUrl';
+    if (_programmeCache.containsKey(cacheKey)) {
+      final hit = _programmeCache.remove(cacheKey);
+      _programmeCache[cacheKey] = hit; // re-insert = most recently used
+      return hit;
+    }
+    List<EpgProgramme>? result;
+    try {
+      result = _queryProgrammes(guideKey, channelUrl);
+    } catch (e) {
+      // This runs inside build (row paint) — a SqliteException (BUSY from a
+      // colliding write, IO error) must degrade to "no guide" for this call,
+      // not become an ErrorWidget row. Deliberately NOT cached: transient
+      // failures should be re-asked once the contention passes.
+      debugPrint('IptvEpgService: programme lookup failed: $e');
+      return null;
+    }
+    _programmeCache[cacheKey] = result;
+    while (_programmeCache.length > _maxProgrammeEntries) {
+      _programmeCache.remove(_programmeCache.keys.first);
+    }
+    return result;
+  }
+
+  List<EpgProgramme>? _queryProgrammes(String guideKey, String channelUrl) {
     final binding = _bindingFor(channelUrl);
     if (binding == null) return null;
 

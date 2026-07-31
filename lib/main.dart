@@ -52,6 +52,7 @@ import 'widgets/mobile_floating_nav.dart';
 import 'widgets/tv_ambient_art_stage.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
+import 'widgets/home/home_theme.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
@@ -77,12 +78,23 @@ Future<void> _capImageCache() async {
     // theme's page-transition builder reads on every route push.
     isTv = await PlatformUtil.isAndroidTV();
   } catch (_) {}
-  if (!isTv) return; // leave non-TV devices on the framework defaults
-  // Warm the Debrify-keyboard opt-out alongside the TV flag — TvTextField
-  // reads StorageService.tvKeyboardEnabledCached synchronously in build.
-  try {
-    await StorageService.getTvKeyboardEnabled();
-  } catch (_) {}
+  // When the TV probe FAILED (as opposed to answering "no"), cap any Android
+  // device: the asymmetry decides it. A phone mistakenly capped loses a
+  // little cache headroom; a 1 GB TV box mistakenly left on Flutter's stock
+  // 100 MB / 1000-image cache is an OOM kill. The probe failing at all is
+  // rare (early-startup channel hiccup), so phones almost never pay this.
+  final capAnyway =
+      !isTv && !kIsWeb && Platform.isAndroid && PlatformUtil.lastProbeFailed;
+  if (!isTv && !capAnyway) {
+    return; // leave non-TV devices on the framework defaults
+  }
+  if (isTv) {
+    // Warm the Debrify-keyboard opt-out alongside the TV flag — TvTextField
+    // reads StorageService.tvKeyboardEnabledCached synchronously in build.
+    try {
+      await StorageService.getTvKeyboardEnabled();
+    } catch (_) {}
+  }
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 140;
   // 56 MB: the Home hero decodes 1080-wide backdrops (~2.6 MB each) per rest
@@ -138,6 +150,15 @@ class _TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Backstop for async errors nothing awaited (fire-and-forget loads,
+  // .then chains without onError). Without a handler these are only printed
+  // by the default dispatcher — with one, they're logged consistently AND
+  // any future crash-reporting hook has a single place to attach. Returning
+  // true marks the error handled so it never doubles up in the console.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Unhandled async error: $error\n$stack');
+    return true;
+  };
   // Fire-and-forget: Pug's init does several platform-channel reads
   // (package_info/device_info/connectivity/timezone) + storage setup that are
   // slow on weak TV hardware. Never block first frame on analytics — it runs
@@ -2450,7 +2471,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             }
           },
           child: AnimatedPremiumBackground(
-            isTelevision: _isAndroidTv,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 // TV Layout: Sidebar + Content
@@ -2632,7 +2652,29 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     : DesktopSidebarNav.width;
 
                 return Scaffold(
-                  backgroundColor: Colors.transparent,
+                  // Opaque page ink rather than transparent-to-the-wallpaper.
+                  //
+                  // The active page is inset by the SafeArea below, so a
+                  // transparent shell let the [AnimatedPremiumBackground] wash
+                  // — then an animated indigo→violet→cyan gradient — show
+                  // through the status-bar and home-indicator strips while the
+                  // page itself sat on near-black ink. On a phone those strips
+                  // are thin; on an iPad they're tall enough that the screen
+                  // read as three mismatched horizontal bands. (That wash is
+                  // static now: once this went opaque nothing could see it
+                  // move, so the animation was dropped.)
+                  //
+                  // #0D0B1A is already the app's de-facto ink (kStremioBg,
+                  // _kStremioBg, kSeeAllBg and HomeTheme.bg are all this exact
+                  // colour), so the strips now match every page that uses it and
+                  // sit within a hair of the few that don't. Safe to make opaque
+                  // because no non-TV page is translucent down to the wallpaper:
+                  // the one page that goes transparent on purpose is the glass
+                  // Home board, which is TV-gated (`_heroTrailerActive`).
+                  //
+                  // TV keeps its transparent shell above — TvAmbientArtStage is
+                  // the real background there.
+                  backgroundColor: HomeTheme.bg,
                   body: Stack(
                     children: [
                       // This exact element chain stays mounted while rotating.
