@@ -847,168 +847,198 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
             // [Premiumize] [AllDebrid]
             // [PikPak]     [WebDAV]
             // [Indexers]   [IPTV]
+            // ── Trackers ──
             // [Trakt]       [Simkl]
             // [MDBList]
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
+            //
+            // The heading splits the cards into two Wraps but does NOT change
+            // the column structure, so every hand-wired DPAD neighbour below
+            // stays valid across the boundary: Trakt is still directly under
+            // Indexers, Simkl still directly under IPTV.
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Row 1: Real Debrid (left), Torbox (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.realDebrid,
-                    focusNode: widget.firstCardFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _torboxFocusNode : null,
-                    downNeighbor: wide
-                        ? _premiumizeFocusNode
-                        : _torboxFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.torbox,
-                    focusNode: _torboxFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? widget.firstCardFocusNode : null,
-                    upNeighbor: wide ? null : widget.firstCardFocusNode,
-                    downNeighbor: wide
-                        ? _allDebridFocusNode
-                        : _premiumizeFocusNode,
-                  ),
-                ),
-                // Row 2: Premiumize (left), AllDebrid (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.premiumize,
-                    focusNode: _premiumizeFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _allDebridFocusNode : null,
-                    upNeighbor: wide
-                        ? widget.firstCardFocusNode
-                        : _torboxFocusNode,
-                    downNeighbor: wide ? _pikpakFocusNode : _allDebridFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.allDebrid,
-                    focusNode: _allDebridFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _premiumizeFocusNode : null,
-                    upNeighbor: wide ? _torboxFocusNode : _premiumizeFocusNode,
-                    downNeighbor: wide ? _webDavFocusNode : _pikpakFocusNode,
-                  ),
-                ),
-                // Row 3: PikPak (left), WebDAV (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.pikpak,
-                    focusNode: _pikpakFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _webDavFocusNode : null,
-                    upNeighbor: wide
-                        ? _premiumizeFocusNode
-                        : _allDebridFocusNode,
-                    downNeighbor: wide
-                        ? _indexerManagersFocusNode
-                        : _webDavFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.webDav,
-                    focusNode: _webDavFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _pikpakFocusNode : null,
-                    upNeighbor: wide ? _allDebridFocusNode : _pikpakFocusNode,
-                    downNeighbor: wide
-                        ? _iptvFocusNode
-                        : _indexerManagersFocusNode,
-                  ),
-                ),
-                // Row 4: Indexer managers (left), IPTV (right).
-                // The Reddit card that used to sit here is hidden — the
-                // source is retired but widget.reddit/_redditFocusNode are
-                // kept so the API and settings code stay untouched.
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.indexerManagers,
-                    focusNode: _indexerManagersFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _iptvFocusNode : null,
-                    upNeighbor: wide ? _pikpakFocusNode : _webDavFocusNode,
-                    downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.iptv,
-                    focusNode: _iptvFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _indexerManagersFocusNode : null,
-                    upNeighbor: wide
-                        ? _webDavFocusNode
-                        : _indexerManagersFocusNode,
-                    // Wide grid: Simkl (row 5 right) now sits directly below
-                    // IPTV (row 4 right), not Trakt (row 5 left).
-                    downNeighbor: wide ? _simklFocusNode : _traktFocusNode,
-                  ),
-                ),
-                // Row 5: Trakt (left), Simkl (right)
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.trakt,
-                    focusNode: _traktFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _simklFocusNode : null,
-                    upNeighbor: wide
-                        ? _indexerManagersFocusNode
-                        : _iptvFocusNode,
-                    // Wide: MDBList sits alone in the left column of row 6,
-                    // directly below Trakt. Narrow (single column): the next
-                    // card down is Simkl, not MDBList. When MDBList is hidden
-                    // (alpha), down goes nowhere in wide.
-                    downNeighbor: wide
-                        ? (widget.mdblist != null ? _mdblistFocusNode : null)
-                        : _simklFocusNode,
-                  ),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: ConnectionCard(
-                    info: widget.simkl,
-                    focusNode: _simklFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _traktFocusNode : null,
-                    upNeighbor: wide ? _iptvFocusNode : _traktFocusNode,
-                    // Down lands on the lone MDBList card, or nowhere when it's
-                    // hidden (alpha).
-                    downNeighbor:
-                        widget.mdblist != null ? _mdblistFocusNode : null,
-                  ),
-                ),
-                // Row 6: MDBList (left column, alone — no right partner).
-                // Omitted entirely when MDBList is hidden for the alpha.
-                if (widget.mdblist != null)
-                  SizedBox(
-                    width: itemWidth,
-                    child: ConnectionCard(
-                      info: widget.mdblist!,
-                      focusNode: _mdblistFocusNode,
-                      isLeftColumn: true,
-                      upNeighbor: wide ? _traktFocusNode : _simklFocusNode,
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    // Row 1: Real Debrid (left), Torbox (right)
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.realDebrid,
+                        focusNode: widget.firstCardFocusNode,
+                        isLeftColumn: true,
+                        rightNeighbor: wide ? _torboxFocusNode : null,
+                        downNeighbor: wide
+                            ? _premiumizeFocusNode
+                            : _torboxFocusNode,
+                      ),
                     ),
-                  ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.torbox,
+                        focusNode: _torboxFocusNode,
+                        isLeftColumn: !wide,
+                        leftNeighbor: wide ? widget.firstCardFocusNode : null,
+                        upNeighbor: wide ? null : widget.firstCardFocusNode,
+                        downNeighbor: wide
+                            ? _allDebridFocusNode
+                            : _premiumizeFocusNode,
+                      ),
+                    ),
+                    // Row 2: Premiumize (left), AllDebrid (right)
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.premiumize,
+                        focusNode: _premiumizeFocusNode,
+                        isLeftColumn: true,
+                        rightNeighbor: wide ? _allDebridFocusNode : null,
+                        upNeighbor: wide
+                            ? widget.firstCardFocusNode
+                            : _torboxFocusNode,
+                        downNeighbor: wide
+                            ? _pikpakFocusNode
+                            : _allDebridFocusNode,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.allDebrid,
+                        focusNode: _allDebridFocusNode,
+                        isLeftColumn: !wide,
+                        leftNeighbor: wide ? _premiumizeFocusNode : null,
+                        upNeighbor: wide
+                            ? _torboxFocusNode
+                            : _premiumizeFocusNode,
+                        downNeighbor: wide
+                            ? _webDavFocusNode
+                            : _pikpakFocusNode,
+                      ),
+                    ),
+                    // Row 3: PikPak (left), WebDAV (right)
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.pikpak,
+                        focusNode: _pikpakFocusNode,
+                        isLeftColumn: true,
+                        rightNeighbor: wide ? _webDavFocusNode : null,
+                        upNeighbor: wide
+                            ? _premiumizeFocusNode
+                            : _allDebridFocusNode,
+                        downNeighbor: wide
+                            ? _indexerManagersFocusNode
+                            : _webDavFocusNode,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.webDav,
+                        focusNode: _webDavFocusNode,
+                        isLeftColumn: !wide,
+                        leftNeighbor: wide ? _pikpakFocusNode : null,
+                        upNeighbor: wide
+                            ? _allDebridFocusNode
+                            : _pikpakFocusNode,
+                        downNeighbor: wide
+                            ? _iptvFocusNode
+                            : _indexerManagersFocusNode,
+                      ),
+                    ),
+                    // Row 4: Indexer managers (left), IPTV (right).
+                    // The Reddit card that used to sit here is hidden — the
+                    // source is retired but widget.reddit/_redditFocusNode are
+                    // kept so the API and settings code stay untouched.
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.indexerManagers,
+                        focusNode: _indexerManagersFocusNode,
+                        isLeftColumn: true,
+                        rightNeighbor: wide ? _iptvFocusNode : null,
+                        upNeighbor: wide ? _pikpakFocusNode : _webDavFocusNode,
+                        downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.iptv,
+                        focusNode: _iptvFocusNode,
+                        isLeftColumn: !wide,
+                        leftNeighbor: wide ? _indexerManagersFocusNode : null,
+                        upNeighbor: wide
+                            ? _webDavFocusNode
+                            : _indexerManagersFocusNode,
+                        // Wide grid: Simkl (row 5 right) now sits directly below
+                        // IPTV (row 4 right), not Trakt (row 5 left).
+                        downNeighbor: wide ? _simklFocusNode : _traktFocusNode,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                const SettingsSectionLabel('Trackers'),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    // Row 1: Trakt (left), Simkl (right)
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.trakt,
+                        focusNode: _traktFocusNode,
+                        isLeftColumn: true,
+                        rightNeighbor: wide ? _simklFocusNode : null,
+                        upNeighbor: wide
+                            ? _indexerManagersFocusNode
+                            : _iptvFocusNode,
+                        // Wide: MDBList sits alone in the left column of row 6,
+                        // directly below Trakt. Narrow (single column): the next
+                        // card down is Simkl, not MDBList. When MDBList is hidden
+                        // (alpha), down goes nowhere in wide.
+                        downNeighbor: wide
+                            ? (widget.mdblist != null
+                                  ? _mdblistFocusNode
+                                  : null)
+                            : _simklFocusNode,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.simkl,
+                        focusNode: _simklFocusNode,
+                        isLeftColumn: !wide,
+                        leftNeighbor: wide ? _traktFocusNode : null,
+                        upNeighbor: wide ? _iptvFocusNode : _traktFocusNode,
+                        // Down lands on the lone MDBList card, or nowhere when it's
+                        // hidden (alpha).
+                        downNeighbor: widget.mdblist != null
+                            ? _mdblistFocusNode
+                            : null,
+                      ),
+                    ),
+                    // Row 6: MDBList (left column, alone — no right partner).
+                    // Omitted entirely when MDBList is hidden for the alpha.
+                    if (widget.mdblist != null)
+                      SizedBox(
+                        width: itemWidth,
+                        child: ConnectionCard(
+                          info: widget.mdblist!,
+                          focusNode: _mdblistFocusNode,
+                          isLeftColumn: true,
+                          upNeighbor: wide ? _traktFocusNode : _simklFocusNode,
+                        ),
+                      ),
+                  ],
+                ),
               ],
             );
           },
