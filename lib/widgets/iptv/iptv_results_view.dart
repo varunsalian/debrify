@@ -688,25 +688,27 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   Future<void> _loadSettings({bool forceReload = false}) async {
     var playlists = await StorageService.getIptvPlaylists();
-    var defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
+    final defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
 
-    // Add default playlist on first run (if not already initialized)
+    // Seed the starter playlist on first run (if not already initialized).
+    // Deliberately NOT marked as the stored default: "Default playlist" is an
+    // explicit choice the user makes in Settings, and it now outranks the
+    // Favorites landing (below) — auto-claiming it here would silently take
+    // that landing away from someone who never picked anything.
     final defaultsInitialized =
         await StorageService.getIptvDefaultsInitialized();
     if (!defaultsInitialized) {
       // Add the default iptv-org playlist
-      final defaultPlaylist = IptvPlaylist(
+      final starterPlaylist = IptvPlaylist(
         id: 'iptv-org-default',
         name: 'iptv-org',
         url: 'https://iptv-org.github.io/iptv/index.m3u',
         addedAt: DateTime.now(),
       );
-      playlists = [defaultPlaylist, ...playlists];
-      defaultPlaylistId = defaultPlaylist.id;
+      playlists = [starterPlaylist, ...playlists];
 
-      // Save the default playlist and mark as initialized
+      // Save the starter playlist and mark as initialized
       await StorageService.setIptvPlaylists(playlists);
-      await StorageService.setIptvDefaultPlaylist(defaultPlaylistId);
       await StorageService.setIptvDefaultsInitialized(true);
     }
 
@@ -746,9 +748,12 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     if (!mounted) return;
 
-    // Determine the new selected playlist. With at least one starred channel,
-    // Favorites is the landing selection; otherwise fall back to the stored
-    // default (never landing on an empty Favorites view).
+    // Determine the new selected playlist. The playlist the user starred as
+    // "Default" in Settings wins: it is the one landing they asked for out
+    // loud, so it outranks the Favorites shelf. With no usable default, at
+    // least one starred channel makes Favorites the landing selection;
+    // otherwise the first real provider (never landing on an empty Favorites
+    // view).
     IptvPlaylist? newSelectedPlaylist;
     IptvPlaylist? firstRealPlaylist;
     for (final p in playlists) {
@@ -762,13 +767,22 @@ class IptvResultsViewState extends State<IptvResultsView>
         break;
       }
     }
-    if (hasFavorites) {
+    // Only a default that still resolves to a present provider counts — a
+    // stale id (its playlist deleted elsewhere, an addon shelf whose addon is
+    // uninstalled) must fall through rather than outrank Favorites.
+    IptvPlaylist? defaultPlaylist;
+    if (defaultPlaylistId != null) {
+      for (final p in playlists) {
+        if (p.id == defaultPlaylistId) {
+          defaultPlaylist = p;
+          break;
+        }
+      }
+    }
+    if (defaultPlaylist != null) {
+      newSelectedPlaylist = defaultPlaylist;
+    } else if (hasFavorites) {
       newSelectedPlaylist = _favoritesPlaylist;
-    } else if (defaultPlaylistId != null && playlists.isNotEmpty) {
-      newSelectedPlaylist = playlists.firstWhere(
-        (p) => p.id == defaultPlaylistId,
-        orElse: () => firstRealPlaylist ?? playlists.first,
-      );
     } else if (playlists.isNotEmpty) {
       newSelectedPlaylist = firstRealPlaylist ?? playlists.first;
     }
@@ -3230,9 +3244,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     bool Function() cancelled,
   ) async {
     // Bootstrap case: nothing has ever been watched, so there is no stored
-    // channel to look up. Start on whatever the page already landed on — which
-    // is Favourites when the user has any (see `_loadSettings`), otherwise
-    // their default provider. Deliberately NOT resolved as a stored identity:
+    // channel to look up. Start on whatever the page already landed on — their
+    // default provider, else Favourites when they have any (see
+    // `_loadSettings`). Deliberately NOT resolved as a stored identity:
     // there is nothing to match, and no user expectation to get wrong.
     if (payload[StorageService.startupIptvFirstAvailable] == true) {
       return _resolveFirstAvailableRow(cancelled);
