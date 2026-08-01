@@ -5533,6 +5533,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   inCw: inCw,
                   imdb: imdb,
                 ),
+                // Inline 1–10 strips in the tracker sheets: same handler, with
+                // the score already chosen so no dialog opens.
+                onTraktRate: (r) => _handleDetailQuickAction(
+                  item,
+                  addon,
+                  TraktItemMenuAction.rate,
+                  inCw: inCw,
+                  imdb: imdb,
+                  presetRating: r,
+                ),
+                onSimklRate: (r) => _handleDetailSimklQuickAction(
+                  item,
+                  SimklItemMenuAction.rate,
+                  presetRating: r,
+                ),
                 simklMenuOptions: simklOptions,
                 simklMenuBuilder: buildSimklOptions,
                 // Live Simkl status (current watchlist status + rating) —
@@ -5650,6 +5665,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     TraktItemMenuAction action, {
     required bool inCw,
     String? imdb,
+    // Set by the merged detail sheet's inline rating strip, which already knows
+    // the score — skips the rating dialog rather than asking twice.
+    int? presetRating,
   }) async {
     if (action == TraktItemMenuAction.removeFromPlayback) {
       if (imdb != null) await _handleContinueDetailAction(action, imdb);
@@ -5671,6 +5689,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
       onSearchPacks: _searchPacksFromDetail,
       onAddToStremioTv: _addToStremioTvFromDetail,
+      presetRating: presetRating,
     );
     // A Trakt watched-state change moves a title in/out of Continue Watching,
     // so reload the board's Trakt rows — otherwise the board is stale when the
@@ -5689,9 +5708,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// actions (Select Source etc.) or Continue-Watching removal to special-case.
   Future<void> _handleDetailSimklQuickAction(
     StremioMeta item,
-    SimklItemMenuAction action,
-  ) async {
-    await handleSimklMenuAction(context, item, action);
+    SimklItemMenuAction action, {
+    int? presetRating,
+  }) async {
+    await handleSimklMenuAction(
+      context,
+      item,
+      action,
+      presetRating: presetRating,
+    );
     // Any status change can add/remove a title from the Simkl CW rows: On Hold
     // and remove/completed/dropped take it OFF, while Watching makes a series
     // newly eligible as an "up next" card. So reload the rows on every one that

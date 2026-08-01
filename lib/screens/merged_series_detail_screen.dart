@@ -27,6 +27,7 @@ import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
+import '../widgets/tracker_brand_marks.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
@@ -92,6 +93,12 @@ class MergedDetailScreen extends StatefulWidget {
   final Future<void> Function(SimklItemMenuAction action)? onSimklAction;
   final Future<SimklTitleStatus?> Function()? simklStatusLoader;
 
+  /// Submits a 1–10 rating straight from the tracker sheet's inline strip.
+  /// When null the strip falls back to firing the sheet's `rate` action, which
+  /// opens that tracker's rating dialog instead.
+  final Future<void> Function(int rating)? onTraktRate;
+  final Future<void> Function(int rating)? onSimklRate;
+
   /// "More Like This" rail + sparse-item meta backfill (same loaders the detail
   /// screen receives).
   final Future<List<StremioMeta>> Function()? recommendationsLoader;
@@ -140,6 +147,8 @@ class MergedDetailScreen extends StatefulWidget {
     this.simklMenuBuilder,
     this.onSimklAction,
     this.simklStatusLoader,
+    this.onTraktRate,
+    this.onSimklRate,
     this.recommendationsLoader,
     this.onRecommendationTap,
     this.metaEnricher,
@@ -266,10 +275,40 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// and when the player pops back.
   TraktTitleStatus? _traktStatus;
 
+  /// Whether the status loaders have answered at least once. A null status
+  /// means "untracked" only *after* this flips — before it, the answer simply
+  /// isn't in yet, and the pill must not claim the title is untracked.
+  bool _traktStatusResolved = false;
+  bool _simklStatusResolved = false;
+
   /// The quick-actions strip to render: rebuilt against [_traktStatus] when a
   /// builder was supplied, else the static list passed in.
   List<TraktMenuOption> get _menuOptions =>
       widget.traktMenuBuilder?.call(_traktStatus) ?? widget.traktMenuOptions;
+
+  /// Debrify's own actions. They arrive inside the Trakt option list (that list
+  /// has always carried both), but none of them touch Trakt — so they get the
+  /// neutral "More" sheet and the Trakt sheet stays purely Trakt. Being app
+  /// actions they're also available when Trakt is disconnected, which the old
+  /// single-menu arrangement only managed by keeping an always-present Trakt
+  /// button.
+  static const Set<TraktItemMenuAction> _appOwnedActions = {
+    TraktItemMenuAction.selectSource,
+    TraktItemMenuAction.addToStremioTv,
+    TraktItemMenuAction.playRandomEpisode,
+    TraktItemMenuAction.searchPacks,
+    TraktItemMenuAction.removeFromPlayback,
+  };
+
+  List<TraktMenuOption> get _appMenuOptions => [
+    for (final o in _menuOptions)
+      if (_appOwnedActions.contains(o.action)) o,
+  ];
+
+  List<TraktMenuOption> get _traktOnlyMenuOptions => [
+    for (final o in _menuOptions)
+      if (!_appOwnedActions.contains(o.action)) o,
+  ];
 
   /// The user's live Simkl relationship to this title. Null until
   /// [simklStatusLoader] resolves — mirrors [_traktStatus] one-for-one.
@@ -348,7 +387,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       final status = await loader();
       if (!mounted || status == null) return;
       setState(() => _traktStatus = status);
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      // Resolved either way: a failed read is still an answered question as
+      // far as the pill is concerned — it stops saying "Checking…" and falls
+      // back to the untracked form rather than spinning forever.
+      if (mounted && !_traktStatusResolved) {
+        setState(() => _traktStatusResolved = true);
+      }
+    }
   }
 
   /// Resolve the user's Simkl relationship to this title — mirrors
@@ -360,7 +407,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       final status = await loader();
       if (!mounted || status == null) return;
       setState(() => _simklStatus = status);
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      if (mounted && !_simklStatusResolved) {
+        setState(() => _simklStatusResolved = true);
+      }
+    }
   }
 
   Future<void> _loadResumeInfo() async {
@@ -1035,24 +1087,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             enabled: animate,
             child: _buildMetaBar(year, extra, rating),
           ),
-          if (_buildTraktStatusChips() case final chips?) ...[
-            SizedBox(height: t ? 8 : 10),
-            _StaggerReveal(
-              key: const ValueKey('rev-trakt-status'),
-              delayMs: 140,
-              enabled: animate,
-              child: chips,
-            ),
-          ],
-          if (_buildSimklStatusChips() case final simklChips?) ...[
-            SizedBox(height: t ? 8 : 10),
-            _StaggerReveal(
-              key: const ValueKey('rev-simkl-status'),
-              delayMs: 145,
-              enabled: animate,
-              child: simklChips,
-            ),
-          ],
+          // No tracker status chips here any more: the Trakt / Simkl pills in
+          // the action row carry that state themselves, so this used to render
+          // the same fact twice.
           if (genres.isNotEmpty) ...[
             SizedBox(height: t ? 8 : 10),
             _StaggerReveal(
@@ -1180,24 +1217,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             enabled: animate,
             child: _buildMetaBar(year, extra, rating),
           ),
-          if (_buildTraktStatusChips() case final chips?) ...[
-            const SizedBox(height: 10),
-            _StaggerReveal(
-              key: const ValueKey('rev-h-trakt-status'),
-              delayMs: 140,
-              enabled: animate,
-              child: chips,
-            ),
-          ],
-          if (_buildSimklStatusChips() case final simklChips?) ...[
-            const SizedBox(height: 10),
-            _StaggerReveal(
-              key: const ValueKey('rev-h-simkl-status'),
-              delayMs: 145,
-              enabled: animate,
-              child: simklChips,
-            ),
-          ],
+          // Tracker state lives in the action-row pills (see the info pane).
           if (genres.isNotEmpty) ...[
             const SizedBox(height: 10),
             _StaggerReveal(
@@ -1290,55 +1310,55 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: parts);
   }
 
-  /// Small state badges from the live Trakt status (In Watchlist / In
-  /// Collection / Watched / ★rating). Renders nothing until the status resolves
-  /// or when the title has no tracked state, so the layout doesn't jump.
-  Widget? _buildTraktStatusChips() {
+  /// Whether Trakt holds any relationship to this title. Drives the pill's
+  /// tinted (tracked) vs. outline (untracked) form.
+  bool get _traktTracked {
     final s = _traktStatus;
-    if (s == null) return null;
-    final chips = <Widget>[
-      if (s.inWatchlist)
-        _statusChip(Icons.bookmark_rounded, 'In Watchlist', _gold),
-      if (s.inCollection)
-        _statusChip(
-          Icons.video_library_rounded,
-          'In Collection',
-          const Color(0xFF7FB2FF),
-        ),
-      if (s.watched == true)
-        _statusChip(
-          Icons.visibility_rounded,
-          'Watched',
-          const Color(0xFF34D399),
-        ),
-      if (s.rating != null)
-        _statusChip(Icons.star_rounded, '${s.rating}/10', _gold),
-    ];
-    if (chips.isEmpty) return null;
-    return Wrap(spacing: 7, runSpacing: 7, children: chips);
+    return s != null &&
+        (s.inWatchlist ||
+            s.inCollection ||
+            s.watched == true ||
+            s.rating != null);
   }
 
-  /// Small state badge from the live Simkl status (current watchlist status
-  /// + rating). Mirrors [_buildTraktStatusChips].
-  Widget? _buildSimklStatusChips() {
-    final s = _simklStatus;
-    if (s == null) return null;
-    final chips = <Widget>[
-      if (s.currentStatus != null)
-        _statusChip(
-          Icons.bookmark_rounded,
-          _simklStatusLabel(s.currentStatus!),
-          const Color(0xFF22D3EE),
-        ),
-      if (s.rating != null)
-        _statusChip(
-          Icons.star_rounded,
-          '${s.rating}/10',
-          const Color(0xFF22D3EE),
-        ),
+  bool get _simklTracked =>
+      _simklStatus?.currentStatus != null || _simklStatus?.rating != null;
+
+  /// The live Trakt state, compressed to fit inside the pill. Trakt allows
+  /// several relationships at once, so they're joined with "·" and capped at
+  /// two — the rating rides in the pill's own compartment, not here.
+  ///
+  /// While the loader is still out this reads "Checking…" rather than "Not
+  /// tracked": the row keeps its geometry either way, and asserting the title
+  /// *isn't* on your watchlist when it is — for however long the call takes —
+  /// is worse than admitting we don't know yet.
+  String get _traktPillLabel {
+    final s = _traktStatus;
+    if (s == null &&
+        !_traktStatusResolved &&
+        widget.traktStatusLoader != null) {
+      return 'Checking…';
+    }
+    if (s == null) return 'Not tracked';
+    final parts = <String>[
+      if (s.inWatchlist) 'Watchlist',
+      if (s.inCollection) 'Collected',
+      if (s.watched == true) 'Watched',
     ];
-    if (chips.isEmpty) return null;
-    return Wrap(spacing: 7, runSpacing: 7, children: chips);
+    if (parts.isEmpty) return s.rating != null ? 'Rated' : 'Not tracked';
+    return parts.take(2).join(' · ');
+  }
+
+  /// Simkl is single-state by definition, so its pill never needs to join
+  /// anything — it's the one watchlist status, or nothing.
+  String get _simklPillLabel {
+    final status = _simklStatus?.currentStatus;
+    if (status != null) return _simklStatusLabel(status);
+    if (_simklStatus?.rating != null) return 'Rated';
+    if (!_simklStatusResolved && widget.simklStatusLoader != null) {
+      return 'Checking…';
+    }
+    return 'Not tracked';
   }
 
   static String _simklStatusLabel(String status) {
@@ -1357,31 +1377,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         return status;
     }
   }
-
-  Widget _statusChip(IconData icon, String label, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: color.withValues(alpha: 0.45)),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.2,
-          ),
-        ),
-      ],
-    ),
-  );
 
   Widget _metaText(String s) => Text(
     s,
@@ -1504,18 +1499,39 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
               if (mounted) setState(() {});
             },
           ),
-        // More — opens the labelled quick-actions menu (with descriptions).
-        if (_menuOptions.isNotEmpty && widget.onTraktAction != null)
+        // Debrify's own actions (bind source, Stremio TV, random episode,
+        // season packs, local Continue Watching) — no tracker involved, so a
+        // neutral button rather than a branded one.
+        if (_appMenuOptions.isNotEmpty && widget.onTraktAction != null)
           _RoundIconButton(
             icon: Icons.more_horiz_rounded,
-            tooltip: 'More options',
+            tooltip: 'More',
+            onTap: _showAppActionsMenu,
+          ),
+        // Trakt — a branded pill that *carries* the live status (the status
+        // chips that used to sit under the title are folded into it, so one
+        // control both shows and changes the relationship).
+        if (_traktOnlyMenuOptions.isNotEmpty && widget.onTraktAction != null)
+          _TrackerPill(
+            mark: TraktMark(size: 21, opacity: _traktTracked ? 1 : 0.55),
+            brand: 'TRAKT',
+            state: _traktPillLabel,
+            rating: _traktStatus?.rating,
+            accent: kTraktRed,
+            tracked: _traktTracked,
+            tooltip: 'Trakt options',
             onTap: _showQuickActionsMenu,
           ),
-        // Simkl's own "More" — a separate button/sheet, not merged with
-        // Trakt's, so nothing here touches the button above.
+        // Simkl's own pill — a separate button/sheet, not merged with Trakt's,
+        // so nothing here touches the button above.
         if (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null)
-          _RoundIconButton(
-            icon: Icons.movie_filter_rounded,
+          _TrackerPill(
+            mark: SimklMark(size: 21, opacity: _simklTracked ? 1 : 0.55),
+            brand: 'SIMKL',
+            state: _simklPillLabel,
+            rating: _simklStatus?.rating,
+            accent: kSimklCyan,
+            tracked: _simklTracked,
             tooltip: 'Simkl options',
             onTap: _showSimklQuickActionsMenu,
           ),
@@ -1604,8 +1620,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
   }
 
-  void _showQuickActionsMenu() {
-    final options = _menuOptions;
+  /// Debrify's own actions, in a plain labelled list. Closes on selection —
+  /// each of these leaves the sheet anyway (a picker, a search, playback).
+  void _showAppActionsMenu() {
+    final options = _appMenuOptions;
     if (options.isEmpty || widget.onTraktAction == null) return;
     showModalBottomSheet<void>(
       context: context,
@@ -1620,34 +1638,83 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         onSelected: (action) async {
           Navigator.of(sheetCtx).pop();
           await widget.onTraktAction?.call(action);
-          // The action likely changed the title's Trakt state (watchlist /
-          // collection / watched / rating) — refresh so the menu and badges
-          // reflect it on the next open.
-          if (mounted) _loadTraktStatus();
+          // Binding a source changes the pill's count, and "Remove from
+          // Continue Watching" changes the resume label.
+          if (mounted) setState(() {});
         },
       ),
     );
   }
 
-  /// Simkl's own quick-actions sheet — mirrors [_showQuickActionsMenu].
-  void _showSimklQuickActionsMenu() {
-    final options = _menuOptionsSimkl;
-    if (options.isEmpty || widget.onSimklAction == null) return;
+  /// The Trakt sheet: watchlist / collection / watched as switches, plus an
+  /// inline rating strip and the list actions.
+  ///
+  /// Unlike the app sheet this one stays open — a tracker sheet is somewhere
+  /// you set several things at once, and each row re-reads the live status so
+  /// the switches show the truth rather than an optimistic guess.
+  void _showQuickActionsMenu() {
+    if (_traktOnlyMenuOptions.isEmpty || widget.onTraktAction == null) return;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF141019),
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetCtx) => _SimklQuickActionsMenu(
+      builder: (sheetCtx) => _TraktSheet(
         title: _item.name,
-        options: options,
         isTelevision: widget.isTelevision,
-        onSelected: (action) async {
-          Navigator.of(sheetCtx).pop();
+        status: _traktStatus,
+        optionsFor: (status) => [
+          for (final o
+              in widget.traktMenuBuilder?.call(status) ??
+                  widget.traktMenuOptions)
+            if (!_appOwnedActions.contains(o.action)) o,
+        ],
+        onAction: (action) async {
+          await widget.onTraktAction?.call(action);
+        },
+        onRate: widget.onTraktRate,
+        statusLoader: widget.traktStatusLoader,
+        // Keep the pill in sync with whatever the sheet did while it was open.
+        onChanged: (status) {
+          if (mounted) {
+            setState(() {
+              _traktStatus = status;
+              _traktStatusResolved = true;
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  /// Simkl's own sheet — mirrors [_showQuickActionsMenu], but Simkl's five
+  /// statuses are mutually exclusive, so they render as one picker instead of
+  /// a list of "Move to X" commands.
+  void _showSimklQuickActionsMenu() {
+    if (_menuOptionsSimkl.isEmpty || widget.onSimklAction == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF141019),
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetCtx) => _SimklSheet(
+        title: _item.name,
+        isTelevision: widget.isTelevision,
+        status: _simklStatus,
+        optionsFor: (status) =>
+            widget.simklMenuBuilder?.call(status) ?? widget.simklMenuOptions,
+        onAction: (action) async {
           await widget.onSimklAction?.call(action);
-          // The action likely changed the title's Simkl watchlist status or
-          // rating — refresh so the menu and badges reflect it on next open.
-          if (mounted) _loadSimklStatus();
+        },
+        onRate: widget.onSimklRate,
+        statusLoader: widget.simklStatusLoader,
+        onChanged: (status) {
+          if (mounted) {
+            setState(() {
+              _simklStatus = status;
+              _simklStatusResolved = true;
+            });
+          }
         },
       ),
     );
@@ -2316,8 +2383,7 @@ class _RecCardState extends State<_RecCard> {
                       // 100 logical px card (up to dpr 3 on phones) — decode
                       // small so ten posters at once don't lean on a 2GB box.
                       memCacheWidth: 300,
-                      placeholder: (_, __) =>
-                          Container(color: widget.fallback),
+                      placeholder: (_, __) => Container(color: widget.fallback),
                       errorWidget: (_, __, ___) =>
                           Container(color: widget.fallback),
                     )
@@ -2683,6 +2749,143 @@ class _ScrollAnchor extends StatelessWidget {
   }
 }
 
+/// A tracker's identity in the action row: its brand mark, its name, and the
+/// live relationship it holds to this title, in one control that opens that
+/// tracker's sheet.
+///
+/// This replaces the pair of anonymous round icon buttons *and* the status
+/// chip rows under the title — the chips rendered exactly the state these
+/// pills now carry, so the hero showed every fact twice.
+///
+/// [tracked] drives the two forms: brand-tinted when the tracker holds the
+/// title, plain outline when it doesn't (and while the status loads, so the
+/// row keeps its geometry).
+class _TrackerPill extends StatefulWidget {
+  final Widget mark;
+
+  /// Short brand name, drawn as the pill's uppercase eyebrow.
+  final String brand;
+
+  /// The live state line — "Watchlist · Collected", "Watching", "Not tracked".
+  final String state;
+
+  /// 1–10 tracker rating, shown in its own compartment when set.
+  final int? rating;
+
+  /// The tracker's brand colour, used for the tint, border and rating.
+  final Color accent;
+  final bool tracked;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _TrackerPill({
+    required this.mark,
+    required this.brand,
+    required this.state,
+    required this.rating,
+    required this.accent,
+    required this.tracked,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  State<_TrackerPill> createState() => _TrackerPillState();
+}
+
+class _TrackerPillState extends State<_TrackerPill> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.accent;
+    final tracked = widget.tracked;
+    final radius = BorderRadius.circular(999);
+    final pill = _FocusHalo(
+      focused: _focused,
+      radius: radius,
+      child: Material(
+        color: tracked
+            ? accent.withValues(alpha: 0.12)
+            : Colors.white.withValues(alpha: 0.07),
+        borderRadius: radius,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: widget.onTap,
+          onFocusChange: (f) => setState(() => _focused = f),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(11, 8, 15, 8),
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(
+                color: tracked
+                    ? accent.withValues(alpha: 0.42)
+                    : Colors.white.withValues(alpha: 0.14),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                widget.mark,
+                const SizedBox(width: 9),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.brand,
+                      style: TextStyle(
+                        color: tracked
+                            ? accent
+                            : Colors.white.withValues(alpha: 0.5),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.3,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      widget.state,
+                      style: TextStyle(
+                        color: tracked
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.62),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1,
+                      ),
+                    ),
+                  ],
+                ),
+                if (widget.rating != null) ...[
+                  const SizedBox(width: 10),
+                  Container(
+                    height: 20,
+                    width: 1,
+                    color: accent.withValues(alpha: 0.45),
+                  ),
+                  const SizedBox(width: 9),
+                  Text(
+                    '${widget.rating}',
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    return Tooltip(message: widget.tooltip, child: pill);
+  }
+}
+
 /// Circular translucent icon button used for the hero "More" (⋮) affordance.
 class _RoundIconButton extends StatefulWidget {
   final IconData icon;
@@ -2770,7 +2973,7 @@ class _QuickActionsMenu extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Quick Actions',
+                      'More',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -2858,24 +3061,539 @@ class _QuickActionsMenu extends StatelessWidget {
   }
 }
 
-/// Simkl's own quick-actions sheet — duplicated from [_QuickActionsMenu]
-/// rather than genericized, same reasoning as [_SimklQuickActions] on the
-/// catalog detail screen: no shared type between the two trackers.
-class _SimklQuickActionsMenu extends StatelessWidget {
+/// Shared chrome for a tracker sheet: the brand lockup, the title it applies
+/// to, and a hairline progress line while an action is in flight.
+///
+/// Only the chrome is shared — the two sheets' bodies stay fully independent,
+/// per the "no shared type between the trackers" rule this screen follows.
+class _TrackerSheetHeader extends StatelessWidget {
+  final Widget mark;
+  final String brand;
   final String title;
-  final List<SimklMenuOption> options;
-  final bool isTelevision;
-  final void Function(SimklItemMenuAction action) onSelected;
+  final Color accent;
+  final bool busy;
 
-  const _SimklQuickActionsMenu({
+  const _TrackerSheetHeader({
+    required this.mark,
+    required this.brand,
     required this.title,
-    required this.options,
-    required this.isTelevision,
-    required this.onSelected,
+    required this.accent,
+    required this.busy,
   });
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.centerRight,
+              colors: [accent.withValues(alpha: 0.18), Colors.transparent],
+            ),
+          ),
+          child: Row(
+            children: [
+              mark,
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      brand,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 2,
+          child: busy
+              ? LinearProgressIndicator(
+                  minHeight: 2,
+                  color: accent,
+                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                )
+              : Container(color: Colors.white.withValues(alpha: 0.07)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Section label inside a tracker sheet.
+class _SheetGroupLabel extends StatelessWidget {
+  final String label;
+  const _SheetGroupLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+    child: Text(
+      label.toUpperCase(),
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.38),
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.4,
+      ),
+    ),
+  );
+}
+
+/// A relationship the tracker either holds or doesn't — rendered as a switch
+/// so the current state is readable without parsing an "Add…"/"Remove…" verb.
+class _SheetSwitchRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool value;
+  final Color accent;
+  final bool autofocus;
+  final VoidCallback onTap;
+
+  const _SheetSwitchRow({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.value,
+    required this.accent,
+    required this.onTap,
+    this.autofocus = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        autofocus: autofocus,
+        focusColor: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 18, 12),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 21,
+                color: value ? accent : Colors.white.withValues(alpha: 0.5),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.42),
+                        fontSize: 12.5,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // A drawn switch rather than a Material Switch: this is a
+              // command that round-trips to an API, so it must not animate to
+              // the new position before the call lands — the parent re-reads
+              // the status and rebuilds with the truth.
+              Container(
+                width: 42,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: value ? accent : Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: AnimatedAlign(
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOut,
+                  alignment: value
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: 18,
+                    height: 18,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A plain icon + label + description row, for actions that aren't a state
+/// (list management, playback removal).
+class _SheetActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String description;
+  final Color? color;
+  final bool autofocus;
+  final VoidCallback onTap;
+
+  const _SheetActionRow({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.onTap,
+    this.color,
+    this.autofocus = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = color ?? Colors.white;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        autofocus: autofocus,
+        focusColor: Colors.white.withValues(alpha: 0.12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 18, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(icon, size: 21, color: tint),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: tint,
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontSize: 12.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The 1–10 rating strip. Ten focusable cells beat a modal dialog on both
+/// inputs: one tap on touch, a LEFT/RIGHT run and OK on a remote.
+class _SheetRatingStrip extends StatelessWidget {
+  final int? rating;
+  final Color accent;
+  final Color onAccent;
+  final void Function(int rating) onRate;
+  final VoidCallback? onClear;
+
+  /// Puts the DPAD cursor on the current score (or 1 when unrated) — used when
+  /// the strip is the first thing in the sheet.
+  final bool autofocus;
+
+  const _SheetRatingStrip({
+    required this.rating,
+    required this.accent,
+    required this.onAccent,
+    required this.onRate,
+    this.onClear,
+    this.autofocus = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final current = rating;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              for (var i = 1; i <= 10; i++) ...[
+                if (i > 1) const SizedBox(width: 5),
+                Expanded(
+                  child: Material(
+                    color: current == null || i > current
+                        ? Colors.white.withValues(alpha: 0.07)
+                        : (i == current
+                              ? accent
+                              : accent.withValues(alpha: 0.22)),
+                    borderRadius: BorderRadius.circular(8),
+                    child: InkWell(
+                      autofocus: autofocus && i == (current ?? 1),
+                      borderRadius: BorderRadius.circular(8),
+                      focusColor: Colors.white.withValues(alpha: 0.18),
+                      onTap: () => onRate(i),
+                      child: SizedBox(
+                        height: 32,
+                        child: Center(
+                          child: Text(
+                            '$i',
+                            style: TextStyle(
+                              color: current != null && i == current
+                                  ? onAccent
+                                  : Colors.white.withValues(
+                                      alpha: current != null && i < current
+                                          ? 0.85
+                                          : 0.5,
+                                    ),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                current != null ? 'Rated $current/10' : 'Not rated',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontSize: 12.5,
+                ),
+              ),
+              const Spacer(),
+              if (onClear != null)
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    focusColor: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: onClear,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: Text(
+                        'Clear rating',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Trakt's sheet.
+///
+/// Takes the same option list the old menu did — so every availability rule
+/// (connected? has an IMDb id? on a Trakt Continue Watching row?) still lives
+/// in `buildTraktAddOnlyMenuOptions` — but renders the add/remove pairs as
+/// switches, since each pair is really one on/off relationship.
+///
+/// Stays open across actions: after each one it re-reads the live status via
+/// [statusLoader] and rebuilds its options from it, so the switches always
+/// show what Trakt actually holds rather than an optimistic guess.
+class _TraktSheet extends StatefulWidget {
+  final String title;
+  final bool isTelevision;
+  final TraktTitleStatus? status;
+  final List<TraktMenuOption> Function(TraktTitleStatus? status) optionsFor;
+  final Future<void> Function(TraktItemMenuAction action) onAction;
+  final Future<void> Function(int rating)? onRate;
+  final Future<TraktTitleStatus?> Function()? statusLoader;
+  final void Function(TraktTitleStatus? status) onChanged;
+
+  const _TraktSheet({
+    required this.title,
+    required this.isTelevision,
+    required this.status,
+    required this.optionsFor,
+    required this.onAction,
+    required this.onRate,
+    required this.statusLoader,
+    required this.onChanged,
+  });
+
+  @override
+  State<_TraktSheet> createState() => _TraktSheetState();
+}
+
+class _TraktSheetState extends State<_TraktSheet> {
+  late TraktTitleStatus? _status = widget.status;
+  bool _busy = false;
+
+  /// Runs one action, then re-reads the status so the sheet (and the pill
+  /// behind it, via [onChanged]) reflect the result. Serialised: a second tap
+  /// while a call is in flight is dropped rather than racing it.
+  Future<void> _run(Future<void> Function() body) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await body();
+      final loader = widget.statusLoader;
+      if (loader != null) {
+        final fresh = await loader();
+        // Null means "couldn't be trusted" (disconnected, or the library fetch
+        // failed), NOT "nothing tracked" — both services document that, and a
+        // genuine empty answer comes back as a non-null all-false status. So
+        // keep showing the last known state rather than fabricating one.
+        if (fresh == null) return;
+        // Publish first: the sheet may already be gone (dismissed mid-call),
+        // and the screen behind it still needs the result for its pill.
+        widget.onChanged(fresh);
+        if (!mounted) return;
+        setState(() => _status = fresh);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final options = widget.optionsFor(_status);
+    TraktMenuOption? opt(TraktItemMenuAction a) {
+      for (final o in options) {
+        if (o.action == a) return o;
+      }
+      return null;
+    }
+
+    final watchlistOn = opt(TraktItemMenuAction.removeFromWatchlist);
+    final watchlistOff = opt(TraktItemMenuAction.addToWatchlist);
+    final collectionOn = opt(TraktItemMenuAction.removeFromCollection);
+    final collectionOff = opt(TraktItemMenuAction.addToCollection);
+    final markWatched = opt(TraktItemMenuAction.markWatched);
+    final markUnwatched = opt(TraktItemMenuAction.markUnwatched);
+    // Only `addToList` is ever emitted (and `handleTraktMenuAction` returns
+    // early on removeFromList — there's no context for *which* list), so this
+    // section is add-only by design.
+    final addToList = opt(TraktItemMenuAction.addToList);
+    final removePlayback = opt(TraktItemMenuAction.removeFromTraktPlayback);
+    final canRate = opt(TraktItemMenuAction.rate) != null;
+    final canUnrate = opt(TraktItemMenuAction.removeRating) != null;
+
+    // A series' whole-title watched state is unknown (the episode list owns
+    // it), so Trakt offers BOTH mark actions — that can't be a switch, and
+    // shows as two explicit commands instead.
+    final watchedIsAmbiguous = markWatched != null && markUnwatched != null;
+
+    // TV: whichever row renders first takes the cursor. Which sections exist
+    // depends on the live status, so this is claimed in build order rather
+    // than hard-coded to one row.
+    var focusClaimed = false;
+    bool claimFocus() {
+      if (!widget.isTelevision || focusClaimed) return false;
+      return focusClaimed = true;
+    }
+
+    final libraryRows = <Widget>[
+      if (watchlistOn != null || watchlistOff != null)
+        _SheetSwitchRow(
+          icon: Icons.bookmark_rounded,
+          label: 'Watchlist',
+          subtitle: 'Synced to every device on your Trakt account',
+          value: watchlistOn != null,
+          accent: kTraktRed,
+          autofocus: claimFocus(),
+          onTap: () => _run(
+            () => widget.onAction((watchlistOn ?? watchlistOff)!.action),
+          ),
+        ),
+      if (collectionOn != null || collectionOff != null)
+        _SheetSwitchRow(
+          icon: Icons.video_library_rounded,
+          label: 'Collection',
+          subtitle: 'Your library of everything you own or keep track of',
+          value: collectionOn != null,
+          accent: kTraktRed,
+          autofocus: claimFocus(),
+          onTap: () => _run(
+            () => widget.onAction((collectionOn ?? collectionOff)!.action),
+          ),
+        ),
+      if (!watchedIsAmbiguous && (markWatched != null || markUnwatched != null))
+        _SheetSwitchRow(
+          icon: Icons.visibility_rounded,
+          label: 'Watched',
+          subtitle: 'Syncs your history across all your devices',
+          value: markUnwatched != null,
+          accent: kTraktRed,
+          autofocus: claimFocus(),
+          onTap: () => _run(
+            () => widget.onAction((markUnwatched ?? markWatched)!.action),
+          ),
+        ),
+    ];
+
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -2885,42 +3603,107 @@ class _SimklQuickActionsMenu extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 2, 20, 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Simkl Actions',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            _TrackerSheetHeader(
+              mark: const TraktMark(size: 30),
+              brand: 'Trakt',
+              title: widget.title,
+              accent: kTraktRed,
+              busy: _busy,
             ),
             Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.only(bottom: 8),
-                itemCount: options.length,
-                itemBuilder: (context, i) => _item(options[i], i),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (libraryRows.isNotEmpty) ...[
+                      const _SheetGroupLabel('Your library'),
+                      ...libraryRows,
+                    ],
+                    if (watchedIsAmbiguous) ...[
+                      const _SheetGroupLabel('History'),
+                      _SheetActionRow(
+                        icon: markWatched.icon,
+                        label: markWatched.label,
+                        description: _MergedDetailScreenState._descriptionFor(
+                          markWatched.action,
+                        ),
+                        autofocus: claimFocus(),
+                        onTap: () =>
+                            _run(() => widget.onAction(markWatched.action)),
+                      ),
+                      _SheetActionRow(
+                        icon: markUnwatched.icon,
+                        label: markUnwatched.label,
+                        description: _MergedDetailScreenState._descriptionFor(
+                          markUnwatched.action,
+                        ),
+                        autofocus: claimFocus(),
+                        onTap: () =>
+                            _run(() => widget.onAction(markUnwatched.action)),
+                      ),
+                    ],
+                    if (canRate) ...[
+                      const _SheetGroupLabel('Rating'),
+                      _SheetRatingStrip(
+                        rating: _status?.rating,
+                        accent: kTraktRed,
+                        onAccent: Colors.white,
+                        autofocus: claimFocus(),
+                        onRate: (r) => _run(() async {
+                          final rate = widget.onRate;
+                          // No inline-rate callback wired (e.g. the IPTV
+                          // caller) — fall back to the tracker's own dialog.
+                          if (rate == null) {
+                            await widget.onAction(TraktItemMenuAction.rate);
+                          } else {
+                            await rate(r);
+                          }
+                        }),
+                        onClear: canUnrate
+                            ? () => _run(
+                                () => widget.onAction(
+                                  TraktItemMenuAction.removeRating,
+                                ),
+                              )
+                            : null,
+                      ),
+                    ],
+                    if (addToList != null) ...[
+                      const _SheetGroupLabel('Lists'),
+                      _SheetActionRow(
+                        icon: addToList.icon,
+                        label: addToList.label,
+                        description: _MergedDetailScreenState._descriptionFor(
+                          addToList.action,
+                        ),
+                        autofocus: claimFocus(),
+                        onTap: () =>
+                            _run(() => widget.onAction(addToList.action)),
+                      ),
+                    ],
+                    if (removePlayback != null) ...[
+                      const _SheetGroupLabel('Playback'),
+                      _SheetActionRow(
+                        icon: removePlayback.icon,
+                        label: removePlayback.label,
+                        description: _MergedDetailScreenState._descriptionFor(
+                          removePlayback.action,
+                        ),
+                        color: const Color(0xFFFF8B8B),
+                        autofocus: claimFocus(),
+                        // Closes the sheet: whether this title is still on a
+                        // Trakt Continue Watching row was decided when the
+                        // screen opened, so the row can't refresh itself.
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          await widget.onAction(removePlayback.action);
+                        },
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -2928,50 +3711,336 @@ class _SimklQuickActionsMenu extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _item(SimklMenuOption o, int index) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        autofocus: isTelevision && index == 0,
-        focusColor: Colors.white.withValues(alpha: 0.12),
-        onTap: () => onSelected(o.action),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 13, 18, 13),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Icon(o.icon, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
+/// Simkl's sheet — the same job as [_TraktSheet], deliberately not sharing a
+/// type with it (Trakt and Simkl stay independent everywhere in this screen).
+///
+/// Simkl has no toggle-off: a title sits in exactly one of five lists, and the
+/// only move is between them. So the statuses render as one exclusive picker
+/// showing where the title is now, rather than four "Move to X" commands with
+/// the current state left implicit.
+class _SimklSheet extends StatefulWidget {
+  final String title;
+  final bool isTelevision;
+  final SimklTitleStatus? status;
+  final List<SimklMenuOption> Function(SimklTitleStatus? status) optionsFor;
+  final Future<void> Function(SimklItemMenuAction action) onAction;
+  final Future<void> Function(int rating)? onRate;
+  final Future<SimklTitleStatus?> Function()? statusLoader;
+  final void Function(SimklTitleStatus? status) onChanged;
+
+  const _SimklSheet({
+    required this.title,
+    required this.isTelevision,
+    required this.status,
+    required this.optionsFor,
+    required this.onAction,
+    required this.onRate,
+    required this.statusLoader,
+    required this.onChanged,
+  });
+
+  @override
+  State<_SimklSheet> createState() => _SimklSheetState();
+}
+
+class _SimklSheetState extends State<_SimklSheet> {
+  late SimklTitleStatus? _status = widget.status;
+  bool _busy = false;
+
+  /// Simkl's five lists, in the order the service presents them.
+  static const _statuses = <(String, String, SimklItemMenuAction, IconData)>[
+    (
+      'plantowatch',
+      'Plan to Watch',
+      SimklItemMenuAction.moveToPlanToWatch,
+      Icons.bookmark_add_rounded,
+    ),
+    (
+      'watching',
+      'Watching',
+      SimklItemMenuAction.moveToWatching,
+      Icons.visibility_rounded,
+    ),
+    (
+      'hold',
+      'On Hold',
+      SimklItemMenuAction.moveToOnHold,
+      Icons.pause_circle_rounded,
+    ),
+    (
+      'completed',
+      'Completed',
+      SimklItemMenuAction.moveToCompleted,
+      Icons.check_circle_rounded,
+    ),
+    (
+      'dropped',
+      'Dropped',
+      SimklItemMenuAction.moveToDropped,
+      Icons.cancel_rounded,
+    ),
+  ];
+
+  Future<void> _run(Future<void> Function() body) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await body();
+      final loader = widget.statusLoader;
+      if (loader != null) {
+        final fresh = await loader();
+        // Null means "couldn't be trusted" (disconnected, or the library fetch
+        // failed), NOT "nothing tracked" — both services document that, and a
+        // genuine empty answer comes back as a non-null all-false status. So
+        // keep showing the last known state rather than fabricating one.
+        if (fresh == null) return;
+        // Publish first: the sheet may already be gone (dismissed mid-call),
+        // and the screen behind it still needs the result for its pill.
+        widget.onChanged(fresh);
+        if (!mounted) return;
+        setState(() => _status = fresh);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final options = widget.optionsFor(_status);
+    SimklMenuOption? opt(SimklItemMenuAction a) {
+      for (final o in options) {
+        if (o.action == a) return o;
+      }
+      return null;
+    }
+
+    final current = _status?.currentStatus;
+    final removeCw = opt(SimklItemMenuAction.removeFromContinueWatching);
+    final canRate = opt(SimklItemMenuAction.rate) != null;
+    final canUnrate = opt(SimklItemMenuAction.removeRating) != null;
+
+    // A status row is offered when its move action is available, and the
+    // current one is always shown even though the builder omits it (there's
+    // nowhere to move it to). Movies therefore keep hiding Watching and On
+    // Hold — Simkl treats them as a single session — with no rule duplicated
+    // here: it falls out of what the builder offered.
+    final visible = [
+      for (final (value, label, action, icon) in _statuses)
+        if (opt(action) != null || value == current)
+          (value, label, action, icon),
+    ];
+    // TV: start on the current status when there is one — that's where the
+    // user's attention already is, and moving from it is the whole point.
+    final currentIndex = visible.indexWhere((s) => s.$1 == current);
+    final focusIndex = currentIndex >= 0 ? currentIndex : 0;
+    final rows = <Widget>[
+      for (final (i, (value, label, action, icon)) in visible.indexed)
+        _SimklStatusRow(
+          icon: icon,
+          label: label,
+          selected: value == current,
+          autofocus: widget.isTelevision && i == focusIndex,
+          // The current row has nothing to move to, so its tap is a no-op —
+          // but it must still be *focusable*: a disabled InkWell can't hold
+          // the DPAD cursor, so the row you just activated would drop focus
+          // the moment it became current.
+          onTap: value == current
+              ? () {}
+              : () => _run(() => widget.onAction(action)),
+        ),
+    ];
+
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _TrackerSheetHeader(
+              mark: const SimklMark(size: 30),
+              brand: 'Simkl',
+              title: widget.title,
+              accent: kSimklCyan,
+              busy: _busy,
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 10),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      o.label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w600,
+                    if (rows.isNotEmpty) ...[
+                      const _SheetGroupLabel('Status'),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: rows,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _MergedDetailScreenState._descriptionForSimkl(o.action),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 13,
-                        height: 1.35,
+                    ],
+                    if (canRate) ...[
+                      const _SheetGroupLabel('Rating'),
+                      _SheetRatingStrip(
+                        rating: _status?.rating,
+                        accent: kSimklCyan,
+                        onAccent: const Color(0xFF04262C),
+                        autofocus: widget.isTelevision && rows.isEmpty,
+                        onRate: (r) => _run(() async {
+                          final rate = widget.onRate;
+                          if (rate == null) {
+                            await widget.onAction(SimklItemMenuAction.rate);
+                          } else {
+                            await rate(r);
+                          }
+                        }),
+                        onClear: canUnrate
+                            ? () => _run(
+                                () => widget.onAction(
+                                  SimklItemMenuAction.removeRating,
+                                ),
+                              )
+                            : null,
                       ),
-                    ),
+                    ],
+                    if (removeCw != null) ...[
+                      const _SheetGroupLabel('Playback'),
+                      _SheetActionRow(
+                        icon: removeCw.icon,
+                        label: removeCw.label,
+                        description:
+                            _MergedDetailScreenState._descriptionForSimkl(
+                              removeCw.action,
+                            ),
+                        color: const Color(0xFFFF8B8B),
+                        autofocus:
+                            widget.isTelevision && rows.isEmpty && !canRate,
+                        // Closes for the same reason as Trakt's: whether the
+                        // title has a paused session was decided when the
+                        // screen opened.
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          await widget.onAction(removeCw.action);
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One of Simkl's five lists, shown as a radio-style row so the exclusivity is
+/// visible. The current status is marked and inert — there's nothing to do.
+class _SimklStatusRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final bool autofocus;
+
+  /// Never null — the current row passes a no-op so it stays focusable. See
+  /// the call site in [_SimklSheetState.build].
+  final VoidCallback onTap;
+
+  const _SimklStatusRow({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.autofocus = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(11);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Material(
+        color: selected
+            ? kSimklCyan.withValues(alpha: 0.13)
+            : Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          autofocus: autofocus,
+          borderRadius: radius,
+          focusColor: Colors.white.withValues(alpha: 0.12),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(
+                color: selected
+                    ? kSimklCyan.withValues(alpha: 0.35)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected ? kSimklCyan : Colors.transparent,
+                    border: Border.all(
+                      color: selected
+                          ? kSimklCyan
+                          : Colors.white.withValues(alpha: 0.22),
+                      width: 2,
+                    ),
+                  ),
+                  child: selected
+                      ? const Icon(
+                          Icons.check_rounded,
+                          size: 12,
+                          color: Color(0xFF04262C),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 13),
+                Icon(
+                  icon,
+                  size: 19,
+                  color: selected
+                      ? kSimklCyan
+                      : Colors.white.withValues(alpha: 0.55),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? kSimklCyan : Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (selected)
+                  Text(
+                    'now',
+                    style: TextStyle(
+                      color: kSimklCyan.withValues(alpha: 0.7),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

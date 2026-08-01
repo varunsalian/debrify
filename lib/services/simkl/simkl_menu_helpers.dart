@@ -111,8 +111,12 @@ Future<int?> showSimklRatingDialog(BuildContext context) {
 Future<void> handleSimklMenuAction(
   BuildContext context,
   StremioMeta item,
-  SimklItemMenuAction action,
-) async {
+  SimklItemMenuAction action, {
+  /// Skips the rating dialog for [SimklItemMenuAction.rate] and submits this
+  /// value directly — mirrors `handleTraktMenuAction`'s [presetRating], for
+  /// the merged detail sheet's inline 1–10 strip.
+  int? presetRating,
+}) async {
   final simklService = SimklService.instance;
   final imdbId = item.effectiveImdbId ?? item.id;
   final type = item.type;
@@ -162,7 +166,7 @@ Future<void> handleSimklMenuAction(
       }
     case SimklItemMenuAction.rate:
       if (!context.mounted) return;
-      final rating = await showSimklRatingDialog(context);
+      final rating = presetRating ?? await showSimklRatingDialog(context);
       if (rating == null) return;
       actionLabel = 'Rated $rating/10 on Simkl';
       success = await simklService.rateItem(imdbId, type, rating);
