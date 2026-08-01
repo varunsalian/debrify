@@ -60,11 +60,16 @@ Let `BR` = current branch (`git branch --show-current`).
 5. **Find the run:** `gh run list --workflow=build.yml --event=release --limit 1 --json databaseId,status,createdAt`. It may take a few seconds to appear after the release publishes — retry the list if empty.
 6. **Watch it in the background:** run `gh run watch <RUN_ID> --exit-status` with `run_in_background: true`, so you're re-invoked when the build finishes (~20–30 min). Tell the user you're watching and they can leave the window open.
 7. **When the run finishes:**
-   - If it **failed** (non-zero exit / `conclusion != success`): DO NOT post to Discord. Report which job failed with a link (`gh run view <RUN_ID>`), and stop.
+   - If it **failed** (non-zero exit / `conclusion != success`): DO NOT post to Discord. Report which job failed with a link (`gh run view <RUN_ID>`), then skip straight to step 9.
    - If it **succeeded**: verify the assets are attached — `gh release view "v$2-$1.N" --json assets -q '.assets[].name'` should include `debrify-v$2-$1.N.apk` and the other 5. Then post:
      `python3 .release/post_discord.py --repo varunsalian/debrify --channel "$1" --tag "v$2-$1.N" --notes-file <scratch>/discord-notes.md`
    - (Tip: run the same command with `--dry-run` first if you want to eyeball the exact payload.)
-8. **Cleanup & report:** `git checkout "$BR"` to return the user to their working branch. Report: the release URL, the Discord message result, and the direct APK link.
+8. **Report:** the release URL, the Discord message result, and the direct APK link.
+9. **Open the next cycle's branch.** Do this even if the build failed or Discord was skipped — the release commit is already on main either way.
+   - `NEXT` = `$2` with the patch component incremented, suffixed `_$1` — so releasing `0.6.6` on `alpha` gives `0.6.7_alpha`, matching the `0.6.5_alpha` / `0.6.6_alpha` convention. If the user named a different next version in their arguments, use theirs.
+   - `git checkout main && git pull --ff-only origin main`
+   - `git checkout -b "$NEXT"` — local only; don't push an empty branch. If it already exists, just check it out and say so.
+   - This replaces returning to `$BR`: the user ends the command on the fresh branch, ready for the next cycle's work. Tell them which branch they're on.
 
 ## Guardrails
 - One approval gate only (Stage B). After "go", run C→D straight through, but never post to Discord if the build failed.
