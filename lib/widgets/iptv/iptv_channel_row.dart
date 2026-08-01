@@ -49,10 +49,18 @@ class IptvChannelRow extends StatefulWidget {
   /// drives the small "saved somewhere" marker.
   final bool inAnyList;
 
-  /// Opens the "add to list" picker. Non-null only once the user has created
-  /// at least one list of their own; until then the same gesture toggles the
-  /// favorite outright, so nobody who never uses lists grows an extra tap.
+  /// Opens the "add to list" picker — the dialog offers Favorites and a
+  /// "Create new list" row, so it is useful even before the user has made a
+  /// list of their own. Null for rows that can't be saved at all (series).
   final VoidCallback? onOpenListPicker;
+
+  /// Whether the user has lists beyond the built-in Favorites.
+  ///
+  /// Only the TV hold gesture consults this: with no lists of their own, HOLD
+  /// OK stays a direct favorite toggle rather than growing a dialog nobody
+  /// asked for. The pointer heart always opens the picker — a tap is cheap
+  /// and reversible, a held remote button is neither.
+  final bool hasCustomLists;
 
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
@@ -106,6 +114,7 @@ class IptvChannelRow extends StatefulWidget {
     this.onFavoriteToggle,
     this.inAnyList = false,
     this.onOpenListPicker,
+    this.hasCustomLists = false,
     this.onFocused,
     this.onDetached,
     this.onSchedule,
@@ -163,7 +172,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       if (status == AnimationStatus.completed) {
         _favHoldFired = true;
         final openPicker = widget.onOpenListPicker;
-        if (openPicker != null) {
+        if (openPicker != null && widget.hasCustomLists) {
           openPicker();
         } else {
           widget.onFavoriteToggle?.call(!widget.isFavorited);
@@ -473,9 +482,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   /// - TV: a non-focusable hint on the focused row ("HOLD OK" + a heart that
   ///   fills as OK is held); a small filled heart on favourited rows otherwise.
   /// - Desktop/mobile: a tappable heart, revealed on hover / when favourited /
-  ///   always on touch (no hover there).
+  ///   always on touch (no hover there). Tapping it opens the list picker so
+  ///   the channel's destination is a choice, not an assumption.
   Widget _buildFavTrailing() {
-    final picksList = widget.onOpenListPicker != null;
+    // Describes what HOLD OK will actually do, so the hint can't promise a
+    // picker on a remote that is really going to toggle the favorite.
+    final picksList = widget.onOpenListPicker != null && widget.hasCustomLists;
     if (widget.onFavoriteToggle == null && !picksList) {
       return const SizedBox.shrink();
     }
@@ -542,9 +554,19 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       child: _FavButton(
         favorited: widget.isFavorited,
         inAnyList: widget.inAnyList,
-        // The heart stays a one-tap favourite toggle even with lists in
-        // play — the picker is the long-press, not this.
-        onTap: () => widget.onFavoriteToggle!(!widget.isFavorited),
+        // Pointer devices: the heart asks WHERE the channel should go rather
+        // than assuming Favorites. The picker offers Favorites and "Create
+        // new list", so it answers the plain case in the same one tap it
+        // used to take. Falls back to a direct toggle only for rows with no
+        // picker at all.
+        onTap: () {
+          final openPicker = widget.onOpenListPicker;
+          if (openPicker != null) {
+            openPicker();
+            return;
+          }
+          widget.onFavoriteToggle!(!widget.isFavorited);
+        },
       ),
     );
   }
@@ -1043,25 +1065,38 @@ class _FavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(
-            favorited
-                ? Icons.favorite_rounded
-                : inAnyList
-                // Saved in a list the user made, just not favourited — show
-                // it as saved rather than as an empty heart.
-                ? Icons.bookmark_rounded
-                : Icons.favorite_border_rounded,
-            size: 18,
-            color: favorited
-                ? const Color(0xFFF43F5E)
-                : Colors.white.withValues(alpha: 0.55),
+    return Tooltip(
+      // The icon is a heart but the action is "choose where this goes", and
+      // nothing else on the row says so. The schedule button beside it is
+      // already labelled, so this matches rather than introduces a habit.
+      message: 'Save to a list',
+      // Hover only. Left at the default, Tooltip registers its own
+      // LongPressGestureRecognizer on pointer-down for touch devices; it sits
+      // deeper than the row's GestureDetector, so its timer fires first, it
+      // wins the arena, and a touch long-press ON the heart would show this
+      // label instead of opening the picker it describes. Hover is installed
+      // independently of triggerMode, so the desktop affordance survives.
+      triggerMode: TooltipTriggerMode.manual,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(
+              favorited
+                  ? Icons.favorite_rounded
+                  : inAnyList
+                  // Saved in a list the user made, just not favourited — show
+                  // it as saved rather than as an empty heart.
+                  ? Icons.bookmark_rounded
+                  : Icons.favorite_border_rounded,
+              size: 18,
+              color: favorited
+                  ? const Color(0xFFF43F5E)
+                  : Colors.white.withValues(alpha: 0.55),
+            ),
           ),
         ),
       ),

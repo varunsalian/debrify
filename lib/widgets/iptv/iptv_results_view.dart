@@ -4946,11 +4946,10 @@ class IptvResultsViewState extends State<IptvResultsView>
                           ? null
                           : (isFavorited) =>
                                 _toggleFavorite(channel, isFavorited),
-                      onOpenListPicker:
-                          channel.contentType == 'series' ||
-                              _customLists.isEmpty
+                      onOpenListPicker: channel.contentType == 'series'
                           ? null
                           : () => _openListPicker(channel),
+                      hasCustomLists: _customLists.isNotEmpty,
                       onFocused: tvPane
                           ? () => _onChannelFocused(channel)
                           : null,
@@ -5060,10 +5059,10 @@ class IptvResultsViewState extends State<IptvResultsView>
           onFavoriteToggle: channel.contentType == 'series'
               ? null
               : (isFavorited) => _toggleFavorite(channel, isFavorited),
-          onOpenListPicker:
-              channel.contentType == 'series' || _customLists.isEmpty
+          onOpenListPicker: channel.contentType == 'series'
               ? null
               : () => _openListPicker(channel),
+          hasCustomLists: _customLists.isNotEmpty,
           onSchedule: openSchedule == null
               ? null
               : () {
