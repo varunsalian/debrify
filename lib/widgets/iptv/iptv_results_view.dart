@@ -3878,14 +3878,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           focusNode: _playlistFilterFocusNode,
           onUpArrowPressed: widget.onUpArrowFromFilters,
           onDownArrowPressed: _focusFirstChannel,
-          options: [
-            for (final p in _playlists) StremioDropdownOption(p.id, p.name),
-            const StremioDropdownOption(_kNewListSentinel, '＋ New list'),
-            const StremioDropdownOption(
-              _kAddPlaylistSentinel,
-              '＋ Add playlist',
-            ),
-          ],
+          options: _sourceDropdownOptions(),
           onSelected: (id) {
             if (id == _kNewListSentinel) {
               _promptCreateList();
@@ -3893,6 +3886,10 @@ class IptvResultsViewState extends State<IptvResultsView>
             }
             if (id == _kAddPlaylistSentinel) {
               _navigateToSettings();
+              return;
+            }
+            if (id == _kAddAddonSentinel) {
+              _navigateToAddons();
               return;
             }
             for (final p in _playlists) {
@@ -3968,6 +3965,61 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   static const String _kAddPlaylistSentinel = '__iptv_add_playlist__';
   static const String _kNewListSentinel = '__iptv_new_list__';
+  static const String _kAddAddonSentinel = '__iptv_add_addon__';
+
+  /// The Sources dropdown, grouped: the two derived shelves, then the user's
+  /// own lists, their playlists, and any live-TV catalogs their Stremio addons
+  /// expose — each ending with the action that adds another one of its kind.
+  ///
+  /// The grouping mirrors the order [_loadSettings] already builds, so this
+  /// only draws the lines where the list already changes character.
+  List<StremioDropdownOption<String>> _sourceDropdownOptions() {
+    final quickAccess = [
+      for (final p in _playlists)
+        if (p.isFavorites || p.isContinueWatching) p,
+    ];
+    final lists = [
+      for (final p in _playlists)
+        if (p.isCustomList) p,
+    ];
+    final addons = [
+      for (final p in _playlists)
+        if (p.isStremioAddon) p,
+    ];
+    final playlists = [
+      for (final p in _playlists)
+        if (!p.isVirtual) p,
+    ];
+
+    return [
+      if (quickAccess.isNotEmpty) ...[
+        const StremioDropdownOption.header('__hdr_quick__', 'Quick access'),
+        for (final p in quickAccess) StremioDropdownOption(p.id, p.name),
+      ],
+      // Always shown, empty or not — it is where "New list" lives, and a user
+      // with no lists yet is exactly who needs to find it.
+      const StremioDropdownOption.header('__hdr_lists__', 'Your lists'),
+      for (final p in lists) StremioDropdownOption(p.id, p.name),
+      const StremioDropdownOption(_kNewListSentinel, '＋ New list'),
+      const StremioDropdownOption.header('__hdr_playlists__', 'Your playlists'),
+      for (final p in playlists) StremioDropdownOption(p.id, p.name),
+      const StremioDropdownOption(_kAddPlaylistSentinel, '＋ Add playlist'),
+      // Only for people who actually run addons — an empty section would push
+      // Stremio at everyone else.
+      if (addons.isNotEmpty) ...[
+        const StremioDropdownOption.header('__hdr_addons__', 'Stremio Addons'),
+        for (final p in addons) StremioDropdownOption(p.id, p.name),
+        const StremioDropdownOption(_kAddAddonSentinel, '＋ Add addon'),
+      ],
+    ];
+  }
+
+  /// Open the Addons hub. Tab-switch rather than a pushed route: the hub is a
+  /// tab body with no app bar of its own, so pushing it would strand the user
+  /// with no way back.
+  void _navigateToAddons() {
+    MainPageBridge.switchTab?.call(7); // 7 = Addons (see main.dart _pages)
+  }
 
   /// Called by a channel row gaining DPAD focus — retunes the preview stage.
   void _onChannelFocused(IptvChannel channel) {
