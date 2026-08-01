@@ -65,7 +65,8 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
   State<StremioDropdown<T>> createState() => _StremioDropdownState<T>();
 }
 
-class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> {
+class _StremioDropdownState<T extends Object>
+    extends State<StremioDropdown<T>> {
   final GlobalKey _btnKey = GlobalKey();
   bool _focused = false;
   bool _hovered = false;
@@ -103,10 +104,14 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (btn == null || overlay == null) return;
-    final topLeft = btn.localToGlobal(Offset(0, btn.size.height + 6),
-        ancestor: overlay);
-    final bottomRight =
-        btn.localToGlobal(btn.size.bottomRight(Offset.zero), ancestor: overlay);
+    final topLeft = btn.localToGlobal(
+      Offset(0, btn.size.height + 6),
+      ancestor: overlay,
+    );
+    final bottomRight = btn.localToGlobal(
+      btn.size.bottomRight(Offset.zero),
+      ancestor: overlay,
+    );
     final pos = RelativeRect.fromRect(
       Rect.fromPoints(topLeft, bottomRight),
       Offset.zero & overlay.size,
@@ -146,8 +151,11 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
                   ),
                 ),
                 if (o.value == widget.value)
-                  const Icon(Icons.check_rounded,
-                      size: 16, color: kSeeAllAccent2),
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: kSeeAllAccent2,
+                  ),
               ],
             ),
           ),
@@ -210,66 +218,70 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
           child: widget.quiet
               ? _buildQuiet(active)
               : LayoutBuilder(
-            builder: (context, constraints) {
-              final stretch = constraints.hasTightWidth;
-              final valueText = Text(
-                _valueLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              );
-              return Container(
-                key: _btnKey,
-                padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
-                decoration: BoxDecoration(
-                  color: kSeeAllPanel,
-                  borderRadius: BorderRadius.circular(11),
-                  // Constant width: Container feeds the border's thickness into
-                  // its layout padding, so a 1→2px focus ring RESIZES the pill
-                  // and reflows the whole filter row (reads as the screen shaking
-                  // on DPAD moves). Only the color may change on focus.
-                  border: Border.all(
-                    width: 2,
-                    color: _focused
-                        ? kSeeAllAccent
-                        : (active ? kSeeAllAccentBorder : kSeeAllLine),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize:
-                      stretch ? MainAxisSize.max : MainAxisSize.min,
-                  children: [
-                    if (widget.label != null) ...[
-                      Text(
-                        widget.label!.toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.42),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
+                  builder: (context, constraints) {
+                    final stretch = constraints.hasTightWidth;
+                    final valueText = Text(
+                      _valueLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    );
+                    return Container(
+                      key: _btnKey,
+                      padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
+                      decoration: BoxDecoration(
+                        color: kSeeAllPanel,
+                        borderRadius: BorderRadius.circular(11),
+                        // Constant width: Container feeds the border's thickness into
+                        // its layout padding, so a 1→2px focus ring RESIZES the pill
+                        // and reflows the whole filter row (reads as the screen shaking
+                        // on DPAD moves). Only the color may change on focus.
+                        border: Border.all(
+                          width: 2,
+                          color: _focused
+                              ? kSeeAllAccent
+                              : (active ? kSeeAllAccentBorder : kSeeAllLine),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                    ],
-                    if (stretch)
-                      Expanded(child: valueText)
-                    else
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 200),
-                        child: valueText,
+                      child: Row(
+                        mainAxisSize: stretch
+                            ? MainAxisSize.max
+                            : MainAxisSize.min,
+                        children: [
+                          if (widget.label != null) ...[
+                            Text(
+                              widget.label!.toUpperCase(),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.42),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          if (stretch)
+                            Expanded(child: valueText)
+                          else
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 200),
+                              child: valueText,
+                            ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                        ],
                       ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.keyboard_arrow_down_rounded,
-                        size: 18, color: Colors.white.withValues(alpha: 0.5)),
-                  ],
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
       ),
     );
@@ -333,16 +345,19 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
                 color: _focused
                     ? Colors.white
                     : widget.quietAccent
-                        ? kSeeAllAccent2
-                        : Colors.white.withValues(alpha: 0.78),
+                    ? kSeeAllAccent2
+                    : Colors.white.withValues(alpha: 0.78),
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
           const SizedBox(width: 3),
-          Icon(Icons.keyboard_arrow_down_rounded,
-              size: 15, color: Colors.white.withValues(alpha: 0.45)),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 15,
+            color: Colors.white.withValues(alpha: 0.45),
+          ),
         ],
       ),
     );
@@ -392,7 +407,8 @@ class _LazyPickerDialogState<T extends Object>
     // context above it). Overshoot is clamped by the scroll position on the
     // first layout.
     _scroll = ScrollController(
-      initialScrollOffset: ((_initialIndex - 3).clamp(0, _initialIndex)) * _rowH,
+      initialScrollOffset:
+          ((_initialIndex - 3).clamp(0, _initialIndex)) * _rowH,
     );
   }
 
@@ -418,8 +434,10 @@ class _LazyPickerDialogState<T extends Object>
 
   @override
   Widget build(BuildContext context) {
-    final maxH =
-        (MediaQuery.of(context).size.height * 0.72).clamp(260.0, 560.0);
+    final maxH = (MediaQuery.of(context).size.height * 0.72).clamp(
+      260.0,
+      560.0,
+    );
     return Dialog(
       backgroundColor: kSeeAllPanel,
       shape: RoundedRectangleBorder(
@@ -474,12 +492,17 @@ class _LazyPickerDialogState<T extends Object>
                       color: Colors.white.withValues(alpha: 0.35),
                       fontSize: 13.5,
                     ),
-                    prefixIcon: const Icon(Icons.search_rounded,
-                        size: 18, color: Colors.white38),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: Colors.white38,
+                    ),
                     filled: true,
                     fillColor: kSeeAllPanel2,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 9,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(color: kSeeAllLine),
@@ -509,7 +532,8 @@ class _LazyPickerDialogState<T extends Object>
                     // Land DPAD focus on the current value when the dialog
                     // opens (its row is built — we scrolled to it). Filtering
                     // reshuffles indices, so only the pristine list anchors.
-                    autofocus: widget.isTelevision &&
+                    autofocus:
+                        widget.isTelevision &&
                         _filter.isEmpty &&
                         i == _initialIndex,
                     onPick: () => Navigator.of(context).pop(o.value),
@@ -583,8 +607,8 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
               color: _focused
                   ? kSeeAllAccent.withValues(alpha: 0.26)
                   : _hovered
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.transparent,
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -597,14 +621,18 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
                     style: TextStyle(
                       color: widget.selected ? kSeeAllAccent2 : Colors.white,
                       fontSize: 13.5,
-                      fontWeight:
-                          widget.selected ? FontWeight.w800 : FontWeight.w600,
+                      fontWeight: widget.selected
+                          ? FontWeight.w800
+                          : FontWeight.w600,
                     ),
                   ),
                 ),
                 if (widget.selected)
-                  const Icon(Icons.check_rounded,
-                      size: 16, color: kSeeAllAccent2),
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: kSeeAllAccent2,
+                  ),
               ],
             ),
           ),
