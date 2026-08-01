@@ -177,6 +177,7 @@ class StorageService {
   static const String _iptvPlaylistsKey = 'iptv_playlists';
   static const String _iptvDefaultPlaylistKey = 'iptv_default_playlist';
   static const String _iptvDefaultsInitializedKey = 'iptv_defaults_initialized';
+  static const String _iptvLastLiveChannelKey = 'iptv_last_live_channel';
 
   // PikPak API settings
   static const String _pikpakEnabledKey = 'pikpak_enabled';
@@ -2504,6 +2505,11 @@ class StorageService {
     await prefs.remove(_startupContinueWatchingItemIdKey);
     await prefs.remove(_startupTraktContinueWatchingMovieIdKey);
     await prefs.remove(_startupTraktContinueWatchingShowIdKey);
+    // The startup-channel memory is a startup reference too — Reset must wipe
+    // it, or a fresh setup would inherit the previous install's channel.
+    await prefs.remove(_iptvLastLiveChannelKey);
+    await prefs.remove(_startupIptvModeKey);
+    await prefs.remove(_startupIptvChannelKey);
   }
 
   /// Clear integration enabled states (RD, TorBox)
@@ -5387,6 +5393,261 @@ class StorageService {
   static Future<void> setIptvDefaultsInitialized(bool initialized) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_iptvDefaultsInitializedKey, initialized);
+  }
+
+  // ==========================================================================
+  // Last live IPTV channel (startup-channel memory)
+  //
+  // Single slot, overwritten. Written ONLY once a live channel has actually
+  // reached a playing state — never at tune time. Both players call in from
+  // their playing-state transition; recording an *attempted* tune would let one
+  // dead stream replace the last working channel, and the startup feature
+  // re-tunes this unattended on every cold boot, so a dead entry would mean
+  // booting into failure until the user cancels out of it.
+  //
+  // Deliberately NOT [recordIptvWatch]: that store is the Continue Watching
+  // shelf, which is on-demand only ("62% through Sky Sports" is meaningless).
+  // ==========================================================================
+
+  /// Remember [url]/[name] as the last live channel that actually played.
+  ///
+  /// [playlistId] is the channel's ORIGIN provider, not whichever shelf it was
+  /// launched from — a channel played out of Favourites or a custom list must
+  /// come back under its real provider's credentials.
+  ///
+  /// The provider fingerprint (`serverUrl` + `username`) is resolved here from
+  /// [playlistId] rather than asked of callers: the players know only a source
+  /// id, and the fingerprint has to be captured while the playlist still
+  /// exists — it is what allows a re-added Xtream account (which mints a fresh
+  /// playlist id) to be recognised later. Resolving it costs one prefs read,
+  /// paid once per settled channel, never per zap.
+  static Future<void> setIptvLastLiveChannel(
+    String url, {
+    required String name,
+    String? playlistId,
+    int? channelNumber,
+    String? group,
+    String? logoUrl,
+    Map<String, String>? httpHeaders,
+  }) async {
+    if (url.isEmpty) return;
+    String? serverUrl;
+    String? username;
+    if (playlistId != null && playlistId.isNotEmpty) {
+      try {
+        for (final playlist in await getIptvPlaylists()) {
+          if (playlist.id == playlistId) {
+            if (playlist.isXtreamCodes) {
+              serverUrl = playlist.serverUrl;
+              username = playlist.username;
+            }
+            break;
+          }
+        }
+      } catch (_) {
+        // Fingerprint is a recovery aid, never a precondition — a failed
+        // lookup still stores a usable entry keyed by playlist id.
+      }
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _iptvLastLiveChannelKey,
+      jsonEncode({
+        'url': url,
+        'name': name,
+        if (playlistId != null && playlistId.isNotEmpty) 'playlistId': playlistId,
+        if (channelNumber != null) 'channelNumber': channelNumber,
+        if (group != null && group.isNotEmpty) 'group': group,
+        if (logoUrl != null && logoUrl.isNotEmpty) 'logoUrl': logoUrl,
+        if (httpHeaders != null && httpHeaders.isNotEmpty)
+          'httpHeaders': httpHeaders,
+        if (serverUrl != null && serverUrl.isNotEmpty) 'serverUrl': serverUrl,
+        if (username != null && username.isNotEmpty) 'username': username,
+        'playedAt': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
+  }
+
+  /// The last live channel that reached a playing state, or null.
+  static Future<Map<String, dynamic>?> getIptvLastLiveChannel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_iptvLastLiveChannelKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      // Malformed (hand-edited prefs, or a format change): treat as absent
+      // rather than throwing on a startup path.
+    }
+    return null;
+  }
+
+  static Future<void> clearIptvLastLiveChannel() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_iptvLastLiveChannelKey);
+  }
+
+  // ==========================================================================
+  // Startup channel (boot straight into a live IPTV channel)
+  //
+  // Reuses the surviving `startup_auto_launch_enabled` / `startup_mode` keys
+  // from the removed general Launch-on-Startup feature; `startup_mode` is set
+  // to 'iptv' so a future second mode can coexist without another master flag.
+  // ==========================================================================
+
+  static const String _startupIptvModeKey = 'startup_iptv_mode';
+  static const String _startupIptvChannelKey = 'startup_iptv_channel';
+
+  /// 'last' (whatever played most recently) or 'pinned' (a chosen channel).
+  static const String startupIptvModeLast = 'last';
+  static const String startupIptvModePinned = 'pinned';
+
+  /// Payload marker meaning "nothing is remembered yet — start on whatever the
+  /// IPTV page lands on". Never persisted; only ever set by [warmStartupIptv].
+  static const String startupIptvFirstAvailable = 'firstAvailable';
+
+  static Future<bool> getStartupIptvEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getBool(_startupAutoLaunchEnabledKey) ?? false) &&
+        prefs.getString(_startupModeKey) == 'iptv';
+  }
+
+  static Future<void> setStartupIptvEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_startupAutoLaunchEnabledKey, enabled);
+    if (enabled) {
+      await prefs.setString(_startupModeKey, 'iptv');
+    } else {
+      // Leave the mode behind rather than clearing it: re-enabling should come
+      // back to IPTV, not to a blank slate.
+      await prefs.remove(_startupModeKey);
+    }
+  }
+
+  static Future<String> getStartupIptvMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final mode = prefs.getString(_startupIptvModeKey);
+    return mode == startupIptvModePinned
+        ? startupIptvModePinned
+        : startupIptvModeLast;
+  }
+
+  static Future<void> setStartupIptvMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _startupIptvModeKey,
+      mode == startupIptvModePinned ? startupIptvModePinned : startupIptvModeLast,
+    );
+  }
+
+  /// The pinned startup channel. Same blob shape as [setIptvLastLiveChannel],
+  /// so both modes resolve through one code path at launch.
+  static Future<Map<String, dynamic>?> getStartupIptvChannel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_startupIptvChannelKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return null;
+  }
+
+  /// [playlistId] must be the channel's ORIGIN provider — the picker aggregates
+  /// Favourites and custom lists, where the same URL can exist under two
+  /// different providers, so a URL alone cannot identify which one was chosen.
+  static Future<void> setStartupIptvChannel(
+    String url, {
+    required String name,
+    String? playlistId,
+    int? channelNumber,
+    String? group,
+    String? logoUrl,
+    Map<String, String>? httpHeaders,
+  }) async {
+    if (url.isEmpty) return;
+    String? serverUrl;
+    String? username;
+    if (playlistId != null && playlistId.isNotEmpty) {
+      try {
+        for (final playlist in await getIptvPlaylists()) {
+          if (playlist.id == playlistId) {
+            if (playlist.isXtreamCodes) {
+              serverUrl = playlist.serverUrl;
+              username = playlist.username;
+            }
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _startupIptvChannelKey,
+      jsonEncode({
+        'url': url,
+        'name': name,
+        if (playlistId != null && playlistId.isNotEmpty) 'playlistId': playlistId,
+        if (channelNumber != null) 'channelNumber': channelNumber,
+        if (group != null && group.isNotEmpty) 'group': group,
+        if (logoUrl != null && logoUrl.isNotEmpty) 'logoUrl': logoUrl,
+        if (httpHeaders != null && httpHeaders.isNotEmpty)
+          'httpHeaders': httpHeaders,
+        if (serverUrl != null && serverUrl.isNotEmpty) 'serverUrl': serverUrl,
+        if (username != null && username.isNotEmpty) 'username': username,
+      }),
+    );
+  }
+
+  static Future<void> clearStartupIptvChannel() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_startupIptvChannelKey);
+  }
+
+  // --- Synchronous startup handoff -----------------------------------------
+  //
+  // MainPage's `_selectedIndex` is a FIELD INITIALIZER: it runs at construction,
+  // long before any async prefs read could answer. Warming the decision in
+  // main() before runApp is the same trick `PlatformUtil.isAndroidTvCached`
+  // uses, and it is what keeps the Home board from mounting and starting its
+  // cold-start IO before we swap to IPTV.
+
+  static Map<String, dynamic>? _startupIptvChannelCached;
+
+  /// The channel to boot into, or null. Only meaningful after [warmStartupIptv].
+  static Map<String, dynamic>? get startupIptvChannelCached =>
+      _startupIptvChannelCached;
+
+  /// Resolve the startup channel once, before `runApp`. Never throws — a
+  /// failure here must degrade to "no startup channel", never to a broken boot.
+  static Future<void> warmStartupIptv() async {
+    try {
+      if (!await getStartupIptvEnabled()) return;
+      final mode = await getStartupIptvMode();
+      final channel = mode == startupIptvModePinned
+          ? await getStartupIptvChannel()
+          : await getIptvLastLiveChannel();
+      final url = channel?['url'];
+      if (url is! String || url.isEmpty) {
+        // Nothing remembered yet — the very first boot after switching this on.
+        // Rather than doing nothing (which reads as broken), hand the IPTV page
+        // a sentinel and let it bootstrap from whatever it lands on. Resolved
+        // there, not here, because picking "the first channel" needs the loaded
+        // catalog and this runs before the first frame.
+        //
+        // Only for 'last': "a specific channel" with none chosen is a
+        // deliberate blank the settings row already labels, and auto-picking
+        // something else would contradict what the user asked for.
+        if (mode == startupIptvModeLast) {
+          _startupIptvChannelCached = const {startupIptvFirstAvailable: true};
+        }
+        return;
+      }
+      _startupIptvChannelCached = channel;
+    } catch (_) {
+      _startupIptvChannelCached = null;
+    }
   }
 
   // ============================================================================

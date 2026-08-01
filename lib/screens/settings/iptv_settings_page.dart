@@ -14,6 +14,7 @@ import '../../utils/tv_keys.dart';
 import '../../utils/tv_reveal.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
+import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -87,6 +88,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   List<IptvPlaylist> _playlists = [];
   String? _defaultPlaylistId;
   bool _redesignEnabled = true;
+
+  // Startup channel
+  bool _startupEnabled = false;
+  String _startupMode = StorageService.startupIptvModeLast;
+  Map<String, dynamic>? _startupChannel;
+  Map<String, dynamic>? _lastLiveChannel;
+  final FocusNode _startupChannelFocusNode = FocusNode(
+    debugLabel: 'iptv-startup-channel',
+  );
   bool _loading = true;
   bool _isAdding = false;
   // Ids of playlists currently being refreshed (re-fetched from source)
@@ -172,6 +182,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       node.dispose();
     }
     _createListFocusNode.dispose();
+    _startupChannelFocusNode.dispose();
     super.dispose();
   }
 
@@ -205,11 +216,63 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       if (!list.isBuiltin) list,
   ];
 
+  /// Subtitle for the "specific channel" row — names the pinned channel so the
+  /// setting is readable without opening the picker.
+  String get _startupChannelLabel {
+    final channel = _startupChannel;
+    if (channel == null) return 'None chosen yet';
+    final name = channel['name'];
+    final number = channel['channelNumber'];
+    if (name is! String || name.isEmpty) return 'None chosen yet';
+    return number is num ? 'CH $number  ·  $name' : name;
+  }
+
+  /// Names the remembered channel, so "last watched" is verifiable at a glance
+  /// rather than a promise the user has to reboot to test.
+  String get _lastLiveChannelLabel {
+    final channel = _lastLiveChannel;
+    final name = channel?['name'];
+    if (name is! String || name.isEmpty) return 'unknown';
+    final number = channel?['channelNumber'];
+    return number is num ? 'CH $number  ·  $name' : name;
+  }
+
+  Future<void> _setStartupMode(String? mode) async {
+    if (mode == null) return;
+    await StorageService.setStartupIptvMode(mode);
+    if (mounted) setState(() => _startupMode = mode);
+    // Choosing "a specific channel" with none set yet goes straight to the
+    // picker — otherwise the mode is selected but inert, which reads as broken.
+    if (mode == StorageService.startupIptvModePinned && _startupChannel == null) {
+      await _pickStartupChannel();
+    }
+  }
+
+  Future<void> _pickStartupChannel() async {
+    final choice = await showIptvStartupChannelPicker(context);
+    if (choice == null) return;
+    await StorageService.setStartupIptvChannel(
+      choice.url,
+      name: choice.name,
+      playlistId: choice.playlistId,
+      channelNumber: choice.channelNumber,
+      group: choice.group,
+      logoUrl: choice.logoUrl,
+      httpHeaders: choice.httpHeaders.isEmpty ? null : choice.httpHeaders,
+    );
+    final stored = await StorageService.getStartupIptvChannel();
+    if (mounted) setState(() => _startupChannel = stored);
+  }
+
   Future<void> _loadSettings() async {
     final playlists = await StorageService.getIptvPlaylists();
     final defaultId = await StorageService.getIptvDefaultPlaylist();
     final redesignEnabled = await StorageService.getIptvRedesignEnabled();
     final lists = await StorageService.getIptvLists();
+    final startupEnabled = await StorageService.getStartupIptvEnabled();
+    final startupMode = await StorageService.getStartupIptvMode();
+    final startupChannel = await StorageService.getStartupIptvChannel();
+    final lastLive = await StorageService.getIptvLastLiveChannel();
 
     if (!mounted) return;
 
@@ -218,6 +281,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _defaultPlaylistId = defaultId;
       _redesignEnabled = redesignEnabled;
       _lists = lists;
+      _startupEnabled = startupEnabled;
+      _startupMode = startupMode;
+      _startupChannel = startupChannel;
+      _lastLiveChannel = lastLive;
       _loading = false;
     });
     _ensureFocusNodes();
@@ -1326,6 +1393,63 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                     label: 'Create list',
                     onTap: _createList,
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Startup channel
+            const SettingsSectionLabel('Startup'),
+            const SizedBox(height: 6),
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Start on a channel'),
+                    subtitle: const Text(
+                      'Open straight into a live channel when the app starts. '
+                      'Press BACK while it is tuning to stop.',
+                    ),
+                    value: _startupEnabled,
+                    onChanged: (enabled) async {
+                      await StorageService.setStartupIptvEnabled(enabled);
+                      if (mounted) setState(() => _startupEnabled = enabled);
+                    },
+                  ),
+                  if (_startupEnabled) ...[
+                    const Divider(height: 1),
+                    RadioListTile<String>(
+                      title: const Text('Last watched channel'),
+                      subtitle: Text(
+                        _lastLiveChannel == null
+                            // Honest about the bootstrap: the first boot after
+                            // enabling this has nothing to resume, and silently
+                            // doing nothing reads as broken.
+                            ? 'Nothing watched yet — starts on the first '
+                                  'channel, then remembers what you watch.'
+                            : 'Currently: ${_lastLiveChannelLabel}',
+                      ),
+                      value: StorageService.startupIptvModeLast,
+                      groupValue: _startupMode,
+                      onChanged: _setStartupMode,
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('A specific channel'),
+                      subtitle: Text(_startupChannelLabel),
+                      value: StorageService.startupIptvModePinned,
+                      groupValue: _startupMode,
+                      onChanged: _setStartupMode,
+                    ),
+                    if (_startupMode == StorageService.startupIptvModePinned)
+                      _FocusableSettingsTile(
+                        focusNode: _startupChannelFocusNode,
+                        icon: Icons.live_tv_rounded,
+                        label: _startupChannel == null
+                            ? 'Choose channel'
+                            : 'Change channel',
+                        onTap: _pickStartupChannel,
+                      ),
+                  ],
                 ],
               ),
             ),

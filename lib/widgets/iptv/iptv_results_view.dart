@@ -92,6 +92,24 @@ class IptvResultsViewState extends State<IptvResultsView>
   final ScrollController _scrollController = ScrollController();
   final IptvService _iptvService = IptvService.instance;
 
+  // ---- Startup channel -----------------------------------------------------
+  // Grid metrics, published from the LayoutBuilder so the startup launch can
+  // scroll to a not-yet-built row.
+  int _gridColumns = 1;
+  double _gridRowExtent = 72;
+
+  /// Bumped by every cancellation. The whole launch re-checks it after each
+  /// await — consuming the pending payload is NOT cancellation, because the
+  /// async chain owns the attempt from that moment on.
+  int _startupAttempt = 0;
+
+  /// True while a startup launch is in flight. Holds the preview stage off:
+  /// `_previewRearmPending` only parks a RE-arm, it does nothing about the
+  /// initial 900ms dwell, which would happily open a second live stream
+  /// underneath the launching player.
+  bool _startupLaunchActive = false;
+
+
   // Playlists and settings
   List<IptvPlaylist> _playlists = [];
   IptvPlaylist? _selectedPlaylist;
@@ -494,7 +512,11 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     // Virtual Stremio playlists come and go with the installed addon set.
     StremioService.instance.addAddonsChangedListener(_onStremioAddonsChanged);
-    _loadSettings();
+    // Chained, not fire-and-forget: the startup launch needs the playlist list
+    // to exist before it can pick the target's provider.
+    _loadSettings().then((_) {
+      if (mounted) unawaited(_maybeRunStartupLaunch());
+    });
     _loadFavorites();
   }
 
@@ -3097,13 +3119,384 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// not stack player launches.
   bool _launchingChannel = false;
 
-  Future<void> _playChannel(IptvChannel channel) async {
+  Future<void> _playChannel(
+    IptvChannel channel, {
+    bool Function()? shouldCancel,
+  }) async {
     if (_launchingChannel) return;
     _launchingChannel = true;
     try {
-      await _playChannelInner(channel);
+      await _playChannelInner(channel, shouldCancel: shouldCancel);
     } finally {
       _launchingChannel = false;
+    }
+  }
+
+  // ==========================================================================
+  // Startup channel — boot straight into a live channel
+  //
+  // Runs against the MOUNTED page rather than as a headless launcher: the
+  // player's launch payload includes `iptvBrowseProvider`, a closure into this
+  // state, and without it a launched channel plays but cannot zap.
+  // ==========================================================================
+
+  /// How long the launch may spend waiting for a catalog. Deliberately under
+  /// the overlay's 30s timeout so the failure is ours (with a message) rather
+  /// than the overlay's silent give-up.
+  static const Duration _startupResolveDeadline = Duration(seconds: 24);
+
+  void _cancelStartupLaunch() {
+    _startupAttempt++;
+    if (_startupLaunchActive) {
+      _startupLaunchActive = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _maybeRunStartupLaunch() async {
+    final payload = MainPageBridge.consumeIptvStartupChannel();
+    if (payload == null) return;
+    // The bootstrap sentinel carries no url/name by design — it means "start on
+    // whatever you land on" — so it must skip the stored-identity validation
+    // below, which would otherwise reject it and cancel the whole attempt.
+    final firstAvailable =
+        payload[StorageService.startupIptvFirstAvailable] == true;
+    final url = payload['url'];
+    final name = payload['name'];
+    if (!firstAvailable &&
+        (url is! String || url.isEmpty || name is! String)) {
+      MainPageBridge.cancelIptvStartupChannel();
+      return;
+    }
+
+    final attempt = ++_startupAttempt;
+    // The epoch, not just the local attempt: cancellation can land in the gap
+    // between consuming the payload and registering the callback below, and
+    // would then find nothing to call. The epoch records it regardless.
+    final epoch = MainPageBridge.iptvStartupEpoch;
+    bool cancelled() =>
+        attempt != _startupAttempt ||
+        epoch != MainPageBridge.iptvStartupEpoch ||
+        !mounted;
+    if (cancelled()) return;
+    _startupLaunchActive = true;
+    MainPageBridge.cancelIptvStartup = _cancelStartupLaunch;
+    if (mounted) setState(() {});
+
+    try {
+      final row = await _resolveStartupRow(payload, cancelled);
+      if (cancelled()) return;
+      if (row == null) {
+        _failStartupLaunch(
+          firstAvailable
+              ? 'No live channels to start on yet'
+              : 'That channel is no longer available',
+        );
+        return;
+      }
+      await _scrollAndFocusStartupRow(row);
+      if (cancelled()) return;
+      await _playChannel(row, shouldCancel: cancelled);
+    } catch (e) {
+      debugPrint('IPTV startup launch failed: $e');
+      if (!cancelled()) _failStartupLaunch('Could not start that channel');
+    } finally {
+      // Do NOT drop the preview suppression just because push() returned.
+      //
+      // Focusing the target row above re-tuned the stage, so `_previewStreamUrl`
+      // is loaded and only this flag is holding the stage off. On TV push()
+      // returns while the native player is merely STARTING — clearing here
+      // would remount the stage and open a second live stream underneath it,
+      // which is the exact failure `_previewRearmPending` exists to prevent.
+      // On the parked-re-arm paths, `_flushPreviewRearm` clears this instead.
+      // Keyed on the parked re-arm itself, not on "we think we launched":
+      // `_playChannelInner` can also return early WITHOUT launching (a Stremio
+      // channel with no playable candidate, say), and treating that as parked
+      // would strand the suppression on forever, leaving the preview stage
+      // permanently dead until some unrelated playback flushed it.
+      final parked = _previewRearmPending;
+      if (attempt == _startupAttempt && !parked) {
+        _startupLaunchActive = false;
+        if (mounted) setState(() {});
+      }
+      MainPageBridge.cancelIptvStartup = null;
+    }
+  }
+
+  void _failStartupLaunch(String reason) {
+    MainPageBridge.notifyAutoLaunchFailed(reason);
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(reason)));
+    }
+  }
+
+  /// Locate the stored channel and return the *resident* row instance.
+  ///
+  /// Never returns a self-materialized [IptvChannel]: `_playChannelInner` looks
+  /// the row up by IDENTITY (`DbChannelList` is backed by a `HashMap.identity`),
+  /// so a foreign instance fails `contains`, falls through to `_allChannels`,
+  /// resolves to null, and gets clamped to index 0 — silently launching the
+  /// first channel in the catalog.
+  Future<IptvChannel?> _resolveStartupRow(
+    Map<String, dynamic> payload,
+    bool Function() cancelled,
+  ) async {
+    // Bootstrap case: nothing has ever been watched, so there is no stored
+    // channel to look up. Start on whatever the page already landed on — which
+    // is Favourites when the user has any (see `_loadSettings`), otherwise
+    // their default provider. Deliberately NOT resolved as a stored identity:
+    // there is nothing to match, and no user expectation to get wrong.
+    if (payload[StorageService.startupIptvFirstAvailable] == true) {
+      return _resolveFirstAvailableRow(cancelled);
+    }
+
+    final url = payload['url'] as String;
+    final name = payload['name'] as String;
+    final channelNumber = (payload['channelNumber'] as num?)?.toInt();
+
+    // 1. The target's own provider, resolved BEFORE anything is looked up — a
+    //    lookup against the landing playlist's catalog would answer about the
+    //    wrong provider entirely.
+    final target = _startupPlaylistFor(payload);
+    if (target == null) return null;
+    if (_selectedPlaylist?.id != target.id) {
+      _onPlaylistChanged(target);
+    }
+
+    final deadline = DateTime.now().add(_startupResolveDeadline);
+
+    // 2. Do not read the catalog until the OUTGOING one is gone. `_loadPlaylist`
+    //    sets its in-flight ticket synchronously, but `_loadPlaylistInner`
+    //    clears `_allChannels`/`_dbSnapshot` only after its first awaits — so
+    //    for a window the previous provider's rows are still sitting there, and
+    //    matching against them would resolve a channel from the wrong account.
+    var ready = false;
+    while (!ready && !cancelled() && DateTime.now().isBefore(deadline)) {
+      if (_inFlightLoadTicket == null) {
+        ready = true; // load finished (or a cached catalog was already present)
+      } else if (_allChannels.isEmpty && _dbSnapshot == null) {
+        ready = true; // cleared — anything arriving now belongs to the target
+      } else {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+    }
+
+    // 3. Wait for that provider's catalog. Stremio shelves arrive
+    //    progressively, so this waits for the row to APPEAR, not merely for a
+    //    load to finish.
+    while (!cancelled() && DateTime.now().isBefore(deadline)) {
+      // A load for a DIFFERENT playlist means something (a user action, an
+      // addon refresh) moved on from under us — the attempt is void.
+      if (_selectedPlaylist?.id != target.id) return null;
+      final snap = _dbSnapshot;
+      if (snap != null) {
+        final entry =
+            snap.entryForUrl(url: url, name: name) ??
+            (channelNumber != null
+                ? snap.entryForChannelNumber(channelNumber)
+                : null);
+        if (entry != null) return _residentDbRow(entry, url, name, channelNumber);
+      } else if (_allChannels.isNotEmpty) {
+        final match = _materializedStartupMatch(url, name, channelNumber);
+        if (match != null) return _adoptStartupCategory(match);
+        // A finished load that still doesn't hold the channel is a real miss;
+        // an in-flight one may still deliver it.
+        if (_inFlightLoadTicket == null) return null;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+    return null;
+  }
+
+  /// First live row of whatever the page is currently showing.
+  ///
+  /// Rows come straight off `_filteredChannels`, so they are the facade's own
+  /// resident instances — the identity `_playChannelInner` needs — and no
+  /// category is adopted, because the landing view is exactly what we want.
+  ///
+  /// The walk is capped: a VOD-heavy catalog could otherwise page thousands of
+  /// rows looking for a live one, and if the first few hundred hold none, the
+  /// honest answer is "nothing to start on" rather than a long stall.
+  Future<IptvChannel?> _resolveFirstAvailableRow(bool Function() cancelled) async {
+    final deadline = DateTime.now().add(_startupResolveDeadline);
+    while (!cancelled() && DateTime.now().isBefore(deadline)) {
+      final channels = _filteredChannels;
+      if (channels.isNotEmpty) {
+        final limit = channels.length < 300 ? channels.length : 300;
+        for (var i = 0; i < limit; i++) {
+          final channel = channels[i];
+          if (channel.isLive) return channel;
+        }
+        // A finished load with no live row in reach is a real answer; an
+        // in-flight one (progressive Stremio) may still deliver.
+        if (_inFlightLoadTicket == null) return null;
+      } else if (_inFlightLoadTicket == null && _settingsLoaded) {
+        return null;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+    return null;
+  }
+
+  /// Convert a catalog position into the facade's filtered index, then read the
+  /// row back out of the live facade so it is a registered, resident instance.
+  Future<IptvChannel?> _residentDbRow(
+    ({int position, IptvChannel channel}) entry,
+    String url,
+    String name,
+    int? storedNumber,
+  ) async {
+    final channel = entry.channel;
+    // Live-only, enforced on the resolved row rather than by filtering — see
+    // the index contract below.
+    if (!channel.isLive) return null;
+    // A channel-number fallback must corroborate on NAME. Numbers are assigned
+    // per load on virtual catalogs, so a shifted numbering is exactly the
+    // condition that triggers this path — and "same group" is worthless
+    // corroboration when hundreds of channels share "Sports".
+    if (channel.url != url &&
+        storedNumber != null &&
+        _normalizedName(channel.name) != _normalizedName(name)) {
+      return null;
+    }
+
+    await _adoptStartupCategoryValue(channel.group);
+    final snap = _dbSnapshot;
+    final list = _filteredChannels;
+    if (snap == null || list is! DbChannelList) return null;
+
+    // The index MUST be counted under the facade's own filter set. DbChannelList
+    // filters on group + search only — it has no `live` parameter — so counting
+    // live-only rows here and indexing a facade holding live+VOD would land on
+    // a different channel entirely.
+    final index = snap.count(
+      group: list.group,
+      search: list.search,
+      beforePosition: entry.position,
+    );
+    if (index < 0 || index >= list.length) return null;
+    final row = list[index];
+    // Verify against what resolution actually returned, not against the stored
+    // blob: a successful number-fallback legitimately has a different URL, and
+    // checking the stale value would reject every one of them.
+    if (row.url != channel.url || row.name != channel.name) return null;
+    return row;
+  }
+
+  IptvChannel? _materializedStartupMatch(
+    String url,
+    String name,
+    int? storedNumber,
+  ) {
+    for (final channel in _allChannels) {
+      if (channel.url == url && channel.name == name && channel.isLive) {
+        return channel;
+      }
+    }
+    if (storedNumber == null) return null;
+    for (final channel in _allChannels) {
+      if (channel.channelNumber == storedNumber &&
+          channel.isLive &&
+          _normalizedName(channel.name) == _normalizedName(name)) {
+        return channel;
+      }
+    }
+    return null;
+  }
+
+  /// Materialized lists hand back the very instance the filtered list holds, so
+  /// identity already lines up — only the category needs adopting.
+  Future<IptvChannel?> _adoptStartupCategory(IptvChannel channel) async {
+    await _adoptStartupCategoryValue(channel.group);
+    return _filteredChannels.contains(channel) ? channel : null;
+  }
+
+  /// Make the target's own group the active category. Without this the landing
+  /// category can simply exclude the target, and no amount of correct counting
+  /// inside it will ever materialize the row.
+  Future<void> _adoptStartupCategoryValue(String? group) async {
+    if (_selectedCategory != group) {
+      setState(() => _selectedCategory = group);
+      _applyFilters();
+      // Let the new facade/filtered list settle before it is indexed.
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
+  static String _normalizedName(String value) =>
+      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// The provider a stored startup channel belongs to.
+  ///
+  /// Falls back to an Xtream fingerprint (`serverUrl` + `username`) captured
+  /// when the channel was saved: re-adding an account mints a brand-new
+  /// playlist id, so an id-only lookup would lose the channel every time a user
+  /// re-entered their subscription.
+  IptvPlaylist? _startupPlaylistFor(Map<String, dynamic> payload) {
+    final playlistId = payload['playlistId'];
+    if (playlistId is String && playlistId.isNotEmpty) {
+      for (final playlist in _playlists) {
+        if (playlist.id == playlistId) return playlist;
+      }
+    }
+    final serverUrl = payload['serverUrl'];
+    final username = payload['username'];
+    if (serverUrl is String && serverUrl.isNotEmpty && username is String) {
+      for (final playlist in _playlists) {
+        if (playlist.isXtreamCodes &&
+            playlist.serverUrl == serverUrl &&
+            playlist.username == username) {
+          return playlist;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Scroll the target into view and focus it, so BACK out of the player lands
+  /// on the channel rather than at the top of the list.
+  ///
+  /// There is no existing scroll-to-index to reuse: the grid's only auto-scroll
+  /// is each row's own `ensureVisible`, fired once a BUILT row takes focus — and
+  /// a distant lazy row is never built and has no focus node.
+  Future<void> _scrollAndFocusStartupRow(IptvChannel row) async {
+    final index = _filteredChannels is DbChannelList
+        ? (_filteredChannels as DbChannelList).indexOfInstance(row)
+        : _filteredChannels.indexOf(row);
+    if (index == null || index < 0) return;
+    // The touch-tablet two-pane renders IptvCenteredSelector, which owns its
+    // OWN controller — `_scrollController` drives the grid only, so scrolling it
+    // here would be a no-op. Hand the selector the index through the selection
+    // it already reconciles against instead.
+    if (_touchTabletTwoPaneActive) {
+      setState(() => _selectTabletChannel(index, row));
+      return;
+    }
+    if (_scrollController.hasClients) {
+      final target =
+          (index ~/ _gridColumns).toDouble() * (_gridRowExtent + 4);
+      final position = _scrollController.position;
+      if (position.hasContentDimensions) {
+        _scrollController.jumpTo(
+          target.clamp(
+            position.minScrollExtent,
+            position.maxScrollExtent,
+          ),
+        );
+      }
+    }
+    // The row has to build before it has a focus node to give focus to, and on
+    // a slow TV that can take more than the next frame.
+    for (var attempt = 0; attempt < 5; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final node = _cardFocusNodes[row];
+      if (node != null) {
+        node.requestFocus();
+        return;
+      }
     }
   }
 
@@ -3210,7 +3603,14 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
-  Future<void> _playChannelInner(IptvChannel channel) async {
+  /// [shouldCancel] is polled after the awaits below and immediately before the
+  /// player is pushed. Checking only before `_playChannel` is not enough: this
+  /// method still awaits a Stremio candidate resolve and a watch record, and a
+  /// BACK landing in either window would otherwise still end in a player.
+  Future<void> _playChannelInner(
+    IptvChannel channel, {
+    bool Function()? shouldCancel,
+  }) async {
     // Series entries aren't playable — their sentinel URL routes to the
     // merged series page, whose episode list does the actual playing.
     if (channel.contentType == 'series') {
@@ -3245,6 +3645,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         return;
       }
       initialUrl = candidates.first.url;
+      if (shouldCancel != null && shouldCancel()) return;
     }
     // Remember on-demand plays so the Continue-watching shelf can rebuild the
     // row later without re-fetching the panel. Recorded BEFORE the launch:
@@ -3318,6 +3719,9 @@ class IptvResultsViewState extends State<IptvResultsView>
               _playerChannelWithOrigin(item, launchSource),
           ];
     if (!mounted) return;
+    // Last gate before the player exists. Everything above may have taken
+    // seconds (Stremio ladder, catalog page, watch record).
+    if (shouldCancel != null && shouldCancel()) return;
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -3571,6 +3975,10 @@ class IptvResultsViewState extends State<IptvResultsView>
   void _flushPreviewRearm() {
     if (!_previewRearmPending || !mounted) return;
     _previewRearmPending = false;
+    // The startup launch parks its preview suppression here too — this is the
+    // designated "we're actually back" hook, and the stage must not remount
+    // while the player it launched is still coming up.
+    _startupLaunchActive = false;
     _previewEpoch.value++;
     // This fires only after real playback, on both TV return paths (app
     // resume for the native player, next row focus for the in-app fallback) —
@@ -4254,7 +4662,9 @@ class IptvResultsViewState extends State<IptvResultsView>
               builder: (context, showing, _) =>
                   _IptvStageFloor(channel: ch, tuning: ch != null && !showing),
             ),
-            if (ch != null)
+            // Startup launch owns the screen: the stage's 900ms dwell would
+            // otherwise open a SECOND live stream under the launching player.
+            if (ch != null && !_startupLaunchActive)
               ValueListenableBuilder<String?>(
                 valueListenable: _previewStreamUrl,
                 builder: (context, streamUrl, _) {
@@ -4512,6 +4922,12 @@ class IptvResultsViewState extends State<IptvResultsView>
               // day someone assigns _filteredChannels outside setState.
               final channelList = _filteredChannels;
               final itemCount = channelList.length;
+              // Published for the startup-channel launch, which must scroll to
+              // a row that has never been built (so it has no focus node and
+              // no ensureVisible of its own). These are LayoutBuilder locals —
+              // unreachable from outside without stashing them.
+              _gridColumns = columns;
+              _gridRowExtent = rowExtent;
 
               // NOT wrapped in TvFocusScrollWrapper: this subtree has no ancestor
               // Scrollable, so the wrapper's ensureVisible walk was a silent no-op

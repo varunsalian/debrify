@@ -1941,6 +1941,27 @@ class CatalogSnapshot {
     return rows.isEmpty ? null : rows.first['position'] as int;
   }
 
+  /// Catalog entry (position + row) matching url+name, or null.
+  ///
+  /// Unlike [positionOf] this hands back the row itself, which the startup
+  /// channel needs: it must adopt the target's OWN group as the active category
+  /// before it can convert a catalog position into a filtered index, and a bare
+  /// position cannot say what that group is.
+  ({int position, IptvChannel channel})? entryForUrl({
+    required String url,
+    required String name,
+    bool? live,
+  }) {
+    final rows = _db.select(
+      'SELECT * ${_where(live: live)} AND url = ? AND name = ? '
+      'ORDER BY position LIMIT 1',
+      [..._args(), url, name],
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return (position: row['position'] as int, channel: _channelFromRow(row));
+  }
+
   /// Catalog position of an assigned live-channel number.
   int? positionOfChannelNumber(int channelNumber) {
     final rows = _db.select(

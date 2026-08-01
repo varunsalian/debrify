@@ -674,6 +674,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             updatePauseButtonLabel()
+            // Startup-channel memory — armed by real playback only, never by a
+            // tune, so a dead stream cannot become "the last channel watched".
+            if (isPlaying) noteLiveChannelPlaying()
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -7802,6 +7805,67 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateIptvGuideCurrentName()
         // Index moved — a previous episode may have (dis)appeared.
         updateIptvEpisodeControls()
+    }
+
+    // ========================================================================
+    // Startup-channel memory
+    //
+    // Remembers the last LIVE channel that actually reached a playing state, so
+    // "start on my last channel" re-tunes what was being watched rather than
+    // what was launched — zapping is how live IPTV is used.
+    //
+    // Fire-and-forget, and deliberately NOT on the tune path: the live branch
+    // of beginIptvPlaybackAfterWatchRegistration short-circuits precisely so
+    // zapping stays instant, and nothing here may reintroduce a round trip in
+    // front of playback.
+    // ========================================================================
+
+    /// A channel counts once it has been playing for this long. Zapping through
+    /// twenty channels supersedes one pending post rather than writing twenty
+    /// times, and the write lands while the app is alive — an abrupt force-stop
+    /// runs no lifecycle callback, so flush-on-stop alone would lose it.
+    private val lastLiveChannelSettleMs = 1_000L
+
+    private var lastLiveChannelArmedUrl: String? = null
+    private var lastLiveChannelRunnable: Runnable? = null
+
+    private fun noteLiveChannelPlaying() {
+        if (!isIptvMode) return
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
+        if (!entry.isLive) return
+        // Already counting down for this channel — a pause/resume must not
+        // restart the settle window.
+        if (lastLiveChannelArmedUrl == entry.url && lastLiveChannelRunnable != null) return
+
+        lastLiveChannelRunnable?.let { iptvBrowseHandler.removeCallbacks(it) }
+        lastLiveChannelArmedUrl = entry.url
+
+        val runnable = Runnable {
+            lastLiveChannelRunnable = null
+            // Re-read: the user may have zapped on during the settle window,
+            // and the channel that settled is the one that counts.
+            val current = iptvChannels.getOrNull(currentIptvIndex)
+            if (current == null || !current.isLive || current.url != entry.url) return@Runnable
+            if (player?.isPlaying != true) return@Runnable
+            // sourceId is backfilled from the launch-level id for entries that
+            // carried none, so fall back to it here for the same reason.
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+                "noteIptvLiveChannel",
+                mapOf(
+                    "url" to current.url,
+                    "name" to current.name,
+                    "sourceId" to (current.sourceId ?: iptvSourceId),
+                    "channelNumber" to current.channelNumber,
+                    "group" to current.group,
+                    "logoUrl" to current.logoUrl,
+                    "httpHeaders" to current.httpHeaders,
+                ),
+            )
+        }
+        lastLiveChannelRunnable = runnable
+        // Posted to iptvBrowseHandler so onDestroy's removeCallbacksAndMessages
+        // already retires it.
+        iptvBrowseHandler.postDelayed(runnable, lastLiveChannelSettleMs)
     }
 
     private fun beginIptvPlaybackAfterWatchRegistration(entry: IptvChannelEntry) {

@@ -677,6 +677,26 @@ class AndroidTvPlayerBridge {
             hasNextEpisode: watchArgs['hasNextEpisode'] as bool?,
           );
           return true;
+        // Startup-channel memory. Fired by the native player once a LIVE
+        // channel has been playing for its settle window — deliberately not
+        // routed through 'recordIptvWatch' above, which feeds the on-demand
+        // Continue Watching shelf and skips live entirely.
+        case 'noteIptvLiveChannel':
+          final liveArgs = call.arguments;
+          if (liveArgs is! Map) return false;
+          final url = liveArgs['url'] as String?;
+          final name = liveArgs['name'] as String?;
+          if (url == null || url.isEmpty || name == null) return false;
+          await StorageService.setIptvLastLiveChannel(
+            url,
+            name: name,
+            playlistId: liveArgs['sourceId'] as String?,
+            channelNumber: (liveArgs['channelNumber'] as num?)?.toInt(),
+            group: liveArgs['group'] as String?,
+            logoUrl: liveArgs['logoUrl'] as String?,
+            httpHeaders: _iptvHeadersFromArgs(liveArgs['httpHeaders']),
+          );
+          return true;
         case 'setIptvFavorite':
           final favoriteArgs = call.arguments;
           if (favoriteArgs is! Map) return false;

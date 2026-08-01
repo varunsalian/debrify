@@ -1718,6 +1718,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final wasPlaying = _isPlaying;
       _isPlaying = p;
       _pushPipState();
+      // Startup-channel memory — armed only by real playback, never by a tune.
+      if (p) _noteLiveChannelPlaying();
       // Trakt scrobble on play/pause
       if (p && _duration > Duration.zero) {
         _traktScrobble('start');
@@ -3834,6 +3836,68 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return null;
     }
     return chans[_currentIptvIndex];
+  }
+
+  // ==========================================================================
+  // Startup-channel memory
+  //
+  // Remembers the last LIVE channel that actually reached a playing state, so
+  // "start on my last channel" re-tunes what was being watched rather than what
+  // was last launched — zapping is how live IPTV is used, and the launch
+  // channel is stale the moment the user presses up.
+  //
+  // Recorded on PLAYBACK, not on tune: a dead stream must never replace the
+  // last working channel, because the startup feature re-tunes this unattended
+  // on every cold boot.
+  // ==========================================================================
+
+  Timer? _lastLiveChannelTimer;
+  String? _lastLiveChannelArmedUrl;
+
+  /// Commit-on-settle: a channel counts once it has been *playing* for
+  /// [_lastLiveChannelSettle]. Zapping through twenty channels arms and
+  /// supersedes one timer rather than writing twenty times, and the commit
+  /// lands while the app is alive — an abrupt force-stop runs no lifecycle
+  /// callback, so a flush-on-dispose alone would lose it.
+  static const Duration _lastLiveChannelSettle = Duration(seconds: 1);
+
+  void _noteLiveChannelPlaying() {
+    final channel = _currentIptvChannel;
+    if (channel == null || !channel.isLive) return;
+    // Already counting down for this very channel — a pause/resume or a
+    // re-emitted playing event must not restart the settle window.
+    if (_lastLiveChannelArmedUrl == channel.url &&
+        (_lastLiveChannelTimer?.isActive ?? false)) {
+      return;
+    }
+    _lastLiveChannelTimer?.cancel();
+    _lastLiveChannelArmedUrl = channel.url;
+    _lastLiveChannelTimer = Timer(_lastLiveChannelSettle, () {
+      // Re-read rather than closing over: the user may have zapped on during
+      // the settle window, and the channel that settled is the one that counts.
+      final settled = _currentIptvChannel;
+      if (settled == null || !settled.isLive || settled.url != channel.url) {
+        return;
+      }
+      if (!_isPlaying) return;
+      unawaited(
+        StorageService.setIptvLastLiveChannel(
+          settled.url,
+          name: settled.name,
+          // Origin provider, resolved the same way the catchup path does —
+          // `_originPlaylistIdFor` lives on the IPTV page and is not reachable
+          // from here.
+          playlistId:
+              settled.attributes['source_playlist_id'] ??
+              _iptvGuideContextOverride?.sourceId ??
+              widget.iptvSourceId,
+          channelNumber: settled.channelNumber,
+          group: settled.group,
+          logoUrl: settled.logoUrl,
+          httpHeaders: settled.httpHeaders.isEmpty ? null : settled.httpHeaders,
+        ),
+      );
+    });
   }
 
   /// Next/Previous (and end-of-episode auto-advance) are scoped to an Xtream
@@ -6084,6 +6148,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _posSub?.cancel();
     _durSub?.cancel();
     _playSub?.cancel();
+    _lastLiveChannelTimer?.cancel();
     _paramsSub?.cancel();
     _completedSub?.cancel();
     _bufferingSub?.cancel();
