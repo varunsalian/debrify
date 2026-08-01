@@ -37,8 +37,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     debugLabel: 'iptv-name-input',
   );
   final FocusNode _urlInputFocusNode = FocusNode(debugLabel: 'iptv-url-input');
-  final FocusNode _epgUrlInputFocusNode =
-      FocusNode(debugLabel: 'iptv-epg-url-input');
+  final FocusNode _epgUrlInputFocusNode = FocusNode(
+    debugLabel: 'iptv-epg-url-input',
+  );
   final FocusNode _addButtonFocusNode = FocusNode(
     debugLabel: 'iptv-add-button',
   );
@@ -87,7 +88,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   List<IptvPlaylist> _playlists = [];
   String? _defaultPlaylistId;
-  bool _redesignEnabled = true;
 
   // Startup channel
   bool _startupEnabled = false;
@@ -243,7 +243,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (mounted) setState(() => _startupMode = mode);
     // Choosing "a specific channel" with none set yet goes straight to the
     // picker — otherwise the mode is selected but inert, which reads as broken.
-    if (mode == StorageService.startupIptvModePinned && _startupChannel == null) {
+    if (mode == StorageService.startupIptvModePinned &&
+        _startupChannel == null) {
       await _pickStartupChannel();
     }
   }
@@ -267,7 +268,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _loadSettings() async {
     final playlists = await StorageService.getIptvPlaylists();
     final defaultId = await StorageService.getIptvDefaultPlaylist();
-    final redesignEnabled = await StorageService.getIptvRedesignEnabled();
     final lists = await StorageService.getIptvLists();
     final startupEnabled = await StorageService.getStartupIptvEnabled();
     final startupMode = await StorageService.getStartupIptvMode();
@@ -279,7 +279,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     setState(() {
       _playlists = playlists;
       _defaultPlaylistId = defaultId;
-      _redesignEnabled = redesignEnabled;
       _lists = lists;
       _startupEnabled = startupEnabled;
       _startupMode = startupMode;
@@ -585,7 +584,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final customName = _xcNameController.text.trim();
     final playlist = IptvPlaylist(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: customName.isEmpty ? '$username@${Uri.parse(serverUrl).host}' : customName,
+      name: customName.isEmpty
+          ? '$username@${Uri.parse(serverUrl).host}'
+          : customName,
       url: '',
       serverUrl: serverUrl,
       username: username,
@@ -641,9 +642,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       );
     } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys(
-        [IptvCatalogKey.forUrl(playlist.url)],
-      );
+      await IptvCatalogDb.removeCatalogsByKeys([
+        IptvCatalogKey.forUrl(playlist.url),
+      ]);
     }
 
     // Remove list memberships and watch history that belonged to this
@@ -970,8 +971,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               .map((p) => p.name)
               .toSet(),
           existingUrls: _playlists
-              .where((p) =>
-                  p.id != playlist.id && !p.isXtreamCodes && !p.isLocalFile)
+              .where(
+                (p) =>
+                    p.id != playlist.id && !p.isXtreamCodes && !p.isLocalFile,
+              )
               .map((p) => p.url)
               .toSet(),
         ),
@@ -1010,7 +1013,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // serve the old channels — the in-memory fetch cache and the on-disk
     // catalog snapshots (the new source's snapshots rebuild on next load).
     if (playlist.isXtreamCodes) {
-      final credsChanged = playlist.serverUrl != updated.serverUrl ||
+      final credsChanged =
+          playlist.serverUrl != updated.serverUrl ||
           playlist.username != updated.username ||
           playlist.password != updated.password;
       if (credsChanged) {
@@ -1025,9 +1029,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       }
     } else if (!playlist.isLocalFile && playlist.url != updated.url) {
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys(
-        [IptvCatalogKey.forUrl(playlist.url)],
-      );
+      await IptvCatalogDb.removeCatalogsByKeys([
+        IptvCatalogKey.forUrl(playlist.url),
+      ]);
     }
 
     final newPlaylists = [
@@ -1451,25 +1455,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                       ),
                   ],
                 ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Experience
-            const SettingsSectionLabel('Experience'),
-            const SizedBox(height: 6),
-            Card(
-              child: SwitchListTile(
-                title: const Text('IPTV redesign'),
-                subtitle: const Text(
-                  'Programme guide inside channel rows and the TV source '
-                  'rail. Turn off for the classic IPTV page.',
-                ),
-                value: _redesignEnabled,
-                onChanged: (enabled) async {
-                  await StorageService.setIptvRedesignEnabled(enabled);
-                  if (mounted) setState(() => _redesignEnabled = enabled);
-                },
               ),
             ),
             const SizedBox(height: 24),
@@ -2272,10 +2257,12 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
   final FocusNode _nameFocusNode = FocusNode(debugLabel: 'iptv-edit-name');
   final FocusNode _urlFocusNode = FocusNode(debugLabel: 'iptv-edit-url');
   final FocusNode _serverFocusNode = FocusNode(debugLabel: 'iptv-edit-server');
-  final FocusNode _usernameFocusNode =
-      FocusNode(debugLabel: 'iptv-edit-username');
-  final FocusNode _passwordFocusNode =
-      FocusNode(debugLabel: 'iptv-edit-password');
+  final FocusNode _usernameFocusNode = FocusNode(
+    debugLabel: 'iptv-edit-username',
+  );
+  final FocusNode _passwordFocusNode = FocusNode(
+    debugLabel: 'iptv-edit-password',
+  );
   final FocusNode _epgFocusNode = FocusNode(debugLabel: 'iptv-edit-epg');
 
   bool get _isXtream => widget.playlist.isXtreamCodes;
@@ -2931,7 +2918,6 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
       ],
     );
   }
-
 }
 
 /// Snap accent border on DPAD focus for the dialog's action buttons — the

@@ -11,12 +11,10 @@ void main() {
     bool useLayout({
       TargetPlatform platform = TargetPlatform.android,
       Size size = const Size(1024, 700),
-      bool redesign = true,
       bool television = false,
       bool web = false,
     }) {
       return IptvResultsViewState.shouldUseTouchTabletTwoPane(
-        redesignEnabled: redesign,
         isTelevision: television,
         isWeb: web,
         platform: platform,
@@ -29,13 +27,12 @@ void main() {
       expect(useLayout(platform: TargetPlatform.iOS), isTrue);
     });
 
-    test('rejects constrained, non-touch, web, TV, and classic layouts', () {
+    test('rejects constrained, non-touch, web, and TV layouts', () {
       expect(useLayout(size: const Size(899, 700)), isFalse);
       expect(useLayout(size: const Size(1024, 499)), isFalse);
       expect(useLayout(platform: TargetPlatform.macOS), isFalse);
       expect(useLayout(web: true), isFalse);
       expect(useLayout(television: true), isFalse);
-      expect(useLayout(redesign: false), isFalse);
     });
   });
 

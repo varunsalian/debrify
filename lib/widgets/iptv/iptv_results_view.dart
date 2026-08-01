@@ -109,21 +109,15 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// underneath the launching player.
   bool _startupLaunchActive = false;
 
-
   // Playlists and settings
   List<IptvPlaylist> _playlists = [];
   IptvPlaylist? _selectedPlaylist;
   bool _settingsLoaded = false;
 
-  /// The redesign flag ([StorageService.getIptvRedesignEnabled]): EPG rows,
-  /// the global-search entry points, the TV source rail, category counts.
-  /// Off = the exact pre-redesign page.
-  bool _redesignEnabled = false;
-
-  /// Desktop gets the full two-pane experience too (redesign): source rail,
-  /// embedded live preview, quiet filters — hover previews, click plays.
+  /// Desktop gets the full two-pane experience too: source rail, embedded
+  /// live preview, quiet filters — hover previews, click plays.
   /// Large touch tablets use the same shell with a fixed center selector;
-  /// phones and constrained tablet windows keep the classic list.
+  /// phones and constrained tablet windows keep the single-pane list.
   static final bool _isDesktop =
       !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
@@ -131,7 +125,6 @@ class IptvResultsViewState extends State<IptvResultsView>
   static const double tabletTwoPaneMinHeight = 500;
 
   static bool shouldUseTouchTabletTwoPane({
-    required bool redesignEnabled,
     required bool isTelevision,
     required bool isWeb,
     required TargetPlatform platform,
@@ -139,8 +132,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   }) {
     final touchPlatform =
         platform == TargetPlatform.android || platform == TargetPlatform.iOS;
-    return redesignEnabled &&
-        !isTelevision &&
+    return !isTelevision &&
         !isWeb &&
         touchPlatform &&
         availableSize.width >= tabletTwoPaneMinWidth &&
@@ -368,7 +360,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// the whole list. Rows without data fall back gracefully; the grid needs
   /// one tile height for everything either way.
   bool get _epgRowsActive {
-    if (!_redesignEnabled || _showsPosterRows) return false;
+    if (_showsPosterRows) return false;
     final channels = _filteredChannels;
     if (channels.isEmpty) return false;
     final sample = channels.length < 10 ? channels.length : 10;
@@ -603,9 +595,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           _favoriteUrls.remove(channel.url);
           _membership = {
             ..._membership,
-            channel.url: {
-              ...?_membership[channel.url],
-            }..remove(StorageService.iptvFavoritesListId),
+            channel.url: {...?_membership[channel.url]}
+              ..remove(StorageService.iptvFavoritesListId),
           };
         }
       });
@@ -626,8 +617,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       channelName: channel.name,
       channelLogoUrl: channel.logoUrl,
       loadLists: () => StorageService.getIptvLists(),
-      loadMembership: () =>
-          StorageService.getIptvListsForChannel(channel.url),
+      loadMembership: () => StorageService.getIptvListsForChannel(channel.url),
       onSetMembership: (listId, inList) => StorageService.setIptvChannelInList(
         listId,
         channel.url,
@@ -697,7 +687,6 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _loadSettings({bool forceReload = false}) async {
-    final redesignEnabled = await StorageService.getIptvRedesignEnabled();
     var playlists = await StorageService.getIptvPlaylists();
     var defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
 
@@ -735,8 +724,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // One store read covers both the presence probe and the list rows — the
     // per-list channel counts come back with them.
     final lists = await StorageService.getIptvLists();
-    final hasFavorites = lists
-        .any((l) => l.isFavorites && l.channelCount > 0);
+    final hasFavorites = lists.any((l) => l.isFavorites && l.channelCount > 0);
     final customLists = [
       for (final list in lists)
         if (!list.isBuiltin) list,
@@ -791,7 +779,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     setState(() {
       _playlists = playlists;
       _settingsLoaded = true;
-      _redesignEnabled = redesignEnabled;
       _selectedPlaylist = newSelectedPlaylist;
       // Adopt the rows this pass just read. Returning from Settings goes
       // through here and NOT through _loadFavorites (a catalog reload only
@@ -3163,8 +3150,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         payload[StorageService.startupIptvFirstAvailable] == true;
     final url = payload['url'];
     final name = payload['name'];
-    if (!firstAvailable &&
-        (url is! String || url.isEmpty || name is! String)) {
+    if (!firstAvailable && (url is! String || url.isEmpty || name is! String)) {
       MainPageBridge.cancelIptvStartupChannel();
       return;
     }
@@ -3297,7 +3283,9 @@ class IptvResultsViewState extends State<IptvResultsView>
             (channelNumber != null
                 ? snap.entryForChannelNumber(channelNumber)
                 : null);
-        if (entry != null) return _residentDbRow(entry, url, name, channelNumber);
+        if (entry != null) {
+          return _residentDbRow(entry, url, name, channelNumber);
+        }
       } else if (_allChannels.isNotEmpty) {
         final match = _materializedStartupMatch(url, name, channelNumber);
         if (match != null) return _adoptStartupCategory(match);
@@ -3319,7 +3307,9 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// The walk is capped: a VOD-heavy catalog could otherwise page thousands of
   /// rows looking for a live one, and if the first few hundred hold none, the
   /// honest answer is "nothing to start on" rather than a long stall.
-  Future<IptvChannel?> _resolveFirstAvailableRow(bool Function() cancelled) async {
+  Future<IptvChannel?> _resolveFirstAvailableRow(
+    bool Function() cancelled,
+  ) async {
     final deadline = DateTime.now().add(_startupResolveDeadline);
     while (!cancelled() && DateTime.now().isBefore(deadline)) {
       final channels = _filteredChannels;
@@ -3475,15 +3465,11 @@ class IptvResultsViewState extends State<IptvResultsView>
       return;
     }
     if (_scrollController.hasClients) {
-      final target =
-          (index ~/ _gridColumns).toDouble() * (_gridRowExtent + 4);
+      final target = (index ~/ _gridColumns).toDouble() * (_gridRowExtent + 4);
       final position = _scrollController.position;
       if (position.hasContentDimensions) {
         _scrollController.jumpTo(
-          target.clamp(
-            position.minScrollExtent,
-            position.maxScrollExtent,
-          ),
+          target.clamp(position.minScrollExtent, position.maxScrollExtent),
         );
       }
     }
@@ -4057,15 +4043,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     final Widget body = LayoutBuilder(
       builder: (context, c) {
         final touchTablet = shouldUseTouchTabletTwoPane(
-          redesignEnabled: _redesignEnabled,
           isTelevision: widget.isTelevision,
           isWeb: kIsWeb,
           platform: defaultTargetPlatform,
           availableSize: Size(c.maxWidth, c.maxHeight),
         );
-        final eligible =
-            widget.isTelevision ||
-            (_redesignEnabled && (_isDesktop || touchTablet));
+        final eligible = widget.isTelevision || _isDesktop || touchTablet;
         final twoPane = eligible && c.maxWidth >= 760 && c.maxHeight >= 380;
         if (twoPane != _tvTwoPaneActive ||
             touchTablet != _touchTabletTwoPaneActive) {
@@ -4162,8 +4145,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
   }
 
-  /// The pre-redesign layout: boxed filter bar over a full-width channel list.
-  /// Phone/desktop keep it (no embedded preview there), and TV falls back to
+  /// The single-pane layout: boxed filter bar over a full-width channel list.
+  /// Phones keep it (no embedded preview there), and TV/desktop fall back to
   /// it when the canvas can't fit two panes.
   Widget _buildClassic() {
     return Column(
@@ -4174,7 +4157,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           selectedPlaylist: _selectedPlaylist,
           categories: _categories,
           selectedCategory: _selectedCategory,
-          categoryCounts: _redesignEnabled ? _categoryCounts : null,
+          categoryCounts: _categoryCounts,
           channelCount: _filteredChannels.length,
           isLoading: _isLoading,
           isLoadingMore: _isLoadingMore,
@@ -4334,16 +4317,11 @@ class IptvResultsViewState extends State<IptvResultsView>
             onUpArrowPressed: widget.onUpArrowFromFilters,
             onDownArrowPressed: _focusFirstChannel,
             options: [
-              StremioDropdownOption(
-                '',
-                _redesignEnabled ? 'All · ${_allChannels.length}' : 'All',
-              ),
+              StremioDropdownOption('', 'All · ${_allChannels.length}'),
               for (final cat in _categories)
                 StremioDropdownOption(
                   cat,
-                  _redesignEnabled
-                      ? '$cat · ${_categoryCounts[cat] ?? 0}'
-                      : cat,
+                  '$cat · ${_categoryCounts[cat] ?? 0}',
                 ),
             ],
             onSelected: (v) => _onCategoryChanged(v.isEmpty ? null : v),
@@ -4525,7 +4503,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   Widget _buildPreviewRail({required bool touchSelector}) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(_redesignEnabled ? 14 : 24, 16, 12, 16),
+      padding: const EdgeInsets.fromLTRB(14, 16, 12, 16),
       child: ValueListenableBuilder<int>(
         valueListenable: _previewEpoch,
         builder: (context, epoch, _) => ValueListenableBuilder<IptvChannel?>(
