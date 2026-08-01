@@ -292,10 +292,14 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final imdbId = item.effectiveImdbId;
     if (enrich == null || imdbId == null) return;
 
+    // An item with no overview is never "rich enough": Trakt / Simkl / MDBList
+    // rows carry a year and rating but no description, and the page would show
+    // an empty summary if we skipped the fetch on their behalf.
     final alreadyRich =
-        (item.year != null && item.year!.isNotEmpty) ||
-        item.imdbRating != null ||
-        (item.genres?.isNotEmpty ?? false);
+        (item.description?.isNotEmpty ?? false) &&
+        ((item.year != null && item.year!.isNotEmpty) ||
+            item.imdbRating != null ||
+            (item.genres?.isNotEmpty ?? false));
     if (alreadyRich) return; // a normal catalog item — nothing to add
 
     try {
@@ -320,7 +324,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           genres: (full.genres?.isNotEmpty ?? false)
               ? full.genres
               : item.genres,
+          runtime: full.runtime ?? item.runtime,
           sourceAddon: item.sourceAddon,
+          trailerYtId: full.trailerYtId ?? item.trailerYtId,
+          logo: full.logo ?? item.logo,
         );
       });
     } catch (_) {

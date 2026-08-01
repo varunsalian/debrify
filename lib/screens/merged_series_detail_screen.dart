@@ -482,10 +482,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final item = widget.item;
     final imdbId = item.effectiveImdbId;
     if (enrich == null || imdbId == null) return;
+    // A missing summary is on its own a reason to ask Cinemeta: rows from
+    // Trakt / Simkl / MDBList arrive with a year and rating but no overview, and
+    // the page has no other source for the description (the IMDb plot is a
+    // best-effort scrape that can go away).
     final alreadyRich =
-        (item.year != null && item.year!.isNotEmpty) ||
-        item.imdbRating != null ||
-        (item.genres?.isNotEmpty ?? false);
+        (item.description?.isNotEmpty ?? false) &&
+        ((item.year != null && item.year!.isNotEmpty) ||
+            item.imdbRating != null ||
+            (item.genres?.isNotEmpty ?? false));
     if (alreadyRich) return;
     try {
       final full = await enrich(imdbId, item.type);
@@ -506,8 +511,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           genres: (full.genres?.isNotEmpty ?? false)
               ? full.genres
               : item.genres,
+          runtime: full.runtime ?? item.runtime,
           sourceAddon: item.sourceAddon,
           trailerYtId: full.trailerYtId ?? item.trailerYtId,
+          logo: full.logo ?? item.logo,
         );
       });
     } catch (_) {}

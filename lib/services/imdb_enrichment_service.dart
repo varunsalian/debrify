@@ -137,6 +137,10 @@ class ImdbEnrichmentService {
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0',
+          // IMDb's edge started rejecting this endpoint with 403 unless the
+          // request looks like it came from imdb.com. Without it every fetch
+          // fails and the detail pages lose plot / cast / awards / details.
+          'Referer': 'https://www.imdb.com/',
         },
         body: json.encode({
           'query': _query,
