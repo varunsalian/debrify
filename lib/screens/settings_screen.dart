@@ -748,6 +748,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'epg',
         'xtream',
       ]),
+      SettingsSearchEntry(
+        icon: Icons.bookmark_rounded,
+        title: 'IPTV lists',
+        subtitle: 'Create and manage your channel lists',
+        category: 'Connections',
+        keywords: const [
+          'list',
+          'lists',
+          'favorites',
+          'favourites',
+          'saved channels',
+          'iptv',
+          'collection',
+        ],
+        onTap: _openIptvSettings,
+      ),
       conn(_traktInfo, const [
         'scrobble',
         'sync',

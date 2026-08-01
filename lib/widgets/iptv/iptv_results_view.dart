@@ -14,6 +14,7 @@ import '../browse/brand_accent.dart';
 import '../browse/browse_results_focus.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_catalog_key.dart';
+import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/iptv_load_phase.dart';
 import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_service.dart';
@@ -36,6 +37,8 @@ import 'db_channel_list.dart';
 import 'iptv_centered_selector.dart';
 import 'iptv_filters.dart';
 import 'iptv_channel_row.dart';
+import 'iptv_list_picker_dialog.dart';
+import 'iptv_list_name_dialog.dart';
 import 'iptv_empty_state.dart';
 import 'iptv_epg_panel.dart';
 
@@ -219,20 +222,48 @@ class IptvResultsViewState extends State<IptvResultsView>
   bool _isLoadingMore = false;
   DateTime? _lastProgressiveApply;
 
-  // Favorites
+  // Favorites — the built-in list, kept as its own set because every row's
+  // star icon reads it on each build.
   Set<String> _favoriteUrls = {};
 
-  /// Original playlistId each favorite was starred from (url → id). Toggling
-  /// a star inside the virtual Favorites view must keep the channel tied to
-  /// its real playlist, so deleting that playlist still sweeps the favorite.
-  Map<String, String> _favoritePlaylistIds = {};
+  /// Which lists each stored channel belongs to (url → list ids). Drives the
+  /// list picker's checkmarks without a per-row store round-trip.
+  Map<String, Set<String>> _membership = const {};
+
+  /// Every list, Favorites first then custom lists in user order.
+  List<IptvListMeta> _lists = const [];
+
+  /// The user's own lists — empty until they create one, which is what keeps
+  /// hold-OK meaning "toggle favorite" for everyone who never does.
+  List<IptvListMeta> get _customLists => [
+    for (final list in _lists)
+      if (!list.isBuiltin) list,
+  ];
+
+  /// Original playlistId each membership was added from, keyed by
+  /// (list id, url). Toggling inside a virtual shelf must keep the channel
+  /// tied to its real playlist, so deleting that playlist still sweeps it out
+  /// of every list — and the same URL saved into two lists from two different
+  /// providers must keep BOTH origins, or one replays under the other's
+  /// credentials.
+  Map<(String, String), String> _favoritePlaylistIds = {};
 
   /// Virtual "Favorites" playlist — never persisted; pinned to the top of the
-  /// picker and backed by the starred-channel store instead of a fetch.
+  /// picker and backed by the built-in list instead of a fetch.
   static final IptvPlaylist _favoritesPlaylist = IptvPlaylist(
     id: 'iptv-favorites',
     name: 'Favorites',
     url: 'favorites://',
+    addedAt: DateTime.fromMillisecondsSinceEpoch(0),
+  );
+
+  /// Virtual playlist for a user-created list. Ids are derived from the list
+  /// id so the player payload, the picker and the browse round-trip all agree
+  /// on one identity.
+  static IptvPlaylist _listPlaylist(IptvListMeta list) => IptvPlaylist(
+    id: 'iptv-list-${list.id}',
+    name: list.name,
+    url: 'list://${list.id}',
     addedAt: DateTime.fromMillisecondsSinceEpoch(0),
   );
 
@@ -472,14 +503,18 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _loadFavorites() async {
-    final favorites = await StorageService.getIptvFavoriteChannels();
+    final lists = await StorageService.getIptvLists();
+    final snapshot = await StorageService.getIptvMembershipSnapshot();
     if (mounted) {
       setState(() {
-        _favoriteUrls = favorites.keys.toSet();
-        _favoritePlaylistIds = {
-          for (final entry in favorites.entries)
-            entry.key: (entry.value['playlistId'] as String?) ?? '',
+        _lists = lists;
+        _membership = snapshot.membership;
+        _favoriteUrls = {
+          for (final entry in snapshot.membership.entries)
+            if (entry.value.contains(StorageService.iptvFavoritesListId))
+              entry.key,
         };
+        _favoritePlaylistIds = snapshot.origins;
       });
     }
   }
@@ -491,14 +526,28 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// strand entries pointing at URLs that no longer authenticate.
   String? _originPlaylistIdFor(IptvChannel channel) {
     final playlist = _selectedPlaylist;
-    if (playlist?.isFavorites ?? false) {
-      return _favoritePlaylistIds[channel.url];
+    if ((playlist?.isFavorites ?? false) || (playlist?.isCustomList ?? false)) {
+      // The shelf's own rows carry the origin of the exact membership they
+      // were rebuilt from — the only source that stays correct when the same
+      // URL sits in two lists under two providers.
+      final rowOrigin = channel.attributes[_kListOriginAttribute];
+      if (rowOrigin != null && rowOrigin.isNotEmpty) return rowOrigin;
+      final listId = playlist!.isFavorites
+          ? StorageService.iptvFavoritesListId
+          : playlist.customListId;
+      if (listId == null) return null;
+      return _favoritePlaylistIds[(listId, channel.url)];
     }
     if (playlist?.isContinueWatching ?? false) {
       return _continuePlaylistIds[channel.url];
     }
     return playlist?.id;
   }
+
+  /// Attribute carrying a list row's originating provider through the
+  /// rebuilt channel, so both origin resolvers can be exact rather than
+  /// looking a URL up in a map that can only hold one answer per URL.
+  static const String _kListOriginAttribute = 'list_playlist_id';
 
   Future<void> _toggleFavorite(IptvChannel channel, bool isFavorited) async {
     await StorageService.setIptvChannelFavorited(
@@ -509,19 +558,120 @@ class IptvResultsViewState extends State<IptvResultsView>
       group: channel.group,
       playlistId: _originPlaylistIdFor(channel),
       channelNumber: channel.channelNumber,
-      // Favorites are replayed from stored metadata, never re-parsed from the
-      // playlist — so the channel's own headers have to travel with it.
+      // A list is replayed from stored metadata, never re-parsed from the
+      // playlist — so the channel's own headers have to travel with it, and
+      // so does what it IS: without a content type a movie comes back as a
+      // live channel and loses its resume bar.
+      contentType: channel.contentType,
+      duration: channel.duration,
       httpHeaders: channel.httpHeaders,
     );
     if (mounted) {
       setState(() {
         if (isFavorited) {
           _favoriteUrls.add(channel.url);
+          _membership = {
+            ..._membership,
+            channel.url: {
+              ...?_membership[channel.url],
+              StorageService.iptvFavoritesListId,
+            },
+          };
         } else {
           _favoriteUrls.remove(channel.url);
+          _membership = {
+            ..._membership,
+            channel.url: {
+              ...?_membership[channel.url],
+            }..remove(StorageService.iptvFavoritesListId),
+          };
         }
       });
     }
+    // Deliberately no shelf reload here, even inside the Favorites view: a
+    // reload disposes every row's focus node (see _loadPlaylist) and would
+    // scramble DPAD focus out from under the hold the user just finished.
+    // The row stays with an empty heart until the next natural reload —
+    // which is what it has always done.
+  }
+
+  /// Open the "add to list" picker for [channel]. Only reachable once the
+  /// user has created a list — before that, the same gesture toggles the
+  /// favorite outright, so nobody grows an extra tap they didn't ask for.
+  Future<void> _openListPicker(IptvChannel channel) async {
+    final changed = await showIptvListPickerDialog(
+      context: context,
+      channelName: channel.name,
+      channelLogoUrl: channel.logoUrl,
+      loadLists: () => StorageService.getIptvLists(),
+      loadMembership: () =>
+          StorageService.getIptvListsForChannel(channel.url),
+      onSetMembership: (listId, inList) => StorageService.setIptvChannelInList(
+        listId,
+        channel.url,
+        inList,
+        channelName: channel.name,
+        logoUrl: channel.logoUrl,
+        group: channel.group,
+        playlistId: _originPlaylistIdFor(channel),
+        channelNumber: channel.channelNumber,
+        contentType: channel.contentType,
+        duration: channel.duration,
+        httpHeaders: channel.httpHeaders,
+      ),
+      onCreateList: (name) => StorageService.createIptvList(name),
+    );
+    if (!changed || !mounted) return;
+    await _loadFavorites();
+    if (!mounted) return;
+    _refreshListShelfPresence();
+    await _refreshVisibleListShelf(channel);
+  }
+
+  /// Create an empty list from the Sources picker — the discoverable path for
+  /// someone who hasn't long-pressed a channel yet. Selects it afterwards so
+  /// the (empty) shelf explains how to fill it.
+  Future<void> _promptCreateList() async {
+    final name = await showIptvListNameDialog(
+      context: context,
+      title: 'New list',
+      confirmLabel: 'Create',
+      existingNames: [for (final list in _lists) list.name],
+    );
+    if (name == null || !mounted) return;
+    final id = await StorageService.createIptvList(name);
+    if (!mounted) return;
+    await _loadFavorites();
+    if (!mounted) return;
+    _refreshListShelfPresence();
+    for (final playlist in _playlists) {
+      if (playlist.customListId == id) {
+        _onPlaylistChanged(playlist);
+        break;
+      }
+    }
+  }
+
+  /// Rebuild the shelf the user is looking at when [channel] just left it —
+  /// a row the picker removed can't stay on screen claiming otherwise.
+  ///
+  /// Narrow on purpose. A reload disposes every row's focus node (see
+  /// [_loadPlaylist]), so it only earns that cost when the visible grid is
+  /// genuinely wrong; adding a channel to some OTHER list changes nothing
+  /// here. And deliberately NOT via _loadSettings, which re-derives the
+  /// landing selection and would yank the user off the source they are on.
+  Future<void> _refreshVisibleListShelf(IptvChannel channel) async {
+    final playlist = _selectedPlaylist;
+    if (playlist == null) return;
+    final listId = playlist.isFavorites
+        ? StorageService.iptvFavoritesListId
+        : playlist.customListId;
+    if (listId == null) return;
+    final stillIn = _membership[channel.url]?.contains(listId) ?? false;
+    if (stillIn) return;
+    final onScreen = _allChannels.any((c) => c.url == channel.url);
+    if (!onScreen) return;
+    await _loadPlaylist(playlist);
   }
 
   Future<void> _loadSettings({bool forceReload = false}) async {
@@ -555,19 +705,31 @@ class IptvResultsViewState extends State<IptvResultsView>
         .getVirtualPlaylists();
     playlists = [...playlists, ...virtualPlaylists];
 
-    // The virtual Favorites playlist leads the picker. Hidden only when there
-    // is nothing at all (no playlists AND no favorites), so the add-a-playlist
-    // empty state can still do its job.
-    final hasFavorites =
-        (await StorageService.getIptvFavoriteChannelUrls()).isNotEmpty;
+    // The virtual Favorites playlist leads the picker, then Continue watching,
+    // then the user's own lists, then the real providers. Hidden only when
+    // there is nothing at all (no playlists, no favorites, no lists), so the
+    // add-a-playlist empty state can still do its job.
+    //
+    // One store read covers both the presence probe and the list rows — the
+    // per-list channel counts come back with them.
+    final lists = await StorageService.getIptvLists();
+    final hasFavorites = lists
+        .any((l) => l.isFavorites && l.channelCount > 0);
+    final customLists = [
+      for (final list in lists)
+        if (!list.isBuiltin) list,
+    ];
     // "Continue watching" earns its slot only while something is actually
-    // half-watched — an empty shelf in the picker is just noise.
+    // half-watched — an empty shelf in the picker is just noise. Custom lists
+    // stay visible even when empty: the user made them on purpose, and an
+    // empty one is where they go to fill it.
     final hasContinue =
         (await StorageService.getIptvContinueWatching()).isNotEmpty;
-    if (hasFavorites || playlists.isNotEmpty) {
+    if (hasFavorites || customLists.isNotEmpty || playlists.isNotEmpty) {
       playlists = [
         _favoritesPlaylist,
         if (hasContinue) _continuePlaylist,
+        for (final list in customLists) _listPlaylist(list),
         ...playlists,
       ];
     }
@@ -580,9 +742,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     IptvPlaylist? newSelectedPlaylist;
     IptvPlaylist? firstRealPlaylist;
     for (final p in playlists) {
-      // Neither virtual shelf is a "real" playlist to fall back to — both can
-      // be empty or vanish entirely between visits.
-      if (!p.isFavorites && !p.isContinueWatching) {
+      // No virtual shelf is a "real" playlist to fall back to — each can be
+      // empty or vanish entirely between visits, and landing on an empty
+      // custom list reads exactly as broken as landing on empty Favorites.
+      // (Stremio addon shelves stay eligible: they are a remote catalog with
+      // content of their own, not a view over stored rows.)
+      if (!p.isFavorites && !p.isContinueWatching && !p.isCustomList) {
         firstRealPlaylist = p;
         break;
       }
@@ -606,6 +771,13 @@ class IptvResultsViewState extends State<IptvResultsView>
       _settingsLoaded = true;
       _redesignEnabled = redesignEnabled;
       _selectedPlaylist = newSelectedPlaylist;
+      // Adopt the rows this pass just read. Returning from Settings goes
+      // through here and NOT through _loadFavorites (a catalog reload only
+      // happens when the selected playlist changed), so without this the
+      // first list a user creates there would leave long-press still
+      // toggling Favorites, and a deleted one would keep a picker pointed at
+      // a row that no longer exists.
+      _lists = lists;
     });
 
     // Only reload playlist if it changed or forced, or if we have no channels
@@ -809,7 +981,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     // or URL
     final IptvParseResult result;
     if (playlist.isFavorites) {
-      result = await _buildFavoritesResult();
+      result = await _buildListResult(StorageService.iptvFavoritesListId);
+    } else if (playlist.isCustomList) {
+      result = await _buildListResult(playlist.customListId!);
     } else if (playlist.isContinueWatching) {
       result = await _buildContinueResult();
     } else if (playlist.isStremioAddon) {
@@ -950,12 +1124,14 @@ class IptvResultsViewState extends State<IptvResultsView>
         epgUrl: result.epgUrl,
       );
     }
-    // Migrate favorites saved under older URL formats (e.g. before the
-    // Xtream /live/ URL fix) to the freshly fetched URLs, then reload so
-    // the stars line up. (The Favorites view's channels ARE the store —
-    // nothing to migrate against.)
+    // Migrate list memberships saved under older URL formats (e.g. before the
+    // Xtream /live/ URL fix) to the freshly fetched URLs, and backfill the
+    // presentation metadata of rows carried over from the pre-v5 favorites
+    // table, then reload so the stars line up. (A list shelf's channels ARE
+    // the store — nothing to migrate against.)
     if (migrateFavorites &&
         !playlist.isFavorites &&
+        !playlist.isCustomList &&
         !playlist.isContinueWatching) {
       await StorageService.reconcileIptvFavoriteUrls(result.channels);
     }
@@ -2227,13 +2403,14 @@ class IptvResultsViewState extends State<IptvResultsView>
     return IptvParseResult(channels: channels, categories: categories);
   }
 
-  /// Build the virtual Favorites playlist from the starred-channel store.
-  /// Metadata was captured at star time, so no fetch is needed; Stremio-keyed
-  /// URLs still resolve on focus/play exactly like anywhere else.
-  Future<IptvParseResult> _buildFavoritesResult() async {
-    final favorites = await StorageService.getIptvFavoriteChannels();
+  /// Build a virtual list shelf (Favorites or a user list) from the stored
+  /// membership. Metadata was captured when the channel was added, so no
+  /// fetch is needed; Stremio-keyed URLs still resolve on focus/play exactly
+  /// like anywhere else.
+  Future<IptvParseResult> _buildListResult(String listId) async {
+    final stored = await StorageService.getIptvListChannels(listId);
     final channels =
-        favorites.entries.map((entry) {
+        stored.entries.map((entry) {
           final meta = entry.value;
           final name = (meta['name'] as String?) ?? '';
           final logoUrl = (meta['logoUrl'] as String?) ?? '';
@@ -2244,7 +2421,16 @@ class IptvResultsViewState extends State<IptvResultsView>
             url: entry.key,
             logoUrl: logoUrl.isEmpty ? null : logoUrl,
             group: group.isEmpty ? null : group,
-            duration: -1,
+            // Rows added before these were stored (and every row migrated
+            // from the pre-v5 favorites table) fall back to live, which is
+            // how they presented then; the reconcile pass backfills them the
+            // first time their provider is opened.
+            duration: (meta['duration'] as num?)?.toInt() ?? -1,
+            contentType: meta['contentType'] as String?,
+            attributes: {
+              if ((meta['playlistId'] as String?)?.isNotEmpty ?? false)
+                _kListOriginAttribute: meta['playlistId'] as String,
+            },
             httpHeaders: StorageService.iptvFavoriteHeaders(meta),
           );
         }).toList()..sort(
@@ -2426,10 +2612,23 @@ class IptvResultsViewState extends State<IptvResultsView>
         {
           'id': playlist.id,
           'name': playlist.name,
+          // Favorites keeps its own flag even though it is now just the
+          // built-in list: the native guide's ★ SAVED button resolves the
+          // source by it, and expects exactly one.
           'isFavorites': playlist.isFavorites,
           'isContinue': playlist.isContinueWatching,
           'isXtream': playlist.isXtreamCodes,
+          'isList': playlist.isCustomList,
+          if (playlist.customListId != null) 'listId': playlist.customListId,
         },
+  ];
+
+  /// The user's lists, for the players' "add to list" picker. Shipped once
+  /// per launch rather than as a field on every channel — the channel payload
+  /// is already capped for size (see [_kMaxPlayerChannels]).
+  List<Map<String, dynamic>> _playerListsPayload() => [
+    for (final list in _lists)
+      {'id': list.id, 'name': list.name, 'isBuiltin': list.isBuiltin},
   ];
 
   String _playerOriginPlaylistId(IptvChannel channel, IptvPlaylist source) {
@@ -2437,8 +2636,17 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (seriesOrigin != null && seriesOrigin.isNotEmpty) {
       return seriesOrigin;
     }
-    final shelfOrigin = source.isFavorites
-        ? _favoritePlaylistIds[channel.url]
+    final listId = source.isFavorites
+        ? StorageService.iptvFavoritesListId
+        : source.customListId;
+    final shelfOrigin = (source.isFavorites || source.isCustomList)
+        // Prefer the row's own origin (see [_kListOriginAttribute]); the map
+        // is only a fallback for rows that predate it.
+        ? (channel.attributes[_kListOriginAttribute]?.isNotEmpty ?? false)
+              ? channel.attributes[_kListOriginAttribute]
+              : (listId == null
+                    ? null
+                    : _favoritePlaylistIds[(listId, channel.url)])
         : source.isContinueWatching
         ? _continuePlaylistIds[channel.url]
         : null;
@@ -2797,7 +3005,15 @@ class IptvResultsViewState extends State<IptvResultsView>
         }
         effectiveCategory = jumpChannel.group;
       }
-      if (!source.isXtreamCodes && !source.isContinueWatching) {
+      // A list shelf is a curated mix — whatever the user put in it — so it
+      // is never narrowed by the requested content type. Without this a list
+      // holding movies would come back EMPTY in the player's guide: these
+      // sources aren't Xtream, so requestedType falls back to 'live' above
+      // and would filter out every on-demand row the user chose to save.
+      if (!source.isXtreamCodes &&
+          !source.isContinueWatching &&
+          !source.isFavorites &&
+          !source.isCustomList) {
         filtered = switch (requestedType) {
           'live' => filtered.where((channel) => channel.isLive),
           'vod' => filtered.where(
@@ -3122,6 +3338,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             ? _selectedContentType
             : (channel.isLive ? 'live' : 'vod'),
         iptvSources: _playerSourcePayload(),
+        iptvLists: _playerListsPayload(),
         iptvBrowseProvider: _providePlayerIptvBrowse,
         // Opening headers for the launch channel (later zaps read them off the
         // channel they switch to). Stremio-addon links are already-resolved CDN
@@ -3226,10 +3443,23 @@ class IptvResultsViewState extends State<IptvResultsView>
     _refreshContinueShelfPresence(items.isNotEmpty);
     if (!mounted) return;
 
-    if (_selectedPlaylist?.isFavorites ?? false) {
+    // A list shelf can have changed under the user while the player was up —
+    // both players can add and remove memberships from their own guide. This
+    // covers Favorites AND custom lists; without the custom-list arm a
+    // channel removed in the native guide stays on screen until a full
+    // reload of the page.
+    final shelf = _selectedPlaylist;
+    final shelfListId = (shelf?.isFavorites ?? false)
+        ? StorageService.iptvFavoritesListId
+        : shelf?.customListId;
+    if (shelfListId != null) {
+      final stored = {
+        for (final entry in _membership.entries)
+          if (entry.value.contains(shelfListId)) entry.key,
+      };
       final current = {for (final channel in _allChannels) channel.url};
-      if (!setEquals(_favoriteUrls, current)) {
-        await _loadPlaylist(_favoritesPlaylist);
+      if (!setEquals(stored, current)) {
+        await _loadPlaylist(shelf!);
         return;
       }
     }
@@ -3294,6 +3524,45 @@ class IptvResultsViewState extends State<IptvResultsView>
         ];
       }
     });
+  }
+
+  /// Re-sync the custom-list rows in the picker after the user created,
+  /// renamed, deleted or reordered one, without disturbing what they are
+  /// looking at. Same reasoning as [_refreshContinueShelfPresence]: going
+  /// through _loadSettings would re-derive the landing selection.
+  void _refreshListShelfPresence() {
+    if (!mounted) return;
+    final desired = [for (final list in _customLists) _listPlaylist(list)];
+    final current = [
+      for (final p in _playlists)
+        if (p.isCustomList) p,
+    ];
+    // Compare names too, not just ids — a rename has to reach the picker.
+    String signature(List<IptvPlaylist> entries) =>
+        entries.map((p) => '${p.id} ${p.name}').join('');
+    if (signature(desired) == signature(current)) return;
+
+    // Rebuild in canonical order: Favorites, Continue, lists, real providers.
+    final keptVirtuals = [
+      for (final p in _playlists)
+        if (p.isFavorites || p.isContinueWatching) p,
+    ];
+    final realPlaylists = [
+      for (final p in _playlists)
+        if (!p.isFavorites && !p.isContinueWatching && !p.isCustomList) p,
+    ];
+    setState(() {
+      _playlists = [...keptVirtuals, ...desired, ...realPlaylists];
+    });
+
+    // The list being viewed can have just been deleted. Leaving it selected
+    // strands the picker: with no matching option the dropdown renders the
+    // FIRST option's label, so it would read "Favorites" above the wrong grid.
+    final selected = _selectedPlaylist;
+    if (selected != null && !_playlists.any((p) => p.id == selected.id)) {
+      final fallback = _playlists.isEmpty ? null : _playlists.first;
+      if (fallback != null) _onPlaylistChanged(fallback);
+    }
   }
 
   bool _previewRearmPending = false;
@@ -3611,12 +3880,17 @@ class IptvResultsViewState extends State<IptvResultsView>
           onDownArrowPressed: _focusFirstChannel,
           options: [
             for (final p in _playlists) StremioDropdownOption(p.id, p.name),
+            const StremioDropdownOption(_kNewListSentinel, '＋ New list'),
             const StremioDropdownOption(
               _kAddPlaylistSentinel,
               '＋ Add playlist',
             ),
           ],
           onSelected: (id) {
+            if (id == _kNewListSentinel) {
+              _promptCreateList();
+              return;
+            }
             if (id == _kAddPlaylistSentinel) {
               _navigateToSettings();
               return;
@@ -3693,6 +3967,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   static const String _kAddPlaylistSentinel = '__iptv_add_playlist__';
+  static const String _kNewListSentinel = '__iptv_new_list__';
 
   /// Called by a channel row gaining DPAD focus — retunes the preview stage.
   void _onChannelFocused(IptvChannel channel) {
@@ -3896,7 +4171,10 @@ class IptvResultsViewState extends State<IptvResultsView>
             Expanded(
               child: ch == null
                   ? const SizedBox.shrink()
-                  : _IptvFocusStageInfo(channel: ch),
+                  : _IptvFocusStageInfo(
+                      channel: ch,
+                      hasLists: _customLists.isNotEmpty,
+                    ),
             ),
           ],
         ),
@@ -4077,6 +4355,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         );
       }
       final isFavoritesView = _selectedPlaylist?.isFavorites ?? false;
+      final isListView = _selectedPlaylist?.isCustomList ?? false;
       final isContinueView = _selectedPlaylist?.isContinueWatching ?? false;
       final unfiltered =
           widget.searchQuery.isEmpty && _selectedCategory == null;
@@ -4091,6 +4370,8 @@ class IptvResultsViewState extends State<IptvResultsView>
                   ? Icons.history_rounded
                   : isFavoritesView
                   ? Icons.star_border
+                  : isListView
+                  ? Icons.playlist_add_rounded
                   : Icons.live_tv_outlined,
               size: 64,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -4103,6 +4384,8 @@ class IptvResultsViewState extends State<IptvResultsView>
                   ? 'Nothing in progress'
                   : isFavoritesView
                   ? 'No favorites yet'
+                  : isListView
+                  ? 'Nothing in ${_selectedPlaylist?.name ?? 'this list'} yet'
                   : 'No channels found',
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -4114,8 +4397,10 @@ class IptvResultsViewState extends State<IptvResultsView>
                   ? 'Try a different category'
                   : isContinueView
                   ? 'Movies you start but do not finish show up here'
-                  : isFavoritesView
-                  ? 'Star channels in any playlist and they show up here'
+                  : isFavoritesView || isListView
+                  ? (widget.isTelevision
+                        ? 'Hold OK on any channel to add it here'
+                        : 'Long-press any channel to add it here')
                   : 'This playlist appears to be empty',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -4210,10 +4495,16 @@ class IptvResultsViewState extends State<IptvResultsView>
                       onTap: () => _playChannel(channel),
                       focusNode: _focusNodeFor(channel),
                       isFavorited: _favoriteUrls.contains(channel.url),
+                      inAnyList: _membership[channel.url]?.isNotEmpty ?? false,
                       onFavoriteToggle: channel.contentType == 'series'
                           ? null
                           : (isFavorited) =>
                                 _toggleFavorite(channel, isFavorited),
+                      onOpenListPicker:
+                          channel.contentType == 'series' ||
+                              _customLists.isEmpty
+                          ? null
+                          : () => _openListPicker(channel),
                       onFocused: tvPane
                           ? () => _onChannelFocused(channel)
                           : null,
@@ -4319,9 +4610,14 @@ class IptvResultsViewState extends State<IptvResultsView>
           isPreviewSelected: selected,
           onTap: centerItem,
           isFavorited: _favoriteUrls.contains(channel.url),
+          inAnyList: _membership[channel.url]?.isNotEmpty ?? false,
           onFavoriteToggle: channel.contentType == 'series'
               ? null
               : (isFavorited) => _toggleFavorite(channel, isFavorited),
+          onOpenListPicker:
+              channel.contentType == 'series' || _customLists.isEmpty
+              ? null
+              : () => _openListPicker(channel),
           onSchedule: openSchedule == null
               ? null
               : () {
@@ -4737,8 +5033,9 @@ class _TuningBarsPainter extends CustomPainter {
 /// text legible on bright channels without a blur/filter pass.
 class _IptvFocusStageInfo extends StatelessWidget {
   final IptvChannel channel;
+  final bool hasLists;
 
-  const _IptvFocusStageInfo({required this.channel});
+  const _IptvFocusStageInfo({required this.channel, this.hasLists = false});
 
   @override
   Widget build(BuildContext context) {
@@ -4863,7 +5160,10 @@ class _IptvFocusStageInfo extends StatelessWidget {
                   dense: dense,
                 ),
                 const Spacer(),
-                _IptvRailHints(showGuide: IptvEpgService.isEpgCapable(channel)),
+                _IptvRailHints(
+                  showGuide: IptvEpgService.isEpgCapable(channel),
+                  hasLists: hasLists,
+                ),
               ],
             ),
           ),
@@ -4992,11 +5292,13 @@ class _IptvRailInfo extends StatelessWidget {
   }
 }
 
-/// Bottom-of-rail key hints: OK to watch fullscreen, hold OK to favourite,
-/// and — when the focused channel has guide data — RIGHT for its schedule.
+/// Bottom-of-rail key hints: OK to watch fullscreen, hold OK to favourite (or
+/// to pick a list, once the user has any), and — when the focused channel has
+/// guide data — RIGHT for its schedule.
 class _IptvRailHints extends StatelessWidget {
   final bool showGuide;
-  const _IptvRailHints({this.showGuide = false});
+  final bool hasLists;
+  const _IptvRailHints({this.showGuide = false, this.hasLists = false});
 
   @override
   Widget build(BuildContext context) {
@@ -5008,7 +5310,7 @@ class _IptvRailHints extends StatelessWidget {
         const SizedBox(width: 16),
         const _KeyCap('HOLD OK'),
         const SizedBox(width: 6),
-        _hint('Favorite'),
+        _hint(hasLists ? 'Add to list' : 'Favorite'),
         if (showGuide) ...[
           const SizedBox(width: 16),
           const _KeyCap('▶'),

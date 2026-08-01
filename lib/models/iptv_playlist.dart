@@ -58,6 +58,23 @@ class IptvPlaylist {
   /// saved positions).
   bool get isContinueWatching => url.startsWith('continue://');
 
+  /// Returns true if this is a virtual playlist backed by a user-created
+  /// channel list (never persisted — the membership store is the truth).
+  bool get isCustomList => url.startsWith('list://');
+
+  /// The list id behind [isCustomList], or null for anything else.
+  String? get customListId =>
+      isCustomList ? url.substring('list://'.length) : null;
+
+  /// Returns true if this playlist is derived rather than user-configured.
+  ///
+  /// Virtual playlists are rebuilt from their backing store on every load and
+  /// must never reach the saved-playlists preference: they would come back
+  /// twice (once stored, once injected) under the same id, and equality here
+  /// is id-only — so lookups would start resolving the stale copy.
+  bool get isVirtual =>
+      isFavorites || isContinueWatching || isStremioAddon || isCustomList;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,

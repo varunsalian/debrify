@@ -25,35 +25,74 @@ import 'iptv_catalog_db.dart';
 /// [StorageService] keeps its public API and delegates here — call sites are
 /// unchanged.
 /// compute() entry for [IptvMediaStore.reconcileFavoriteUrlsForCatalog]:
-/// reads the catalog's current URLs from the DB and computes the
+/// reads the catalog's current rows from the DB and computes the
 /// stored-URL → current-URL renames with the same canonical-match rules the
-/// in-memory scan uses. Runs entirely on the worker; only the (tiny) rename
-/// map crosses back.
-Map<String, String> computeFavoriteRenamesJob(FavoriteRenameJob job) {
-  final storedByCanonical = <String, String>{
-    for (final url in job.storedUrls)
-      IptvMediaStore.canonicalChannelKey(url): url,
-  };
+/// in-memory scan uses, plus the content-type/duration backfill for stored
+/// rows that never captured it. Runs entirely on the worker; only the (tiny)
+/// result crosses back.
+FavoriteRenameResult computeFavoriteRenamesJob(FavoriteRenameJob job) {
+  // Set-valued: with per-list membership rows, two different lists can hold
+  // two DIFFERENT historical URL forms of the same channel. They collapse to
+  // one canonical key, so a single-valued map would keep only one of them and
+  // silently leave the other list's row on a dead URL forever.
+  final storedByCanonical = <String, Set<String>>{};
+  for (final url in job.storedUrls) {
+    storedByCanonical
+        .putIfAbsent(IptvMediaStore.canonicalChannelKey(url), () => <String>{})
+        .add(url);
+  }
   // Cheap pre-filter, same as the in-memory scan: a channel can only match
-  // a favorite on the same host.
-  final favoriteHosts = <String>{
+  // a stored row on the same host.
+  final storedHosts = <String>{
     for (final url in job.storedUrls)
       if (Uri.tryParse(url)?.host.isNotEmpty ?? false) Uri.parse(url).host,
   };
+  final needsMeta = job.urlsNeedingMeta.toSet();
   final renames = <String, String>{};
-  for (final url in IptvCatalogDb.catalogUrls(
+  final meta = <String, ChannelPresentation>{};
+  for (final row in IptvCatalogDb.catalogPresentationRows(
     dbPath: job.dbPath,
     catalogKey: job.catalogKey,
   )) {
     if (storedByCanonical.isEmpty) break;
-    if (!favoriteHosts.any(url.contains)) continue;
-    final storedKey =
-        storedByCanonical.remove(IptvMediaStore.canonicalChannelKey(url));
-    if (storedKey != null && storedKey != url) {
-      renames[storedKey] = url;
+    if (!storedHosts.any(row.url.contains)) continue;
+    final storedUrls =
+        storedByCanonical.remove(IptvMediaStore.canonicalChannelKey(row.url));
+    if (storedUrls == null) continue;
+    for (final storedUrl in storedUrls) {
+      if (storedUrl != row.url) renames[storedUrl] = row.url;
+      if (needsMeta.contains(storedUrl)) {
+        meta[storedUrl] = ChannelPresentation(
+          contentType: row.contentType,
+          duration: row.duration,
+        );
+      }
     }
   }
-  return renames;
+  return FavoriteRenameResult(renames: renames, meta: meta);
+}
+
+/// How a stored list channel should present itself when it is rebuilt from
+/// storage alone: live vs on-demand, and the runtime a progress bar needs.
+class ChannelPresentation {
+  final String? contentType;
+  final int? duration;
+
+  const ChannelPresentation({this.contentType, this.duration});
+
+  bool get isEmpty => contentType == null && duration == null;
+}
+
+class FavoriteRenameResult {
+  /// stored URL → current URL.
+  final Map<String, String> renames;
+
+  /// stored URL → presentation metadata for rows that had none.
+  final Map<String, ChannelPresentation> meta;
+
+  const FavoriteRenameResult({required this.renames, required this.meta});
+
+  bool get isEmpty => renames.isEmpty && meta.isEmpty;
 }
 
 class FavoriteRenameJob {
@@ -61,11 +100,35 @@ class FavoriteRenameJob {
   final String catalogKey;
   final List<String> storedUrls;
 
+  /// The subset of [storedUrls] whose content_type/duration is still unknown
+  /// — migrated favorites, which predate those columns.
+  final List<String> urlsNeedingMeta;
+
   const FavoriteRenameJob({
     required this.dbPath,
     required this.catalogKey,
     required this.storedUrls,
+    this.urlsNeedingMeta = const [],
   });
+}
+
+/// A user-created (or built-in) channel list.
+class IptvListMeta {
+  final String id;
+  final String name;
+  final int position;
+  final bool isBuiltin;
+  final int channelCount;
+
+  const IptvListMeta({
+    required this.id,
+    required this.name,
+    required this.position,
+    required this.isBuiltin,
+    required this.channelCount,
+  });
+
+  bool get isFavorites => id == IptvMediaStore.favoritesListId;
 }
 
 class IptvMediaStore {
@@ -113,9 +176,12 @@ class IptvMediaStore {
     if (favoritesRaw != null) {
       final favorites = await _decodeLegacyMap(favoritesRaw);
       await db.runTxn((txn) async {
+        // A very old install can reach v5 with the prefs blob still present,
+        // so the import lands straight in the built-in Favorites list.
+        await DebrifyTvDatabase.seedBuiltinList(txn);
         for (final entry in favorites.entries) {
           await txn.insert(
-            'iptv_favorites',
+            'iptv_list_channels',
             _favoriteRowFromLegacy(entry.key, entry.value),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
@@ -213,35 +279,154 @@ class IptvMediaStore {
     return '${uri.scheme}://${uri.host}$port/${segments.join('/')}$query';
   }
 
-  // ── Favorites ─────────────────────────────────────────────────────────────
+  // ── Lists (Favorites is the built-in one) ─────────────────────────────────
 
-  /// Rewrite stored favorite URLs to the current format when a fetched
-  /// channel matches an existing favorite canonically but not literally
-  /// (e.g. favorites saved before the Xtream /live/ URL fix).
+  /// Reserved id of the built-in Favorites list.
+  static const String favoritesListId = DebrifyTvDatabase.favoritesListId;
+
+  /// Every list, Favorites first, then custom lists in user order.
+  static Future<List<IptvListMeta>> lists() async {
+    await _ensureMigrated();
+    final db = await DebrifyTvDatabase.instance.database;
+    // One query: a per-list COUNT(*) round-trip would be N reads on every
+    // settings pass, and the page asks for this on each load.
+    final rows = await db.rawQuery('''
+      SELECT l.id, l.name, l.position, l.is_builtin,
+             (SELECT COUNT(*) FROM iptv_list_channels c WHERE c.list_id = l.id)
+               AS channel_count
+      FROM iptv_lists l
+      ORDER BY l.position ASC, l.name ASC
+    ''');
+    return [
+      for (final row in rows)
+        IptvListMeta(
+          id: row['id'] as String,
+          name: row['name'] as String,
+          position: (row['position'] as num?)?.toInt() ?? 0,
+          isBuiltin: ((row['is_builtin'] as num?)?.toInt() ?? 0) != 0,
+          channelCount: (row['channel_count'] as num?)?.toInt() ?? 0,
+        ),
+    ];
+  }
+
+  /// Create a list and return its id. Names are not unique-enforced here —
+  /// the picker validates before calling, and a duplicate name is a display
+  /// annoyance rather than a data problem.
+  static Future<String> createList(String name) async {
+    await _ensureMigrated();
+    final trimmed = name.trim();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = 'list_${now}_${math.Random().nextInt(1 << 20)}';
+    await DebrifyTvDatabase.instance.runTxn((txn) async {
+      final maxRow = await txn.rawQuery(
+        'SELECT MAX(position) AS p FROM iptv_lists',
+      );
+      final nextPosition = ((maxRow.first['p'] as num?)?.toInt() ?? 0) + 1;
+      await txn.insert('iptv_lists', {
+        'id': id,
+        'name': trimmed,
+        'position': nextPosition,
+        'is_builtin': 0,
+        'created_at': now,
+        'updated_at': now,
+      });
+    });
+    return id;
+  }
+
+  /// Rename a custom list. The built-in Favorites list is not renameable.
+  static Future<void> renameList(String listId, String name) async {
+    if (listId == favoritesListId) return;
+    await _ensureMigrated();
+    final db = await DebrifyTvDatabase.instance.database;
+    await db.update(
+      'iptv_lists',
+      {
+        'name': name.trim(),
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ? AND is_builtin = 0',
+      whereArgs: [listId],
+    );
+  }
+
+  /// Delete a custom list. Memberships go with it via ON DELETE CASCADE —
+  /// the channels themselves are untouched, they just stop being in a list.
+  static Future<void> deleteList(String listId) async {
+    if (listId == favoritesListId) return;
+    await _ensureMigrated();
+    final db = await DebrifyTvDatabase.instance.database;
+    await db.delete(
+      'iptv_lists',
+      where: 'id = ? AND is_builtin = 0',
+      whereArgs: [listId],
+    );
+  }
+
+  /// Reorder custom lists. Favorites is pinned at position 0 and ignored
+  /// here; everything named in [orderedIds] takes 1..n in that order.
+  static Future<void> reorderLists(List<String> orderedIds) async {
+    await _ensureMigrated();
+    await DebrifyTvDatabase.instance.runTxn((txn) async {
+      var position = 1;
+      for (final id in orderedIds) {
+        if (id == favoritesListId) continue;
+        await txn.update(
+          'iptv_lists',
+          {'position': position},
+          where: 'id = ? AND is_builtin = 0',
+          whereArgs: [id],
+        );
+        position += 1;
+      }
+    });
+  }
+
+  // ── Membership ────────────────────────────────────────────────────────────
+
+  /// Rewrite stored membership URLs to the current format when a fetched
+  /// channel matches a stored row canonically but not literally (e.g. rows
+  /// saved before the Xtream /live/ URL fix), and backfill the presentation
+  /// metadata of rows migrated from the old favorites table.
+  ///
+  /// This is the in-memory variant, used by local files and Stremio addon
+  /// catalogs — the only reconcile path those sources ever take, so the
+  /// backfill has to live here too or their migrated VOD favorites would
+  /// present as live forever.
   static Future<void> reconcileFavoriteUrls(List<IptvChannel> channels) async {
     await _ensureMigrated();
     final db = await DebrifyTvDatabase.instance.database;
-    final urlRows = await db.query('iptv_favorites', columns: ['url']);
+    final urlRows = await db.rawQuery(
+      'SELECT DISTINCT url FROM iptv_list_channels',
+    );
     if (urlRows.isEmpty) return;
     final storedUrls = [for (final row in urlRows) row['url'] as String];
+    final needsMeta = await _urlsNeedingPresentation(db);
 
-    final storedByCanonical = <String, String>{
-      for (final url in storedUrls) canonicalChannelKey(url): url,
-    };
+    // Set-valued: two lists can hold two different historical URL forms of
+    // the same channel, which collapse to one canonical key. A single-valued
+    // map would keep only one and strand the other on a dead URL.
+    final storedByCanonical = <String, Set<String>>{};
+    for (final url in storedUrls) {
+      storedByCanonical
+          .putIfAbsent(canonicalChannelKey(url), () => <String>{})
+          .add(url);
+    }
 
-    // Cheap pre-filter: a channel can only match a favorite on the same
+    // Cheap pre-filter: a channel can only match a stored row on the same
     // host, and canonicalizing tens of thousands of URLs on the UI isolate
     // is not free.
-    final favoriteHosts = <String>{
+    final storedHosts = <String>{
       for (final url in storedUrls)
         if (Uri.tryParse(url)?.host.isNotEmpty ?? false) Uri.parse(url).host,
     };
 
-    // The scan yields to the event loop, so a concurrent star/un-star can
-    // land mid-flight. Renames are collected against locals only and applied
-    // in one transaction that re-checks each source row — an entry un-starred
+    // The scan yields to the event loop, so a concurrent add/remove can land
+    // mid-flight. Changes are collected against locals only and applied in
+    // one transaction that re-checks each source row — an entry removed
     // during the scan stays gone instead of being resurrected.
     final renames = <String, String>{}; // stored URL → current URL
+    final meta = <String, ChannelPresentation>{};
     final chunk = Stopwatch()..start();
     for (final channel in channels) {
       if (storedByCanonical.isEmpty) break;
@@ -249,22 +434,28 @@ class IptvMediaStore {
         await Future<void>.delayed(Duration.zero);
         chunk.reset();
       }
-      if (!favoriteHosts.any(channel.url.contains)) continue;
+      if (!storedHosts.any(channel.url.contains)) continue;
       // Consume the mapping so a second canonically-equal channel can't
       // re-move an already-migrated entry.
-      final storedKey = storedByCanonical.remove(
+      final matched = storedByCanonical.remove(
         canonicalChannelKey(channel.url),
       );
-      if (storedKey != null && storedKey != channel.url) {
-        renames[storedKey] = channel.url;
+      if (matched == null) continue;
+      for (final storedUrl in matched) {
+        if (storedUrl != channel.url) renames[storedUrl] = channel.url;
+        if (needsMeta.contains(storedUrl)) {
+          meta[storedUrl] = ChannelPresentation(
+            contentType: channel.contentType,
+            duration: channel.duration,
+          );
+        }
       }
     }
-    if (renames.isEmpty) return;
-    await _applyFavoriteRenames(renames);
+    await _applyReconcile(renames, meta);
   }
 
-  /// DB-catalog variant of [reconcileFavoriteUrls]: the fresh URLs are read
-  /// straight from the catalog rows on a WORKER isolate — walking a paging
+  /// DB-catalog variant of [reconcileFavoriteUrls]: the fresh rows are read
+  /// straight from the catalog on a WORKER isolate — walking a paging
   /// facade here would keep the scan's cost on the UI isolate, which is
   /// tens of near-saturated seconds on a big playlist.
   static Future<void> reconcileFavoriteUrlsForCatalog(
@@ -273,90 +464,145 @@ class IptvMediaStore {
     await _ensureMigrated();
     if (!IptvCatalogDb.isOpen) return;
     final db = await DebrifyTvDatabase.instance.database;
-    final urlRows = await db.query('iptv_favorites', columns: ['url']);
+    final urlRows = await db.rawQuery(
+      'SELECT DISTINCT url FROM iptv_list_channels',
+    );
     if (urlRows.isEmpty) return;
+    final needsMeta = await _urlsNeedingPresentation(db);
 
-    final renames = await compute(
+    final result = await compute(
       computeFavoriteRenamesJob,
       FavoriteRenameJob(
         dbPath: IptvCatalogDb.path,
         catalogKey: catalogKey,
         storedUrls: [for (final row in urlRows) row['url'] as String],
+        urlsNeedingMeta: needsMeta.toList(),
       ),
     );
-    if (renames.isEmpty) return;
-    await _applyFavoriteRenames(renames);
+    if (result.isEmpty) return;
+    await _applyReconcile(result.renames, result.meta);
   }
 
-  /// Apply stored-URL → current-URL renames in one transaction that
-  /// re-checks each source row — an entry un-starred while the scan ran
-  /// stays gone instead of being resurrected.
-  static Future<void> _applyFavoriteRenames(
-    Map<String, String> renames,
+  /// Stored URLs whose presentation metadata is still unknown — rows carried
+  /// over from the pre-v5 favorites table, which had no such columns.
+  static Future<Set<String>> _urlsNeedingPresentation(
+    DatabaseExecutor db,
   ) async {
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT url FROM iptv_list_channels '
+      'WHERE content_type IS NULL OR duration IS NULL',
+    );
+    return {for (final row in rows) row['url'] as String};
+  }
+
+  /// Apply stored-URL → current-URL renames and metadata backfill in one
+  /// transaction that re-checks each source row — an entry removed while the
+  /// scan ran stays gone instead of being resurrected. A renamed URL can
+  /// appear in several lists, so every matching row moves, each keeping its
+  /// own list_id.
+  static Future<void> _applyReconcile(
+    Map<String, String> renames,
+    Map<String, ChannelPresentation> meta,
+  ) async {
+    if (renames.isEmpty && meta.isEmpty) return;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
       for (final entry in renames.entries) {
         final rows = await txn.query(
-          'iptv_favorites',
+          'iptv_list_channels',
           where: 'url = ?',
           whereArgs: [entry.key],
         );
-        if (rows.isEmpty) continue; // un-starred during the scan
-        final row = Map<String, Object?>.from(rows.first);
-        row['url'] = entry.value;
-        await txn.delete(
-          'iptv_favorites',
-          where: 'url = ?',
-          whereArgs: [entry.key],
-        );
-        await txn.insert(
-          'iptv_favorites',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
+        if (rows.isEmpty) continue; // removed during the scan
+        final backfill = meta[entry.key];
+        for (final existing in rows) {
+          final row = Map<String, Object?>.from(existing);
+          row['url'] = entry.value;
+          if (backfill != null) {
+            row['content_type'] ??= backfill.contentType;
+            row['duration'] ??= backfill.duration;
+          }
+          await txn.delete(
+            'iptv_list_channels',
+            where: 'list_id = ? AND url = ?',
+            whereArgs: [row['list_id'], entry.key],
+          );
+          await txn.insert(
+            'iptv_list_channels',
+            row,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+      // Rows that kept their URL but still need presentation metadata.
+      // COALESCE so a known value is never overwritten by a later scan.
+      for (final entry in meta.entries) {
+        if (renames.containsKey(entry.key)) continue;
+        if (entry.value.isEmpty) continue;
+        await txn.rawUpdate(
+          'UPDATE iptv_list_channels SET '
+          'content_type = COALESCE(content_type, ?), '
+          'duration = COALESCE(duration, ?) '
+          'WHERE url = ? AND (content_type IS NULL OR duration IS NULL)',
+          [entry.value.contentType, entry.value.duration, entry.key],
         );
       }
     });
   }
 
-  static Future<void> setChannelFavorited(
+  /// Add or remove [channelUrl] in [listId].
+  static Future<void> setChannelInList(
+    String listId,
     String channelUrl,
-    bool isFavorited, {
+    bool inList, {
     String? channelName,
     String? logoUrl,
     String? group,
     String? playlistId,
     int? channelNumber,
+    String? contentType,
+    int? duration,
     Map<String, String>? httpHeaders,
   }) async {
     await _ensureMigrated();
     final canonical = canonicalChannelKey(channelUrl);
     await DebrifyTvDatabase.instance.runTxn((txn) async {
       // Match older stored URL formats too, so toggling can't leave stale
-      // duplicates behind. Favorites number in the dozens, so scanning the
-      // URLs inside the transaction is cheap.
-      final rows = await txn.query('iptv_favorites', columns: ['url']);
+      // duplicates behind. Scoped to this list: the same channel legitimately
+      // belongs to several lists at once. A list holds dozens of rows, so
+      // scanning its URLs inside the transaction is cheap.
+      final rows = await txn.query(
+        'iptv_list_channels',
+        columns: ['url'],
+        where: 'list_id = ?',
+        whereArgs: [listId],
+      );
       for (final row in rows) {
         final url = row['url'] as String;
         if (canonicalChannelKey(url) == canonical) {
           await txn.delete(
-            'iptv_favorites',
-            where: 'url = ?',
-            whereArgs: [url],
+            'iptv_list_channels',
+            where: 'list_id = ? AND url = ?',
+            whereArgs: [listId, url],
           );
         }
       }
-      if (isFavorited) {
-        await txn.insert('iptv_favorites', {
+      if (inList) {
+        await txn.insert('iptv_list_channels', {
+          'list_id': listId,
           'url': channelUrl,
           'name': channelName ?? '',
           'logo_url': logoUrl ?? '',
           'channel_group': group ?? '',
           'playlist_id': playlistId ?? '',
           'channel_number': channelNumber,
-          // The favorites view rebuilds channels from this metadata alone
-          // (no re-fetch), so a channel that needs a specific UA/Referer has
-          // to carry it here or it would play from the playlist but not from
-          // Favorites. Omitted when empty — most channels declare none.
+          // A list view rebuilds channels from this metadata alone (no
+          // re-fetch), so anything playback or presentation depends on has to
+          // be captured here: a channel needing a specific UA/Referer would
+          // otherwise play from its playlist but not from the list, and one
+          // without a content type would present as live and lose its
+          // resume bar.
+          'content_type': contentType,
+          'duration': duration,
           'http_headers_json': (httpHeaders != null && httpHeaders.isNotEmpty)
               ? jsonEncode(httpHeaders)
               : null,
@@ -366,29 +612,129 @@ class IptvMediaStore {
     });
   }
 
-  static Future<void> removeFavoritesByPlaylistId(String playlistId) async {
+  /// Which lists each stored channel belongs to, url → list ids.
+  static Future<Map<String, Set<String>>> channelMembership() async {
+    return (await membershipSnapshot()).membership;
+  }
+
+  /// Everything the page needs about stored channels in ONE read: which lists
+  /// each belongs to, and which provider each membership came from. Separate
+  /// queries would scan the same table twice on every catalog load.
+  ///
+  /// Origins are keyed by (list id, url), not url alone: the same channel can
+  /// be saved into two lists from two different providers, and collapsing
+  /// those would replay one of them under the other's credentials — and
+  /// sweep it on the wrong provider's deletion.
+  static Future<
+    ({
+      Map<String, Set<String>> membership,
+      Map<(String, String), String> origins,
+    })
+  >
+  membershipSnapshot() async {
+    await _ensureMigrated();
+    final db = await DebrifyTvDatabase.instance.database;
+    final rows = await db.query(
+      'iptv_list_channels',
+      columns: ['list_id', 'url', 'playlist_id'],
+    );
+    final membership = <String, Set<String>>{};
+    final origins = <(String, String), String>{};
+    for (final row in rows) {
+      final url = row['url'] as String;
+      final listId = row['list_id'] as String;
+      membership.putIfAbsent(url, () => <String>{}).add(listId);
+      origins[(listId, url)] = (row['playlist_id'] as String?) ?? '';
+    }
+    return (membership: membership, origins: origins);
+  }
+
+  /// The lists [channelUrl] currently belongs to.
+  static Future<Set<String>> listsForChannel(String channelUrl) async {
+    await _ensureMigrated();
+    final db = await DebrifyTvDatabase.instance.database;
+    final canonical = canonicalChannelKey(channelUrl);
+    final rows = await db.query(
+      'iptv_list_channels',
+      columns: ['list_id', 'url'],
+    );
+    return {
+      for (final row in rows)
+        if (canonicalChannelKey(row['url'] as String) == canonical)
+          row['list_id'] as String,
+    };
+  }
+
+  /// Drop every membership belonging to [playlistId], across ALL lists —
+  /// the provider is gone, so its channels can't play from anywhere.
+  static Future<void> removeListChannelsByPlaylistId(String playlistId) async {
     await _ensureMigrated();
     final db = await DebrifyTvDatabase.instance.database;
     await db.delete(
-      'iptv_favorites',
+      'iptv_list_channels',
       where: 'playlist_id = ?',
       whereArgs: [playlistId],
     );
   }
 
-  /// All favorites, url → metadata, in the same map shape the prefs store
-  /// used ('name'/'logoUrl'/'group'/'playlistId'/'httpHeaders'/'addedAt'),
-  /// oldest-starred first (the prefs map's insertion order).
-  static Future<Map<String, Map<String, dynamic>>> favoriteChannels() async {
+  /// One list's channels, url → metadata, in the same map shape the prefs
+  /// store used ('name'/'logoUrl'/'group'/'playlistId'/'httpHeaders'/
+  /// 'addedAt', plus 'contentType'/'duration'), oldest-added first.
+  static Future<Map<String, Map<String, dynamic>>> listChannels(
+    String listId,
+  ) async {
     await _ensureMigrated();
     final db = await DebrifyTvDatabase.instance.database;
     final rows = await db.query(
-      'iptv_favorites',
+      'iptv_list_channels',
+      where: 'list_id = ?',
+      whereArgs: [listId],
       orderBy: 'added_at ASC, url ASC',
     );
     return {
       for (final row in rows) row['url'] as String: _favoriteMeta(row),
     };
+  }
+
+  // ── Favorites compatibility ───────────────────────────────────────────────
+  // Favorites is now just the built-in list; these keep the older call sites
+  // working unchanged.
+
+  static Future<void> setChannelFavorited(
+    String channelUrl,
+    bool isFavorited, {
+    String? channelName,
+    String? logoUrl,
+    String? group,
+    String? playlistId,
+    int? channelNumber,
+    String? contentType,
+    int? duration,
+    Map<String, String>? httpHeaders,
+  }) {
+    return setChannelInList(
+      favoritesListId,
+      channelUrl,
+      isFavorited,
+      channelName: channelName,
+      logoUrl: logoUrl,
+      group: group,
+      playlistId: playlistId,
+      channelNumber: channelNumber,
+      contentType: contentType,
+      duration: duration,
+      httpHeaders: httpHeaders,
+    );
+  }
+
+  /// Deleting a provider sweeps its channels out of EVERY list, not just
+  /// Favorites — they have nowhere left to play from.
+  static Future<void> removeFavoritesByPlaylistId(String playlistId) {
+    return removeListChannelsByPlaylistId(playlistId);
+  }
+
+  static Future<Map<String, Map<String, dynamic>>> favoriteChannels() {
+    return listChannels(favoritesListId);
   }
 
   // ── Watch history ─────────────────────────────────────────────────────────
@@ -532,6 +878,7 @@ class IptvMediaStore {
   static Map<String, Object?> _favoriteRowFromLegacy(String url, Object? meta) {
     final map = meta is Map ? meta : const <String, dynamic>{};
     return {
+      'list_id': favoritesListId,
       'url': url,
       'name': map['name']?.toString() ?? '',
       'logo_url': map['logoUrl']?.toString() ?? '',
@@ -596,6 +943,13 @@ class IptvMediaStore {
       'playlistId': row['playlist_id'] ?? '',
       if (row['channel_number'] != null)
         'channelNumber': (row['channel_number'] as num).toInt(),
+      // Absent on rows migrated from the pre-v5 favorites table until the
+      // reconcile pass backfills them; consumers fall back to the old
+      // live-by-default reading, which is what those rows did before.
+      if (row['content_type'] != null)
+        'contentType': row['content_type'] as String,
+      if (row['duration'] != null)
+        'duration': (row['duration'] as num).toInt(),
       if (headers != null) 'httpHeaders': headers,
       'addedAt': (row['added_at'] as num?)?.toInt() ?? 0,
     };

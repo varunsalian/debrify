@@ -1358,9 +1358,13 @@ class IptvCatalogDb {
     }
   }
 
-  /// Every channel URL in the current generation of [catalogKey], in
-  /// catalog order.
-  static List<String> catalogUrls({
+  /// Every channel in the current generation of [catalogKey] with the fields
+  /// that decide how a stored list row presents itself — live vs on-demand,
+  /// and the runtime a progress bar needs. Used by the reconcile pass to
+  /// backfill membership rows migrated from the old favorites table, which
+  /// predate those columns.
+  static List<({String url, String? contentType, int? duration})>
+      catalogPresentationRows({
     required String dbPath,
     required String catalogKey,
   }) {
@@ -1372,11 +1376,18 @@ class IptvCatalogDb {
       );
       if (gen.isEmpty) return const [];
       final rows = db.select(
-        'SELECT url FROM channels '
+        'SELECT url, content_type, duration FROM channels '
         'WHERE catalog_key = ? AND generation = ? ORDER BY position',
         [catalogKey, gen.first['generation'] as int],
       );
-      return [for (final row in rows) row['url'] as String];
+      return [
+        for (final row in rows)
+          (
+            url: row['url'] as String,
+            contentType: row['content_type'] as String?,
+            duration: (row['duration'] as num?)?.toInt(),
+          ),
+      ];
     } finally {
       db.dispose();
     }

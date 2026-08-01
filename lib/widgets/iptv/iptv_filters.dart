@@ -310,6 +310,8 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
               Icon(
                 widget.selectedPlaylist?.isFavorites == true
                     ? Icons.star_rounded
+                    : widget.selectedPlaylist?.isCustomList == true
+                        ? Icons.bookmark_rounded
                     : widget.selectedPlaylist?.isXtreamCodes == true
                         ? Icons.login
                         : widget.selectedPlaylist?.isLocalFile == true
@@ -797,13 +799,17 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
                   label: playlist.name,
                   subtitle: playlist.isFavorites
                       ? 'Your starred channels'
-                      : playlist.isXtreamCodes
+                      : playlist.isCustomList
+                          ? 'Your list'
+                          : playlist.isXtreamCodes
                           ? 'Xtream Codes - ${playlist.serverUrl}'
                           : playlist.isLocalFile ? 'Local file' : playlist.url,
                   icon: isSelected
                       ? Icons.check_circle
                       : playlist.isFavorites
                           ? Icons.star_rounded
+                          : playlist.isCustomList
+                              ? Icons.bookmark_rounded
                           : playlist.isXtreamCodes
                               ? Icons.login
                               : (playlist.isLocalFile ? Icons.folder : Icons.playlist_play),

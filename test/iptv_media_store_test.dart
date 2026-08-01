@@ -28,6 +28,10 @@ void main() {
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
         version: 1,
+        // Production enables this in onConfigure, and list membership is a
+        // foreign key onto iptv_lists — without it the cascade rules under
+        // test here simply wouldn't fire.
+        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
       ),
     );

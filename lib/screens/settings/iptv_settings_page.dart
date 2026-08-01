@@ -12,6 +12,8 @@ import '../../utils/m3u_parser.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../../utils/tv_reveal.dart';
+import '../../services/iptv_media_store.dart' show IptvListMeta;
+import '../../widgets/iptv/iptv_list_name_dialog.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -70,6 +72,17 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   // Focus nodes for playlist items (3 per item: star + refresh + delete)
   final List<FocusNode> _playlistFocusNodes = [];
+
+  /// Focus nodes for the Lists section — its OWN array rather than an
+  /// extension of [_playlistFocusNodes], whose every index is `row * 4`
+  /// arithmetic that a second section would silently break.
+  /// 4 per list: rename + move-up + move-down + delete.
+  final List<FocusNode> _listFocusNodes = [];
+  final FocusNode _createListFocusNode = FocusNode(
+    debugLabel: 'iptv-create-list',
+  );
+
+  List<IptvListMeta> _lists = [];
 
   List<IptvPlaylist> _playlists = [];
   String? _defaultPlaylistId;
@@ -155,6 +168,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     for (final node in _playlistFocusNodes) {
       node.dispose();
     }
+    for (final node in _listFocusNodes) {
+      node.dispose();
+    }
+    _createListFocusNode.dispose();
     super.dispose();
   }
 
@@ -170,12 +187,29 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       final index = _playlistFocusNodes.length;
       _playlistFocusNodes.add(FocusNode(debugLabel: 'iptv-playlist-$index'));
     }
+
+    // 4 per custom list (rename + up + down + delete). Favorites is built in
+    // and has no row of its own here.
+    final listsNeeded = _customLists.length * 4;
+    while (_listFocusNodes.length > listsNeeded) {
+      _listFocusNodes.removeLast().dispose();
+    }
+    while (_listFocusNodes.length < listsNeeded) {
+      final index = _listFocusNodes.length;
+      _listFocusNodes.add(FocusNode(debugLabel: 'iptv-list-$index'));
+    }
   }
+
+  List<IptvListMeta> get _customLists => [
+    for (final list in _lists)
+      if (!list.isBuiltin) list,
+  ];
 
   Future<void> _loadSettings() async {
     final playlists = await StorageService.getIptvPlaylists();
     final defaultId = await StorageService.getIptvDefaultPlaylist();
     final redesignEnabled = await StorageService.getIptvRedesignEnabled();
+    final lists = await StorageService.getIptvLists();
 
     if (!mounted) return;
 
@@ -183,6 +217,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _playlists = playlists;
       _defaultPlaylistId = defaultId;
       _redesignEnabled = redesignEnabled;
+      _lists = lists;
       _loading = false;
     });
     _ensureFocusNodes();
@@ -544,10 +579,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       );
     }
 
-    // Remove favorites and watch history that belonged to this playlist —
-    // both replay from stored metadata, so either would otherwise keep
-    // offering streams that no longer authenticate.
-    await StorageService.removeIptvFavoritesByPlaylistId(playlist.id);
+    // Remove list memberships and watch history that belonged to this
+    // playlist — both replay from stored metadata, so either would otherwise
+    // keep offering streams that no longer authenticate. The sweep covers
+    // EVERY list, not just Favorites: the provider is gone, so its channels
+    // have nowhere left to play from. The lists themselves survive, possibly
+    // empty.
+    await StorageService.removeIptvListChannelsByPlaylistId(playlist.id);
     await StorageService.removeIptvWatchHistoryByPlaylistId(playlist.id);
 
     setState(() => _playlists = newPlaylists);
@@ -668,6 +706,137 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       ),
     );
   }
+
+  // ── Channel lists ────────────────────────────────────────────────────────
+
+  Future<void> _reloadLists() async {
+    final lists = await StorageService.getIptvLists();
+    if (!mounted) return;
+    setState(() => _lists = lists);
+    _ensureFocusNodes();
+  }
+
+  Future<void> _createList() async {
+    final name = await showIptvListNameDialog(
+      context: context,
+      title: 'New list',
+      confirmLabel: 'Create',
+      existingNames: [for (final list in _lists) list.name],
+    );
+    if (name == null) return;
+    await StorageService.createIptvList(name);
+    await _reloadLists();
+    if (!mounted) return;
+    _showSnackBar('Created "$name"', isError: false);
+  }
+
+  Future<void> _renameList(IptvListMeta list) async {
+    final name = await showIptvListNameDialog(
+      context: context,
+      title: 'Rename list',
+      confirmLabel: 'Save',
+      initialValue: list.name,
+      existingNames: [for (final entry in _lists) entry.name],
+    );
+    if (name == null || name == list.name) return;
+    await StorageService.renameIptvList(list.id, name);
+    await _reloadLists();
+  }
+
+  Future<void> _deleteList(IptvListMeta list) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${list.name}"?'),
+        content: Text(
+          list.channelCount == 0
+              ? 'The list is empty, so nothing else changes.'
+              : 'The ${list.channelCount} channels in it stay in your '
+                    'playlists — only the list goes away.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await StorageService.deleteIptvList(list.id);
+    await _reloadLists();
+    if (!mounted) return;
+    // The deleted row's focus node is gone with it; land DPAD on the same
+    // slot of a surviving list, or on Create when the section empties.
+    if (PlatformUtil.isAndroidTvCached) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_listFocusNodes.isEmpty) {
+          _focusAndReveal(_createListFocusNode);
+        } else {
+          _focusAndReveal(_listFocusNodes.first);
+        }
+      });
+    }
+    _showSnackBar('Deleted "${list.name}"', isError: false);
+  }
+
+  Future<void> _moveList(IptvListMeta list, int delta) async {
+    final order = [for (final entry in _customLists) entry.id];
+    final index = order.indexOf(list.id);
+    final target = index + delta;
+    if (index < 0 || target < 0 || target >= order.length) return;
+    order.removeAt(index);
+    order.insert(target, list.id);
+    await StorageService.reorderIptvLists(order);
+    await _reloadLists();
+  }
+
+  List<Widget> _buildListsSection() {
+    final lists = _customLists;
+    if (lists.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+          child: Row(
+            children: [
+              Icon(Icons.bookmark_border_rounded, color: kSettingsDim2),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'No lists yet — Favorites is always there.',
+                  style: TextStyle(fontSize: 13, color: kSettingsDim),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+    return [
+      for (var i = 0; i < lists.length; i++)
+        _IptvListSettingsRow(
+          list: lists[i],
+          isFirst: i == 0,
+          isLast: i == lists.length - 1,
+          renameFocusNode: _listNodeAt(i * 4),
+          upFocusNode: _listNodeAt(i * 4 + 1),
+          downFocusNode: _listNodeAt(i * 4 + 2),
+          deleteFocusNode: _listNodeAt(i * 4 + 3),
+          onRename: () => _renameList(lists[i]),
+          onMoveUp: () => _moveList(lists[i], -1),
+          onMoveDown: () => _moveList(lists[i], 1),
+          onDelete: () => _deleteList(lists[i]),
+        ),
+    ];
+  }
+
+  FocusNode? _listNodeAt(int index) =>
+      index < _listFocusNodes.length ? _listFocusNodes[index] : null;
 
   List<Widget> _buildPlaylistsList() {
     final items = <Widget>[];
@@ -1137,6 +1306,29 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               )
             else
               Card(child: Column(children: _buildPlaylistsList())),
+            const SizedBox(height: 24),
+
+            // Channel lists
+            const SettingsSectionLabel('Your Lists'),
+            Text(
+              'Hold OK (or long-press) any channel to add it to a list. '
+              'Deleting a list never deletes its channels.',
+              style: TextStyle(fontSize: 12, color: kSettingsDim),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  ..._buildListsSection(),
+                  _FocusableSettingsTile(
+                    focusNode: _createListFocusNode,
+                    icon: Icons.add_rounded,
+                    label: 'Create list',
+                    onTap: _createList,
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 24),
 
             // Experience
@@ -2627,3 +2819,127 @@ final ButtonStyle _dialogButtonFocusStyle = ButtonStyle(
         : null,
   ),
 );
+
+/// One custom list in the Settings "Your Lists" section: name, count, and the
+/// four actions. Each action carries its own focus node so DPAD walks them in
+/// reading order.
+class _IptvListSettingsRow extends StatelessWidget {
+  final IptvListMeta list;
+  final bool isFirst;
+  final bool isLast;
+  final FocusNode? renameFocusNode;
+  final FocusNode? upFocusNode;
+  final FocusNode? downFocusNode;
+  final FocusNode? deleteFocusNode;
+  final VoidCallback onRename;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
+  final VoidCallback onDelete;
+
+  const _IptvListSettingsRow({
+    required this.list,
+    required this.isFirst,
+    required this.isLast,
+    required this.renameFocusNode,
+    required this.upFocusNode,
+    required this.downFocusNode,
+    required this.deleteFocusNode,
+    required this.onRename,
+    required this.onMoveUp,
+    required this.onMoveDown,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+      child: Row(
+        children: [
+          Icon(Icons.bookmark_rounded, size: 20, color: kSettingsDim),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  list.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  list.channelCount == 1
+                      ? '1 channel'
+                      : '${list.channelCount} channels',
+                  style: TextStyle(fontSize: 12, color: kSettingsDim2),
+                ),
+              ],
+            ),
+          ),
+          _FocusableIconButton(
+            focusNode: renameFocusNode,
+            icon: Icons.edit_outlined,
+            tooltip: 'Rename',
+            onPressed: onRename,
+          ),
+          // The ends of the list keep their arrows for a stable focus order,
+          // but a no-op move would just be a dead keypress — skip it.
+          _FocusableIconButton(
+            focusNode: upFocusNode,
+            icon: Icons.keyboard_arrow_up_rounded,
+            color: isFirst ? kSettingsDim2 : null,
+            tooltip: 'Move up',
+            onPressed: isFirst ? () {} : onMoveUp,
+          ),
+          _FocusableIconButton(
+            focusNode: downFocusNode,
+            icon: Icons.keyboard_arrow_down_rounded,
+            color: isLast ? kSettingsDim2 : null,
+            tooltip: 'Move down',
+            onPressed: isLast ? () {} : onMoveDown,
+          ),
+          _FocusableIconButton(
+            focusNode: deleteFocusNode,
+            icon: Icons.delete_outline_rounded,
+            tooltip: 'Delete',
+            onPressed: onDelete,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Plain focusable action row for the Lists section header actions.
+class _FocusableSettingsTile extends StatelessWidget {
+  final FocusNode focusNode;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _FocusableSettingsTile({
+    required this.focusNode,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      focusNode: focusNode,
+      leading: Icon(icon, color: kSettingsAccent),
+      title: Text(
+        label,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      onTap: onTap,
+    );
+  }
+}

@@ -77,6 +77,7 @@ import com.debrify.app.util.SubtitleCue
 import com.debrify.app.util.SubtitleCueCache
 import com.debrify.app.util.SubtitleFontManager
 import com.debrify.app.util.SubtitleSettings
+import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -256,6 +257,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvGuideVisible = false
     private var iptvBrowseChannels = mutableListOf<IptvChannelEntry>()
     private var iptvSources = mutableListOf<IptvSourceEntry>()
+
+    // The user's channel lists, shipped once at launch (never per channel —
+    // the channel payload is already capped for size on the Dart side).
+    private var iptvLists = mutableListOf<IptvListEntry>()
     private var iptvCategories = mutableListOf<String>()
     private var iptvSourceId: String? = null
     private var iptvSourceName: String = "IPTV"
@@ -5232,6 +5237,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvSelectedCategory =
             json.optString("selectedCategory").takeIf { it.isNotEmpty() }
         iptvSources = parseIptvSources(json.optJSONArray("sources"))
+        iptvLists = parseIptvLists(json.optJSONArray("lists"))
         iptvCategories = parseStringList(json.optJSONArray("categories"))
         // Playback owns this context until the user starts browsing another
         // source/category. CH +/- can then restore the actual playing source
@@ -5342,8 +5348,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 isFavorites = source.optBoolean("isFavorites"),
                 isContinue = source.optBoolean("isContinue"),
                 isXtream = source.optBoolean("isXtream"),
+                isList = source.optBoolean("isList"),
+                listId = source.optString("listId").takeIf { it.isNotEmpty() },
             )
         }.filterTo(mutableListOf()) { it.id.isNotEmpty() && !it.isContinue }
+    }
+
+    private fun parseIptvLists(array: JSONArray?): MutableList<IptvListEntry> {
+        if (array == null) return mutableListOf()
+        return MutableList(array.length()) { index ->
+            val entry = array.optJSONObject(index) ?: JSONObject()
+            IptvListEntry(
+                id = entry.optString("id"),
+                name = entry.optString("name").ifEmpty { "List" },
+                isBuiltin = entry.optBoolean("isBuiltin"),
+            )
+        }.filterTo(mutableListOf()) { it.id.isNotEmpty() }
     }
 
     private fun parseStringList(array: JSONArray?): MutableList<String> {
@@ -5469,6 +5489,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             resumePositionMs = resumePositionMs,
             httpHeaders = headers,
             contentType = normalizedType,
+            duration = duration,
             sourceId = sourceId,
             sourceName = sourceName,
             isFavorite = isFavorite,
@@ -5669,6 +5690,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         "Open the series to choose an episode",
                         Toast.LENGTH_SHORT,
                     ).show()
+                } else if (iptvLists.any { !it.isBuiltin }) {
+                    showIptvListPicker(entry)
                 } else {
                     toggleIptvFavorite(entry)
                 }
@@ -6010,6 +6033,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvContentType = when {
             source.isContinue -> "vod"
             source.isFavorites -> "live"
+            // A list is a curated mix with no content type of its own. Without
+            // this arm a lingering "vod" state would ride through and ask Dart
+            // for the wrong slice of the list.
+            source.isList -> "live"
             iptvContentType == "episodes" -> if (source.isXtream) "series" else "live"
             !source.isXtream && iptvContentType == "series" -> "live"
             else -> iptvContentType
@@ -6257,6 +6284,222 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+
+    /// "Add to list" checklist for one channel. Reached by long-click once the
+    /// user has created a list of their own; before that the same gesture
+    /// toggles the favourite outright, exactly as it always did.
+    ///
+    /// Membership is fetched per channel rather than shipped with every
+    /// channel at launch — the launch payload is already capped for size.
+    /// Creating a list stays on the Flutter side; this only picks.
+    private fun showIptvListPicker(entry: IptvChannelEntry) {
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            toggleIptvFavorite(entry)
+            return
+        }
+        val listHeight = minOf(
+            dp(400),
+            (resources.displayMetrics.heightPixels * 0.5f).toInt(),
+        )
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+        }
+        val statusText = TextView(this).apply {
+            setPadding(dp(2), dp(4), dp(2), dp(8))
+            setTextColor(0xB3FFFFFF.toInt())
+            textSize = 13f
+            text = "Loading lists…"
+        }
+        val listView = RecyclerView(this).apply {
+            layoutManager = LinearLayoutManager(
+                this@AndroidTvTorrentPlayerActivity,
+                LinearLayoutManager.VERTICAL,
+                false,
+            )
+            isFocusable = true
+            clipToPadding = false
+            setPadding(0, 0, 0, dp(16))
+        }
+        container.addView(
+            statusText,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        container.addView(
+            listView,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                listHeight,
+            ),
+        )
+
+        val membership = mutableSetOf<String>()
+        val adapter = IptvListPickerAdapter(iptvLists, membership) { list ->
+            val nowIn = !membership.contains(list.id)
+            if (nowIn) membership.add(list.id) else membership.remove(list.id)
+            // Favorites drives the star badge in the guide, so keep the row in
+            // step when it is the list being toggled.
+            if (list.isBuiltin) {
+                entry.isFavorite = nowIn
+                iptvChannelAdapter?.notifyFavoriteFor(entry)
+            }
+            // Removing a channel from the list currently being browsed has to
+            // take its row out of the guide too — otherwise it stays there,
+            // still selectable, claiming a membership it no longer has.
+            if (!nowIn) {
+                val browsing = iptvSources.firstOrNull { it.id == iptvSourceId }
+                val browsingThisList = browsing != null &&
+                    (browsing.listId == list.id ||
+                        (list.isBuiltin && browsing.isFavorites))
+                if (browsingThisList) removeIptvGuideRow(entry)
+            }
+            channel.invokeMethod(
+                "setIptvChannelInList",
+                hashMapOf<String, Any?>(
+                    "listId" to list.id,
+                    "inList" to nowIn,
+                    "url" to entry.url,
+                    "name" to entry.name,
+                    "logoUrl" to entry.logoUrl,
+                    "group" to entry.group,
+                    "sourceId" to entry.sourceId,
+                    "channelNumber" to entry.channelNumber,
+                    "contentType" to entry.contentType,
+                    "duration" to entry.duration,
+                    "httpHeaders" to entry.httpHeaders,
+                ),
+            )
+        }
+        listView.adapter = adapter
+
+        val dialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)
+            .setTitle(entry.name)
+            .setView(container)
+            .setNegativeButton("Done", null)
+            .create()
+        dialog.show()
+
+        channel.invokeMethod(
+            "getIptvChannelListMembership",
+            hashMapOf<String, Any?>("url" to entry.url),
+            object : MethodChannel.Result {
+                override fun success(result: Any?) {
+                    val ids = (result as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+                    membership.clear()
+                    membership.addAll(ids)
+                    statusText.text = "Pick the lists this channel belongs to"
+                    // Rows only exist from here on: toggling against an
+                    // unloaded membership set would read every list as "not
+                    // in", so pressing an already-added list would re-add it
+                    // instead of removing it.
+                    adapter.setReady(true)
+                    listView.post {
+                        listView.findViewHolderForAdapterPosition(0)
+                            ?.itemView?.requestFocus()
+                    }
+                }
+
+                override fun error(code: String, message: String?, details: Any?) {
+                    statusText.text = "Couldn't load your lists"
+                }
+
+                override fun notImplemented() {
+                    statusText.text = "Couldn't load your lists"
+                }
+            },
+        )
+    }
+
+    /// Drop [entry] from the guide after it left the list being browsed.
+    ///
+    /// A local removal rather than a re-browse: re-requesting the source would
+    /// rebuild the whole window and throw away the user's scroll position and
+    /// focus, for a change we already know the shape of. The adapter diffs, so
+    /// the row animates out and the rest keep their holders.
+    private fun removeIptvGuideRow(entry: IptvChannelEntry) {
+        // The playing channel is not removable from under the player — it
+        // would strand zapping with no current index. Its membership is gone
+        // in storage either way; the row simply outlives the session.
+        if (entry.isCurrent) return
+        val removedFromBrowse = iptvBrowseChannels.removeAll { it === entry }
+        iptvSearchSavedChannels.removeAll { it === entry }
+        if (!removedFromBrowse) return
+        iptvChannelAdapter?.updateChannels(iptvBrowseChannels.toList())
+        refreshIptvBrowserChrome()
+    }
+
+    private class IptvListPickerAdapter(
+        private val lists: List<IptvListEntry>,
+        private val membership: Set<String>,
+        private val onToggle: (IptvListEntry) -> Unit,
+    ) : RecyclerView.Adapter<IptvListPickerAdapter.ViewHolder>() {
+        // No rows until the channel's real membership has landed — see the
+        // success callback in showIptvListPicker.
+        private var ready = false
+
+        fun setReady(value: Boolean) {
+            if (ready == value) return
+            ready = value
+            notifyDataSetChanged()
+        }
+
+        class ViewHolder(val label: TextView) : RecyclerView.ViewHolder(label)
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val density = parent.resources.displayMetrics.density
+            fun px(dp: Int) = (dp * density).toInt()
+            val label = TextView(parent.context).apply {
+                layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    px(52),
+                ).apply {
+                    bottomMargin = px(6)
+                }
+                isFocusable = true
+                isClickable = true
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(px(16), 0, px(16), 0)
+                setBackgroundResource(R.drawable.iptv_premium_button_bg)
+                setTextColor(
+                    ContextCompat.getColorStateList(
+                        context,
+                        R.color.iptv_premium_button_text,
+                    ),
+                )
+                textSize = 15f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                stateListAnimator = null
+            }
+            return ViewHolder(label)
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val list = lists[position]
+            val checked = membership.contains(list.id)
+            holder.label.text = if (checked) "\u2713  ${list.name}" else list.name
+            holder.label.isSelected = checked
+            holder.label.setOnClickListener {
+                onToggle(list)
+                notifyItemChanged(position)
+            }
+            holder.label.setOnFocusChangeListener { view, focused ->
+                view.animate()
+                    .scaleX(if (focused) 1.015f else 1f)
+                    .scaleY(if (focused) 1.015f else 1f)
+                    .setDuration(120)
+                    .start()
+            }
+        }
+
+        override fun getItemCount(): Int = if (ready) lists.size else 0
+    }
+
+
     private fun requestIptvBrowse(
         action: String,
         query: String = iptvGuideSearch?.text?.toString()?.trim().orEmpty(),
@@ -6372,6 +6615,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "group" to entry.group,
             "sourceId" to entry.sourceId,
             "channelNumber" to entry.channelNumber,
+            // Without these a movie favourited here would be replayed as a
+            // live channel and lose its resume bar — the list view rebuilds
+            // rows from stored metadata alone.
+            "contentType" to entry.contentType,
+            "duration" to entry.duration,
             "httpHeaders" to entry.httpHeaders,
             "isFavorite" to entry.isFavorite,
         )
@@ -6980,7 +7228,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val current = iptvChannels.getOrNull(currentIptvIndex)
         if (current?.isLive != true) return
         val activeSource = iptvSources.firstOrNull { it.id == iptvZapSourceId }
-        if (activeSource?.isFavorites == true) {
+        if (activeSource?.isFavorites == true || activeSource?.isList == true) {
             Toast.makeText(
                 this,
                 "Select a provider before jumping by channel number",
@@ -12886,6 +13134,10 @@ private data class IptvChannelEntry(
     var epgLoaded: Boolean = false,
     var epgLoading: Boolean = false,
     val contentType: String = if (isLive) "live" else "vod",
+    // The playlist's declared runtime (-1 for live). Retained because a
+    // channel saved into a list is rebuilt from stored metadata alone, and
+    // without the runtime its progress/resume UI has nothing to divide by.
+    val duration: Int = -1,
     var sourceId: String? = null,
     var sourceName: String? = null,
     var isFavorite: Boolean = false,
@@ -13138,6 +13390,17 @@ private data class IptvSourceEntry(
     val isFavorites: Boolean,
     val isContinue: Boolean,
     val isXtream: Boolean,
+    // A user-created channel list. Favorites keeps its own flag (the SAVED
+    // nav button resolves the source by it) and is NOT flagged as a list.
+    val isList: Boolean = false,
+    val listId: String? = null,
+)
+
+/// One of the user's channel lists, for the "add to list" picker.
+private data class IptvListEntry(
+    val id: String,
+    val name: String,
+    val isBuiltin: Boolean,
 )
 
 private data class IptvEpgProgram(

@@ -45,6 +45,15 @@ class IptvChannelRow extends StatefulWidget {
   final VoidCallback onTap;
   final ValueChanged<bool>? onFavoriteToggle;
 
+  /// Whether this channel is in any list at all (including Favorites) —
+  /// drives the small "saved somewhere" marker.
+  final bool inAnyList;
+
+  /// Opens the "add to list" picker. Non-null only once the user has created
+  /// at least one list of their own; until then the same gesture toggles the
+  /// favorite outright, so nobody who never uses lists grows an extra tap.
+  final VoidCallback? onOpenListPicker;
+
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
 
@@ -95,6 +104,8 @@ class IptvChannelRow extends StatefulWidget {
     this.isFavorited = false,
     this.isPreviewSelected = false,
     this.onFavoriteToggle,
+    this.inAnyList = false,
+    this.onOpenListPicker,
     this.onFocused,
     this.onDetached,
     this.onSchedule,
@@ -126,8 +137,9 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  // Long-press OK on TV toggles favorite; a short press still plays. The hold
-  // is driven by a controller so the focused row can show a filling heart —
+  // Long-press OK on TV toggles favorite — or opens the list picker once the
+  // user has lists of their own; a short press still plays. The hold is
+  // driven by a controller so the focused row can show a filling heart,
   // making the otherwise-invisible gesture discoverable.
   static const _favHoldDuration = Duration(milliseconds: 500);
   late final AnimationController _holdController = AnimationController(
@@ -150,7 +162,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     _holdController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         _favHoldFired = true;
-        widget.onFavoriteToggle?.call(!widget.isFavorited);
+        final openPicker = widget.onOpenListPicker;
+        if (openPicker != null) {
+          openPicker();
+        } else {
+          widget.onFavoriteToggle?.call(!widget.isFavorited);
+        }
       }
     });
   }
@@ -369,9 +386,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
             event.logicalKey == LogicalKeyboardKey.space;
         if (!isSelect) return KeyEventResult.ignored;
 
-        // Without a favorite action (or off-TV), keep press-to-play.
+        // Without a favorite action or a list picker (or off-TV), keep
+        // press-to-play.
         final canHoldToFavorite =
-            widget.isTelevision && widget.onFavoriteToggle != null;
+            widget.isTelevision &&
+            (widget.onFavoriteToggle != null ||
+                widget.onOpenListPicker != null);
         if (!canHoldToFavorite) {
           if (event is KeyDownEvent) {
             widget.onTap();
@@ -412,6 +432,10 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onTap,
+          // Touch/desktop counterpart of TV's hold-OK. The row had no
+          // long-press before, so this adds a gesture rather than
+          // reinterpreting one.
+          onLongPress: widget.onOpenListPicker,
           behavior: HitTestBehavior.opaque,
           child: row,
         ),
@@ -451,7 +475,14 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   /// - Desktop/mobile: a tappable heart, revealed on hover / when favourited /
   ///   always on touch (no hover there).
   Widget _buildFavTrailing() {
-    if (widget.onFavoriteToggle == null) return const SizedBox.shrink();
+    final picksList = widget.onOpenListPicker != null;
+    if (widget.onFavoriteToggle == null && !picksList) {
+      return const SizedBox.shrink();
+    }
+
+    // In a list the user made, but not favourited: a quiet bookmark so the
+    // row still reads as "saved somewhere" without competing with the heart.
+    final marksListOnly = widget.inAnyList && !widget.isFavorited;
 
     if (widget.isTelevision) {
       if (_focused) {
@@ -462,6 +493,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
             builder: (_, __) => _FavHint(
               favorited: widget.isFavorited,
               progress: _holdController.value,
+              picksList: picksList,
             ),
           ),
         );
@@ -476,15 +508,42 @@ class _IptvChannelRowState extends State<IptvChannelRow>
           ),
         );
       }
+      if (marksListOnly) {
+        return Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Icon(
+            Icons.bookmark_rounded,
+            size: 16,
+            color: Colors.white.withValues(alpha: 0.55),
+          ),
+        );
+      }
       return const SizedBox.shrink();
     }
 
-    final show = widget.isFavorited || _active || _isTouchMobile;
+    if (widget.onFavoriteToggle == null) {
+      return marksListOnly
+          ? Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Icon(
+                Icons.bookmark_rounded,
+                size: 16,
+                color: Colors.white.withValues(alpha: 0.55),
+              ),
+            )
+          : const SizedBox.shrink();
+    }
+
+    final show =
+        widget.isFavorited || marksListOnly || _active || _isTouchMobile;
     if (!show) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(left: 6),
       child: _FavButton(
         favorited: widget.isFavorited,
+        inAnyList: widget.inAnyList,
+        // The heart stays a one-tap favourite toggle even with lists in
+        // play — the picker is the long-press, not this.
         onTap: () => widget.onFavoriteToggle!(!widget.isFavorited),
       ),
     );
@@ -783,7 +842,15 @@ class _RowEpgState extends State<_RowEpg> {
 class _FavHint extends StatelessWidget {
   final bool favorited;
   final double progress; // 0..1 hold progress
-  const _FavHint({required this.favorited, required this.progress});
+
+  /// Hold opens the list picker rather than toggling the favourite outright.
+  final bool picksList;
+
+  const _FavHint({
+    required this.favorited,
+    required this.progress,
+    this.picksList = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -831,9 +898,19 @@ class _FavHint extends StatelessWidget {
                   ),
                 ),
               Icon(
-                done ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                picksList
+                    ? Icons.playlist_add_rounded
+                    : done
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
                 size: 16,
-                color: heartColor,
+                color: picksList
+                    ? Color.lerp(
+                        Colors.white.withValues(alpha: 0.7),
+                        HomeTheme.focusGold,
+                        progress,
+                      )!
+                    : heartColor,
               ),
             ],
           ),
@@ -956,8 +1033,13 @@ class _ResumeBar extends StatelessWidget {
 
 class _FavButton extends StatelessWidget {
   final bool favorited;
+  final bool inAnyList;
   final VoidCallback onTap;
-  const _FavButton({required this.favorited, required this.onTap});
+  const _FavButton({
+    required this.favorited,
+    required this.onTap,
+    this.inAnyList = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -969,7 +1051,13 @@ class _FavButton extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(6),
           child: Icon(
-            favorited ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            favorited
+                ? Icons.favorite_rounded
+                : inAnyList
+                // Saved in a list the user made, just not favourited — show
+                // it as saved rather than as an empty heart.
+                ? Icons.bookmark_rounded
+                : Icons.favorite_border_rounded,
             size: 18,
             color: favorited
                 ? const Color(0xFFF43F5E)

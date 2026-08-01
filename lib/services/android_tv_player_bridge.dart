@@ -40,6 +40,18 @@ class AndroidTvPlayerBridge {
     'com.debrify.app/android_tv_player',
   );
 
+  /// The platform channel hands headers back as a plain dynamic map; a stored
+  /// channel replays from this metadata alone, so a UA/Referer-guarded stream
+  /// is unplayable if it doesn't survive the crossing.
+  static Map<String, String> _iptvHeadersFromArgs(Object? raw) {
+    if (raw is! Map) return const {};
+    final headers = <String, String>{};
+    raw.forEach((key, value) {
+      if (key is String && value != null) headers[key] = value.toString();
+    });
+    return headers;
+  }
+
   static StreamNextProvider? _streamNextProvider;
   static ChannelSwitchProvider? _channelSwitchProvider;
   static ChannelByIdSwitchProvider? _channelByIdSwitchProvider;
@@ -671,15 +683,6 @@ class AndroidTvPlayerBridge {
           final url = favoriteArgs['url'] as String?;
           final isFavorite = favoriteArgs['isFavorite'] == true;
           if (url == null || url.isEmpty) return false;
-          final headers = <String, String>{};
-          final rawHeaders = favoriteArgs['httpHeaders'];
-          if (rawHeaders is Map) {
-            rawHeaders.forEach((key, value) {
-              if (key is String && value != null) {
-                headers[key] = value.toString();
-              }
-            });
-          }
           await StorageService.setIptvChannelFavorited(
             url,
             isFavorite,
@@ -688,9 +691,42 @@ class AndroidTvPlayerBridge {
             group: favoriteArgs['group'] as String?,
             playlistId: favoriteArgs['sourceId'] as String?,
             channelNumber: (favoriteArgs['channelNumber'] as num?)?.toInt(),
-            httpHeaders: headers,
+            contentType: favoriteArgs['contentType'] as String?,
+            duration: (favoriteArgs['duration'] as num?)?.toInt(),
+            httpHeaders: _iptvHeadersFromArgs(favoriteArgs['httpHeaders']),
           );
           return true;
+        case 'setIptvChannelInList':
+          final listArgs = call.arguments;
+          if (listArgs is! Map) return false;
+          final url = listArgs['url'] as String?;
+          final listId = listArgs['listId'] as String?;
+          if (url == null || url.isEmpty) return false;
+          if (listId == null || listId.isEmpty) return false;
+          await StorageService.setIptvChannelInList(
+            listId,
+            url,
+            listArgs['inList'] == true,
+            channelName: listArgs['name'] as String?,
+            logoUrl: listArgs['logoUrl'] as String?,
+            group: listArgs['group'] as String?,
+            playlistId: listArgs['sourceId'] as String?,
+            channelNumber: (listArgs['channelNumber'] as num?)?.toInt(),
+            contentType: listArgs['contentType'] as String?,
+            duration: (listArgs['duration'] as num?)?.toInt(),
+            httpHeaders: _iptvHeadersFromArgs(listArgs['httpHeaders']),
+          );
+          return true;
+        case 'getIptvChannelListMembership':
+          // Fetched per channel when the native picker opens rather than
+          // shipped with every channel at launch — that payload is already
+          // capped for size.
+          final membershipArgs = call.arguments;
+          final url = membershipArgs is Map
+              ? membershipArgs['url'] as String?
+              : null;
+          if (url == null || url.isEmpty) return <String>[];
+          return (await StorageService.getIptvListsForChannel(url)).toList();
         case 'reportIptvStreamResult':
           // Feedback from the native serial ladder: cache the URL that
           // actually played, or drop the stale candidate list when every

@@ -3042,6 +3042,8 @@ class StorageService {
     String? group,
     String? playlistId,
     int? channelNumber,
+    String? contentType,
+    int? duration,
     Map<String, String>? httpHeaders,
   }) {
     return IptvMediaStore.setChannelFavorited(
@@ -3052,8 +3054,102 @@ class StorageService {
       group: group,
       playlistId: playlistId,
       channelNumber: channelNumber,
+      contentType: contentType,
+      duration: duration,
       httpHeaders: httpHeaders,
     );
+  }
+
+  // ── IPTV custom lists ────────────────────────────────────────────────────
+
+  /// Reserved id of the built-in Favorites list.
+  static const String iptvFavoritesListId = IptvMediaStore.favoritesListId;
+
+  /// Every channel list, Favorites first then custom lists in user order.
+  static Future<List<IptvListMeta>> getIptvLists() {
+    return IptvMediaStore.lists();
+  }
+
+  /// Create a channel list and return its id.
+  static Future<String> createIptvList(String name) {
+    return IptvMediaStore.createList(name);
+  }
+
+  static Future<void> renameIptvList(String listId, String name) {
+    return IptvMediaStore.renameList(listId, name);
+  }
+
+  /// Delete a custom list. The channels themselves are untouched.
+  static Future<void> deleteIptvList(String listId) {
+    return IptvMediaStore.deleteList(listId);
+  }
+
+  static Future<void> reorderIptvLists(List<String> orderedIds) {
+    return IptvMediaStore.reorderLists(orderedIds);
+  }
+
+  /// Add or remove a channel in a list.
+  static Future<void> setIptvChannelInList(
+    String listId,
+    String channelUrl,
+    bool inList, {
+    String? channelName,
+    String? logoUrl,
+    String? group,
+    String? playlistId,
+    int? channelNumber,
+    String? contentType,
+    int? duration,
+    Map<String, String>? httpHeaders,
+  }) {
+    return IptvMediaStore.setChannelInList(
+      listId,
+      channelUrl,
+      inList,
+      channelName: channelName,
+      logoUrl: logoUrl,
+      group: group,
+      playlistId: playlistId,
+      channelNumber: channelNumber,
+      contentType: contentType,
+      duration: duration,
+      httpHeaders: httpHeaders,
+    );
+  }
+
+  /// One list's channels, url → metadata.
+  static Future<Map<String, Map<String, dynamic>>> getIptvListChannels(
+    String listId,
+  ) {
+    return IptvMediaStore.listChannels(listId);
+  }
+
+  /// Which lists each stored channel belongs to, url → list ids.
+  static Future<Map<String, Set<String>>> getIptvChannelMembership() {
+    return IptvMediaStore.channelMembership();
+  }
+
+  /// Membership + per-(list, url) origin providers in one read (see
+  /// [IptvMediaStore.membershipSnapshot]).
+  static Future<
+    ({
+      Map<String, Set<String>> membership,
+      Map<(String, String), String> origins,
+    })
+  >
+  getIptvMembershipSnapshot() {
+    return IptvMediaStore.membershipSnapshot();
+  }
+
+  /// The lists one channel belongs to, matched canonically.
+  static Future<Set<String>> getIptvListsForChannel(String channelUrl) {
+    return IptvMediaStore.listsForChannel(channelUrl);
+  }
+
+
+  /// Remove every membership belonging to a playlist, across all lists.
+  static Future<void> removeIptvListChannelsByPlaylistId(String playlistId) {
+    return IptvMediaStore.removeListChannelsByPlaylistId(playlistId);
   }
 
   /// Per-channel HTTP headers stored with a favorite (see
@@ -5248,10 +5344,20 @@ class StorageService {
         .toList();
   }
 
-  /// Save IPTV playlists
+  /// Save IPTV playlists.
+  ///
+  /// Virtual playlists (Favorites, custom lists, Continue watching, Stremio
+  /// addon shelves) are dropped here rather than trusted not to arrive: the
+  /// page's own list holds real and virtual entries side by side, and a
+  /// virtual one that reached the preference would be restored AND injected
+  /// on the next load — two entries with the same id, where id-only equality
+  /// makes lookups resolve the stale copy.
   static Future<void> setIptvPlaylists(List<IptvPlaylist> playlists) async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonList = playlists.map((p) => jsonEncode(p.toJson())).toList();
+    final jsonList = playlists
+        .where((p) => !p.isVirtual)
+        .map((p) => jsonEncode(p.toJson()))
+        .toList();
     await prefs.setStringList(_iptvPlaylistsKey, jsonList);
   }
 
