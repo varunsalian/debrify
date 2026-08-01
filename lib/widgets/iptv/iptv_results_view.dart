@@ -4000,6 +4000,10 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (focused) _clearPreview();
   }
 
+  /// Every route into IPTV settings from this page is an "Add playlist"
+  /// affordance — the source dropdown's entry, the filter bar's picker, the
+  /// empty state's button — so open settings ON the add form rather than
+  /// dropping the user at its default landing to go hunting for it.
   void _navigateToSettings() {
     // Captured for the EPG-URL-edit case below: _loadSettings only reloads
     // the playlist when the SELECTION changes, so an edit to the current
@@ -4008,7 +4012,11 @@ class IptvResultsViewState extends State<IptvResultsView>
     final beforeId = _selectedPlaylist?.id;
     final beforeEpgUrl = _selectedPlaylist?.epgUrl;
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const IptvSettingsPage()))
+        .push(
+          MaterialPageRoute(
+            builder: (_) => const IptvSettingsPage(openAddSource: true),
+          ),
+        )
         .then((_) async {
           // Reload settings when returning
           await _loadSettings();

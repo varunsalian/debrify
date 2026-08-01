@@ -20,7 +20,13 @@ import 'iptv_settings_two_pane.dart';
 import 'widgets/settings_widgets.dart';
 
 class IptvSettingsPage extends StatefulWidget {
-  const IptvSettingsPage({super.key});
+  const IptvSettingsPage({super.key, this.openAddSource = false});
+
+  /// Opened by an "Add playlist" affordance rather than from the settings
+  /// list: land on the add form itself instead of making the user find it.
+  /// The wide layout opens its Add pane (see [IptvSettingsTwoPane]); the
+  /// single column already puts Add Playlist first, so it needs nothing.
+  final bool openAddSource;
 
   @override
   State<IptvSettingsPage> createState() => _IptvSettingsPageState();
@@ -320,7 +326,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         // that flag is set by a later post-frame than this one.
         final twoPane = _twoPaneKey.currentState;
         if (twoPane != null) {
-          twoPane.focusRail();
+          // Arrived from an "Add playlist" button: hand DPAD to the add method
+          // chooser, not to the rail — the user already chose the destination.
+          if (widget.openAddSource) {
+            twoPane.focusAddPane();
+          } else {
+            twoPane.focusRail();
+          }
           return;
         }
         _urlTabFocusNode.requestFocus();
@@ -1434,6 +1446,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Widget _buildTwoPane() {
     return IptvSettingsTwoPane(
       key: _twoPaneKey,
+      openAddSource: widget.openAddSource,
       playlists: _playlists,
       defaultPlaylistId: _defaultPlaylistId,
       refreshingIds: _refreshingIds,

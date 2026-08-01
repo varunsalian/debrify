@@ -58,7 +58,13 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.onToggleStartup,
     required this.onStartupModeChanged,
     required this.onPickStartupChannel,
+    this.openAddSource = false,
   });
+
+  /// The page was opened by an "Add playlist" affordance (the IPTV page's
+  /// source dropdown, its empty state), not by a plain visit to settings — so
+  /// open ON the Add pane instead of the source the page normally lands on.
+  final bool openAddSource;
 
   final List<IptvPlaylist> playlists;
   final String? defaultPlaylistId;
@@ -162,9 +168,11 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     _syncRailNodes();
     _syncStats();
     // Land on the default source (or the first one) rather than on "Add" —
-    // the common visit is to manage what you already have.
-    final initial = _initialDest();
-    _dest.value = initial;
+    // the common visit is to manage what you already have. Unless the caller
+    // came here to add: then "Add" is the whole point of the trip. Deliberately
+    // only the OPENING landing — the later re-homing below (a deleted source
+    // leaving the pane pointing at a ghost) still goes through _initialDest.
+    _dest.value = widget.openAddSource ? const _AddDest() : _initialDest();
   }
 
   @override
@@ -263,6 +271,25 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   /// Entry point for the page's back button: hand DPAD to the rail entry the
   /// pane currently belongs to, never blindly to the first one.
   void focusRail() => _focusRail(_selectedRailIndex);
+
+  /// TV entry point for an "Add playlist" deep-link: skip the rail entirely and
+  /// put DPAD straight on the add method chooser, the way OK on the rail's
+  /// "Add a source" entry would. LEFT out of the pane still returns to that
+  /// entry, so the rail is one keypress away.
+  void focusAddPane() {
+    final alreadyThere = _dest.value is _AddDest;
+    _dest.value = const _AddDest();
+    if (alreadyThere) {
+      _enterPane();
+      return;
+    }
+    // The pane is still showing something else this frame, so the method
+    // chooser's node is attached to nothing — and requesting focus on an
+    // unattached node silently strands DPAD. Wait for the switch.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _enterPane();
+    });
+  }
 
   /// The rail index currently selected, so LEFT out of the pane returns to
   /// the entry the pane belongs to.
