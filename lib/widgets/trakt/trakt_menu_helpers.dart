@@ -211,6 +211,11 @@ Future<void> handleTraktMenuAction(
   Future<void> Function(StremioMeta)? onPlayRandomEpisode,
   void Function(StremioMeta)? onSearchPacks,
   Future<void> Function(StremioMeta)? onAddToStremioTv,
+  /// Skips the rating dialog for [TraktItemMenuAction.rate] and submits this
+  /// value directly — for surfaces that pick the rating themselves (the merged
+  /// detail sheet's inline 1–10 strip). Omit it and the dialog behaves as
+  /// before.
+  int? presetRating,
 }) async {
   final traktService = TraktService.instance;
   final imdbId = item.effectiveImdbId ?? item.id;
@@ -230,7 +235,7 @@ Future<void> handleTraktMenuAction(
       success = await traktService.addToHistory(imdbId, type);
     case TraktItemMenuAction.rate:
       if (!context.mounted) return;
-      final rating = await showTraktRatingDialog(context);
+      final rating = presetRating ?? await showTraktRatingDialog(context);
       if (rating == null) return;
       actionLabel = 'Rated $rating/10 on Trakt';
       success = await traktService.rateItem(imdbId, type, rating);

@@ -35,6 +35,14 @@ class Controls extends StatelessWidget {
   final bool hideSeekbar;
   final bool hideOptions;
   final bool hideBackButton;
+
+  /// Playback speed is meaningless on a live stream — the native TV dock
+  /// drops it for live channels too.
+  final bool hideSpeed;
+
+  /// Shuffle needs a playlist to pick from. IPTV sessions have none, so the
+  /// button opens a menu that cannot do anything.
+  final bool hideRandom;
   final VoidCallback onRandom;
   final bool hasIptvChannels;
   final VoidCallback? onShowIptvChannels;
@@ -42,6 +50,12 @@ class Controls extends StatelessWidget {
   final VoidCallback? onShowStremioSources;
   final bool showPipButton;
   final VoidCallback? onPip;
+
+  /// Optional panel glued to the top edge of the bottom bar, so the two read
+  /// as one surface. Live IPTV puts its channel identity and now/next here:
+  /// the dock owns this strip, so the zap banner joins it rather than
+  /// fighting it for the space.
+  final Widget? infoPanel;
 
   const Controls({
     Key? key,
@@ -77,6 +91,8 @@ class Controls extends StatelessWidget {
     required this.hideSeekbar,
     required this.hideOptions,
     required this.hideBackButton,
+    this.hideSpeed = false,
+    this.hideRandom = false,
     required this.onRandom,
     this.hasIptvChannels = false,
     this.onShowIptvChannels,
@@ -84,6 +100,7 @@ class Controls extends StatelessWidget {
     this.onShowStremioSources,
     this.showPipButton = false,
     this.onPip,
+    this.infoPanel,
   }) : super(key: key);
 
   String _getAspectRatioName() {
@@ -260,202 +277,220 @@ class Controls extends StatelessWidget {
                 ],
               ),
 
-              // Netflix-style Bottom Bar with all controls (conditionally shown)
-              if (!hideOptions)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Progress bar with time indicators
-                      Row(
+              // The bottom unit: optional info panel glued to the top of the
+              // bottom bar. Kept in one Column so they move together and
+              // nothing can open a gap between them.
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (infoPanel != null) infoPanel!,
+                  // Netflix-style Bottom Bar with all controls (conditionally shown)
+                  if (!hideOptions)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (!hideSeekbar) ...[
-                            Text(
-                              _format(position),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  trackHeight: 4,
-                                  activeTrackColor: const Color(0xFFE50914),
-                                  inactiveTrackColor: Colors.white.withOpacity(
-                                    0.3,
-                                  ),
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 6,
-                                    elevation: 2,
-                                  ),
-                                  thumbColor: const Color(0xFFE50914),
-                                  overlayShape: const RoundSliderOverlayShape(
-                                    overlayRadius: 12,
+                          // Progress bar with time indicators
+                          Row(
+                            children: [
+                              if (!hideSeekbar) ...[
+                                Text(
+                                  _format(position),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                                child: Slider(
-                                  min: 0,
-                                  max: 1,
-                                  value:
-                                      (position.inMilliseconds /
-                                              (total.inMilliseconds == 0
-                                                  ? 1
-                                                  : total.inMilliseconds))
-                                          .clamp(0.0, 1.0),
-                                  onChangeStart: (_) => onSeekBarChangedStart(),
-                                  onChanged: (v) => onSeekBarChanged(v),
-                                  onChangeEnd: (_) => onSeekBarChangeEnd(),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      trackHeight: 4,
+                                      activeTrackColor: const Color(0xFFE50914),
+                                      inactiveTrackColor: Colors.white
+                                          .withOpacity(0.3),
+                                      thumbShape: const RoundSliderThumbShape(
+                                        enabledThumbRadius: 6,
+                                        elevation: 2,
+                                      ),
+                                      thumbColor: const Color(0xFFE50914),
+                                      overlayShape:
+                                          const RoundSliderOverlayShape(
+                                            overlayRadius: 12,
+                                          ),
+                                    ),
+                                    child: Slider(
+                                      min: 0,
+                                      max: 1,
+                                      value:
+                                          (position.inMilliseconds /
+                                                  (total.inMilliseconds == 0
+                                                      ? 1
+                                                      : total.inMilliseconds))
+                                              .clamp(0.0, 1.0),
+                                      onChangeStart: (_) =>
+                                          onSeekBarChangedStart(),
+                                      onChanged: (v) => onSeekBarChanged(v),
+                                      onChangeEnd: (_) => onSeekBarChangeEnd(),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  _format(duration),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+
+                          // Separates the seek row from the buttons. Dropped
+                          // only when there is no seek row AND a panel above
+                          // it, where it would be a band of dead space under
+                          // the panel. Other seekbar-less flows (Debrify TV)
+                          // keep the spacing they have always had.
+                          if (!(hideSeekbar && infoPanel != null))
+                            const SizedBox(height: 16),
+
+                          // Netflix-style control buttons row - responsive layout
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                // Previous episode button
+                                if (hasPrevious)
+                                  NetflixControlButton(
+                                    icon: Icons.skip_previous_rounded,
+                                    label: 'Previous',
+                                    onPressed: onPrevious!,
+                                    isCompact: true,
+                                  ),
+
+                                // Play/Pause button
+                                NetflixControlButton(
+                                  icon: isPlaying
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  label: isPlaying ? 'Pause' : 'Play',
+                                  onPressed: onPlayPause,
+                                  isPrimary: true,
+                                  isCompact: true,
+                                ),
+
+                                // Next episode button
+                                if (hasNext)
+                                  NetflixControlButton(
+                                    icon: Icons.skip_next_rounded,
+                                    label: 'Next',
+                                    onPressed: onNext!,
+                                    isCompact: true,
+                                  ),
+
+                                // Next channel button
+                                if (hasNextChannel && onNextChannel != null)
+                                  NetflixControlButton(
+                                    icon: Icons.tv_rounded,
+                                    label: 'Next Channel',
+                                    onPressed: onNextChannel!,
+                                    isCompact: true,
+                                  ),
+
+                                // Channel guide button
+                                if (hasGuide && onShowGuide != null)
+                                  NetflixControlButton(
+                                    icon: Icons.grid_view_rounded,
+                                    label: 'Guide',
+                                    onPressed: onShowGuide!,
+                                    isCompact: true,
+                                  ),
+
+                                // IPTV Channels button
+                                if (hasIptvChannels &&
+                                    onShowIptvChannels != null)
+                                  NetflixControlButton(
+                                    icon: Icons.calendar_view_week_rounded,
+                                    label: 'Guide',
+                                    onPressed: onShowIptvChannels!,
+                                    isCompact: true,
+                                  ),
+
+                                // Stremio Sources button
+                                if (hasStremioSources &&
+                                    onShowStremioSources != null)
+                                  NetflixControlButton(
+                                    icon: Icons.swap_horiz_rounded,
+                                    label: 'Sources',
+                                    onPressed: onShowStremioSources!,
+                                    isCompact: true,
+                                  ),
+
+                                // Speed indicator and button
+                                if (!hideSpeed)
+                                  NetflixControlButton(
+                                    icon: Icons.speed_rounded,
+                                    label: '${speed}x',
+                                    onPressed: onSpeed,
+                                    isCompact: true,
+                                  ),
+
+                                // Aspect ratio button
+                                NetflixControlButton(
+                                  icon: Icons.aspect_ratio_rounded,
+                                  label: _getAspectRatioName(),
+                                  onPressed: onAspect,
+                                  isCompact: true,
+                                ),
+
+                                // Audio & subtitles button
+                                NetflixControlButton(
+                                  icon: Icons.subtitles_rounded,
+                                  label: 'Audio & Subs',
+                                  onPressed: onShowTracks,
+                                  isCompact: true,
+                                ),
+
+                                // Playlist button
+                                if (hasPlaylist)
+                                  NetflixControlButton(
+                                    icon: Icons.playlist_play_rounded,
+                                    label: 'Episodes',
+                                    onPressed: onShowPlaylist,
+                                    isCompact: true,
+                                  ),
+
+                                // Random button
+                                if (!hideRandom)
+                                  NetflixControlButton(
+                                    icon: Icons.shuffle_rounded,
+                                    label: 'Random',
+                                    onPressed: onRandom,
+                                    isCompact: true,
+                                  ),
+
+                                // Orientation toggle button
+                                NetflixControlButton(
+                                  icon: Icons.screen_rotation_rounded,
+                                  label: isLandscape ? 'Portrait' : 'Landscape',
+                                  onPressed: onRotate,
+                                  isCompact: true,
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Text(
-                              _format(duration),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ] else ...[
-                            const SizedBox.shrink(),
-                          ],
+                          ),
                         ],
                       ),
-
-                      const SizedBox(height: 16),
-
-                      // Netflix-style control buttons row - responsive layout
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            // Previous episode button
-                            if (hasPrevious)
-                              NetflixControlButton(
-                                icon: Icons.skip_previous_rounded,
-                                label: 'Previous',
-                                onPressed: onPrevious!,
-                                isCompact: true,
-                              ),
-
-                            // Play/Pause button
-                            NetflixControlButton(
-                              icon: isPlaying
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              label: isPlaying ? 'Pause' : 'Play',
-                              onPressed: onPlayPause,
-                              isPrimary: true,
-                              isCompact: true,
-                            ),
-
-                            // Next episode button
-                            if (hasNext)
-                              NetflixControlButton(
-                                icon: Icons.skip_next_rounded,
-                                label: 'Next',
-                                onPressed: onNext!,
-                                isCompact: true,
-                              ),
-
-                            // Next channel button
-                            if (hasNextChannel && onNextChannel != null)
-                              NetflixControlButton(
-                                icon: Icons.tv_rounded,
-                                label: 'Next Channel',
-                                onPressed: onNextChannel!,
-                                isCompact: true,
-                              ),
-
-                            // Channel guide button
-                            if (hasGuide && onShowGuide != null)
-                              NetflixControlButton(
-                                icon: Icons.grid_view_rounded,
-                                label: 'Guide',
-                                onPressed: onShowGuide!,
-                                isCompact: true,
-                              ),
-
-                            // IPTV Channels button
-                            if (hasIptvChannels && onShowIptvChannels != null)
-                              NetflixControlButton(
-                                icon: Icons.calendar_view_week_rounded,
-                                label: 'Guide',
-                                onPressed: onShowIptvChannels!,
-                                isCompact: true,
-                              ),
-
-                            // Stremio Sources button
-                            if (hasStremioSources && onShowStremioSources != null)
-                              NetflixControlButton(
-                                icon: Icons.swap_horiz_rounded,
-                                label: 'Sources',
-                                onPressed: onShowStremioSources!,
-                                isCompact: true,
-                              ),
-
-                            // Speed indicator and button
-                            NetflixControlButton(
-                              icon: Icons.speed_rounded,
-                              label: '${speed}x',
-                              onPressed: onSpeed,
-                              isCompact: true,
-                            ),
-
-                            // Aspect ratio button
-                            NetflixControlButton(
-                              icon: Icons.aspect_ratio_rounded,
-                              label: _getAspectRatioName(),
-                              onPressed: onAspect,
-                              isCompact: true,
-                            ),
-
-                            // Audio & subtitles button
-                            NetflixControlButton(
-                              icon: Icons.subtitles_rounded,
-                              label: 'Audio & Subs',
-                              onPressed: onShowTracks,
-                              isCompact: true,
-                            ),
-
-                            // Playlist button
-                            if (hasPlaylist)
-                              NetflixControlButton(
-                                icon: Icons.playlist_play_rounded,
-                                label: 'Episodes',
-                                onPressed: onShowPlaylist,
-                                isCompact: true,
-                              ),
-
-                            // Random button
-                            NetflixControlButton(
-                              icon: Icons.shuffle_rounded,
-                              label: 'Random',
-                              onPressed: onRandom,
-                              isCompact: true,
-                            ),
-
-                            // Orientation toggle button
-                            NetflixControlButton(
-                              icon: Icons.screen_rotation_rounded,
-                              label: isLandscape ? 'Portrait' : 'Landscape',
-                              onPressed: onRotate,
-                              isCompact: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                ],
+              ),
             ],
           ),
         ),

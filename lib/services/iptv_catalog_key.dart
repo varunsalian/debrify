@@ -32,14 +32,11 @@ class IptvCatalogKey {
   ];
 
   /// The key for this playlist + content type, or null when the source isn't
-  /// cacheable at all. Virtual shelves (favorites, continue-watching), Stremio
-  /// addons and local files have no stable remote identity, so they stay
-  /// materialized in memory instead of living as rows.
+  /// cacheable at all. Virtual shelves (favorites, custom lists,
+  /// continue-watching), Stremio addons and local files have no stable remote
+  /// identity, so they stay materialized in memory instead of living as rows.
   static String? forPlaylist(IptvPlaylist playlist, String contentType) {
-    if (playlist.isFavorites ||
-        playlist.isContinueWatching ||
-        playlist.isStremioAddon ||
-        playlist.isLocalFile) {
+    if (playlist.isVirtual || playlist.isLocalFile) {
       return null;
     }
     if (playlist.isXtreamCodes) {

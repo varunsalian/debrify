@@ -1358,9 +1358,13 @@ class IptvCatalogDb {
     }
   }
 
-  /// Every channel URL in the current generation of [catalogKey], in
-  /// catalog order.
-  static List<String> catalogUrls({
+  /// Every channel in the current generation of [catalogKey] with the fields
+  /// that decide how a stored list row presents itself — live vs on-demand,
+  /// and the runtime a progress bar needs. Used by the reconcile pass to
+  /// backfill membership rows migrated from the old favorites table, which
+  /// predate those columns.
+  static List<({String url, String? contentType, int? duration})>
+      catalogPresentationRows({
     required String dbPath,
     required String catalogKey,
   }) {
@@ -1372,11 +1376,18 @@ class IptvCatalogDb {
       );
       if (gen.isEmpty) return const [];
       final rows = db.select(
-        'SELECT url FROM channels '
+        'SELECT url, content_type, duration FROM channels '
         'WHERE catalog_key = ? AND generation = ? ORDER BY position',
         [catalogKey, gen.first['generation'] as int],
       );
-      return [for (final row in rows) row['url'] as String];
+      return [
+        for (final row in rows)
+          (
+            url: row['url'] as String,
+            contentType: row['content_type'] as String?,
+            duration: (row['duration'] as num?)?.toInt(),
+          ),
+      ];
     } finally {
       db.dispose();
     }
@@ -1928,6 +1939,27 @@ class CatalogSnapshot {
       [..._args(group: group), url, name],
     );
     return rows.isEmpty ? null : rows.first['position'] as int;
+  }
+
+  /// Catalog entry (position + row) matching url+name, or null.
+  ///
+  /// Unlike [positionOf] this hands back the row itself, which the startup
+  /// channel needs: it must adopt the target's OWN group as the active category
+  /// before it can convert a catalog position into a filtered index, and a bare
+  /// position cannot say what that group is.
+  ({int position, IptvChannel channel})? entryForUrl({
+    required String url,
+    required String name,
+    bool? live,
+  }) {
+    final rows = _db.select(
+      'SELECT * ${_where(live: live)} AND url = ? AND name = ? '
+      'ORDER BY position LIMIT 1',
+      [..._args(), url, name],
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return (position: row['position'] as int, channel: _channelFromRow(row));
   }
 
   /// Catalog position of an assigned live-channel number.

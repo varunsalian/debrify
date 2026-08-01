@@ -41,11 +41,26 @@ void main() {
   // the healthy-panel case whose catchup flags the schedule path must keep.
   var serveDataTable = false;
 
-  String guideXml() {
+  DateTime guideStart() {
     final now = DateTime.now().toUtc();
+    return DateTime.utc(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+    ).subtract(const Duration(minutes: 30));
+  }
+
+  String rawPanelTime(DateTime time) =>
+      '${time.year.toString().padLeft(4, '0')}-'
+      '${time.month.toString().padLeft(2, '0')}-'
+      '${time.day.toString().padLeft(2, '0')} '
+      '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}:00';
+
+  String guideXml() {
     const slot = Duration(minutes: 30);
-    final start = DateTime.utc(now.year, now.month, now.day, now.hour)
-        .subtract(slot);
+    final start = guideStart();
     String fmt(DateTime t) =>
         '${t.year.toString().padLeft(4, '0')}'
         '${t.month.toString().padLeft(2, '0')}'
@@ -54,17 +69,23 @@ void main() {
         '${t.minute.toString().padLeft(2, '0')}00 +0000';
     final b = StringBuffer('<?xml version="1.0" encoding="UTF-8"?><tv>');
     // Guide publishes lowercase ids; the "playlist" below carries uppercase.
-    b.write('<channel id="mock1.test">'
-        '<display-name>Mock One</display-name></channel>');
-    b.write('<channel id="namedonly.guide">'
-        '<display-name>Named Only Channel</display-name></channel>');
+    b.write(
+      '<channel id="mock1.test">'
+      '<display-name>Mock One</display-name></channel>',
+    );
+    b.write(
+      '<channel id="namedonly.guide">'
+      '<display-name>Named Only Channel</display-name></channel>',
+    );
     for (final id in ['mock1.test', 'namedonly.guide']) {
       for (var i = 0; i < 8; i++) {
         final s = start.add(slot * i);
         final e = start.add(slot * (i + 1));
-        b.write('<programme start="${fmt(s)}" stop="${fmt(e)}" '
-            'channel="$id"><title>Show $i on $id</title>'
-            '<desc>Description $i</desc></programme>');
+        b.write(
+          '<programme start="${fmt(s)}" stop="${fmt(e)}" '
+          'channel="$id"><title>Show $i on $id</title>'
+          '<desc>Description $i</desc></programme>',
+        );
       }
     }
     b.write('</tv>');
@@ -83,26 +104,34 @@ void main() {
         xmltvHits++;
         // Served as a gzip FILE (magic bytes), like real panels do.
         final body = gzip.encode(utf8.encode(guideXml()));
-        request.response.headers.contentType =
-            ContentType('application', 'octet-stream');
+        request.response.headers.contentType = ContentType(
+          'application',
+          'octet-stream',
+        );
         request.response.add(body);
       } else {
         shortEpgHits++;
         request.response.headers.contentType = ContentType.json;
         final action = request.uri.queryParameters['action'] ?? '';
         if (serveDataTable && action == 'get_simple_data_table') {
-          // Healthy panel: a data table with archive flags on past rows.
-          final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-          const slot = 1800;
-          final start = (now ~/ slot) * slot;
+          // Healthy catch-up metadata, but with the real-world provider bug
+          // this regression covers: the data-table timeline is two hours
+          // ahead of the otherwise-correct xmltv.php timeline.
+          const slot = Duration(minutes: 30);
+          final start = guideStart();
           final rows = [
-            for (var i = -2; i < 4; i++)
+            for (var i = 0; i < 8; i++)
               {
-                'title': base64Encode(utf8.encode('Panel Show ${i + 2}')),
+                'title': base64Encode(utf8.encode('Show $i on mock1.test')),
                 'description': '',
-                'start_timestamp': '${start + i * slot}',
-                'stop_timestamp': '${start + (i + 1) * slot}',
-                if (i < 0) 'has_archive': 1,
+                'start_timestamp':
+                    '${start.add(slot * i).add(const Duration(hours: 2)).millisecondsSinceEpoch ~/ 1000}',
+                'stop_timestamp':
+                    '${start.add(slot * (i + 1)).add(const Duration(hours: 2)).millisecondsSinceEpoch ~/ 1000}',
+                'start': rawPanelTime(
+                  start.add(slot * i).add(const Duration(hours: 2)),
+                ),
+                if (i == 0) 'has_archive': 1,
               },
           ];
           request.response.write(jsonEncode({'epg_listings': rows}));
@@ -122,23 +151,24 @@ void main() {
   });
 
   IptvChannel liveChannel(int id, {String? tvgId, String? name}) => IptvChannel(
-        name: name ?? 'Channel $id',
-        url: 'http://127.0.0.1:$port/live/user/pass/$id.ts',
-        duration: -1,
-        contentType: 'live',
-        attributes: {if (tvgId != null) 'tvg-id': tvgId},
-      );
+    name: name ?? 'Channel $id',
+    url: 'http://127.0.0.1:$port/live/user/pass/$id.ts',
+    duration: -1,
+    contentType: 'live',
+    attributes: {if (tvgId != null) 'tvg-id': tvgId},
+  );
 
-  test(
-      'healthy panel: schedule prefers the per-stream data table (catchup '
-      'flags survive) while now/next keeps the local XMLTV fast path',
-      () async {
+  test('shifted panel: schedule keeps the XMLTV timeline while merging '
+      'catchup metadata', () async {
     serveDataTable = true;
     final ch = liveChannel(10, tvgId: 'MOCK1.TEST');
     // Distinct guide URL => distinct snapshot, so this test's filtered
     // snapshot can't shadow the next test's channels.
     final epgUrl = IptvEpgService.xmltvUrlFor(
-        'http://127.0.0.1:$port', 'ordering', 'pass');
+      'http://127.0.0.1:$port',
+      'ordering',
+      'pass',
+    );
     final status = await IptvEpgService.instance.setM3uEpgContext(
       playlistKey: 'itest-order',
       epgUrl: epgUrl,
@@ -146,37 +176,58 @@ void main() {
     );
     expect(status, M3uEpgStatus.matched);
 
-    // Schedule = per-stream rows, not the XMLTV index — and the archive
-    // flags catchup replay needs are intact.
-    final schedule = await IptvEpgService.instance.schedule(ch.url);
-    expect(schedule.any((p) => p.title.startsWith('Panel Show')), isTrue,
-        reason: 'per-stream data table must win over the XMLTV index');
-    expect(schedule.any((p) => p.hasArchive), isTrue,
-        reason: 'has_archive flags must survive for catchup');
+    final before = IptvEpgService.instance.peekNowNext(ch.url);
+    expect(before?.now, isNotNull);
 
-    // now/next still answers instantly from the local XMLTV index.
-    final peek = IptvEpgService.instance.peekNowNext(ch.url);
-    expect(peek, isNotNull);
-    expect(peek!.now?.title, contains('mock1.test'));
+    // The visible schedule stays on the same XMLTV timeline as the card even
+    // though the provider's data table is shifted by two hours.
+    final schedule = await IptvEpgService.instance.schedule(ch.url);
+    final scheduleNow = schedule.firstWhere((p) => p.airsAt(DateTime.now()));
+    expect(scheduleNow.title, before!.now!.title);
+    expect(scheduleNow.start, before.now!.start);
+
+    // Catch-up metadata still rides on the matching XMLTV row, including the
+    // raw panel-local start the replay URL requires. Display time is not
+    // shifted to that raw value.
+    final archived = schedule.firstWhere((p) => p.hasArchive);
+    expect(archived.title, 'Show 0 on mock1.test');
+    expect(
+      archived.start.millisecondsSinceEpoch,
+      guideStart().millisecondsSinceEpoch,
+    );
+    expect(
+      archived.rawStart,
+      rawPanelTime(guideStart().add(const Duration(hours: 2))),
+    );
+    expect(
+      IptvEpgService.catchupStart(archived),
+      rawPanelTime(
+        guideStart().add(const Duration(hours: 2)),
+      ).substring(0, 16).replaceFirst(' ', ':').replaceFirst(':', '-', 13),
+    );
 
     serveDataTable = false;
     IptvEpgService.instance.clearM3uEpgContext();
   });
 
-  test(
-      'broken-short_epg panel: xmltv.php layering delivers now/next '
+  test('broken-short_epg panel: xmltv.php layering delivers now/next '
       '(case-insensitive ids + name-only fallback), snapshot survives '
       'the panel going down', () async {
     xmltvHits = 0; // this test's guide URL is distinct from the one above
     // Channels shaped exactly like XtreamCodesService builds them.
     final byId = liveChannel(1, tvgId: 'MOCK1.TEST'); // case-mismatched id
-    final byName =
-        liveChannel(2, name: 'Named Only Channel'); // no tvg-id at all
+    final byName = liveChannel(
+      2,
+      name: 'Named Only Channel',
+    ); // no tvg-id at all
     final uncovered = liveChannel(3, tvgId: 'not.in.guide');
     final channels = [byId, byName, uncovered];
 
-    final epgUrl =
-        IptvEpgService.xmltvUrlFor('http://127.0.0.1:$port', 'user', 'pass');
+    final epgUrl = IptvEpgService.xmltvUrlFor(
+      'http://127.0.0.1:$port',
+      'user',
+      'pass',
+    );
 
     final status = await IptvEpgService.instance.setM3uEpgContext(
       playlistKey: 'itest',

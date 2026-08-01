@@ -31,7 +31,7 @@ class DebrifyTvDatabase {
 
     _db = await openDatabase(
       dbPath,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -113,49 +113,7 @@ class DebrifyTvDatabase {
 
         await createIptvStoreTables(db);
       },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await db.execute(
-            'ALTER TABLE tv_channels ADD COLUMN channel_number INTEGER',
-          );
-
-          final rows = await db.query(
-            'tv_channels',
-            columns: ['channel_id'],
-            orderBy: 'updated_at DESC',
-          );
-
-          var channelNumber = 1;
-          for (final row in rows) {
-            final channelId = row['channel_id'] as String?;
-            if (channelId == null || channelId.isEmpty) {
-              continue;
-            }
-            await db.update(
-              'tv_channels',
-              {'channel_number': channelNumber},
-              where: 'channel_id = ?',
-              whereArgs: [channelId],
-            );
-            channelNumber += 1;
-          }
-
-          await db.execute(
-            'CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_channels_channel_number ON tv_channels(channel_number)',
-          );
-        }
-
-        if (oldVersion < 3) {
-          await createIptvStoreTables(db);
-        }
-        // v1/v2 create this table above using the current schema, which
-        // already contains the column. Only a genuine v3 database needs ALTER.
-        if (oldVersion == 3) {
-          await db.execute(
-            'ALTER TABLE iptv_favorites ADD COLUMN channel_number INTEGER',
-          );
-        }
-      },
+      onUpgrade: runUpgrade,
     );
 
     // Ensure index exists for fresh creates (onCreate already runs for v2 DB)
@@ -171,27 +129,144 @@ class DebrifyTvDatabase {
     return db.transaction(action, exclusive: false);
   }
 
-  /// IPTV favorites / watch history / video resume tables (schema v3), used
-  /// by IptvMediaStore. `IF NOT EXISTS` so it's safe from both onCreate and
+  /// Schema migrations. Named (rather than an inline closure) so migration
+  /// tests can drive it against a database opened at an older version.
+  @visibleForTesting
+  static Future<void> runUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE tv_channels ADD COLUMN channel_number INTEGER',
+      );
+
+      final rows = await db.query(
+        'tv_channels',
+        columns: ['channel_id'],
+        orderBy: 'updated_at DESC',
+      );
+
+      var channelNumber = 1;
+      for (final row in rows) {
+        final channelId = row['channel_id'] as String?;
+        if (channelId == null || channelId.isEmpty) {
+          continue;
+        }
+        await db.update(
+          'tv_channels',
+          {'channel_number': channelNumber},
+          where: 'channel_id = ?',
+          whereArgs: [channelId],
+        );
+        channelNumber += 1;
+      }
+
+      await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_channels_channel_number ON tv_channels(channel_number)',
+      );
+    }
+
+    if (oldVersion < 3) {
+      await createIptvStoreTables(db);
+    }
+    // Only a GENUINE v3 database has an iptv_favorites table predating
+    // channel_number. v1/v2 databases got their IPTV tables from the call
+    // above, which since v5 doesn't create iptv_favorites at all — hence the
+    // `== 3` rather than `< 4`, and hence the existence check in the v5 step.
+    if (oldVersion == 3) {
+      await db.execute(
+        'ALTER TABLE iptv_favorites ADD COLUMN channel_number INTEGER',
+      );
+    }
+
+    if (oldVersion < 5) {
+      await migrateFavoritesToLists(db);
+    }
+  }
+
+  /// v5: favorites stop being their own table and become the built-in list
+  /// inside the custom-lists schema.
+  ///
+  /// The `sqlite_master` probe is load-bearing: on a v1/v2 database
+  /// [createIptvStoreTables] has already run with the CURRENT schema, so
+  /// `iptv_favorites` never existed on that path and a blind `SELECT` from it
+  /// would throw mid-upgrade. It also makes a half-completed previous attempt
+  /// (tables created, drop not reached) resumable.
+  static Future<void> migrateFavoritesToLists(DatabaseExecutor db) async {
+    await createIptvStoreTables(db);
+
+    final legacy = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      ['iptv_favorites'],
+    );
+    if (legacy.isEmpty) return;
+
+    // content_type / duration have no legacy counterpart — they stay NULL and
+    // are backfilled by the reconcile pass the first time each playlist is
+    // opened (IptvMediaStore). Until then a migrated VOD favorite keeps
+    // presenting as live, exactly as it did before this migration.
+    await db.execute('''
+      INSERT OR IGNORE INTO iptv_list_channels
+        (list_id, url, name, logo_url, channel_group, playlist_id,
+         channel_number, content_type, duration, http_headers_json, added_at)
+      SELECT ?, url, name, logo_url, channel_group, playlist_id,
+             channel_number, NULL, NULL, http_headers_json, added_at
+      FROM iptv_favorites
+    ''', [favoritesListId]);
+
+    await db.execute('DROP TABLE iptv_favorites');
+  }
+
+  /// Reserved id of the built-in Favorites list: always present, never
+  /// renamed, never deleted, and the destination of every legacy favorite.
+  static const String favoritesListId = 'favorites';
+
+  /// IPTV lists / watch history / video resume tables (schema v5), used by
+  /// IptvMediaStore. `IF NOT EXISTS` so it's safe from both onCreate and
   /// onUpgrade, and callable directly by tests on an in-memory database.
   static Future<void> createIptvStoreTables(DatabaseExecutor db) async {
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS iptv_favorites (
-        url TEXT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS iptv_lists (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        is_builtin INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS iptv_list_channels (
+        list_id TEXT NOT NULL,
+        url TEXT NOT NULL,
         name TEXT NOT NULL DEFAULT '',
         logo_url TEXT NOT NULL DEFAULT '',
         channel_group TEXT NOT NULL DEFAULT '',
         playlist_id TEXT NOT NULL DEFAULT '',
         channel_number INTEGER,
+        content_type TEXT,
+        duration INTEGER,
         http_headers_json TEXT,
-        added_at INTEGER NOT NULL DEFAULT 0
+        added_at INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (list_id, url),
+        FOREIGN KEY (list_id) REFERENCES iptv_lists(id) ON DELETE CASCADE
       )
     ''');
 
     await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_iptv_favorites_playlist
-      ON iptv_favorites(playlist_id)
+      CREATE INDEX IF NOT EXISTS idx_iptv_list_channels_playlist
+      ON iptv_list_channels(playlist_id)
     ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_iptv_list_channels_url
+      ON iptv_list_channels(url)
+    ''');
+
+    await seedBuiltinList(db);
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS iptv_watch_history (
@@ -230,5 +305,22 @@ class DebrifyTvDatabase {
         updated_at INTEGER NOT NULL DEFAULT 0
       )
     ''');
+  }
+
+  /// Insert the built-in Favorites row if it isn't already there.
+  ///
+  /// MUST be `INSERT OR IGNORE`, never `OR REPLACE`. The database opens with
+  /// `PRAGMA foreign_keys = ON`, and REPLACE resolves a conflict by DELETEing
+  /// the conflicting row with foreign-key actions firing — which would
+  /// cascade through `iptv_list_channels` and wipe every favorite. This runs
+  /// from [createIptvStoreTables], i.e. on every open, so that would be a
+  /// data-loss-on-launch bug rather than an edge case.
+  static Future<void> seedBuiltinList(DatabaseExecutor db) async {
+    await db.execute(
+      'INSERT OR IGNORE INTO iptv_lists '
+      '(id, name, position, is_builtin, created_at, updated_at) '
+      'VALUES (?, ?, 0, 1, 0, 0)',
+      [favoritesListId, 'Favorites'],
+    );
   }
 }

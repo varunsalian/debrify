@@ -102,10 +102,12 @@ class _SettingsSearchPageState extends State<SettingsSearchPage> {
     super.dispose();
   }
 
-  List<String> get _terms =>
-      _query.trim().toLowerCase().split(RegExp(r'\s+'))
-          .where((t) => t.isNotEmpty)
-          .toList();
+  List<String> get _terms => _query
+      .trim()
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((t) => t.isNotEmpty)
+      .toList();
 
   List<SettingsSearchEntry> get _filtered {
     final terms = _terms;
@@ -188,7 +190,18 @@ class _SettingsSearchPageState extends State<SettingsSearchPage> {
     String? lastCategory;
     bool firstRowAssigned = false;
 
+    // Group first. A heading is emitted on every category CHANGE, so entries
+    // that interleave categories would render the same heading twice — and
+    // the index this reads is a long hand-maintained list where one row in
+    // the wrong place is invisible until you look at the results. Grouping is
+    // stable: categories keep first-appearance order, entries keep theirs, so
+    // an already-ordered index renders exactly as before.
+    final grouped = <String, List<SettingsSearchEntry>>{};
     for (final e in filtered) {
+      grouped.putIfAbsent(e.category, () => []).add(e);
+    }
+
+    for (final e in grouped.values.expand((g) => g)) {
       if (e.category != lastCategory) {
         children.add(
           Padding(

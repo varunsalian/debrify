@@ -590,11 +590,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Reddit source is retired — card hidden, settings code kept.
         // _redditInfo,
         _iptvInfo,
+        _indexerManagersInfo,
+      ],
+      // Watch history lives on its own rail category — Connections had grown
+      // to ten cards covering five unrelated jobs.
+      trackers: [
         _traktInfo,
         _simklInfo,
         // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
         if (kMdblistEnabled) _mdblistInfo,
-        _indexerManagersInfo,
       ],
       firstFocusNode: _firstCardFocusNode,
       onOpenSearch: _openSettingsSearch,
@@ -705,15 +709,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// lands on the owning page. Per-leaf deep-links are a future extension —
   /// add entries here.
   List<SettingsSearchEntry> _buildSearchIndex() {
-    SettingsSearchEntry conn(ConnectionInfo info, List<String> keywords) =>
-        SettingsSearchEntry(
-          icon: Icons.link_rounded,
-          title: info.title,
-          subtitle: info.caption,
-          category: 'Connections',
-          keywords: keywords,
-          onTap: info.onTap,
-        );
+    SettingsSearchEntry conn(
+      ConnectionInfo info,
+      List<String> keywords, {
+      // Trakt/Simkl/MDBList now live under their own heading; search results
+      // must say where the thing actually is.
+      String category = 'Connections',
+    }) => SettingsSearchEntry(
+      icon: Icons.link_rounded,
+      title: info.title,
+      subtitle: info.caption,
+      category: category,
+      keywords: keywords,
+      onTap: info.onTap,
+    );
 
     SettingsSearchEntry nav(
       SettingsRowContent c,
@@ -748,14 +757,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'epg',
         'xtream',
       ]),
-      conn(_traktInfo, const [
-        'scrobble',
-        'sync',
-        'watch history',
-        'watchlist',
-      ]),
-      conn(_simklInfo, const ['scrobble', 'sync', 'watch history']),
-      if (kMdblistEnabled) conn(_mdblistInfo, const ['lists', 'ratings']),
+      SettingsSearchEntry(
+        icon: Icons.bookmark_rounded,
+        title: 'IPTV lists',
+        subtitle: 'Create and manage your channel lists',
+        category: 'Connections',
+        keywords: const [
+          'list',
+          'lists',
+          'favorites',
+          'favourites',
+          'saved channels',
+          'iptv',
+          'collection',
+        ],
+        onTap: _openIptvSettings,
+      ),
+      SettingsSearchEntry(
+        icon: Icons.live_tv_rounded,
+        title: 'Startup channel',
+        subtitle: 'Open straight into a live channel when the app starts',
+        category: 'Connections',
+        keywords: const [
+          'startup',
+          'start up',
+          'boot',
+          'launch',
+          'auto play',
+          'autoplay',
+          'auto launch',
+          'last watched',
+          'on open',
+          'iptv',
+          'live tv',
+        ],
+        onTap: _openIptvSettings,
+      ),
       conn(_indexerManagersInfo, const [
         'indexer',
         'torznab',
@@ -763,6 +800,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'prowlarr',
         'engines',
       ]),
+
+      // Trackers — keep this block last in the Connections neighbourhood so
+      // the two categories stay contiguous; see SettingsSearchPage.
+      conn(_traktInfo, const [
+        'scrobble',
+        'sync',
+        'watch history',
+        'watchlist',
+      ], category: 'Trackers'),
+      conn(_simklInfo, const [
+        'scrobble',
+        'sync',
+        'watch history',
+      ], category: 'Trackers'),
+      if (kMdblistEnabled)
+        conn(_mdblistInfo, const ['lists', 'ratings'], category: 'Trackers'),
 
       // General
       nav(
@@ -790,7 +843,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SettingsRows.remote,
         'General',
         _openRemoteControl,
-        keywords: const ['cast', 'handoff', 'phone', 'receive', 'send', 'setup'],
+        keywords: const [
+          'cast',
+          'handoff',
+          'phone',
+          'receive',
+          'send',
+          'setup',
+        ],
       ),
 
       // Search
@@ -1190,12 +1250,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
 
       // Home Page
-      leaf(
-        'Home Page',
-        'Home Rows',
-        'Choose which rows appear on Home',
-        const ['home rows', 'rows', 'catalogs', 'customize'],
-      ),
+      leaf('Home Page', 'Home Rows', 'Choose which rows appear on Home', const [
+        'home rows',
+        'rows',
+        'catalogs',
+        'customize',
+      ]),
       leaf(
         'Home Page',
         'Continue Watching',
@@ -1602,7 +1662,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (file.size > 20 * 1024 * 1024) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('That file is too large to be a Debrify backup.')),
+        const SnackBar(
+          content: Text('That file is too large to be a Debrify backup.'),
+        ),
       );
       return;
     }
@@ -1867,8 +1929,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // deliberately excluded: the sandbox grants read-only user-selected access,
   // so a writable custom folder needs security-scoped bookmarks (own feature).
   bool get _downloadLocationSupported =>
-      !kIsWeb &&
-      (Platform.isAndroid || Platform.isWindows || Platform.isLinux);
+      !kIsWeb && (Platform.isAndroid || Platform.isWindows || Platform.isLinux);
 
   bool get _downloadLocationUsesSaf => !kIsWeb && Platform.isAndroid;
 

@@ -86,22 +86,25 @@ class M3uParser {
           final (url, urlHeaders) = _splitUrlOptions(line.trim());
           // Accept playable stream schemes; keep the list curated so
           // non-playable entries (plugin://, file://, ...) stay filtered out.
-          if (RegExp(r'^(https?|rtmps?|rtsps?|udp|rtp|mms[ht]?|srt)://',
-                  caseSensitive: false)
-              .hasMatch(url)) {
-            channels.add(IptvChannel(
-              name: currentName,
-              url: url,
-              logoUrl: currentLogo,
-              group: currentGroup,
-              duration: currentDuration,
-              attributes: currentAttributes,
-              // Most channels declare none, and a big playlist is tens of
-              // thousands of these — don't hand each one its own empty map.
-              httpHeaders: currentHeaders.isEmpty && urlHeaders.isEmpty
-                  ? const {}
-                  : {...currentHeaders, ...urlHeaders},
-            ));
+          if (RegExp(
+            r'^(https?|rtmps?|rtsps?|udp|rtp|mms[ht]?|srt)://',
+            caseSensitive: false,
+          ).hasMatch(url)) {
+            channels.add(
+              IptvChannel(
+                name: currentName,
+                url: url,
+                logoUrl: currentLogo,
+                group: currentGroup,
+                duration: currentDuration,
+                attributes: currentAttributes,
+                // Most channels declare none, and a big playlist is tens of
+                // thousands of these — don't hand each one its own empty map.
+                httpHeaders: currentHeaders.isEmpty && urlHeaders.isEmpty
+                    ? const {}
+                    : {...currentHeaders, ...urlHeaders},
+              ),
+            );
           }
         }
 
@@ -136,14 +139,20 @@ class M3uParser {
   /// XMLTV guide URL from the `#EXTM3U` header: `url-tvg="…"` (also seen as
   /// `x-tvg-url=`, quoted or bare). The value may be a comma-separated list;
   /// only the first entry is used.
+  ///
+  /// Public so callers that only need to know *whether* a stored playlist
+  /// declares a guide can ask without parsing the whole file — one source of
+  /// truth, rather than a second copy of this regex elsewhere.
+  static String? headerEpgUrl(String header) => _parseHeaderEpgUrl(header);
+
   static String? _parseHeaderEpgUrl(String header) {
     final match = RegExp(
       '''(?:url-tvg|x-tvg-url)=(?:"([^"]*)"|'([^']*)'|(\\S+))''',
       caseSensitive: false,
     ).firstMatch(header);
     if (match == null) return null;
-    final value =
-        (match.group(1) ?? match.group(2) ?? match.group(3) ?? '').trim();
+    final value = (match.group(1) ?? match.group(2) ?? match.group(3) ?? '')
+        .trim();
     if (value.isEmpty) return null;
     final first = value.split(',').first.trim();
     if (!first.startsWith('http')) return null;
@@ -245,7 +254,8 @@ class M3uParser {
       // Unknown keys pass through when they read as a header name — a server
       // ignores request headers it doesn't know, but dropping a real one
       // (Authorization, X-...) would break the channel.
-      final name = _headerNameFor(rawKey) ??
+      final name =
+          _headerNameFor(rawKey) ??
           (RegExp(r'^[A-Za-z][A-Za-z0-9-]*$').hasMatch(rawKey) ? rawKey : null);
       if (name == null) continue;
       final value = _decodeOption(part.substring(eq + 1).trim());
@@ -351,9 +361,5 @@ class _ExtInfResult {
   final int? duration;
   final Map<String, String> attributes;
 
-  _ExtInfResult({
-    required this.name,
-    this.duration,
-    required this.attributes,
-  });
+  _ExtInfResult({required this.name, this.duration, required this.attributes});
 }

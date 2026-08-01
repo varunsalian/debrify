@@ -45,6 +45,23 @@ class IptvChannelRow extends StatefulWidget {
   final VoidCallback onTap;
   final ValueChanged<bool>? onFavoriteToggle;
 
+  /// Whether this channel is in any list at all (including Favorites) —
+  /// drives the small "saved somewhere" marker.
+  final bool inAnyList;
+
+  /// Opens the "add to list" picker — the dialog offers Favorites and a
+  /// "Create new list" row, so it is useful even before the user has made a
+  /// list of their own. Null for rows that can't be saved at all (series).
+  final VoidCallback? onOpenListPicker;
+
+  /// Whether the user has lists beyond the built-in Favorites.
+  ///
+  /// Only the TV hold gesture consults this: with no lists of their own, HOLD
+  /// OK stays a direct favorite toggle rather than growing a dialog nobody
+  /// asked for. The pointer heart always opens the picker — a tap is cheap
+  /// and reversible, a held remote button is neither.
+  final bool hasCustomLists;
+
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
 
@@ -95,6 +112,9 @@ class IptvChannelRow extends StatefulWidget {
     this.isFavorited = false,
     this.isPreviewSelected = false,
     this.onFavoriteToggle,
+    this.inAnyList = false,
+    this.onOpenListPicker,
+    this.hasCustomLists = false,
     this.onFocused,
     this.onDetached,
     this.onSchedule,
@@ -126,8 +146,9 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  // Long-press OK on TV toggles favorite; a short press still plays. The hold
-  // is driven by a controller so the focused row can show a filling heart —
+  // Long-press OK on TV toggles favorite — or opens the list picker once the
+  // user has lists of their own; a short press still plays. The hold is
+  // driven by a controller so the focused row can show a filling heart,
   // making the otherwise-invisible gesture discoverable.
   static const _favHoldDuration = Duration(milliseconds: 500);
   late final AnimationController _holdController = AnimationController(
@@ -150,7 +171,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     _holdController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         _favHoldFired = true;
-        widget.onFavoriteToggle?.call(!widget.isFavorited);
+        final openPicker = widget.onOpenListPicker;
+        if (openPicker != null && widget.hasCustomLists) {
+          openPicker();
+        } else {
+          widget.onFavoriteToggle?.call(!widget.isFavorited);
+        }
       }
     });
   }
@@ -369,9 +395,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
             event.logicalKey == LogicalKeyboardKey.space;
         if (!isSelect) return KeyEventResult.ignored;
 
-        // Without a favorite action (or off-TV), keep press-to-play.
+        // Without a favorite action or a list picker (or off-TV), keep
+        // press-to-play.
         final canHoldToFavorite =
-            widget.isTelevision && widget.onFavoriteToggle != null;
+            widget.isTelevision &&
+            (widget.onFavoriteToggle != null ||
+                widget.onOpenListPicker != null);
         if (!canHoldToFavorite) {
           if (event is KeyDownEvent) {
             widget.onTap();
@@ -412,6 +441,10 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onTap,
+          // Touch/desktop counterpart of TV's hold-OK. The row had no
+          // long-press before, so this adds a gesture rather than
+          // reinterpreting one.
+          onLongPress: widget.onOpenListPicker,
           behavior: HitTestBehavior.opaque,
           child: row,
         ),
@@ -449,9 +482,19 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   /// - TV: a non-focusable hint on the focused row ("HOLD OK" + a heart that
   ///   fills as OK is held); a small filled heart on favourited rows otherwise.
   /// - Desktop/mobile: a tappable heart, revealed on hover / when favourited /
-  ///   always on touch (no hover there).
+  ///   always on touch (no hover there). Tapping it opens the list picker so
+  ///   the channel's destination is a choice, not an assumption.
   Widget _buildFavTrailing() {
-    if (widget.onFavoriteToggle == null) return const SizedBox.shrink();
+    // Describes what HOLD OK will actually do, so the hint can't promise a
+    // picker on a remote that is really going to toggle the favorite.
+    final picksList = widget.onOpenListPicker != null && widget.hasCustomLists;
+    if (widget.onFavoriteToggle == null && !picksList) {
+      return const SizedBox.shrink();
+    }
+
+    // In a list the user made, but not favourited: a quiet bookmark so the
+    // row still reads as "saved somewhere" without competing with the heart.
+    final marksListOnly = widget.inAnyList && !widget.isFavorited;
 
     if (widget.isTelevision) {
       if (_focused) {
@@ -462,6 +505,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
             builder: (_, __) => _FavHint(
               favorited: widget.isFavorited,
               progress: _holdController.value,
+              picksList: picksList,
             ),
           ),
         );
@@ -476,16 +520,53 @@ class _IptvChannelRowState extends State<IptvChannelRow>
           ),
         );
       }
+      if (marksListOnly) {
+        return Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Icon(
+            Icons.bookmark_rounded,
+            size: 16,
+            color: Colors.white.withValues(alpha: 0.55),
+          ),
+        );
+      }
       return const SizedBox.shrink();
     }
 
-    final show = widget.isFavorited || _active || _isTouchMobile;
+    if (widget.onFavoriteToggle == null) {
+      return marksListOnly
+          ? Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Icon(
+                Icons.bookmark_rounded,
+                size: 16,
+                color: Colors.white.withValues(alpha: 0.55),
+              ),
+            )
+          : const SizedBox.shrink();
+    }
+
+    final show =
+        widget.isFavorited || marksListOnly || _active || _isTouchMobile;
     if (!show) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(left: 6),
       child: _FavButton(
         favorited: widget.isFavorited,
-        onTap: () => widget.onFavoriteToggle!(!widget.isFavorited),
+        inAnyList: widget.inAnyList,
+        // Pointer devices: the heart asks WHERE the channel should go rather
+        // than assuming Favorites. The picker offers Favorites and "Create
+        // new list", so it answers the plain case in the same one tap it
+        // used to take. Falls back to a direct toggle only for rows with no
+        // picker at all.
+        onTap: () {
+          final openPicker = widget.onOpenListPicker;
+          if (openPicker != null) {
+            openPicker();
+            return;
+          }
+          widget.onFavoriteToggle!(!widget.isFavorited);
+        },
       ),
     );
   }
@@ -783,7 +864,15 @@ class _RowEpgState extends State<_RowEpg> {
 class _FavHint extends StatelessWidget {
   final bool favorited;
   final double progress; // 0..1 hold progress
-  const _FavHint({required this.favorited, required this.progress});
+
+  /// Hold opens the list picker rather than toggling the favourite outright.
+  final bool picksList;
+
+  const _FavHint({
+    required this.favorited,
+    required this.progress,
+    this.picksList = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -831,9 +920,19 @@ class _FavHint extends StatelessWidget {
                   ),
                 ),
               Icon(
-                done ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                picksList
+                    ? Icons.playlist_add_rounded
+                    : done
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
                 size: 16,
-                color: heartColor,
+                color: picksList
+                    ? Color.lerp(
+                        Colors.white.withValues(alpha: 0.7),
+                        HomeTheme.focusGold,
+                        progress,
+                      )!
+                    : heartColor,
               ),
             ],
           ),
@@ -956,24 +1055,48 @@ class _ResumeBar extends StatelessWidget {
 
 class _FavButton extends StatelessWidget {
   final bool favorited;
+  final bool inAnyList;
   final VoidCallback onTap;
-  const _FavButton({required this.favorited, required this.onTap});
+  const _FavButton({
+    required this.favorited,
+    required this.onTap,
+    this.inAnyList = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(
-            favorited ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-            size: 18,
-            color: favorited
-                ? const Color(0xFFF43F5E)
-                : Colors.white.withValues(alpha: 0.55),
+    return Tooltip(
+      // The icon is a heart but the action is "choose where this goes", and
+      // nothing else on the row says so. The schedule button beside it is
+      // already labelled, so this matches rather than introduces a habit.
+      message: 'Save to a list',
+      // Hover only. Left at the default, Tooltip registers its own
+      // LongPressGestureRecognizer on pointer-down for touch devices; it sits
+      // deeper than the row's GestureDetector, so its timer fires first, it
+      // wins the arena, and a touch long-press ON the heart would show this
+      // label instead of opening the picker it describes. Hover is installed
+      // independently of triggerMode, so the desktop affordance survives.
+      triggerMode: TooltipTriggerMode.manual,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(
+              favorited
+                  ? Icons.favorite_rounded
+                  : inAnyList
+                  // Saved in a list the user made, just not favourited — show
+                  // it as saved rather than as an empty heart.
+                  ? Icons.bookmark_rounded
+                  : Icons.favorite_border_rounded,
+              size: 18,
+              color: favorited
+                  ? const Color(0xFFF43F5E)
+                  : Colors.white.withValues(alpha: 0.55),
+            ),
           ),
         ),
       ),

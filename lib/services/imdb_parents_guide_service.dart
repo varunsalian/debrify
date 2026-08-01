@@ -75,6 +75,9 @@ class ImdbParentsGuideService {
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0',
+          // Same 403 gate as ImdbEnrichmentService — the endpoint now wants an
+          // imdb.com referer.
+          'Referer': 'https://www.imdb.com/',
         },
         body: json.encode({
           'query': _query,

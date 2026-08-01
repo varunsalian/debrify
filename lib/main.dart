@@ -58,6 +58,7 @@ import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
 import 'services/analytics_service.dart';
 import 'services/support_remote_config_service.dart';
+import 'widgets/auto_launch_overlay.dart';
 import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
@@ -180,6 +181,7 @@ Future<void> main() async {
   // _capImageCache call right after resolves without a second channel trip.
   await _initOrientation();
   await _capImageCache();
+  await _resolveStartupChannel();
   // Old-playback-state cleanup is pure housekeeping — never block first frame
   // on a storage sweep (slow flash on TV boxes).
   unawaited(_cleanupPlaybackState());
@@ -199,6 +201,37 @@ Future<void> main() async {
       await windowManager.show();
       await windowManager.focus();
     });
+  }
+}
+
+/// Resolve the IPTV startup channel BEFORE runApp.
+///
+/// It has to be settled synchronously by the time `_MainPageState` is
+/// constructed: `_selectedIndex` is a field initializer, so an async prefs read
+/// would land after the first build — Home would mount and begin its cold-start
+/// IO before we could swap to IPTV, which is both a visible flash and wasted
+/// work. Same reasoning as [PlatformUtil.isAndroidTvCached] being warmed here.
+///
+/// The launch intent is resolved first and wins: opening the app with a magnet
+/// or a shared link is an explicit request that must not be buried under an
+/// auto-tuned channel.
+Future<void> _resolveStartupChannel() async {
+  try {
+    // Cheap prefs read FIRST. The intent preflight below costs two platform
+    // channel round trips, and this runs before the first frame on every cold
+    // start — making every user pay that so the small minority with a startup
+    // channel can have one would be a plain boot regression.
+    if (!await StorageService.getStartupIptvEnabled()) return;
+    await DeepLinkService.preflightLaunchIntent();
+    if (DeepLinkService.launchedByIntent) return;
+    await StorageService.warmStartupIptv();
+    final channel = StorageService.startupIptvChannelCached;
+    if (channel != null) {
+      MainPageBridge.setIptvStartupChannel(channel);
+    }
+  } catch (e) {
+    // A startup channel is a convenience; never let it break the boot.
+    debugPrint('Startup channel resolve failed: $e');
   }
 }
 
@@ -640,7 +673,12 @@ class _SupportCampaignDialogState extends State<_SupportCampaignDialog> {
 class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   static bool _didAutoUpdateCheck = false;
 
-  int _selectedIndex = 15; // Home (the Stremio board); old index-0 Home retired
+  // Home (the Stremio board; old index-0 Home retired) — unless a startup
+  // channel is pending, in which case boot straight to IPTV (13) so the page
+  // that owns the launch is the one that mounts. Resolved in main() before
+  // runApp precisely so this initializer can read it; tab 13 is unconditional
+  // in _computeVisibleNavIndices, so it can never be swallowed.
+  int _selectedIndex = MainPageBridge.hasPendingIptvStartup ? 13 : 15;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   bool _hasRealDebridKey = false;
@@ -667,6 +705,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // platform check here used to flash the non-TV chrome (the old top bar) on
   // TV for a frame or two before setState flipped the flag.
   bool _isAndroidTv = PlatformUtil.isAndroidTvCached;
+
+  /// Covers the boot while the IPTV startup channel resolves and launches.
+  /// Torn down by [MainPageBridge.notifyPlayerLaunching] (which every playback
+  /// path already calls) or by cancellation.
+  bool _showIptvStartupOverlay = false;
+
+  void _hideIptvStartupOverlay() {
+    if (!mounted) {
+      _showIptvStartupOverlay = false;
+      return;
+    }
+    if (_showIptvStartupOverlay) setState(() => _showIptvStartupOverlay = false);
+  }
+
+  /// BACK / timeout during the startup launch. Cancels the attempt itself —
+  /// clearing the pending payload alone would not stop work already in flight,
+  /// which is why the bridge bumps an epoch and calls into the IPTV page.
+  void _cancelIptvStartup() {
+    MainPageBridge.cancelIptvStartupChannel();
+    _hideIptvStartupOverlay();
+  }
 
   // Back button press tracking for Android TV exit
   DateTime? _lastBackPressTime;
@@ -779,6 +838,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    // Startup channel: show the cover immediately so the user never sees the
+    // IPTV page assembling itself underneath, and publish the splash hand-off
+    // signal — AppInitializer waits on homeBoardReady, which only the Home
+    // board sets, so booting to tab 13 would otherwise stall on its 10s valve.
+    if (MainPageBridge.hasPendingIptvStartup) {
+      _showIptvStartupOverlay = true;
+      MainPageBridge.hideAutoLaunchOverlay = _hideIptvStartupOverlay;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        MainPageBridge.homeBoardReady.value = true;
+      });
+    }
     // Expose tab switcher for deep-link flows
     MainPageBridge.switchTab = (int index) {
       if (!mounted) return;
@@ -1009,6 +1079,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.focusTvSidebar = null;
     MainPageBridge.isTvSidebarFocused = null;
     MainPageBridge.tvDirectionalLeft = null;
+    MainPageBridge.hideAutoLaunchOverlay = null;
     if (_tvFocusRecoveryInstalled) {
       HardwareKeyboard.instance.removeHandler(_tvDeadFocusRecovery);
     }
@@ -2421,6 +2492,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           onPopInvoked: (bool didPop) async {
             if (didPop) return;
 
+            // The startup-channel cover owns BACK while it is up: this is the
+            // promised escape hatch, and it has to win over every other handler
+            // (including double-back-to-exit) or a hung launch would be
+            // uninterruptible.
+            if (_showIptvStartupOverlay) {
+              _cancelIptvStartup();
+              return;
+            }
+
             // First, check if any child screen wants to handle back navigation
             // (e.g., folder navigation in RealDebrid, TorBox, PikPak, Playlist screens)
             if (MainPageBridge.handleBackNavigation()) {
@@ -2760,8 +2840,30 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             ),
           ),
         ),
+        // Startup-channel cover — last child so it sits above everything,
+        // including the nav chrome.
+        if (_showIptvStartupOverlay)
+          Positioned.fill(
+            child: AutoLaunchOverlay(
+              launchTitle: 'Starting channel',
+              channelName: _iptvStartupChannelName,
+              channelNumber: _iptvStartupChannelNumber,
+              cancelHint: 'Press BACK to cancel',
+              onTimeout: _cancelIptvStartup,
+            ),
+          ),
       ],
     );
+  }
+
+  String get _iptvStartupChannelName {
+    final name = StorageService.startupIptvChannelCached?['name'];
+    return name is String && name.isNotEmpty ? name : 'your channel';
+  }
+
+  int? get _iptvStartupChannelNumber {
+    final number = StorageService.startupIptvChannelCached?['channelNumber'];
+    return number is num ? number.toInt() : null;
   }
 }
 

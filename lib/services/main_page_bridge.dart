@@ -319,6 +319,66 @@ class MainPageBridge {
     return channelId;
   }
 
+  // ==========================================================================
+  // IPTV startup channel
+  //
+  // main() resolves the channel before runApp and stashes it here; the IPTV
+  // page consumes it once, after its catalog is loaded.
+  //
+  // Cancellation is TWO mechanisms on purpose. The callback is the fast path,
+  // but the overlay can be on screen before IptvResultsView has registered one
+  // — so BACK would hit a null callback while the payload stayed consumable,
+  // and the launch would proceed moments later. The epoch is the durable truth:
+  // the payload carries the epoch it was dispatched under, consumption requires
+  // it to still match, and cancelling increments. That also stops a stale
+  // cancellation from killing an unrelated later attempt.
+  // ==========================================================================
+
+  static Map<String, dynamic>? _iptvStartupChannel;
+  static int _iptvStartupEpoch = 0;
+  static int _iptvStartupPayloadEpoch = -1;
+
+  /// Registered by IptvResultsView while it owns a startup attempt, so BACK /
+  /// timeout can abort work already in flight.
+  static VoidCallback? cancelIptvStartup;
+
+  /// Called from main() before the first frame.
+  static void setIptvStartupChannel(Map<String, dynamic> channel) {
+    _iptvStartupChannel = channel;
+    _iptvStartupPayloadEpoch = _iptvStartupEpoch;
+  }
+
+  /// True while a startup channel is pending and not cancelled — drives the
+  /// overlay and the splash hand-off.
+  static bool get hasPendingIptvStartup =>
+      _iptvStartupChannel != null &&
+      _iptvStartupPayloadEpoch == _iptvStartupEpoch;
+
+  /// The pending channel, consumed once. Returns null if it was cancelled
+  /// before the page got to it (epoch moved on).
+  static Map<String, dynamic>? consumeIptvStartupChannel() {
+    if (!hasPendingIptvStartup) {
+      _iptvStartupChannel = null;
+      return null;
+    }
+    final channel = _iptvStartupChannel;
+    _iptvStartupChannel = null;
+    return channel;
+  }
+
+  /// Abort the startup attempt — from BACK, the overlay timeout, or a failure.
+  /// Safe to call at any stage, including before anything registered.
+  static void cancelIptvStartupChannel() {
+    _iptvStartupEpoch++;
+    _iptvStartupChannel = null;
+    final cancel = cancelIptvStartup;
+    if (cancel != null) cancel();
+    hideAutoLaunchOverlay?.call();
+  }
+
+  /// The epoch an in-flight attempt should keep re-checking.
+  static int get iptvStartupEpoch => _iptvStartupEpoch;
+
   // Store a local Continue Watching item that should be quick-played when
   // TorrentSearchScreen/Home is ready.
   static Map<String, dynamic>? _continueWatchingItemToAutoPlay;

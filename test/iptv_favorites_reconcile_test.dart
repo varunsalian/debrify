@@ -57,6 +57,7 @@ void main() {
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
         version: 1,
+        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
       ),
     );
@@ -189,6 +190,176 @@ void main() {
     expect(await readFavorites(), isEmpty);
   });
 
+  group('across several lists', () {
+    test(
+        'two lists holding DIFFERENT historical forms of one channel both '
+        'migrate', () async {
+      // The canonical map is keyed by canonical URL. Both stored forms
+      // collapse onto the same key, so a single-valued map would keep only
+      // one of them and leave the other list pointing at a dead URL forever.
+      await seed({
+        'http://host/u/p/42.ts': {'name': 'Legacy path form'},
+      });
+      final kids = await StorageService.createIptvList('Kids');
+      await StorageService.setIptvChannelInList(
+        kids,
+        'http://host/live/u/p/42.m3u8',
+        true,
+        channelName: 'Legacy extension form',
+      );
+
+      await StorageService.reconcileIptvFavoriteUrls([
+        channel('http://host/live/u/p/42.ts', name: 'Sky'),
+      ]);
+
+      expect((await readFavorites()).keys, ['http://host/live/u/p/42.ts']);
+      expect(
+        (await StorageService.getIptvListChannels(kids)).keys,
+        ['http://host/live/u/p/42.ts'],
+        reason: 'every list holding the channel moves to the current form',
+      );
+    });
+
+    test('the same stored URL in two lists migrates in both', () async {
+      await seed({
+        'http://host/u/p/42.ts': {'name': 'Sky'},
+      });
+      final kids = await StorageService.createIptvList('Kids');
+      await StorageService.setIptvChannelInList(
+        kids,
+        'http://host/u/p/42.ts',
+        true,
+        channelName: 'Sky',
+      );
+
+      await StorageService.reconcileIptvFavoriteUrls([
+        channel('http://host/live/u/p/42.ts', name: 'Sky'),
+      ]);
+
+      expect((await readFavorites()).keys, ['http://host/live/u/p/42.ts']);
+      expect((await StorageService.getIptvListChannels(kids)).keys,
+          ['http://host/live/u/p/42.ts']);
+    });
+
+    test('a rename that collides with an existing row collapses it', () async {
+      // Both forms already sit in the SAME list (only reachable for rows
+      // carried over from the old store, where de-dup was global).
+      final kids = await StorageService.createIptvList('Kids');
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      for (final url in [
+        'http://host/u/p/42.ts',
+        'http://host/live/u/p/42.ts',
+      ]) {
+        await db.insert('iptv_list_channels', {
+          'list_id': kids,
+          'url': url,
+          'name': 'Sky',
+          'added_at': 1,
+        });
+      }
+
+      await StorageService.reconcileIptvFavoriteUrls([
+        channel('http://host/live/u/p/42.ts', name: 'Sky'),
+      ]);
+
+      expect((await StorageService.getIptvListChannels(kids)).keys,
+          ['http://host/live/u/p/42.ts'],
+          reason: 'the duplicate collapses instead of throwing on the '
+              '(list_id, url) primary key');
+    });
+  });
+
+  group('presentation backfill', () {
+    test('the in-memory scan fills content type and duration', () async {
+      // Local files and Stremio addon catalogs only ever reconcile through
+      // this path, so a migrated VOD favorite of theirs would present as
+      // live forever if the backfill lived only in the worker variant.
+      await seed({
+        'http://host/movie/u/p/9.mp4': {'name': 'A Movie'},
+      });
+
+      await StorageService.reconcileIptvFavoriteUrls([
+        IptvChannel(
+          name: 'A Movie',
+          url: 'http://host/movie/u/p/9.mp4',
+          contentType: 'vod',
+          duration: 5400,
+        ),
+      ]);
+
+      final meta = (await readFavorites())['http://host/movie/u/p/9.mp4']!;
+      expect(meta['contentType'], 'vod');
+      expect(meta['duration'], 5400);
+    });
+
+    test('backfill rides along with a rename', () async {
+      await seed({
+        'http://host/u/p/42.ts': {'name': 'Sky'},
+      });
+
+      await StorageService.reconcileIptvFavoriteUrls([
+        IptvChannel(
+          name: 'Sky',
+          url: 'http://host/live/u/p/42.ts',
+          contentType: 'live',
+          duration: -1,
+        ),
+      ]);
+
+      final meta = (await readFavorites())['http://host/live/u/p/42.ts']!;
+      expect(meta['contentType'], 'live');
+      expect(meta['duration'], -1);
+    });
+
+    test('a known content type is never overwritten', () async {
+      const url = 'http://host/movie/u/p/9.mp4';
+      await StorageService.setIptvChannelFavorited(
+        url,
+        true,
+        channelName: 'A Movie',
+        contentType: 'vod',
+        duration: 5400,
+      );
+
+      // A catalog that mislabels the row must not be able to flip it.
+      await StorageService.reconcileIptvFavoriteUrls([
+        IptvChannel(name: 'A Movie', url: url, contentType: 'live'),
+      ]);
+
+      final meta = (await readFavorites())[url]!;
+      expect(meta['contentType'], 'vod');
+      expect(meta['duration'], 5400);
+    });
+
+    test('backfill reaches every list holding the channel', () async {
+      const url = 'http://host/movie/u/p/9.mp4';
+      await seed({
+        url: {'name': 'A Movie'},
+      });
+      final kids = await StorageService.createIptvList('Kids');
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      await db.insert('iptv_list_channels', {
+        'list_id': kids,
+        'url': url,
+        'name': 'A Movie',
+        'added_at': 1,
+      });
+
+      await StorageService.reconcileIptvFavoriteUrls([
+        IptvChannel(
+          name: 'A Movie',
+          url: url,
+          contentType: 'vod',
+          duration: 5400,
+        ),
+      ]);
+
+      expect((await StorageService.getIptvListChannels(kids))[url]!['contentType'],
+          'vod');
+      expect((await readFavorites())[url]!['contentType'], 'vod');
+    });
+  });
+
   group('catalog-DB variant (worker-side scan)', () {
     late Directory catalogDir;
 
@@ -240,6 +411,60 @@ void main() {
       await StorageService.reconcileIptvFavoriteUrlsForCatalog('missing|key');
 
       expect((await readFavorites()).keys, ['http://host/u/p/42.ts']);
+    });
+
+    test('different historical forms across two lists both migrate',
+        () async {
+      await seed({
+        'http://host/u/p/42.ts': {'name': 'Sky'},
+      });
+      final kids = await StorageService.createIptvList('Kids');
+      await StorageService.setIptvChannelInList(
+        kids,
+        'http://host/live/u/p/42.m3u8',
+        true,
+        channelName: 'Sky',
+      );
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'xc|http://host|u|live',
+        channels: [channel('http://host/live/u/p/42.ts', name: 'Sky')],
+      );
+
+      await StorageService.reconcileIptvFavoriteUrlsForCatalog(
+        'xc|http://host|u|live',
+      );
+
+      expect((await readFavorites()).keys, ['http://host/live/u/p/42.ts']);
+      expect((await StorageService.getIptvListChannels(kids)).keys,
+          ['http://host/live/u/p/42.ts']);
+    });
+
+    test('the worker scan backfills content type and duration', () async {
+      const url = 'http://host/movie/u/p/9.mp4';
+      await seed({
+        url: {'name': 'A Movie'},
+      });
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'xc|http://host|u|vod',
+        channels: [
+          IptvChannel(
+            name: 'A Movie',
+            url: url,
+            contentType: 'vod',
+            duration: 5400,
+          ),
+        ],
+      );
+
+      await StorageService.reconcileIptvFavoriteUrlsForCatalog(
+        'xc|http://host|u|vod',
+      );
+
+      final meta = (await readFavorites())[url]!;
+      expect(meta['contentType'], 'vod');
+      expect(meta['duration'], 5400);
     });
   });
 }

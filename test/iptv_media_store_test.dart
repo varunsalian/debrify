@@ -28,6 +28,10 @@ void main() {
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
         version: 1,
+        // Production enables this in onConfigure, and list membership is a
+        // foreign key onto iptv_lists — without it the cascade rules under
+        // test here simply wouldn't fire.
+        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
       ),
     );
@@ -400,6 +404,86 @@ void main() {
       await StorageService.clearAllPlaybackData();
 
       expect(await StorageService.getVideoResume('http://h/v.mp4'), isNull);
+    });
+
+    // Backs Home's "Remove from Continue Watching" on an IPTV card.
+    test('removing a movie drops its shelf row AND its saved position',
+        () async {
+      await watchAndResume('http://h/keep.mp4',
+          positionMs: 50000, durationMs: 100000, updatedAt: 10);
+      await watchAndResume('http://h/drop.mp4',
+          positionMs: 50000, durationMs: 100000, updatedAt: 20);
+
+      await StorageService.removeIptvContinueWatchingItem('http://h/drop.mp4');
+
+      final shelf = await StorageService.getIptvContinueWatching();
+      expect(shelf.map((e) => e['url']), ['http://h/keep.mp4']);
+      expect(await StorageService.getVideoResume('http://h/drop.mp4'), isNull,
+          reason: 'the position must go too, or a replay resumes mid-item');
+      expect(await StorageService.getVideoResume('http://h/keep.mp4'), isNotNull,
+          reason: 'nothing else may be touched');
+    });
+
+    test(
+        'removing a series clears every episode — position included — and '
+        'leaves other series alone', () async {
+      for (var i = 1; i <= 3; i++) {
+        await watchAndResume('http://h/s1e$i.mp4',
+            positionMs: 50000,
+            durationMs: 100000,
+            updatedAt: 100 + i,
+            seriesId: 's1',
+            hasNext: true);
+      }
+      await watchAndResume('http://h/s2e1.mp4',
+          positionMs: 50000,
+          durationMs: 100000,
+          updatedAt: 10,
+          seriesId: 's2',
+          hasNext: true);
+
+      await StorageService.removeIptvContinueWatchingSeries(
+        playlistId: 'p1',
+        seriesId: 's1',
+      );
+
+      final shelf = await StorageService.getIptvContinueWatching();
+      expect(shelf.map((e) => e['url']), ['http://h/s2e1.mp4'],
+          reason: 'only the removed series leaves the shelf');
+      for (var i = 1; i <= 3; i++) {
+        expect(await StorageService.getVideoResume('http://h/s1e$i.mp4'), isNull,
+            reason: 'episode $i kept its position, so its progress bar lives on');
+      }
+      expect(await StorageService.getVideoResume('http://h/s2e1.mp4'), isNotNull);
+    });
+
+    test('a series removal is scoped to its own playlist', () async {
+      await watchAndResume('http://h/a/s1e1.mp4',
+          positionMs: 50000,
+          durationMs: 100000,
+          updatedAt: 10,
+          seriesId: 's1',
+          hasNext: true,
+          playlistId: 'p1');
+      // Same series id on a DIFFERENT provider — a distinct show as far as the
+      // shelf is concerned (it groups on <playlistId>::<seriesId>).
+      await watchAndResume('http://h/b/s1e1.mp4',
+          positionMs: 50000,
+          durationMs: 100000,
+          updatedAt: 20,
+          seriesId: 's1',
+          hasNext: true,
+          playlistId: 'p2');
+
+      await StorageService.removeIptvContinueWatchingSeries(
+        playlistId: 'p1',
+        seriesId: 's1',
+      );
+
+      final shelf = await StorageService.getIptvContinueWatching();
+      expect(shelf.map((e) => e['url']), ['http://h/b/s1e1.mp4']);
+      expect(await StorageService.getVideoResume('http://h/b/s1e1.mp4'),
+          isNotNull);
     });
   });
 }

@@ -5,11 +5,62 @@ import '../../utils/tv_keys.dart';
 import '../tv_text_field.dart';
 import 'see_all_theme.dart';
 
-/// One selectable option in a [StremioDropdown].
+/// One row in a [StremioDropdown] — a selectable option, or a section header
+/// when [isHeader] is set.
+///
+/// A header is never selectable, never matched against the dropdown's value,
+/// and never counted as the fallback label; its [value] exists only because
+/// the list is typed, so callers pass any unused sentinel.
 class StremioDropdownOption<T> {
   final T value;
   final String label;
-  const StremioDropdownOption(this.value, this.label);
+  final bool isHeader;
+  const StremioDropdownOption(this.value, this.label, {this.isHeader = false});
+
+  /// Section header. Give it a sentinel [value] no real option uses.
+  const StremioDropdownOption.header(this.value, this.label) : isHeader = true;
+}
+
+/// Section label inside a dropdown list: an accent tick and an upper-case
+/// caption.
+///
+/// Sized against the OPTIONS it labels rather than as fine print. A caption
+/// lighter than its own group reads as an artifact floating between two rows;
+/// this one is smaller than an option but heavier, which is what makes it
+/// scan as a heading instead of a disabled entry.
+class StremioDropdownSectionHeader extends StatelessWidget {
+  final String label;
+  const StremioDropdownSectionHeader({super.key, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 14,
+          decoration: BoxDecoration(
+            color: kSeeAllAccent2.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 9),
+        Flexible(
+          child: Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.62),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+              fontSize: 11.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// A dark-glass, Stremio-styled pill dropdown used for the See-All filter bars
@@ -65,16 +116,22 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
   State<StremioDropdown<T>> createState() => _StremioDropdownState<T>();
 }
 
-class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> {
+class _StremioDropdownState<T extends Object>
+    extends State<StremioDropdown<T>> {
   final GlobalKey _btnKey = GlobalKey();
   bool _focused = false;
   bool _hovered = false;
 
   String get _valueLabel {
     for (final o in widget.options) {
-      if (o.value == widget.value) return o.label;
+      if (!o.isHeader && o.value == widget.value) return o.label;
     }
-    return widget.options.isNotEmpty ? widget.options.first.label : '';
+    // Headers are skipped in the fallback too, or a dropdown whose value has
+    // gone missing would render a section title as its current selection.
+    for (final o in widget.options) {
+      if (!o.isHeader) return o.label;
+    }
+    return '';
   }
 
   /// Above this many options the showMenu popup is swapped for a lazy picker
@@ -103,15 +160,22 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (btn == null || overlay == null) return;
-    final topLeft = btn.localToGlobal(Offset(0, btn.size.height + 6),
-        ancestor: overlay);
-    final bottomRight =
-        btn.localToGlobal(btn.size.bottomRight(Offset.zero), ancestor: overlay);
+    final topLeft = btn.localToGlobal(
+      Offset(0, btn.size.height + 6),
+      ancestor: overlay,
+    );
+    final bottomRight = btn.localToGlobal(
+      btn.size.bottomRight(Offset.zero),
+      ancestor: overlay,
+    );
     final pos = RelativeRect.fromRect(
       Rect.fromPoints(topLeft, bottomRight),
       Offset.zero & overlay.size,
     );
 
+    // Resolved once per open rather than per item: the items loop below would
+    // otherwise rescan the whole option list for every row it builds.
+    final hasSections = widget.options.any((o) => o.isHeader);
     final result = await showMenu<T>(
       context: context,
       position: pos,
@@ -122,35 +186,70 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
         side: BorderSide(color: kSeeAllLine),
       ),
       constraints: const BoxConstraints(minWidth: 190, maxWidth: 320),
+      // Sectioned menus indent their options so each group reads as belonging
+      // to the caption above it. Flat menus pass null and keep whatever
+      // PopupMenuItem's own default is — hard-coding a number here silently
+      // shifted every header-less dropdown in the app, because the Material 3
+      // default is 12, not the 16 the Material 2 default used to be.
       items: [
-        for (final o in widget.options)
-          PopupMenuItem<T>(
-            value: o.value,
-            height: 44,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    o.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: o.value == widget.value
-                          ? kSeeAllAccent2
-                          : Colors.white,
-                      fontSize: 13.5,
-                      fontWeight: o.value == widget.value
-                          ? FontWeight.w800
-                          : FontWeight.w600,
+        for (final (index, o) in widget.options.indexed)
+          if (o.isHeader)
+            // enabled:false keeps it out of the tap AND keyboard-traversal
+            // paths, so DPAD steps between real options as if it weren't
+            // there.
+            PopupMenuItem<T>(
+              enabled: false,
+              height: 38,
+              // Two pieces of geometry carry the hierarchy. The tick hangs in
+              // the gutter so the caption itself starts LEFT of the options,
+              // which indent beneath it. And the spare height sits above the
+              // caption, not around it — air on both sides would make the
+              // header look like it belongs to neither group. The first
+              // header skips that gap; nothing precedes it to separate from.
+              padding: EdgeInsets.only(
+                left: 6,
+                right: 16,
+                top: index == 0 ? 0 : 12,
+              ),
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: StremioDropdownSectionHeader(label: o.label),
+              ),
+            )
+          else
+            PopupMenuItem<T>(
+              value: o.value,
+              height: 44,
+              padding: hasSections
+                  ? const EdgeInsets.only(left: 32, right: 16)
+                  : null,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      o.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: o.value == widget.value
+                            ? kSeeAllAccent2
+                            : Colors.white,
+                        fontSize: 13.5,
+                        fontWeight: o.value == widget.value
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-                if (o.value == widget.value)
-                  const Icon(Icons.check_rounded,
-                      size: 16, color: kSeeAllAccent2),
-              ],
+                  if (o.value == widget.value)
+                    const Icon(
+                      Icons.check_rounded,
+                      size: 16,
+                      color: kSeeAllAccent2,
+                    ),
+                ],
+              ),
             ),
-          ),
       ],
     );
     if (result != null) widget.onSelected(result);
@@ -210,66 +309,70 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
           child: widget.quiet
               ? _buildQuiet(active)
               : LayoutBuilder(
-            builder: (context, constraints) {
-              final stretch = constraints.hasTightWidth;
-              final valueText = Text(
-                _valueLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              );
-              return Container(
-                key: _btnKey,
-                padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
-                decoration: BoxDecoration(
-                  color: kSeeAllPanel,
-                  borderRadius: BorderRadius.circular(11),
-                  // Constant width: Container feeds the border's thickness into
-                  // its layout padding, so a 1→2px focus ring RESIZES the pill
-                  // and reflows the whole filter row (reads as the screen shaking
-                  // on DPAD moves). Only the color may change on focus.
-                  border: Border.all(
-                    width: 2,
-                    color: _focused
-                        ? kSeeAllAccent
-                        : (active ? kSeeAllAccentBorder : kSeeAllLine),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize:
-                      stretch ? MainAxisSize.max : MainAxisSize.min,
-                  children: [
-                    if (widget.label != null) ...[
-                      Text(
-                        widget.label!.toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.42),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
+                  builder: (context, constraints) {
+                    final stretch = constraints.hasTightWidth;
+                    final valueText = Text(
+                      _valueLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    );
+                    return Container(
+                      key: _btnKey,
+                      padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
+                      decoration: BoxDecoration(
+                        color: kSeeAllPanel,
+                        borderRadius: BorderRadius.circular(11),
+                        // Constant width: Container feeds the border's thickness into
+                        // its layout padding, so a 1→2px focus ring RESIZES the pill
+                        // and reflows the whole filter row (reads as the screen shaking
+                        // on DPAD moves). Only the color may change on focus.
+                        border: Border.all(
+                          width: 2,
+                          color: _focused
+                              ? kSeeAllAccent
+                              : (active ? kSeeAllAccentBorder : kSeeAllLine),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                    ],
-                    if (stretch)
-                      Expanded(child: valueText)
-                    else
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 200),
-                        child: valueText,
+                      child: Row(
+                        mainAxisSize: stretch
+                            ? MainAxisSize.max
+                            : MainAxisSize.min,
+                        children: [
+                          if (widget.label != null) ...[
+                            Text(
+                              widget.label!.toUpperCase(),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.42),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          if (stretch)
+                            Expanded(child: valueText)
+                          else
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 200),
+                              child: valueText,
+                            ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                        ],
                       ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.keyboard_arrow_down_rounded,
-                        size: 18, color: Colors.white.withValues(alpha: 0.5)),
-                  ],
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
       ),
     );
@@ -333,16 +436,19 @@ class _StremioDropdownState<T extends Object> extends State<StremioDropdown<T>> 
                 color: _focused
                     ? Colors.white
                     : widget.quietAccent
-                        ? kSeeAllAccent2
-                        : Colors.white.withValues(alpha: 0.78),
+                    ? kSeeAllAccent2
+                    : Colors.white.withValues(alpha: 0.78),
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
           const SizedBox(width: 3),
-          Icon(Icons.keyboard_arrow_down_rounded,
-              size: 15, color: Colors.white.withValues(alpha: 0.45)),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 15,
+            color: Colors.white.withValues(alpha: 0.45),
+          ),
         ],
       ),
     );
@@ -379,6 +485,13 @@ class _LazyPickerDialogState<T extends Object>
   late final ScrollController _scroll;
   late List<StremioDropdownOption<T>> _shown;
   late final int _initialIndex;
+
+  /// Whether any row is a section heading — rows indent under headings.
+  /// Cached: [itemBuilder] reads it per row, and this dialog exists for lists
+  /// of several hundred entries, where a rescan per row is a real cost on the
+  /// weak TV hardware it was written to protect. Safe to cache because a
+  /// dialog's options never change once it is open.
+  late final bool _hasSections = widget.options.any((o) => o.isHeader);
   String _filter = '';
   final TextEditingController _filterController = TextEditingController();
 
@@ -386,13 +499,20 @@ class _LazyPickerDialogState<T extends Object>
   void initState() {
     super.initState();
     _shown = widget.options;
-    final idx = widget.options.indexWhere((o) => o.value == widget.value);
-    _initialIndex = idx < 0 ? 0 : idx;
+    final idx = widget.options.indexWhere(
+      (o) => !o.isHeader && o.value == widget.value,
+    );
+    // A miss still has to anchor on a real row. Index 0 is a section heading
+    // in a grouped list, and headings are not focusable — autofocusing one
+    // would open the picker on TV with focus nowhere at all.
+    final firstOption = widget.options.indexWhere((o) => !o.isHeader);
+    _initialIndex = idx >= 0 ? idx : (firstOption < 0 ? 0 : firstOption);
     // Open with the current value near the top of the viewport (a few rows of
     // context above it). Overshoot is clamped by the scroll position on the
     // first layout.
     _scroll = ScrollController(
-      initialScrollOffset: ((_initialIndex - 3).clamp(0, _initialIndex)) * _rowH,
+      initialScrollOffset:
+          ((_initialIndex - 3).clamp(0, _initialIndex)) * _rowH,
     );
   }
 
@@ -407,19 +527,24 @@ class _LazyPickerDialogState<T extends Object>
     final f = v.trim().toLowerCase();
     setState(() {
       _filter = f;
+      // Headers are dropped entirely while filtering rather than matched:
+      // a surviving header whose whole section was filtered out would label
+      // the rows beneath it with the wrong section.
       _shown = f.isEmpty
           ? widget.options
           : [
               for (final o in widget.options)
-                if (o.label.toLowerCase().contains(f)) o,
+                if (!o.isHeader && o.label.toLowerCase().contains(f)) o,
             ];
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final maxH =
-        (MediaQuery.of(context).size.height * 0.72).clamp(260.0, 560.0);
+    final maxH = (MediaQuery.of(context).size.height * 0.72).clamp(
+      260.0,
+      560.0,
+    );
     return Dialog(
       backgroundColor: kSeeAllPanel,
       shape: RoundedRectangleBorder(
@@ -447,7 +572,9 @@ class _LazyPickerDialogState<T extends Object>
                   ),
                   const Spacer(),
                   Text(
-                    '${_shown.length}',
+                    // Headings are not results — counting them would read
+                    // "8" over a four-source list.
+                    '${_shown.where((o) => !o.isHeader).length}',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.35),
                       fontSize: 11,
@@ -474,12 +601,17 @@ class _LazyPickerDialogState<T extends Object>
                       color: Colors.white.withValues(alpha: 0.35),
                       fontSize: 13.5,
                     ),
-                    prefixIcon: const Icon(Icons.search_rounded,
-                        size: 18, color: Colors.white38),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: Colors.white38,
+                    ),
                     filled: true,
                     fillColor: kSeeAllPanel2,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 9,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(color: kSeeAllLine),
@@ -503,13 +635,31 @@ class _LazyPickerDialogState<T extends Object>
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
                 itemBuilder: (context, i) {
                   final o = _shown[i];
+                  if (o.isHeader) {
+                    // The list is fixed-extent for lazy-scroll performance, so
+                    // the header sits in a full row slot; bottom-align it to
+                    // read as a lead-in to the rows under it rather than a
+                    // floating caption. Left of the rows, which indent under
+                    // it — the tick hangs further left still.
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(2, 0, 8, 6),
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: StremioDropdownSectionHeader(label: o.label),
+                      ),
+                    );
+                  }
                   return _LazyPickerRow(
                     label: o.label,
                     selected: o.value == widget.value,
+                    // Filtering strips the headings, so the indent that sat
+                    // under them goes with it.
+                    indented: _hasSections && _filter.isEmpty,
                     // Land DPAD focus on the current value when the dialog
                     // opens (its row is built — we scrolled to it). Filtering
                     // reshuffles indices, so only the pristine list anchors.
-                    autofocus: widget.isTelevision &&
+                    autofocus:
+                        widget.isTelevision &&
                         _filter.isEmpty &&
                         i == _initialIndex,
                     onPick: () => Navigator.of(context).pop(o.value),
@@ -528,6 +678,9 @@ class _LazyPickerRow extends StatefulWidget {
   final String label;
   final bool selected;
   final bool autofocus;
+
+  /// Sit under a section heading rather than at the list's own left edge.
+  final bool indented;
   final VoidCallback onPick;
 
   const _LazyPickerRow({
@@ -535,6 +688,7 @@ class _LazyPickerRow extends StatefulWidget {
     required this.selected,
     required this.autofocus,
     required this.onPick,
+    this.indented = false,
   });
 
   @override
@@ -578,13 +732,16 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
           onTap: widget.onPick,
           behavior: HitTestBehavior.opaque,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: EdgeInsets.only(
+              left: widget.indented ? 22 : 12,
+              right: 12,
+            ),
             decoration: BoxDecoration(
               color: _focused
                   ? kSeeAllAccent.withValues(alpha: 0.26)
                   : _hovered
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.transparent,
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -597,14 +754,18 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
                     style: TextStyle(
                       color: widget.selected ? kSeeAllAccent2 : Colors.white,
                       fontSize: 13.5,
-                      fontWeight:
-                          widget.selected ? FontWeight.w800 : FontWeight.w600,
+                      fontWeight: widget.selected
+                          ? FontWeight.w800
+                          : FontWeight.w600,
                     ),
                   ),
                 ),
                 if (widget.selected)
-                  const Icon(Icons.check_rounded,
-                      size: 16, color: kSeeAllAccent2),
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: kSeeAllAccent2,
+                  ),
               ],
             ),
           ),

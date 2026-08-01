@@ -29,11 +29,65 @@ class DeepLinkService {
   final Map<String, DateTime> _recentlyProcessedUrls = {};
   static const _deduplicationWindow = Duration(seconds: 30);
 
+  // ==========================================================================
+  // Launch-intent preflight
+  //
+  // The IPTV startup channel decides which tab to open SYNCHRONOUSLY, in a
+  // field initializer, before any async work can answer. The initial link and
+  // share used to be read here in initialize() — i.e. after MainPage mounts —
+  // so a startup auto-launch would win the race and tune a channel over a
+  // magnet the user had just opened the app with.
+  //
+  // main() therefore resolves both before runApp and CACHES them here.
+  // initialize() consumes the cached values rather than reading again: an
+  // initial share is consume-once, so a second read would either drop it or
+  // deliver it twice.
+  // ==========================================================================
+
+  static bool _preflightRan = false;
+  static Uri? _preflightUri;
+  static List<SharedFile>? _preflightShared;
+  static bool _launchedByIntent = false;
+
+  /// True when the app was opened by a link or a share. Read by main() to
+  /// suppress the IPTV startup channel — the user's explicit intent wins.
+  ///
+  /// Recorded as its own flag rather than derived from the cached values:
+  /// [initialize] CONSUMES those (nulls them), so a derived getter would start
+  /// answering false the moment the link was handled.
+  static bool get launchedByIntent => _launchedByIntent;
+
+  /// Read the launch intent once, before runApp. Never throws.
+  static Future<void> preflightLaunchIntent() async {
+    if (_preflightRan) return;
+    _preflightRan = true;
+    try {
+      _preflightUri = await DeepLinkService()._appLinks.getInitialLink();
+    } catch (e) {
+      debugPrint('Deep link preflight (link) failed: $e');
+    }
+    try {
+      _preflightShared = await FlutterSharingIntent.instance.getInitialSharing();
+    } catch (e) {
+      debugPrint('Deep link preflight (share) failed: $e');
+    }
+    _launchedByIntent =
+        _preflightUri != null || (_preflightShared?.isNotEmpty ?? false);
+  }
+
   /// Initialize deep link listening
   Future<void> initialize() async {
     // Handle initial link if app was opened via magnet link
     try {
-      final initialUri = await _appLinks.getInitialLink();
+      // Consume the preflight's read when there was one — getInitialLink is
+      // not guaranteed to answer twice, and the share below definitely isn't.
+      final Uri? initialUri;
+      if (_preflightRan) {
+        initialUri = _preflightUri;
+        _preflightUri = null;
+      } else {
+        initialUri = await _appLinks.getInitialLink();
+      }
       if (initialUri != null) {
         _handleUri(initialUri);
       }
@@ -53,7 +107,13 @@ class DeepLinkService {
 
     // Handle initial shared content if app was opened via share
     try {
-      final initialShared = await FlutterSharingIntent.instance.getInitialSharing();
+      final List<SharedFile> initialShared;
+      if (_preflightRan) {
+        initialShared = _preflightShared ?? const [];
+        _preflightShared = null;
+      } else {
+        initialShared = await FlutterSharingIntent.instance.getInitialSharing();
+      }
       if (initialShared.isNotEmpty) {
         _processSharedFiles(initialShared);
       }

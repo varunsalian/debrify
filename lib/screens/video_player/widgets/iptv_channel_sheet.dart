@@ -112,6 +112,16 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   late List<Map<String, dynamic>> _sources;
   Set<String> _favoriteUrls = <String>{};
   bool _favoritesOnly = false;
+
+  /// A submitted search is browsing every category. The category it
+  /// interrupted is parked here and restored when the search is cleared.
+  bool _allCategorySearch = false;
+  String? _categoryBeforeSearch;
+
+  /// The query the loaded list actually answers. The "press enter" prompt is
+  /// only true of a query that has been typed but not yet submitted — once
+  /// the results are in, the header goes back to counting them.
+  String _submittedQuery = '';
   bool _browseLoading = false;
   String? _browseError;
   int _browseTicket = 0;
@@ -175,7 +185,14 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     _animController.forward();
 
     _searchFocusNode.addListener(() {
-      if (_searchFocusNode.hasFocus && _focusZone != _FocusZone.search) {
+      if (!_searchFocusNode.hasFocus) return;
+      // Entering the field widens the scope to every category, exactly when
+      // the native guide does it (beginIptvAllCategorySearch on focus). Doing
+      // it only on submit meant the typed filter still had the category
+      // applied, so a channel from anywhere else could not appear and the
+      // search read as broken.
+      _beginAllCategorySearch();
+      if (_focusZone != _FocusZone.search) {
         setState(() => _focusZone = _FocusZone.search);
       }
     });
@@ -197,7 +214,19 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   // ─── Filtering ───────────────────────────────────────────────────────
 
   void _applyFilters() {
-    final query = _searchController.text.trim().toLowerCase();
+    // Typing does NOT narrow the list. The loaded channels are a page of the
+    // source, so filtering them as you type empties the list for anything
+    // that simply is not on this page — which reads as "no such channel"
+    // when the channel exists and the query has just never been run. The
+    // native guide leaves the list alone until the query is submitted and
+    // says so in the header; this now matches.
+    //
+    // Sheets with no browse provider are the exception: a series' episode
+    // list has no source to submit to, so there local filtering IS the
+    // search.
+    final query = widget.browseProvider == null
+        ? _searchController.text.trim().toLowerCase()
+        : '';
     setState(() {
       _filteredChannels = _channels.where((c) {
         if (_favoritesOnly && !_favoriteUrls.contains(c.url)) return false;
@@ -260,12 +289,91 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     if (mounted && _favoritesOnly) _applyFilters();
   }
 
-  Future<void> _submitSearch() =>
-      _requestBrowse(query: _searchController.text.trim());
+  /// Park the current category and widen the scope to the whole source.
+  ///
+  /// Search is a temporary all-categories browsing context, entered the
+  /// moment the field takes focus — the same trigger as the native guide's
+  /// `beginIptvAllCategorySearch`. Left scoped to the selected category, the
+  /// obvious search (pick "Sports", look for "BBC") returned nothing with no
+  /// hint a filter was suppressing it. The category is remembered and put
+  /// back when the search is cleared or the guide closes.
+  ///
+  /// Deliberately does not re-browse: the native guide leaves the visible list
+  /// alone until the query is submitted, and refetching on every focus would
+  /// throw away the list the user is looking at.
+  void _beginAllCategorySearch() {
+    if (_allCategorySearch) return;
+    _allCategorySearch = true;
+    _categoryBeforeSearch = _selectedCategory;
+    if (_selectedCategory == null) return;
+    setState(() => _selectedCategory = null);
+    _applyFilters();
+    _notifyContextChanged();
+  }
+
+  /// Run the typed query against the whole source. Submitting is the only
+  /// thing that searches — typing never does.
+  Future<void> _submitSearch() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      await _clearSearch();
+      return;
+    }
+    _beginAllCategorySearch();
+    _submittedQuery = query;
+    await _requestBrowse(category: null, query: query);
+  }
+
+  /// Close the guide, putting back the category an unfinished search parked.
+  ///
+  /// A submitted search persists `selectedCategory: null` to the player, but
+  /// the category it interrupted lives only in this state — closing without
+  /// restoring it would dispose the only record, so the guide would reopen on
+  /// "All" over a category-scoped channel ring. The native guide restores the
+  /// same way on close (`restoreIptvCategoryAfterSearch` in `hideIptvGuide`).
+  void _handleClose() {
+    _submittedQuery = '';
+    if (_allCategorySearch) {
+      _selectedCategory = _categoryBeforeSearch;
+      _allCategorySearch = false;
+      _categoryBeforeSearch = null;
+      _notifyContextChanged();
+    }
+    widget.onClose();
+  }
+
+  /// Drop the query and put back whatever category the search interrupted.
+  Future<void> _clearSearch() async {
+    _searchController.clear();
+    _submittedQuery = '';
+    if (!_allCategorySearch) {
+      if (widget.browseProvider == null) {
+        _applyFilters();
+      } else {
+        await _requestBrowse(query: '');
+      }
+      return;
+    }
+    final restored = _categoryBeforeSearch;
+    _allCategorySearch = false;
+    _categoryBeforeSearch = null;
+    setState(() => _selectedCategory = restored);
+    if (widget.browseProvider == null) {
+      _applyFilters();
+      _notifyContextChanged();
+      return;
+    }
+    await _requestBrowse(category: restored, query: '');
+  }
 
   Future<void> _selectCategory(String? category) async {
     _selectedCategory = category;
     _favoritesOnly = false;
+    // An explicit category choice ends the search context rather than being
+    // undone by a later restore.
+    _allCategorySearch = false;
+    _categoryBeforeSearch = null;
+    _submittedQuery = '';
     _searchController.clear();
     if (widget.browseProvider == null) {
       _applyFilters();
@@ -282,6 +390,12 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     _sourceName = (source['name'] as String?) ?? 'IPTV';
     _selectedCategory = null;
     _favoritesOnly = source['isFavorites'] == true;
+    // The parked category belongs to the source being left. Carrying it over
+    // would make a later search-clear apply the old source's category as a
+    // filter on this one, which can match nothing at all.
+    _allCategorySearch = false;
+    _categoryBeforeSearch = null;
+    _submittedQuery = '';
     _searchController.clear();
     await _requestBrowse(sourceId: id, category: null, query: '');
   }
@@ -437,7 +551,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       if (_compactPane == _CompactPane.schedule) {
         setState(() => _compactPane = _CompactPane.channels);
       } else {
-        widget.onClose();
+        _handleClose();
       }
       return;
     }
@@ -548,7 +662,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           return Stack(
             children: [
               GestureDetector(
-                onTap: widget.onClose,
+                onTap: _handleClose,
                 child: FadeTransition(
                   opacity: _fadeAnim,
                   child: Container(color: Colors.black54),
@@ -642,7 +756,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       children: [
         _buildNowPlayingCard(compact: compact),
         _buildSearchBar(),
-        _buildFilterBar(compact: compact),
+        _buildFilterBar(),
         if (_browseLoading)
           const LinearProgressIndicator(
             minHeight: 2,
@@ -707,6 +821,14 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 Text(
                   _compactPane == _CompactPane.schedule && compact
                       ? (_scheduleChannel?.name ?? 'Select a channel')
+                      // Typing does not search — submitting does. Without
+                      // saying so, a typed query that changes nothing on
+                      // screen reads as a search that found nothing. Native
+                      // puts the same prompt in the same place.
+                      : (widget.browseProvider != null &&
+                            _searchController.text.trim().isNotEmpty &&
+                            _searchController.text.trim() != _submittedQuery)
+                      ? 'Press enter to search all channels'
                       : '${_filteredChannels.length} of ${_channels.length} channels',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.35),
@@ -728,7 +850,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
-              onTap: widget.onClose,
+              onTap: _handleClose,
               child: Container(
                 width: 36,
                 height: 36,
@@ -881,14 +1003,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                         color: Colors.white.withValues(alpha: 0.4),
                         size: 18,
                       ),
-                      onPressed: () {
-                        _searchController.clear();
-                        if (widget.browseProvider == null) {
-                          _applyFilters();
-                        } else {
-                          unawaited(_requestBrowse(query: ''));
-                        }
-                      },
+                      onPressed: () => unawaited(_clearSearch()),
                     ),
                   IconButton(
                     tooltip: 'Search full source',
@@ -921,6 +1036,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
             ),
           ),
           onChanged: (_) {
+            // Rebuilds for the header prompt and the clear button. With a
+            // provider the list is untouched until submit; without one this
+            // is the only search there is.
             _applyFilters();
           },
           onSubmitted: (_) => unawaited(_submitSearch()),
@@ -930,65 +1048,78 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     );
   }
 
-  Widget _buildFilterBar({required bool compact}) {
-    final categories = <String?>[null, ..._categories];
-    final visibleCategoryCount = compact ? 8 : 5;
-    return SizedBox(
-      height: 43,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 7),
-        children: [
-          _GuideMenuButton(
-            icon: Icons.dns_rounded,
-            label: _sourceName,
-            options: [
-              for (final source in _sources)
-                _GuideMenuOption(
-                  value: source,
-                  label: source['name'] as String? ?? 'IPTV',
-                ),
-            ],
-            onSelected: (value) => unawaited(_selectSource(value)),
-          ),
-          const SizedBox(width: 7),
-          for (final category in categories.take(visibleCategoryCount)) ...[
+  /// Pick a category from a searchable list.
+  ///
+  /// Categories used to be laid out as chips in a horizontally scrolling row,
+  /// which a mouse cannot scroll — on desktop every chip past the fold, plus
+  /// the "More" menu and the Saved filter behind them, was simply
+  /// unreachable. A source can carry hundreds of categories, so a picker with
+  /// its own search is the only shape that fits them all on any input.
+  Future<void> _openCategoryPicker() async {
+    final choice = await showDialog<_CategoryChoice>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (_) => _CategoryPickerDialog(
+        categories: _categories,
+        selected: _favoritesOnly ? null : _selectedCategory,
+      ),
+    );
+    if (choice == null || !mounted) return;
+    await _selectCategory(choice.value);
+  }
+
+  Widget _buildFilterBar() {
+    final categoryLabel = _favoritesOnly
+        ? 'All'
+        : (_selectedCategory ?? 'All');
+    // Three fixed controls, so the row cannot overflow and nothing depends on
+    // being able to scroll it.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 7),
+      child: SizedBox(
+        height: 36,
+        child: Row(
+          children: [
+            Flexible(
+              child: _GuideMenuButton(
+                icon: Icons.dns_rounded,
+                label: _sourceName,
+                options: [
+                  for (final source in _sources)
+                    _GuideMenuOption(
+                      value: source,
+                      label: source['name'] as String? ?? 'IPTV',
+                    ),
+                ],
+                onSelected: (value) => unawaited(_selectSource(value)),
+              ),
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: _GuideDropdownButton(
+                icon: Icons.category_rounded,
+                label: categoryLabel,
+                // A picked category is the strongest filter on screen; show it
+                // as selected the way the old chip did.
+                selected: !_favoritesOnly && _selectedCategory != null,
+                onTap: () => unawaited(_openCategoryPicker()),
+              ),
+            ),
+            const SizedBox(width: 7),
             _FilterChip(
-              label: category ?? 'All',
-              selected: !_favoritesOnly && _selectedCategory == category,
-              onTap: () => unawaited(_selectCategory(category)),
+              icon: Icons.favorite_rounded,
+              label: 'Saved',
+              selected: _favoritesOnly,
+              onTap: () {
+                setState(() {
+                  _favoritesOnly = !_favoritesOnly;
+                  if (_favoritesOnly) _selectedCategory = null;
+                });
+                _applyFilters();
+              },
             ),
-            const SizedBox(width: 7),
           ],
-          if (categories.length > visibleCategoryCount) ...[
-            _GuideMenuButton(
-              icon: Icons.category_rounded,
-              label: 'More',
-              options: [
-                for (final category in categories.skip(visibleCategoryCount))
-                  _GuideMenuOption(
-                    value: {'category': category},
-                    label: category ?? 'All',
-                  ),
-              ],
-              onSelected: (value) =>
-                  unawaited(_selectCategory(value['category'] as String?)),
-            ),
-            const SizedBox(width: 7),
-          ],
-          _FilterChip(
-            icon: Icons.favorite_rounded,
-            label: 'Saved',
-            selected: _favoritesOnly,
-            onTap: () {
-              setState(() {
-                _favoritesOnly = !_favoritesOnly;
-                if (_favoritesOnly) _selectedCategory = null;
-              });
-              _applyFilters();
-            },
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1102,6 +1233,14 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
 
   Widget _buildChannelList({required bool compact}) {
     if (_filteredChannels.isEmpty) {
+      // The list can only be empty here because a submitted search (or a
+      // category) came back with nothing. If the user has since typed a NEW
+      // query, saying "no channels found" would again describe a search that
+      // was never run — point at the submit instead.
+      final pending =
+          widget.browseProvider != null &&
+          _searchController.text.trim().isNotEmpty &&
+          _searchController.text.trim() != _submittedQuery;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1114,14 +1253,16 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.satellite_alt_rounded,
+                pending
+                    ? Icons.search_rounded
+                    : Icons.satellite_alt_rounded,
                 color: Colors.white.withValues(alpha: 0.1),
                 size: 32,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'No channels found',
+              pending ? 'Search all channels' : 'No channels found',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 15,
@@ -1130,12 +1271,32 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
             ),
             const SizedBox(height: 6),
             Text(
-              'Try a different search term',
+              pending
+                  ? 'Nothing loaded matches "${_searchController.text.trim()}" —'
+                        ' press enter to search the whole source'
+                  : 'Try a different search term',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.2),
                 fontSize: 12,
               ),
             ),
+            if (pending) ...[
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: () => unawaited(_submitSearch()),
+                icon: const Icon(Icons.search_rounded, size: 17),
+                label: const Text('Search all channels'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF7C5CFF),
+                  foregroundColor: Colors.white,
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       );
@@ -1248,6 +1409,307 @@ class _GuideMenuButton extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Rebuild an [IptvChannel] from a browse-provider channel map.
+///
+/// Exposed because the player consumes the same payload when it re-anchors its
+/// channel ring to a category. Both sides must parse it identically — a
+/// channel rebuilt differently in the two places stops matching itself, and
+/// the playing row can no longer be found in its own list.
+IptvChannel iptvChannelFromBrowsePayload(Map<String, dynamic> raw) =>
+    _IptvChannelSheetState._channelFromMap(raw);
+
+/// A dropdown-looking button that opens a picker rather than a popup menu —
+/// for lists too long to sit in a [PopupMenuButton].
+class _GuideDropdownButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _GuideDropdownButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? const Color(0xFF7C5CFF)
+          : Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 92, maxWidth: 190),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? Colors.transparent
+                  : Colors.white.withValues(alpha: 0.06),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: selected ? Colors.white : Colors.white54,
+                size: 15,
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? Colors.white : Colors.white70,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 5),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: selected ? Colors.white70 : Colors.white38,
+                size: 16,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The picked category. Wrapped so that "All" (a null category) is
+/// distinguishable from dismissing the dialog without choosing.
+class _CategoryChoice {
+  final String? value;
+  const _CategoryChoice(this.value);
+}
+
+/// Searchable category list. Works on every input the guide runs under:
+/// pointer, DPAD (the rows are focusable and the field is a [TvTextField],
+/// so TV gets the in-app keyboard), and touch.
+class _CategoryPickerDialog extends StatefulWidget {
+  final List<String> categories;
+  final String? selected;
+
+  const _CategoryPickerDialog({
+    required this.categories,
+    required this.selected,
+  });
+
+  @override
+  State<_CategoryPickerDialog> createState() => _CategoryPickerDialogState();
+}
+
+class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  /// "All" always survives filtering when the query is empty, so the list is
+  /// never headed by a category when the user has not searched for one.
+  List<String?> get _matches {
+    final query = _query.trim().toLowerCase();
+    final all = <String?>[null, ...widget.categories];
+    if (query.isEmpty) return all;
+    return [
+      for (final category in all)
+        if ((category ?? 'All').toLowerCase().contains(query)) category,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final matches = _matches;
+
+    return Dialog(
+      backgroundColor: const Color(0xFF14141C),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 460,
+          maxHeight: size.height * 0.72,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.category_rounded,
+                    color: Colors.white54,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Category',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${widget.categories.length}',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                // Deliberately not autofocused: on TV that would throw the
+                // in-app keyboard over the list before the user has looked
+                // at it.
+                child: TvTextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search categories…',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: Colors.white.withValues(alpha: 0.3),
+                      size: 19,
+                    ),
+                    filled: false,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                ),
+              ),
+            ),
+            Flexible(
+              child: matches.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                      child: Text(
+                        'No category matches "${_query.trim()}"',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          fontSize: 13,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.only(bottom: 12),
+                      itemCount: matches.length,
+                      itemBuilder: (_, index) {
+                        final category = matches[index];
+                        final isSelected = category == widget.selected;
+                        return _CategoryPickerRow(
+                          label: category ?? 'All',
+                          selected: isSelected,
+                          onTap: () => Navigator.of(
+                            context,
+                          ).pop(_CategoryChoice(category)),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryPickerRow extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryPickerRow({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          color: selected
+              ? const Color(0xFF7C5CFF).withValues(alpha: 0.16)
+              : Colors.transparent,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? Colors.white : Colors.white70,
+                    fontSize: 13.5,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (selected)
+                const Icon(
+                  Icons.check_rounded,
+                  color: Color(0xFF7C5CFF),
+                  size: 18,
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -24,6 +24,10 @@ import 'widgets/settings_widgets.dart';
 class SettingsTvLayout extends StatefulWidget {
   final List<ConnectionInfo> connections;
 
+  /// Watch-history services (Trakt, Simkl, MDBList) — their own rail category
+  /// rather than three more cards in Connections, which had grown to ten.
+  final List<ConnectionInfo> trackers;
+
   /// Focus target the sidebar hand-off and post-logout restores aim at —
   /// attached to the first rail item.
   final FocusNode? firstFocusNode;
@@ -63,6 +67,7 @@ class SettingsTvLayout extends StatefulWidget {
   const SettingsTvLayout({
     super.key,
     required this.connections,
+    required this.trackers,
     required this.firstFocusNode,
     required this.onOpenSearch,
     required this.onOpenHomePageSettings,
@@ -109,25 +114,33 @@ class _Category {
 }
 
 const List<_Category> _kCategories = [
-  _Category(Icons.link_rounded, 'Connections', 'Debrid, Trakt, IPTV & more'),
+  _Category(Icons.link_rounded, 'Connections', 'Debrid, cloud, IPTV & more'),
+  _Category(Icons.sync_rounded, 'Trackers', 'Trakt & Simkl watch history'),
   _Category(Icons.tune_rounded, 'General', 'Home, player & remote'),
   _Category(Icons.search_rounded, 'Search', 'Engines, filters & providers'),
   _Category(Icons.live_tv_rounded, 'TV Mode', 'Debrify TV & keyboard'),
-  _Category(Icons.storage_rounded, 'Data & Backup', 'Downloads, backup & restore'),
+  _Category(
+    Icons.storage_rounded,
+    'Data & Backup',
+    'Downloads, backup & restore',
+  ),
   _Category(Icons.system_update_rounded, 'Updates', 'Version & auto-update'),
   _Category(Icons.favorite_rounded, 'Support', 'Donate & community links'),
   _Category(Icons.warning_amber_rounded, 'Danger Zone', 'Reset Debrify'),
 ];
 
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
-  /// Max focusable rows in any single non-Connections category (Data & Backup
-  /// has up to 5 with the download-location row) — sizes the pane node pool.
+  /// Max focusable rows in any single FIXED category — one whose rows are
+  /// written out here rather than driven by a provider list (Data & Backup has
+  /// up to 5 with the download-location row). Connections and Trackers are
+  /// sized from their own lists; see the pool computation in [initState].
   static const int _kMaxCategoryRows = 5;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
   /// [ValueListenableBuilder]s — not the whole two-pane tree (which, on
-  /// Connections, means re-laying-out 10 cards per DPAD step on weak TVs).
+  /// Connections, means re-laying-out every provider card per DPAD step on
+  /// weak TVs).
   final ValueNotifier<int> _selected = ValueNotifier<int>(0);
 
   /// One node per category rail item — all owned here. The parent's
@@ -138,7 +151,9 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
 
   /// The search item sits above the category rail — its own node so Up from the
   /// first category lands here and Down from here returns to the categories.
-  final FocusNode _searchNode = FocusNode(debugLabel: 'settings-tv-rail-search');
+  final FocusNode _searchNode = FocusNode(
+    debugLabel: 'settings-tv-rail-search',
+  );
 
   /// Pool of focus nodes for the pane rows, indexed top-to-bottom. Reused
   /// across categories (only one pane is shown at a time). A node whose
@@ -161,12 +176,15 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
       _kCategories.length,
       (i) => FocusNode(debugLabel: 'settings-tv-rail-$i'),
     );
-    // The pool must cover the largest category. Connections has one row per
-    // provider (widget.connections.length); every other category has at most
-    // [_kMaxCategoryRows] rows (General / Search / Data & Backup = 4).
-    final poolSize = widget.connections.length > _kMaxCategoryRows
-        ? widget.connections.length
-        : _kMaxCategoryRows;
+    // The pool must cover whichever category has the most rows. Connections
+    // and Trackers each have one row per provider; the fixed categories have
+    // at most [_kMaxCategoryRows]. Computed over all three rather than
+    // assuming Connections is always the biggest — it no longer holds every
+    // provider.
+    var poolSize = _kMaxCategoryRows;
+    for (final n in [widget.connections.length, widget.trackers.length]) {
+      if (n > poolSize) poolSize = n;
+    }
     _paneNodes = List.generate(
       poolSize,
       (i) => FocusNode(debugLabel: 'settings-tv-pane-$i'),
@@ -453,7 +471,18 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ],
         ];
-      case 1: // General
+      case 1: // Trackers
+        return [
+          for (int i = 0; i < widget.trackers.length; i++) ...[
+            if (i != 0) const SizedBox(height: 10),
+            ConnectionCard(
+              info: widget.trackers[i],
+              focusNode: _paneNodes[i],
+              isLeftColumn: false,
+            ),
+          ],
+        ];
+      case 2: // General
         return [
           SettingsSection(
             title: '',
@@ -476,7 +505,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 2: // Search
+      case 3: // Search
         return [
           SettingsSection(
             title: '',
@@ -504,7 +533,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 3: // TV Mode
+      case 4: // TV Mode
         return [
           SettingsSection(
             title: '',
@@ -523,64 +552,64 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 4: // Data & Backup
-      {
-        // Focus nodes are claimed sequentially so the optional
-        // download-location row doesn't shift hardcoded indices.
-        int paneIdx = 0;
-        FocusNode nextNode() => _paneNodes[paneIdx++];
-        return [
-          if (widget.onOpenDownloadLocation != null) ...[
-            const SettingsSectionLabel('Downloads'),
+      case 5: // Data & Backup
+        {
+          // Focus nodes are claimed sequentially so the optional
+          // download-location row doesn't shift hardcoded indices.
+          int paneIdx = 0;
+          FocusNode nextNode() => _paneNodes[paneIdx++];
+          return [
+            if (widget.onOpenDownloadLocation != null) ...[
+              const SettingsSectionLabel('Downloads'),
+              SettingsSection(
+                title: '',
+                children: [
+                  SettingsTile.spec(
+                    SettingsRows.downloadLocation,
+                    subtitle: widget.downloadLocationSubtitle,
+                    onTap: widget.onOpenDownloadLocation!,
+                    focusNode: nextNode(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+            ],
+            const SettingsSectionLabel('Maintenance'),
             SettingsSection(
               title: '',
               children: [
                 SettingsTile.spec(
-                  SettingsRows.downloadLocation,
-                  subtitle: widget.downloadLocationSubtitle,
-                  onTap: widget.onOpenDownloadLocation!,
+                  SettingsRows.clearDownloads,
+                  onTap: widget.onClearDownloads,
+                  focusNode: nextNode(),
+                ),
+                SettingsTile.spec(
+                  SettingsRows.clearPlayback,
+                  onTap: widget.onClearPlayback,
                   focusNode: nextNode(),
                 ),
               ],
             ),
             const SizedBox(height: 18),
-          ],
-          const SettingsSectionLabel('Maintenance'),
-          SettingsSection(
-            title: '',
-            children: [
-              SettingsTile.spec(
-                SettingsRows.clearDownloads,
-                onTap: widget.onClearDownloads,
-                focusNode: nextNode(),
-              ),
-              SettingsTile.spec(
-                SettingsRows.clearPlayback,
-                onTap: widget.onClearPlayback,
-                focusNode: nextNode(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          const SettingsSectionLabel('Backup & Restore'),
-          SettingsSection(
-            title: '',
-            children: [
-              SettingsTile.spec(
-                SettingsRows.createBackup,
-                onTap: widget.onCreateBackup,
-                focusNode: nextNode(),
-              ),
-              SettingsTile.spec(
-                SettingsRows.restoreBackup,
-                onTap: widget.onRestoreBackup,
-                focusNode: nextNode(),
-              ),
-            ],
-          ),
-        ];
-      }
-      case 5: // Updates
+            const SettingsSectionLabel('Backup & Restore'),
+            SettingsSection(
+              title: '',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.createBackup,
+                  onTap: widget.onCreateBackup,
+                  focusNode: nextNode(),
+                ),
+                SettingsTile.spec(
+                  SettingsRows.restoreBackup,
+                  onTap: widget.onRestoreBackup,
+                  focusNode: nextNode(),
+                ),
+              ],
+            ),
+          ];
+        }
+      case 6: // Updates
         return [
           SettingsSection(
             title: '',
@@ -612,7 +641,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 6: // Support
+      case 7: // Support
         // The donation row is conditional, so index the pane nodes off a
         // running counter to keep Up/Down wiring contiguous.
         int p = 0;
@@ -646,8 +675,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 7: // Danger Zone
-      default:
+      case 8: // Danger Zone
         return [
           SettingsSection(
             title: '',
@@ -661,6 +689,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
+      // Deliberately NOT sharing a body with Danger Zone, which is how this
+      // read before: an index nobody wrote a case for used to fall through
+      // and render Reset Debrify. A forgotten case should show nothing, never
+      // the destructive pane.
+      default:
+        return const [];
     }
   }
 }

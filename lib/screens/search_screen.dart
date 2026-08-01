@@ -51,6 +51,7 @@ import '../services/youtube_service.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
 import '../widgets/hero_trailer_backdrop.dart';
+import '../widgets/home/cw_card_menu.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
@@ -680,12 +681,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _CwRow(
         title: 'Continue Watching',
         tag: 'Movies',
+        kind: _CwKind.local,
         items: _cwMovies,
         nodes: _cwMovieNodes,
         progressOf: (m) => _cwProgress[m.imdbId],
         episodeOf: (_) => null,
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
+        onRemove: _removeLocalCwItem,
         onSeeAll: () => _openContinueWatchingSeeAll('movie'),
       ),
     if (_cwEnabled &&
@@ -694,36 +697,42 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _CwRow(
         title: 'Continue Watching',
         tag: 'Series',
+        kind: _CwKind.local,
         items: _cwSeries,
         nodes: _cwSeriesNodes,
         progressOf: (m) => _cwProgress[m.imdbId],
         episodeOf: (m) => _cwEpisode[m.imdbId],
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
+        onRemove: _removeLocalCwItem,
         onSeeAll: () => _openContinueWatchingSeeAll('series'),
       ),
     if (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies'))
       _CwRow(
         title: 'Trakt Continue Watching',
         tag: 'Movies',
+        kind: _CwKind.trakt,
         items: _traktMovies,
         nodes: _traktMovieNodes,
         progressOf: (m) => _traktProgress[m.imdbId],
         episodeOf: (_) => null,
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
+        onRemove: _removeTraktCwItem,
         onSeeAll: () => _openTraktSeeAll('movie'),
       ),
     if (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows'))
       _CwRow(
         title: 'Trakt Continue Watching',
         tag: 'Shows',
+        kind: _CwKind.trakt,
         items: _traktSeries,
         nodes: _traktSeriesNodes,
         progressOf: (m) => _traktProgress[m.imdbId],
         episodeOf: (m) => _traktEpisode[m.imdbId],
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
+        onRemove: _removeTraktCwItem,
         onSeeAll: () => _openTraktSeeAll('series'),
       ),
     // Simkl rows come after the Trakt rows. Both trackers fetch over the network
@@ -736,24 +745,28 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _CwRow(
         title: 'Simkl Continue Watching',
         tag: 'Movies',
+        kind: _CwKind.simkl,
         items: _simklMovies,
         nodes: _simklMovieNodes,
         progressOf: (m) => _simklProgress[m.imdbId],
         episodeOf: (_) => null,
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
+        onRemove: _removeSimklCwItem,
         onSeeAll: () => _openSimklCwSeeAll('movie'),
       ),
     if (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows'))
       _CwRow(
         title: 'Simkl Continue Watching',
         tag: 'Shows',
+        kind: _CwKind.simkl,
         items: _simklSeries,
         nodes: _simklSeriesNodes,
         progressOf: (m) => _simklProgress[m.imdbId],
         episodeOf: (m) => _simklEpisode[m.imdbId],
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
+        onRemove: _removeSimklCwItem,
         onSeeAll: () => _openSimklCwSeeAll('series'),
       ),
     // IPTV Continue Watching (Xtream VOD). Routes through [IptvCwRouter], not
@@ -764,23 +777,27 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _CwRow(
         title: 'IPTV Continue Watching',
         tag: 'Movies',
+        kind: _CwKind.iptv,
         items: _iptvCwMovies,
         nodes: _iptvCwMovieNodes,
         progressOf: (m) => _iptvCwProgress[m.id],
         episodeOf: (_) => null,
         onOpen: _openIptvCwItem,
         onQuickPlay: _openIptvCwItem,
+        onRemove: _removeIptvCwItem,
       ),
     if (_iptvCwSeries.isNotEmpty && !_homeDisabled.contains('iptv:series'))
       _CwRow(
         title: 'IPTV Continue Watching',
         tag: 'Series',
+        kind: _CwKind.iptv,
         items: _iptvCwSeries,
         nodes: _iptvCwSeriesNodes,
         progressOf: (m) => _iptvCwProgress[m.id],
         episodeOf: (m) => _iptvCwEpisode[m.id],
         onOpen: _openIptvCwItem,
         onQuickPlay: _openIptvCwItem,
+        onRemove: _removeIptvCwItem,
       ),
   ];
 
@@ -2822,11 +2839,54 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// The Trakt rows just landed (skeleton → content), usually seconds after
-  /// the rest of the board — if the user is already browsing elsewhere, point
-  /// them at the new rows with a small toast, with the direction worked out
-  /// from where DPAD focus currently sits (local Continue Watching renders
-  /// above the Trakt rows; favourites and catalog rows below).
-  void _maybeAnnounceTraktRows() {
+  /// the rest of the board. Local Continue Watching renders above them; Simkl,
+  /// IPTV, favourites and catalog rows below.
+  void _maybeAnnounceTraktRows() => _maybeAnnounceCwRows(
+    label: 'Trakt',
+    visible:
+        (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies')) ||
+        (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows')),
+    ownNodes: [_traktMovieNodes, _traktSeriesNodes],
+    aboveNodes: [_cwMovieNodes, _cwSeriesNodes],
+    belowNodes: [
+      _simklMovieNodes,
+      _simklSeriesNodes,
+      _iptvCwMovieNodes,
+      _iptvCwSeriesNodes,
+    ],
+  );
+
+  /// Same for the Simkl rows, which land on their own schedule (and without a
+  /// reserved skeleton slot, so they push the board when they arrive). Local
+  /// Continue Watching and the Trakt rows render above them, IPTV below.
+  void _maybeAnnounceSimklRows() => _maybeAnnounceCwRows(
+    label: 'Simkl',
+    visible:
+        (_simklMovies.isNotEmpty && !_homeDisabled.contains('simkl:movies')) ||
+        (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows')),
+    ownNodes: [_simklMovieNodes, _simklSeriesNodes],
+    aboveNodes: [
+      _cwMovieNodes,
+      _cwSeriesNodes,
+      _traktMovieNodes,
+      _traktSeriesNodes,
+    ],
+    belowNodes: [_iptvCwMovieNodes, _iptvCwSeriesNodes],
+  );
+
+  /// A tracker's Continue Watching rows just appeared on the board — if the
+  /// user is already browsing elsewhere, point them at the new rows with a
+  /// small toast, with the direction worked out from where DPAD focus currently
+  /// sits. [ownNodes] are the new rows themselves (focus already there → stay
+  /// quiet), [aboveNodes] / [belowNodes] the other Continue Watching rows they
+  /// slot between; favourites and catalog rows always render below.
+  void _maybeAnnounceCwRows({
+    required String label,
+    required bool visible,
+    required List<List<FocusNode>> ownNodes,
+    required List<List<FocusNode>> aboveNodes,
+    required List<List<FocusNode>> belowNodes,
+  }) {
     if (!mounted || !widget.isTelevision) return;
     if (widget.searchMode || widget.discoverMode) return;
     // Still on the brand loading stage: the rows will simply be there when the
@@ -2838,20 +2898,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return;
     // Rows hidden by the Home Rows manager never reached the screen.
-    final visible =
-        (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies')) ||
-        (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows'));
     if (!visible) return;
     final primary = FocusManager.instance.primaryFocus;
     bool onRow(List<FocusNode> nodes) =>
         primary != null && nodes.contains(primary);
+    bool onAny(List<List<FocusNode>> rows) => rows.any(onRow);
+    if (onAny(ownNodes)) return; // already looking at them
     String? dir;
-    if (onRow(_traktMovieNodes) || onRow(_traktSeriesNodes)) {
-      return; // already looking at them
-    } else if (onRow(_cwMovieNodes) || onRow(_cwSeriesNodes)) {
+    if (onAny(aboveNodes)) {
       dir = 'down';
-    } else if (onRow(_simklMovieNodes) || onRow(_simklSeriesNodes)) {
-      dir = 'up'; // Simkl rows render just below the Trakt rows
+    } else if (onAny(belowNodes)) {
+      dir = 'up';
     } else {
       for (final kind in _favRowKinds) {
         if (onRow(_favNodesFor(kind))) {
@@ -2869,8 +2926,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
     }
     final msg = dir == null
-        ? 'Trakt Continue Watching loaded'
-        : 'Trakt loaded — scroll $dir to view';
+        ? '$label Continue Watching loaded'
+        : '$label loaded — scroll $dir to view';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -2970,7 +3027,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// title's playback entries (and watch history, so shows don't reappear via
   /// "Up Next") on Trakt, then pop the detail and reload the Trakt rows —
   /// mirroring the old home screen's remove flow.
-  Future<void> _removeFromTraktContinueWatching(String imdbId) async {
+  ///
+  /// [popDetail] is false when the card's own long-press menu asks for the
+  /// removal: there's no detail route open to pop, and popping would take the
+  /// board itself off the stack.
+  Future<void> _removeFromTraktContinueWatching(
+    String imdbId, {
+    bool popDetail = true,
+  }) async {
     final cwItem = _traktByImdb[imdbId];
     if (cwItem == null) return;
     final removed = await TraktContinueWatchingService.instance.removeItem(
@@ -2981,13 +3045,184 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _snack('Failed to remove from Trakt Continue Watching');
       return;
     }
-    // The Trakt calls take a moment — the user may have already backed out of
-    // the detail during the wait, so only pop while it's still the top route.
-    Navigator.of(
-      context,
-    ).popUntil((route) => route.settings.name != kCatalogDetailRouteName);
+    if (popDetail) {
+      // The Trakt calls take a moment — the user may have already backed out of
+      // the detail during the wait, so only pop while it's still the top route.
+      Navigator.of(
+        context,
+      ).popUntil((route) => route.settings.name != kCatalogDetailRouteName);
+    }
     _snack('Removed from Trakt Continue Watching');
-    _loadTraktContinueWatching(refreshBound: false);
+    await _loadTraktContinueWatching(refreshBound: false);
+  }
+
+  // ── Continue Watching card menu (long-press / hold-OK) ────────────────────
+
+  /// Guards against a second menu stacking on the first — on TV the hold-OK
+  /// gesture and the tap the platform synthesizes from DPAD Select can both
+  /// arrive for one press.
+  bool _cwMenuOpen = false;
+
+  /// Long-press (hold-OK on TV) on a Continue Watching card: Play, or take the
+  /// title off the row. Each row supplies its own removal (see [_CwRow.onRemove])
+  /// because the four sources write to four different places.
+  ///
+  /// [cwIndex]/[col] are the card's board coordinates, used to put TV focus back
+  /// on a live card once the row rebuilds without the removed one.
+  Future<void> _openCwCardMenu(
+    _CwRow row,
+    StremioMeta item,
+    int cwIndex,
+    int col,
+  ) async {
+    if (_cwMenuOpen) return;
+    _cwMenuOpen = true;
+    final isSeries = item.type == 'series';
+    // An IPTV series card routes to its Xtream series page rather than playing
+    // outright (see [_openIptvCwItem]) — so name the action for what it does.
+    final playLabel = (row.kind == _CwKind.iptv && isSeries)
+        ? 'Open series'
+        : 'Play';
+    final String playDescription;
+    final String removeDescription;
+    switch (row.kind) {
+      case _CwKind.local:
+        playDescription = isSeries
+            ? 'Jump back into the episode you stopped on.'
+            : 'Resume from where you left off.';
+        removeDescription =
+            'Takes it off this row and clears the position saved on this '
+            'device.';
+      case _CwKind.trakt:
+        playDescription = isSeries
+            ? 'Jump back into the episode you stopped on.'
+            : 'Resume from where you left off.';
+        removeDescription =
+            'Deletes this title\'s playback progress (and watch history) on '
+            'Trakt, so it leaves the Trakt rows everywhere.';
+      case _CwKind.simkl:
+        playDescription = isSeries
+            ? 'Jump back into the episode you stopped on.'
+            : 'Resume from where you left off.';
+        removeDescription = isSeries
+            ? 'Moves the show to On Hold on Simkl and clears the paused '
+                  'position, so it stops resurfacing as up next.'
+            : 'Clears this movie\'s paused position on Simkl.';
+      case _CwKind.iptv:
+        playDescription = isSeries
+            ? 'Open the series and pick up where you left off.'
+            : 'Resume from where you left off.';
+        removeDescription = isSeries
+            ? 'Clears every watched episode of this series from your IPTV '
+                  'history.'
+            : 'Clears this item from your IPTV watch history and forgets its '
+                  'position.';
+    }
+
+    final episode = row.episodeOf(item);
+    CwCardAction? action;
+    try {
+      action = await showCwCardMenu(
+        context,
+        title: item.name,
+        isTelevision: widget.isTelevision,
+        posterUrl: item.poster,
+        subtitle: [row.title, if (episode != null) episode].join('  ·  '),
+        // Mirrors the card's own long-press-to-play gate: PikPak-only setups
+        // have no quick play, so the menu offers the removal alone.
+        showPlay: row.kind == _CwKind.iptv || !_pikpakOnly,
+        playLabel: playLabel,
+        playDescription: playDescription,
+        removeDescription: removeDescription,
+      );
+    } finally {
+      _cwMenuOpen = false;
+    }
+    if (!mounted || action == null) return;
+    switch (action) {
+      case CwCardAction.play:
+        row.onQuickPlay(item);
+      case CwCardAction.remove:
+        await row.onRemove(item);
+        if (!mounted) return;
+        _refocusAfterCwRemoval(cwIndex, col);
+    }
+  }
+
+  /// Put TV focus back on the board after a removal: the card that had it is
+  /// gone (and its FocusNode with it, if the row shrank), which would otherwise
+  /// leave the remote dead until the global reclaim listener notices.
+  void _refocusAfterCwRemoval(int cwIndex, int col) {
+    if (!widget.isTelevision) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Same index first: if this row survived it's still here, and if it
+      // emptied out the row below has slid into its place.
+      if (_focusCwRow(cwIndex, col)) return;
+      for (var i = cwIndex - 1; i >= 0; i--) {
+        if (_focusCwRow(i, col)) return;
+      }
+      // No Continue Watching rows left at all — hand the remote to the shell.
+      _leaveBoardTop();
+    });
+  }
+
+  /// Remove a LOCAL Continue Watching title from the row itself. The same two
+  /// writes [_handleContinueDetailAction] makes (list entry + saved position),
+  /// without the detail pop — nothing was pushed here.
+  Future<void> _removeLocalCwItem(StremioMeta item) async {
+    final imdbId = _imdbOf(item) ?? item.id;
+    if (imdbId.isEmpty) return;
+    await StorageService.removeContinueWatchingItem(imdbId);
+    await StorageService.clearPlaybackStateByImdbId(imdbId);
+    if (!mounted) return;
+    _snack('Removed from Continue Watching');
+    await _loadContinueWatching();
+  }
+
+  /// Remove a Trakt Continue Watching title from the row itself — the detail
+  /// page's flow minus the pop.
+  Future<void> _removeTraktCwItem(StremioMeta item) async {
+    final imdbId = _imdbOf(item);
+    if (imdbId == null) return;
+    await _removeFromTraktContinueWatching(imdbId, popDetail: false);
+  }
+
+  /// Remove a Simkl Continue Watching title from the row itself. Routes through
+  /// the shared [handleSimklMenuAction] the detail sheet uses (which shows its
+  /// own result snackbar), so a series is moved to On Hold and its paused
+  /// session cleared, and a movie just loses the session.
+  Future<void> _removeSimklCwItem(StremioMeta item) async {
+    await handleSimklMenuAction(
+      context,
+      item,
+      SimklItemMenuAction.removeFromContinueWatching,
+    );
+    if (!mounted) return;
+    await _loadSimklContinueWatching(refreshBound: false);
+  }
+
+  /// Remove an IPTV Continue Watching card: a movie drops its own history +
+  /// resume entry, a series drops every episode's (the card collapses them, so
+  /// leaving one behind would just rebuild it).
+  Future<void> _removeIptvCwItem(StremioMeta item) async {
+    final entry = _iptvCwByKey[item.id];
+    if (entry == null) return;
+    if (entry.isSeries) {
+      final seriesId = (entry.raw['seriesId'] as String?) ?? '';
+      if (seriesId.isEmpty) return;
+      await StorageService.removeIptvContinueWatchingSeries(
+        playlistId: (entry.raw['playlistId'] as String?) ?? '',
+        seriesId: seriesId,
+      );
+    } else {
+      final url = (entry.raw['url'] as String?) ?? entry.routeKey;
+      if (url.isEmpty) return;
+      await StorageService.removeIptvContinueWatchingItem(url);
+    }
+    if (!mounted) return;
+    _snack('Removed from Continue Watching');
+    await _loadIptvContinueWatching();
   }
 
   // ── Simkl Continue Watching ───────────────────────────────────────────────
@@ -3050,6 +3285,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return origIndex[a]!.compareTo(origIndex[b]!);
     });
 
+    // Whether the board already showed Simkl rows before this load — only a
+    // fresh appearance announces itself below; a refresh of rows the user can
+    // already see stays quiet.
+    final hadSimklRows = _simklMovies.isNotEmpty || _simklSeries.isNotEmpty;
     _syncCwNodes(_simklMovieNodes, movieMetas.length, 'smovie');
     _syncCwNodes(_simklSeriesNodes, showMetas.length, 'sseries');
     setState(() {
@@ -3067,6 +3306,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ..addAll(byImdb);
     });
     _maybeAutoFocusBoard();
+    if (!hadSimklRows) _maybeAnnounceSimklRows();
     if (refreshBound) unawaited(_refreshBoundSources());
   }
 
@@ -5533,6 +5773,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   inCw: inCw,
                   imdb: imdb,
                 ),
+                // Inline 1–10 strips in the tracker sheets: same handler, with
+                // the score already chosen so no dialog opens.
+                onTraktRate: (r) => _handleDetailQuickAction(
+                  item,
+                  addon,
+                  TraktItemMenuAction.rate,
+                  inCw: inCw,
+                  imdb: imdb,
+                  presetRating: r,
+                ),
+                onSimklRate: (r) => _handleDetailSimklQuickAction(
+                  item,
+                  SimklItemMenuAction.rate,
+                  presetRating: r,
+                ),
                 simklMenuOptions: simklOptions,
                 simklMenuBuilder: buildSimklOptions,
                 // Live Simkl status (current watchlist status + rating) —
@@ -5650,6 +5905,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     TraktItemMenuAction action, {
     required bool inCw,
     String? imdb,
+    // Set by the merged detail sheet's inline rating strip, which already knows
+    // the score — skips the rating dialog rather than asking twice.
+    int? presetRating,
   }) async {
     if (action == TraktItemMenuAction.removeFromPlayback) {
       if (imdb != null) await _handleContinueDetailAction(action, imdb);
@@ -5671,6 +5929,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
       onSearchPacks: _searchPacksFromDetail,
       onAddToStremioTv: _addToStremioTvFromDetail,
+      presetRating: presetRating,
     );
     // A Trakt watched-state change moves a title in/out of Continue Watching,
     // so reload the board's Trakt rows — otherwise the board is stale when the
@@ -5689,9 +5948,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// actions (Select Source etc.) or Continue-Watching removal to special-case.
   Future<void> _handleDetailSimklQuickAction(
     StremioMeta item,
-    SimklItemMenuAction action,
-  ) async {
-    await handleSimklMenuAction(context, item, action);
+    SimklItemMenuAction action, {
+    int? presetRating,
+  }) async {
+    await handleSimklMenuAction(
+      context,
+      item,
+      action,
+      presetRating: presetRating,
+    );
     // Any status change can add/remove a title from the Simkl CW rows: On Hold
     // and remove/completed/dropped take it OFF, while Watching makes a series
     // newly eligible as an "up next" card. So reload the rows on every one that
@@ -10336,9 +10601,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           hasBoundSource: _isBound(item),
                           progress: row.progressOf(item),
                           episodeLabel: row.episodeOf(item),
-                          onQuickPlay: _pikpakOnly
-                              ? null
-                              : () => row.onQuickPlay(item),
+                          // Long-press / hold-OK opens the Play + Remove menu
+                          // rather than playing outright — a Continue Watching
+                          // card is the one place removal has to be reachable.
+                          onLongPress: () =>
+                              _openCwCardMenu(row, item, cwIndex, col),
                           onFocused: () => _setHero(item),
                           onUp: up(col),
                           onDown: down(col),
@@ -12590,12 +12857,18 @@ class _CategoryTag extends StatelessWidget {
   }
 }
 
+/// Where a Continue Watching row's entries live — drives the long-press menu's
+/// wording, since "remove" means a different write per source (local store,
+/// Trakt playback API, Simkl status/session, IPTV watch history).
+enum _CwKind { local, trakt, simkl, iptv }
+
 /// A leading "Continue Watching" board row (local or Trakt). Carries its own
 /// header, focus nodes, per-item progress lookup, and open / quick-play
 /// handlers so the local and Trakt sources render through one row builder.
 class _CwRow {
   final String title; // e.g. 'Continue Watching' or 'Trakt Movies'
   final String? tag; // 'Movies' / 'Series' pill, or null
+  final _CwKind kind;
   final List<StremioMeta> items;
   final List<FocusNode> nodes;
   final double? Function(StremioMeta) progressOf;
@@ -12605,18 +12878,24 @@ class _CwRow {
   final void Function(StremioMeta) onOpen;
   final void Function(StremioMeta) onQuickPlay;
 
+  /// Takes the title off THIS row's source and reloads it. Long-press (hold-OK
+  /// on TV) offers it next to Play — see [_SearchScreenState._openCwCardMenu].
+  final Future<void> Function(StremioMeta) onRemove;
+
   /// Opens the "See All" grid for this row's source, or null to hide the link.
   final VoidCallback? onSeeAll;
 
   const _CwRow({
     required this.title,
     required this.tag,
+    required this.kind,
     required this.items,
     required this.nodes,
     required this.progressOf,
     required this.episodeOf,
     required this.onOpen,
     required this.onQuickPlay,
+    required this.onRemove,
     this.onSeeAll,
   });
 }
@@ -12703,6 +12982,11 @@ class _BoardCell extends StatelessWidget {
   /// Long-press quick-play (mobile/desktop). Null hides the shortcut — used to
   /// mirror the catalog tiles' long-press-to-play when quick-play is available.
   final VoidCallback? onQuickPlay;
+
+  /// Long-press (and hold-OK on TV) opens a menu instead of playing. Set on
+  /// Continue Watching cards, where the press has to offer removal too; takes
+  /// precedence over [onQuickPlay] when both are given.
+  final VoidCallback? onLongPress;
   final VoidCallback onFocused;
   final VoidCallback onUp;
   final VoidCallback onDown;
@@ -12726,6 +13010,7 @@ class _BoardCell extends StatelessWidget {
     this.progress,
     this.episodeLabel,
     this.onQuickPlay,
+    this.onLongPress,
     required this.onFocused,
     required this.onUp,
     required this.onDown,
@@ -12788,6 +13073,7 @@ class _BoardCell extends StatelessWidget {
         progress: progress,
         episodeLabel: episodeLabel,
         onQuickPlay: onQuickPlay,
+        onLongPress: onLongPress,
         onOpen: onOpen,
         heroTag: heroTag,
       ),
@@ -12833,6 +13119,10 @@ class _StremioCard extends StatefulWidget {
 
   /// Long-press quick-play (mobile/desktop). Null hides the shortcut.
   final VoidCallback? onQuickPlay;
+
+  /// Long-press — and hold-OK on TV — opens a menu instead of playing. Wins
+  /// over [onQuickPlay] when both are set (Continue Watching cards).
+  final VoidCallback? onLongPress;
   final VoidCallback onOpen;
 
   /// Shared-element tag: when set, the poster flies into the detail page's
@@ -12848,6 +13138,7 @@ class _StremioCard extends StatefulWidget {
     this.progress,
     this.episodeLabel,
     this.onQuickPlay,
+    this.onLongPress,
     required this.onOpen,
     this.heroTag,
   });
@@ -12856,11 +13147,51 @@ class _StremioCard extends StatefulWidget {
   State<_StremioCard> createState() => _StremioCardState();
 }
 
-class _StremioCardState extends State<_StremioCard> {
+class _StremioCardState extends State<_StremioCard>
+    with SingleTickerProviderStateMixin {
   bool _focused = false;
   bool _hovered = false;
   bool _keyDown = false;
   bool get _active => _focused || _hovered;
+
+  /// Hold-OK on TV (same 500ms as the IPTV channel row's hold-to-favourite) —
+  /// only armed on cards that have an [_StremioCard.onLongPress] menu. A short
+  /// press still opens the title. Driven by a controller so the focused card
+  /// can show the hold filling, making an otherwise-invisible gesture
+  /// discoverable.
+  static const _holdDuration = Duration(milliseconds: 500);
+  late final AnimationController _holdController = AnimationController(
+    vsync: this,
+    duration: _holdDuration,
+  );
+  bool _holdFired = false;
+  bool _holding = false;
+
+  bool get _holdEnabled => widget.isTelevision && widget.onLongPress != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _holdController.addStatusListener((status) {
+      if (status != AnimationStatus.completed) return;
+      _holdFired = true;
+      if (mounted) setState(() => _holding = false);
+      _holdController.reset();
+      widget.onLongPress?.call();
+    });
+  }
+
+  @override
+  void dispose() {
+    _holdController.dispose();
+    super.dispose();
+  }
+
+  /// Abandon an in-flight hold (focus left, or the key came back up).
+  void _cancelHold() {
+    _holdController.reset();
+    if (_holding && mounted) setState(() => _holding = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12976,6 +13307,35 @@ class _StremioCardState extends State<_StremioCard> {
                       ),
                     ),
                   ),
+                // Hold-OK feedback: a dim scrim with a filling ring, shown only
+                // while OK is actually held down (so it costs nothing at rest).
+                if (_holding)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: ColoredBox(
+                        color: Colors.black.withValues(alpha: 0.42),
+                        child: Center(
+                          child: SizedBox(
+                            width: 34,
+                            height: 34,
+                            child: AnimatedBuilder(
+                              animation: _holdController,
+                              builder: (_, __) => CircularProgressIndicator(
+                                value: _holdController.value,
+                                strokeWidth: 3,
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.22,
+                                ),
+                                valueColor: const AlwaysStoppedAnimation(
+                                  kStremioFocusRing,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Selection ring — accent on TV focus, subtle white on hover.
                 if (_active)
                   Positioned.fill(
@@ -13006,7 +13366,13 @@ class _StremioCardState extends State<_StremioCard> {
       focusNode: widget.focusNode,
       onFocusChange: (f) {
         setState(() => _focused = f);
-        if (!f) _keyDown = false;
+        if (!f) {
+          // Focus left mid-press — disarm, so a stray key-up can't open a card
+          // the user never pressed and a half-filled hold can't fire.
+          _keyDown = false;
+          _holdFired = false;
+          _cancelHold();
+        }
         if (f) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
@@ -13025,6 +13391,27 @@ class _StremioCardState extends State<_StremioCard> {
       onKeyEvent: (node, event) {
         if (isActivateKey(event.logicalKey) ||
             event.logicalKey == LogicalKeyboardKey.space) {
+          // Cards with a long-press menu (Continue Watching) tell a tap from a
+          // hold; every other card keeps the plain press-to-open path.
+          if (_holdEnabled) {
+            if (event is KeyDownEvent) {
+              _keyDown = true;
+              _holdFired = false;
+              setState(() => _holding = true);
+              _holdController.forward(from: 0);
+            } else if (event is KeyUpEvent) {
+              // A press this card actually started, released before the hold
+              // completed → open. A key-up with no matching key-down (focus
+              // arrived mid-press) is swallowed.
+              final wasPress = _keyDown && !_holdFired;
+              _keyDown = false;
+              _holdFired = false;
+              _cancelHold();
+              if (wasPress) widget.onOpen();
+            }
+            // Swallow auto-repeat while the key is held.
+            return KeyEventResult.handled;
+          }
           if (event is KeyDownEvent) {
             _keyDown = true;
             return KeyEventResult.handled;
@@ -13045,8 +13432,18 @@ class _StremioCardState extends State<_StremioCard> {
         },
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
-          onTap: widget.onOpen,
-          onLongPress: widget.onQuickPlay,
+          // Guarded because this card now sits UNDER a dialog: on TV remotes
+          // where Select also emits a tap, picking a row in the long-press menu
+          // pops it and lets that tap through to the card — which would open
+          // the detail page on top of the play/removal the user actually asked
+          // for. The dialog rows mark the key action; this drops its echo.
+          onTap: () {
+            if (DialogTapGuard.shouldIgnoreTap()) return;
+            widget.onOpen();
+          },
+          // Touch/desktop counterpart of TV's hold-OK: the menu when there is
+          // one, else the old long-press-to-play.
+          onLongPress: widget.onLongPress ?? widget.onQuickPlay,
           behavior: HitTestBehavior.opaque,
           // No title beneath the poster — Stremio lets the artwork carry the
           // rail; the title lives on the hero (focused) and the detail page.

@@ -235,6 +235,11 @@ class VideoPlayerLaunchArgs {
   final String? iptvSelectedCategory;
   final String? iptvContentType;
   final List<Map<String, dynamic>>? iptvSources;
+
+  /// The user's channel lists ({id, name, isBuiltin}), for the players'
+  /// "add to list" picker. Shipped once per launch rather than as a field on
+  /// every channel — the channel payload is already capped for size.
+  final List<Map<String, dynamic>>? iptvLists;
   final Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
   iptvBrowseProvider;
   // Stremio sources for in-player source switching
@@ -323,6 +328,7 @@ class VideoPlayerLaunchArgs {
     this.iptvSelectedCategory,
     this.iptvContentType,
     this.iptvSources,
+    this.iptvLists,
     this.iptvBrowseProvider,
     this.stremioSources,
     this.stremioCurrentSourceIndex,
@@ -700,6 +706,7 @@ class VideoPlayerLauncher {
           iptvSelectedCategory: args.iptvSelectedCategory,
           iptvContentType: args.iptvContentType,
           iptvSources: args.iptvSources,
+          iptvLists: args.iptvLists,
           iptvBrowseProvider: args.iptvBrowseProvider,
           stremioSources: args.stremioSources,
           stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
@@ -790,6 +797,7 @@ class VideoPlayerLauncher {
           iptvSelectedCategory: args.iptvSelectedCategory,
           iptvContentType: args.iptvContentType,
           iptvSources: args.iptvSources,
+          iptvLists: args.iptvLists,
           iptvBrowseProvider: args.iptvBrowseProvider,
           stremioSources: args.stremioSources,
           stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
@@ -2187,6 +2195,7 @@ class VideoPlayerLauncher {
           'selectedCategory': args.iptvSelectedCategory,
         'contentType': args.iptvContentType ?? inferredContentType,
         if (args.iptvSources != null) 'sources': args.iptvSources,
+        if (args.iptvLists != null) 'lists': args.iptvLists,
         'channels': [
           for (final c in channels)
             {
