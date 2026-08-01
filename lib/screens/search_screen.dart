@@ -2839,11 +2839,54 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// The Trakt rows just landed (skeleton → content), usually seconds after
-  /// the rest of the board — if the user is already browsing elsewhere, point
-  /// them at the new rows with a small toast, with the direction worked out
-  /// from where DPAD focus currently sits (local Continue Watching renders
-  /// above the Trakt rows; favourites and catalog rows below).
-  void _maybeAnnounceTraktRows() {
+  /// the rest of the board. Local Continue Watching renders above them; Simkl,
+  /// IPTV, favourites and catalog rows below.
+  void _maybeAnnounceTraktRows() => _maybeAnnounceCwRows(
+    label: 'Trakt',
+    visible:
+        (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies')) ||
+        (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows')),
+    ownNodes: [_traktMovieNodes, _traktSeriesNodes],
+    aboveNodes: [_cwMovieNodes, _cwSeriesNodes],
+    belowNodes: [
+      _simklMovieNodes,
+      _simklSeriesNodes,
+      _iptvCwMovieNodes,
+      _iptvCwSeriesNodes,
+    ],
+  );
+
+  /// Same for the Simkl rows, which land on their own schedule (and without a
+  /// reserved skeleton slot, so they push the board when they arrive). Local
+  /// Continue Watching and the Trakt rows render above them, IPTV below.
+  void _maybeAnnounceSimklRows() => _maybeAnnounceCwRows(
+    label: 'Simkl',
+    visible:
+        (_simklMovies.isNotEmpty && !_homeDisabled.contains('simkl:movies')) ||
+        (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows')),
+    ownNodes: [_simklMovieNodes, _simklSeriesNodes],
+    aboveNodes: [
+      _cwMovieNodes,
+      _cwSeriesNodes,
+      _traktMovieNodes,
+      _traktSeriesNodes,
+    ],
+    belowNodes: [_iptvCwMovieNodes, _iptvCwSeriesNodes],
+  );
+
+  /// A tracker's Continue Watching rows just appeared on the board — if the
+  /// user is already browsing elsewhere, point them at the new rows with a
+  /// small toast, with the direction worked out from where DPAD focus currently
+  /// sits. [ownNodes] are the new rows themselves (focus already there → stay
+  /// quiet), [aboveNodes] / [belowNodes] the other Continue Watching rows they
+  /// slot between; favourites and catalog rows always render below.
+  void _maybeAnnounceCwRows({
+    required String label,
+    required bool visible,
+    required List<List<FocusNode>> ownNodes,
+    required List<List<FocusNode>> aboveNodes,
+    required List<List<FocusNode>> belowNodes,
+  }) {
     if (!mounted || !widget.isTelevision) return;
     if (widget.searchMode || widget.discoverMode) return;
     // Still on the brand loading stage: the rows will simply be there when the
@@ -2855,20 +2898,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return;
     // Rows hidden by the Home Rows manager never reached the screen.
-    final visible =
-        (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies')) ||
-        (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows'));
     if (!visible) return;
     final primary = FocusManager.instance.primaryFocus;
     bool onRow(List<FocusNode> nodes) =>
         primary != null && nodes.contains(primary);
+    bool onAny(List<List<FocusNode>> rows) => rows.any(onRow);
+    if (onAny(ownNodes)) return; // already looking at them
     String? dir;
-    if (onRow(_traktMovieNodes) || onRow(_traktSeriesNodes)) {
-      return; // already looking at them
-    } else if (onRow(_cwMovieNodes) || onRow(_cwSeriesNodes)) {
+    if (onAny(aboveNodes)) {
       dir = 'down';
-    } else if (onRow(_simklMovieNodes) || onRow(_simklSeriesNodes)) {
-      dir = 'up'; // Simkl rows render just below the Trakt rows
+    } else if (onAny(belowNodes)) {
+      dir = 'up';
     } else {
       for (final kind in _favRowKinds) {
         if (onRow(_favNodesFor(kind))) {
@@ -2886,8 +2926,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
     }
     final msg = dir == null
-        ? 'Trakt Continue Watching loaded'
-        : 'Trakt loaded — scroll $dir to view';
+        ? '$label Continue Watching loaded'
+        : '$label loaded — scroll $dir to view';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -3245,6 +3285,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return origIndex[a]!.compareTo(origIndex[b]!);
     });
 
+    // Whether the board already showed Simkl rows before this load — only a
+    // fresh appearance announces itself below; a refresh of rows the user can
+    // already see stays quiet.
+    final hadSimklRows = _simklMovies.isNotEmpty || _simklSeries.isNotEmpty;
     _syncCwNodes(_simklMovieNodes, movieMetas.length, 'smovie');
     _syncCwNodes(_simklSeriesNodes, showMetas.length, 'sseries');
     setState(() {
@@ -3262,6 +3306,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ..addAll(byImdb);
     });
     _maybeAutoFocusBoard();
+    if (!hadSimklRows) _maybeAnnounceSimklRows();
     if (refreshBound) unawaited(_refreshBoundSources());
   }
 
