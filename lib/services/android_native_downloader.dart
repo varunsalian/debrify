@@ -70,6 +70,31 @@ class AndroidNativeDownloader {
     }
   }
 
+  /// Copy an on-disk file into the MediaStore (Download/<subDir>) so it becomes
+  /// user-visible, then delete the source. Used to publish an IPTV recording
+  /// that libmpv wrote to app-private storage. Returns the content URI string
+  /// on success, or null on failure.
+  static Future<String?> saveLocalFile({
+    required String path,
+    required String fileName,
+    String subDir = 'Debrify/Recordings',
+    String mimeType = 'video/mp2t',
+  }) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await _channel.invokeMethod<String>('saveFileToMediaStore', {
+        'path': path,
+        'fileName': fileName,
+        'subDir': subDir,
+        'mimeType': mimeType,
+      });
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
   /// Native truth for reconciliation: every persisted task merged with the
   /// live in-memory registry. Status is one of running/paused/failed.
   static Future<List<Map<String, dynamic>>> queryTasks() async {

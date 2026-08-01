@@ -515,6 +515,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// right-hand one was painted from launch state a zap never refreshed.
   bool get _iptvZapBannerOwnsIdentity => _currentIptvChannel?.isLive == true;
 
+  // ── IPTV recording (libmpv `stream-record`) ─────────────────────────────
+  /// True once the player is confirmed to run on a native (libmpv) backend —
+  /// recording is unavailable on the web backend.
+  bool _recordingSupported = false;
+  bool _isRecording = false;
+  /// Filesystem path libmpv is writing the active recording to.
+  String? _recordingTempPath;
+
+  /// Record is offered only for live IPTV on a libmpv backend.
+  bool get _canRecord => _recordingSupported && _iptvZapBannerOwnsIdentity;
+
   /// Bumped whenever the guide reports a browse the user drove (a category
   /// pick, a search, a source change). An in-flight re-anchor that predates
   /// the change must not land: it would reset the ring and the persisted
@@ -1606,6 +1617,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
     _playerCreated = true;
     _videoController = mkv.VideoController(_player);
+    // libmpv exposes `stream-record`; the web backend does not. Gate the
+    // record control on having a native player.
+    _recordingSupported = _player.platform is mk.NativePlayer;
 
     // Must happen before the first open() — mpv reads both audio options when
     // it creates the audio output, which is on first playback.
@@ -4042,9 +4056,138 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  Future<void> _toggleRecording() async {
+    if (_isRecording) {
+      await _stopRecording();
+    } else {
+      await _startRecording();
+    }
+  }
+
+  Future<void> _startRecording() async {
+    if (!_playerCreated) return;
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) return;
+    final channel = _currentIptvChannel;
+    if (channel == null) return;
+    try {
+      final path = await _recordingTargetPath(channel.name);
+      final parent = Directory(path).parent;
+      if (!await parent.exists()) {
+        await parent.create(recursive: true);
+      }
+      await platform.setProperty('stream-record', path);
+      if (!mounted) return;
+      setState(() {
+        _isRecording = true;
+        _recordingTempPath = path;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recording started')),
+      );
+    } catch (e) {
+      debugPrint('VideoPlayer: start recording failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not start recording')),
+      );
+    }
+  }
+
+  /// Stop the active recording. Auto-stops (channel change / dispose) pass
+  /// [userInitiated] = false to stay quiet.
+  Future<void> _stopRecording({bool userInitiated = true}) async {
+    if (!_isRecording) return;
+    final path = _recordingTempPath;
+    final platform = _playerCreated ? _player.platform : null;
+    // Flip state first so a rapid re-tap / channel switch can't double-stop.
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _recordingTempPath = null;
+      });
+    } else {
+      _isRecording = false;
+      _recordingTempPath = null;
+    }
+    try {
+      if (platform is mk.NativePlayer) {
+        await platform.setProperty('stream-record', '');
+      }
+    } catch (e) {
+      debugPrint('VideoPlayer: stop recording failed: $e');
+    }
+    if (path == null) return;
+    // Publish to a user-visible location. On Android the file lives in
+    // app-private storage, so hand it to the native MediaStore publisher; on
+    // desktop it's already under the user's Downloads.
+    if (Platform.isAndroid) {
+      unawaited(_publishRecording(path, userInitiated: userInitiated));
+    } else if (userInitiated && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Recording saved: $path')),
+      );
+    }
+  }
+
+  Future<void> _publishRecording(
+    String path, {
+    required bool userInitiated,
+  }) async {
+    try {
+      final fileName = path.split(Platform.pathSeparator).last;
+      final uri = await AndroidNativeDownloader.saveLocalFile(
+        path: path,
+        fileName: fileName,
+      );
+      if (!userInitiated || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            uri != null
+                ? 'Recording saved to Downloads/Debrify/Recordings'
+                : 'Recording saved: $path',
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('VideoPlayer: publish recording failed: $e');
+    }
+  }
+
+  Future<String> _recordingTargetPath(String channelName) async {
+    final safeName = channelName
+        .replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '_');
+    var base = safeName.isEmpty ? 'recording' : safeName;
+    if (base.length > 60) base = base.substring(0, 60);
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final stamp =
+        '${now.year}${two(now.month)}${two(now.day)}_'
+        '${two(now.hour)}${two(now.minute)}${two(now.second)}';
+    final fileName = '${base}_$stamp.ts';
+
+    Directory dir;
+    if (Platform.isAndroid) {
+      dir = (await getExternalStorageDirectory()) ??
+          await getApplicationDocumentsDirectory();
+    } else {
+      dir = (await getDownloadsDirectory()) ??
+          await getApplicationDocumentsDirectory();
+    }
+    final sep = Platform.pathSeparator;
+    return '${dir.path}${sep}Debrify${sep}Recordings$sep$fileName';
+  }
+
   Future<void> _switchToIptvChannel(int index) async {
     final channels = _effectiveIptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
+    // A channel change ends the current recording (the stream identity flips).
+    if (_isRecording) {
+      await _stopRecording(userInitiated: false);
+    }
     _cancelPendingIptvCatchup();
     final ticket = ++_iptvSwitchTicket;
     // This switch owns the error gate now (a superseded ladder's state doesn't
@@ -6153,6 +6296,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    // Finalize any in-progress recording before the player is torn down. Best
+    // effort: the .ts on disk is already playable even without a clean flush,
+    // and publishing reads the file independently of the player.
+    if (_isRecording) {
+      unawaited(_stopRecording(userInitiated: false));
+    }
     _iptvCatchupRequests.cancel();
     // Detach from PiP (disarms auto-enter); ignored if a newer player already
     // took ownership, so route replacement can't disarm the incoming screen.
@@ -8016,6 +8165,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 : null,
                             showPipButton: PipService.isOwner(this),
                             onPip: PipService.isOwner(this) ? _enterPip : null,
+                            hasRecord: _canRecord,
+                            isRecording: _isRecording,
+                            onRecord: _canRecord ? _toggleRecording : null,
                           ),
                         ),
                       );

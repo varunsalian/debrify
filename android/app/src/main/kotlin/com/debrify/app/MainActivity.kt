@@ -135,6 +135,56 @@ class MainActivity : FlutterActivity() {
 
     private fun isTelevision(): Boolean = televisionDetected
 
+    /**
+     * Copy [path] into the MediaStore (`Download/<subDir>`) so it becomes
+     * user-visible, then delete the source. Mirrors
+     * MediaStoreDownloadService.createViaMediaStore. Used to publish an IPTV
+     * recording that libmpv wrote to app-private storage. Runs on a worker
+     * thread; returns the content URI string or null on failure.
+     */
+    private fun saveRecordingToMediaStore(
+        path: String,
+        fileName: String,
+        subDir: String,
+        mimeType: String,
+    ): String? {
+        val source = java.io.File(path)
+        if (!source.exists()) return null
+        return try {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, mimeType)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    put(android.provider.MediaStore.Downloads.RELATIVE_PATH, "Download/$subDir")
+                    put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                }
+            }
+            val resolver = contentResolver
+            val uri = resolver.insert(
+                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                values,
+            ) ?: return null
+            val wrote = resolver.openOutputStream(uri)?.use { out ->
+                java.io.FileInputStream(source).use { input -> input.copyTo(out) }
+                true
+            } ?: false
+            if (!wrote) {
+                runCatching { resolver.delete(uri, null, null) }
+                return null
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val done = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                }
+                runCatching { resolver.update(uri, done, null, null) }
+            }
+            runCatching { source.delete() }
+            uri.toString()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** The Dart-owned setting (Settings → Home Page → Native Trailer Surface),
      *  read from the shared_preferences plugin's store. Must be checked here
      *  too: the transparency mode is fixed at activity creation, so flipping
@@ -621,7 +671,26 @@ class MainActivity : FlutterActivity() {
 						result.error("fgs_not_allowed", e.message, null)
 					}
 				}
-				"queryDownloadTasks" -> {
+				"saveFileToMediaStore" -> {
+						val path = call.argument<String>("path")
+						val fileName = call.argument<String>("fileName") ?: "recording.ts"
+						val subDir = call.argument<String>("subDir") ?: "Debrify/Recordings"
+						val mimeType = call.argument<String>("mimeType") ?: "video/mp2t"
+						if (path.isNullOrEmpty()) {
+							result.error("bad_args", "path is required", null)
+							return@setMethodCallHandler
+						}
+						// Copy off the main thread (recordings can be large); post
+						// the MethodChannel result back on the main thread.
+						Thread {
+							val savedUri = saveRecordingToMediaStore(path, fileName, subDir, mimeType)
+							runOnUiThread {
+								if (savedUri != null) result.success(savedUri)
+								else result.error("save_failed", "could not save file", null)
+							}
+						}.start()
+					}
+					"queryDownloadTasks" -> {
 					// Native truth for Dart reconciliation: the persisted store
 					// merged with the live in-memory registry. A stored
 					// "running" with no live worker means the process died

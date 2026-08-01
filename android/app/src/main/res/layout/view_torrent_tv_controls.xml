@@ -253,6 +253,15 @@
                 android:contentDescription="Jump to channel"
                 android:visibility="gone" />
 
+            <!-- Record (live IPTV only; shown at runtime, disabled for HLS). -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/iptv_record_button"
+                style="@style/CinemaControlButton"
+                android:drawableStart="@drawable/ic_record"
+                android:text="Record"
+                android:contentDescription="Record channel"
+                android:visibility="gone" />
+
         </LinearLayout>
 
     </LinearLayout>

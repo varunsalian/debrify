@@ -143,6 +143,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvNextButton: AppCompatButton? = null
     private var iptvGuideButton: AppCompatButton? = null
     private var iptvJumpButton: AppCompatButton? = null
+    private var iptvRecordButton: AppCompatButton? = null
+    // Tees the live progressive stream to a MediaStore file while playing.
+    private val iptvRecordingController by lazy { IptvRecordingController(this) }
     private var iptvUpPressActive = false
     private var iptvUpLongPressHandled = false
     private var originalControlDockOrder: List<View> = emptyList()
@@ -1224,9 +1227,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             dataSourceFactory
         }
 
+        // IPTV: tee the played bytes to a recording file on demand. Inert unless
+        // the user starts a recording (see IptvRecordingController); wraps the
+        // fully-resolved factory so recorded bytes carry the channel's headers.
+        val recordingDataSourceFactory = if (isIptvMode) {
+            RecordingDataSource.Factory(finalDataSourceFactory, iptvRecordingController)
+        } else {
+            finalDataSourceFactory
+        }
+
         // Create media source factory that uses the data source
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(finalDataSourceFactory)
+            .setDataSourceFactory(recordingDataSourceFactory)
 
         val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
@@ -1888,6 +1900,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvPrevButton = prevButton
         iptvGuideButton = playlistButton
         iptvJumpButton = playerView.findViewById(R.id.iptv_jump_channel_button)
+        iptvRecordButton = playerView.findViewById(R.id.iptv_record_button)
         playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)?.let { dock ->
             if (originalControlDockOrder.isEmpty()) {
                 originalControlDockOrder =
@@ -5531,6 +5544,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvPrevButton,
             iptvNextButton,
             iptvJumpButton,
+            iptvRecordButton,
             playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
         )
         buttons.forEach {
@@ -5538,6 +5552,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             it.setTextColor(
                 ContextCompat.getColorStateList(this, R.color.iptv_premium_button_text)
             )
+        }
+
+        iptvRecordButton?.setOnClickListener {
+            hideControlsMenu()
+            toggleIptvRecording()
         }
 
         iptvPrevButton?.apply {
@@ -5557,6 +5576,81 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
     }
 
+    // ── IPTV recording ──────────────────────────────────────────────────────
+
+    /** True when the current live stream is HLS and thus not tee-recordable. */
+    private fun isCurrentIptvHls(): Boolean {
+        val url = currentIptvStreamUrl ?: return true
+        if (iptvHlsForcedUrls.contains(url)) return true
+        val path = url.substringBefore('?').substringBefore('#')
+        return path.endsWith(".m3u8", ignoreCase = true) ||
+            path.endsWith(".m3u", ignoreCase = true)
+    }
+
+    /** Reflect record availability + active state on the button. */
+    private fun updateRecordButtonState() {
+        val button = iptvRecordButton ?: return
+        if (iptvRecordingController.isActive) {
+            button.text = "Stop"
+            button.isEnabled = true
+            button.isFocusable = true
+            button.alpha = 1f
+        } else {
+            val hls = isCurrentIptvHls()
+            button.text = "Record"
+            button.isEnabled = !hls
+            // A disabled button can still trap D-pad focus; drop it from the
+            // focus order so HLS channels skip past it cleanly.
+            button.isFocusable = !hls
+            button.alpha = if (hls) 0.4f else 1f
+        }
+    }
+
+    private fun toggleIptvRecording() {
+        if (iptvRecordingController.isActive) {
+            iptvRecordingController.stop()
+            updateRecordButtonState()
+            Toast.makeText(
+                this,
+                "Recording saved to Downloads/Debrify/Recordings",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        if (isCurrentIptvHls()) {
+            Toast.makeText(this, "Recording isn't supported for this stream", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val url = currentIptvStreamUrl
+        if (url.isNullOrEmpty()) return
+        val entry = iptvChannels.getOrNull(currentIptvIndex)
+        val fileName = "${sanitizeRecordingName(entry?.name ?: "recording")}_${recordingTimestamp()}.ts"
+        if (iptvRecordingController.start(url, fileName, "video/mp2t")) {
+            updateRecordButtonState()
+            Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Couldn't start recording", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Finalize any active recording (channel change / exit). Safe when idle. */
+    private fun finalizeIptvRecordingIfActive() {
+        if (!iptvRecordingController.isActive) return
+        iptvRecordingController.stop()
+        updateRecordButtonState()
+    }
+
+    private fun sanitizeRecordingName(raw: String): String {
+        val cleaned = raw.replace(Regex("[^A-Za-z0-9 _-]"), "")
+            .trim()
+            .replace(Regex("\\s+"), "_")
+        return cleaned.take(60).ifEmpty { "recording" }
+    }
+
+    private fun recordingTimestamp(): String =
+        java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+            .format(java.util.Date())
+
     private fun updateIptvControlPresentation(entry: IptvChannelEntry?) {
         val live = entry?.isLive != false
         val vodVisibility = if (live) View.GONE else View.VISIBLE
@@ -5572,6 +5666,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nightModeButton?.visibility = View.VISIBLE
         iptvJumpButton?.visibility = if (live) View.VISIBLE else View.GONE
         iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
+        iptvRecordButton?.visibility = if (live) View.VISIBLE else View.GONE
+        updateRecordButtonState()
         if (!live && iptvGuideVisible) hideIptvGuide()
         if (live) {
             cinemaSeekMode = false
@@ -5583,9 +5679,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** Live IPTV uses a balanced nine-action dock:
-     *  Audio · Subs · Aspect | CH- · Play/Pause · CH+ | Guide · Jump · Night.
-     *  The XML order remains the standard cinema/VOD order; only the live
+    /** Live IPTV uses a balanced dock:
+     *  Audio · Subs · Aspect | CH- · Play/Pause · CH+ | Guide · Jump · Record · Night.
+     *  Record is present only for progressive streams (disabled for HLS). The
+     *  XML order remains the standard cinema/VOD order; only the live
      *  presentation is rearranged, so movies and episodes keep their old UX. */
     private fun arrangeLiveIptvControlDock() {
         val dock =
@@ -5602,6 +5699,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             playerView.findViewById<View>(R.id.debrify_controls_right_divider),
             iptvGuideButton,
             iptvJumpButton,
+            iptvRecordButton,
             nightModeButton,
         )
         replaceControlDockOrder(dock, desired)
@@ -5643,6 +5741,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvNextButton,
             iptvGuideButton,
             iptvJumpButton,
+            iptvRecordButton,
         )
         standardButtons.forEach {
             it.setBackgroundResource(R.drawable.cinema_button_bg)
@@ -8834,6 +8933,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     /** The shared ExoPlayer media-item swap both IPTV entry points use. */
     private fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String) {
+        // A genuine channel change while recording: finalize the previous
+        // channel's file before the stream identity flips. An HLS-fallback retry
+        // re-enters with the SAME url and is handled via abortAndDelete instead.
+        if (iptvRecordingController.isActive && streamUrl != currentIptvStreamUrl) {
+            finalizeIptvRecordingIfActive()
+        }
+
         val metadata = MediaMetadata.Builder()
             .setTitle(entry.name)
             .setArtist(entry.group ?: "IPTV")
@@ -8878,6 +8984,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // the progress ticker here — without this the Flutter side is told
         // nothing about on-demand playback and can't save a resume position.
         restartProgressUpdates()
+
+        // Reflect the new stream's HLS-ness on the record button (progressive →
+        // enabled, HLS → disabled).
+        updateRecordButtonState()
     }
 
     /**
@@ -8908,8 +9018,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "AndroidTvPlayer",
             "Unrecognized format for ${entry.name} — retrying as HLS"
         )
+        // The stream is HLS, so any tee-recorded bytes are an unusable
+        // playlist/segment mix — discard them and lock the button off.
+        if (iptvRecordingController.isActive) {
+            iptvRecordingController.abortAndDelete()
+            Toast.makeText(
+                this,
+                "Recording stopped — this channel is HLS",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
         iptvHlsForcedUrls.add(url)
         setIptvMediaItem(entry, url)
+        updateRecordButtonState()
         // Stremio candidate: give the forced-HLS attempt a FULL stall window
         // (arming re-cancels the one ticking since candidate start — a slow
         // panel can eat most of that window on the failed sniff alone, and
@@ -11360,6 +11481,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Finalize any in-progress recording so its MediaStore row isn't left
+        // pending (invisible) when the player is torn down.
+        finalizeIptvRecordingIfActive()
+
         // Clean up seek feedback manager
         if (::seekFeedbackManager.isInitialized) {
             seekFeedbackManager.destroy()
