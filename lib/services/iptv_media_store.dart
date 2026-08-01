@@ -796,6 +796,63 @@ class IptvMediaStore {
     );
   }
 
+  /// Drop one on-demand item from Continue Watching: its history row AND its
+  /// saved position. The shelf is a join of the two, so the history row alone
+  /// would be enough to hide it — but the resume entry is what makes the
+  /// removal stick (it still drives the progress bar wherever the item is
+  /// listed, and a re-play would silently jump back into the middle).
+  static Future<void> removeWatchEntry(String url) async {
+    if (url.isEmpty) return;
+    await _ensureMigrated();
+    await DebrifyTvDatabase.instance.runTxn((txn) async {
+      await txn.delete('iptv_watch_history', where: 'url = ?', whereArgs: [url]);
+      await txn.delete(
+        'video_resume',
+        where: 'resume_key = ?',
+        whereArgs: [url],
+      );
+    });
+  }
+
+  /// The series counterpart of [removeWatchEntry]: a series shows as ONE
+  /// Continue Watching card collapsed from all its watched episodes, so
+  /// removing that card has to take every episode with it — otherwise the next
+  /// most-recent episode simply re-materializes the card.
+  static Future<void> removeWatchSeries({
+    required String playlistId,
+    required String seriesId,
+  }) async {
+    if (seriesId.isEmpty) return;
+    await _ensureMigrated();
+    final db = await DebrifyTvDatabase.instance.database;
+    final rows = await db.query(
+      'iptv_watch_history',
+      columns: ['url'],
+      where: 'playlist_id = ? AND series_id = ?',
+      whereArgs: [playlistId, seriesId],
+    );
+    final urls = [
+      for (final row in rows)
+        if (row['url'] is String) row['url'] as String,
+    ];
+    await DebrifyTvDatabase.instance.runTxn((txn) async {
+      await txn.delete(
+        'iptv_watch_history',
+        where: 'playlist_id = ? AND series_id = ?',
+        whereArgs: [playlistId, seriesId],
+      );
+      for (var i = 0; i < urls.length; i += _inChunkSize) {
+        final chunk = urls.sublist(i, math.min(i + _inChunkSize, urls.length));
+        final placeholders = List.filled(chunk.length, '?').join(',');
+        await txn.delete(
+          'video_resume',
+          where: 'resume_key IN ($placeholders)',
+          whereArgs: chunk,
+        );
+      }
+    });
+  }
+
   /// All remembered on-demand items, url → metadata, oldest-played first.
   static Future<Map<String, Map<String, dynamic>>> watchHistory() async {
     await _ensureMigrated();

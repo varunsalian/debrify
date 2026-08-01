@@ -4010,6 +4010,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// Write one on-demand IPTV item to the watch history, carrying whatever
+  /// series identity the channel was built with (see `openXtreamEpisode`,
+  /// which stamps these attributes on every episode of a series). The
+  /// playlist id has to match the one the series page records or the shelf
+  /// would group the same series under two keys.
+  Future<void> _recordIptvWatchForChannel(IptvChannel channel) async {
+    final attrs = channel.attributes;
+    final seriesId = attrs['series_id'];
+    final hasNext = attrs['has_next_episode'];
+    final headers = channel.httpHeaders;
+    try {
+      await StorageService.recordIptvWatch(
+        channel.url,
+        channelName: channel.name,
+        logoUrl: channel.logoUrl,
+        group: channel.group,
+        playlistId:
+            attrs['series_playlist_id'] ??
+            attrs['source_playlist_id'] ??
+            widget.iptvSourceId,
+        httpHeaders: headers.isEmpty ? null : headers,
+        seriesId: (seriesId != null && seriesId.isNotEmpty) ? seriesId : null,
+        seriesName: attrs['series_name'] ?? channel.group,
+        season: int.tryParse(attrs['season'] ?? ''),
+        episode: int.tryParse(attrs['episode'] ?? ''),
+        hasNextEpisode: hasNext == null ? null : hasNext == 'true',
+      );
+    } catch (e) {
+      debugPrint('Player: IPTV watch registration failed: $e');
+    }
+  }
+
   Future<void> _switchToIptvChannel(int index) async {
     final channels = _effectiveIptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
@@ -4050,6 +4082,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else {
       _hideIptvZapBanner();
     }
+
+    // Register the item we're switching TO in the IPTV watch history, exactly
+    // as the native TV player does before every non-live start. Only the item
+    // the user LAUNCHED used to be recorded, so an auto-advanced episode wrote
+    // a resume position that no history row accounted for: the Continue
+    // Watching shelf kept pointing at the launch episode, and a series-wide
+    // removal (which finds episodes through the history) couldn't reach the
+    // rest of them. Unawaited — the shelf can settle a frame late, a zap can't.
+    if (!channel.isLive) unawaited(_recordIptvWatchForChannel(channel));
 
     try {
       await _player.pause();

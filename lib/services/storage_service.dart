@@ -3378,6 +3378,24 @@ class StorageService {
     return IptvMediaStore.removeWatchHistoryByPlaylistId(playlistId);
   }
 
+  /// Take one on-demand IPTV item off the Continue Watching shelf (history +
+  /// saved position). The local counterpart of [removeContinueWatchingItem].
+  static Future<void> removeIptvContinueWatchingItem(String url) {
+    return IptvMediaStore.removeWatchEntry(url);
+  }
+
+  /// Take a whole IPTV series off the Continue Watching shelf — every watched
+  /// episode of it, since the shelf collapses them into one card.
+  static Future<void> removeIptvContinueWatchingSeries({
+    required String playlistId,
+    required String seriesId,
+  }) {
+    return IptvMediaStore.removeWatchSeries(
+      playlistId: playlistId,
+      seriesId: seriesId,
+    );
+  }
+
   /// Build progress map for playlist items
   /// Maps playlist dedupe keys to their playback progress data
   static Future<Map<String, Map<String, dynamic>>> buildPlaylistProgressMap(
