@@ -824,27 +824,38 @@ class IptvEpgService {
   /// time and trimmed to yesterday-late-night through the guide's horizon.
   ///
   /// Source order differs from now/next on purpose: for Xtream channels the
-  /// per-stream data table comes FIRST — its listings carry the has_archive
-  /// flags catchup replay needs (XMLTV rows never do) and are the panel's
-  /// freshest data — with the XMLTV index as the fallback for panels whose
-  /// data-table endpoints are broken or empty. Pure-M3U channels only ever
-  /// have the XMLTV index.
+  /// XMLTV timeline stays authoritative when it covers the channel, exactly
+  /// as it is for now/next. The per-stream table is still fetched because it
+  /// alone carries catch-up metadata; matching rows donate [hasArchive] and
+  /// [rawStart] without replacing the titles or times the rest of the UI
+  /// already shows. This matters on panels whose two EPG exports disagree or
+  /// whose data-table timestamps carry a provider-wide timezone shift.
+  /// Pure-M3U channels only ever have the XMLTV index, while Xtream channels
+  /// without XMLTV coverage keep using the data table as before.
   Future<List<EpgProgramme>> schedule(String channelUrl) {
     final xmltv = _xmltvProgrammesFor(channelUrl);
     if (xmltv != null && _parseXtreamUrl(channelUrl) == null) {
       return Future.value(xmltv);
     }
+    final contextGeneration = _m3uContextGeneration;
 
     final cached = _scheduleCache[channelUrl];
-    if (cached != null && !cached.isStale) return Future.value(cached.value);
+    if (cached != null &&
+        !cached.isStale &&
+        cached.contextGeneration == _m3uContextGeneration) {
+      return Future.value(cached.value);
+    }
 
-    final inFlight = _scheduleInFlight[channelUrl];
+    final inFlightKey = '$contextGeneration\n$channelUrl';
+    final inFlight = _scheduleInFlight[inFlightKey];
     if (inFlight != null) return inFlight;
 
-    final future = _fetchSchedule(channelUrl).whenComplete(() {
-      _scheduleInFlight.remove(channelUrl);
-    });
-    _scheduleInFlight[channelUrl] = future;
+    final future = _fetchSchedule(channelUrl, contextGeneration).whenComplete(
+      () {
+        _scheduleInFlight.remove(inFlightKey);
+      },
+    );
+    _scheduleInFlight[inFlightKey] = future;
     return future;
   }
 
@@ -866,9 +877,13 @@ class IptvEpgService {
     return result;
   }
 
-  Future<List<EpgProgramme>> _fetchSchedule(String channelUrl) async {
+  Future<List<EpgProgramme>> _fetchSchedule(
+    String channelUrl,
+    int contextGeneration,
+  ) async {
     final ref = _parseXtreamUrl(channelUrl);
     if (ref == null) return const [];
+    final xmltv = _xmltvProgrammesFor(channelUrl);
 
     var listings =
         await _fetchListings(ref, 'get_simple_data_table', '') ??
@@ -884,13 +899,7 @@ class IptvEpgService {
     // from a couple of hours back (context for "what did I just miss") to
     // whatever future the panel serves, capped so the UI stays bounded.
     final now = DateTime.now();
-    final floor = now.subtract(const Duration(hours: 3));
-    listings = [
-      for (final p in listings)
-        if (p.stop.isAfter(floor)) p,
-    ];
-    listings.sort((a, b) => a.start.compareTo(b.start));
-    if (listings.length > 250) listings = listings.sublist(0, 250);
+    listings = _trimSchedule(listings, now);
 
     // An empty answer here is as likely a timeout as a truly guideless
     // channel. Don't cache it (a schedule open is an explicit action — let
@@ -899,13 +908,32 @@ class IptvEpgService {
     // When an XMLTV guide covers the channel, its rows stand in — the
     // no-catchup trade only applies to panels whose data table failed.
     if (listings.isEmpty) {
-      return _xmltvProgrammesFor(channelUrl) ?? const [];
+      return xmltv == null ? const [] : _trimSchedule(xmltv, now);
     }
 
-    _scheduleCache.remove(channelUrl);
-    _scheduleCache[channelUrl] = _CachedSchedule(listings);
-    while (_scheduleCache.length > _maxScheduleEntries) {
-      _scheduleCache.remove(_scheduleCache.keys.first);
+    // One visual timeline per channel. nowNext() already chose XMLTV, so a
+    // schedule from a shifted or stale data-table must not contradict it.
+    // Retain the panel rows only as a source of archive flags and the raw
+    // panel-local start required by the timeshift endpoint.
+    final xmltvTimeline = xmltv == null ? null : _trimSchedule(xmltv, now);
+    if (xmltvTimeline != null &&
+        xmltvTimeline.isNotEmpty &&
+        !_pickNowNext(xmltvTimeline, now).isEmpty) {
+      listings = _mergePanelMetadataIntoXmltv(xmltvTimeline, listings);
+    }
+
+    // A playlist/guide switch while the network request was in flight makes
+    // this result valid only for its original caller. Do not let it replace a
+    // newer context's cache entry or now/next state.
+    if (contextGeneration == _m3uContextGeneration) {
+      _scheduleCache.remove(channelUrl);
+      _scheduleCache[channelUrl] = _CachedSchedule(
+        listings,
+        contextGeneration: contextGeneration,
+      );
+      while (_scheduleCache.length > _maxScheduleEntries) {
+        _scheduleCache.remove(_scheduleCache.keys.first);
+      }
     }
 
     // The schedule is a superset of now/next — reuse it so opening a
@@ -916,10 +944,126 @@ class IptvEpgService {
     // get_short_epg already gave the rail — the case the comment above
     // promises to avoid.
     final pick = _pickNowNext(listings, now);
-    if (!pick.isEmpty || _nowNextCache[channelUrl] == null) {
+    if (contextGeneration == _m3uContextGeneration &&
+        (!pick.isEmpty || _nowNextCache[channelUrl] == null)) {
       _storeNowNext(channelUrl, pick);
     }
     return listings;
+  }
+
+  static List<EpgProgramme> _trimSchedule(
+    List<EpgProgramme> source,
+    DateTime now,
+  ) {
+    final floor = now.subtract(const Duration(hours: 3));
+    final result = [
+      for (final p in source)
+        if (p.stop.isAfter(floor)) p,
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    return result.length > 250 ? result.sublist(0, 250) : result;
+  }
+
+  /// Overlay catch-up metadata from the panel onto the XMLTV timeline.
+  ///
+  /// Providers commonly publish the same programmes with a constant offset
+  /// between xmltv.php and get_simple_data_table. Infer that offset from at
+  /// least two unambiguous title matches, then pair rows by title and shifted
+  /// start time. A lone match is accepted only when the times already agree;
+  /// guessing from one rerun would make the wrong recording actionable.
+  static List<EpgProgramme> _mergePanelMetadataIntoXmltv(
+    List<EpgProgramme> xmltv,
+    List<EpgProgramme> panel,
+  ) {
+    if (xmltv.isEmpty || panel.isEmpty) return xmltv;
+
+    String key(EpgProgramme p) => XmltvEpgSource.normalizeChannelName(p.title);
+    final xmlByTitle = <String, List<EpgProgramme>>{};
+    final panelByTitle = <String, List<EpgProgramme>>{};
+    for (final p in xmltv) {
+      final title = key(p);
+      if (title.isNotEmpty) (xmlByTitle[title] ??= []).add(p);
+    }
+    for (final p in panel) {
+      final title = key(p);
+      if (title.isNotEmpty) (panelByTitle[title] ??= []).add(p);
+    }
+
+    // Only titles occurring once on each side vote. Repeated schedule blocks
+    // (news, teleshopping, back-to-back episodes) otherwise manufacture many
+    // plausible offsets. Bucket to five minutes to tolerate sloppy seconds.
+    final offsetVotes = <int, int>{};
+    for (final entry in xmlByTitle.entries) {
+      final other = panelByTitle[entry.key];
+      if (entry.value.length != 1 || other?.length != 1) continue;
+      final xmlProgramme = entry.value.single;
+      final panelProgramme = other!.single;
+      final durationDelta =
+          (panelProgramme.stop.difference(panelProgramme.start).inMinutes -
+                  xmlProgramme.stop.difference(xmlProgramme.start).inMinutes)
+              .abs();
+      if (durationDelta > 15) continue;
+      final rawMinutes =
+          panelProgramme.start.difference(xmlProgramme.start).inMilliseconds /
+          Duration.millisecondsPerMinute;
+      if (rawMinutes.abs() > 18 * 60) continue;
+      final bucket = (rawMinutes / 5).round() * 5;
+      offsetVotes[bucket] = (offsetVotes[bucket] ?? 0) + 1;
+    }
+
+    int? offsetMinutes;
+    var bestVotes = 0;
+    var tied = false;
+    for (final entry in offsetVotes.entries) {
+      if (entry.value > bestVotes) {
+        offsetMinutes = entry.key;
+        bestVotes = entry.value;
+        tied = false;
+      } else if (entry.value == bestVotes) {
+        tied = true;
+      }
+    }
+    if (bestVotes < 2 || tied) offsetMinutes = null;
+
+    final used = <EpgProgramme>{};
+    const tolerance = Duration(minutes: 8);
+    return [
+      for (final xmlProgramme in xmltv)
+        () {
+          final candidates = panelByTitle[key(xmlProgramme)];
+          if (candidates == null || candidates.isEmpty) return xmlProgramme;
+          final expected = offsetMinutes == null
+              ? xmlProgramme.start
+              : xmlProgramme.start.add(Duration(minutes: offsetMinutes));
+          EpgProgramme? match;
+          Duration? closest;
+          for (final candidate in candidates) {
+            if (used.contains(candidate)) continue;
+            final distance = candidate.start.difference(expected).abs();
+            if (distance > tolerance) continue;
+            final durationDelta =
+                (candidate.stop.difference(candidate.start).inMinutes -
+                        xmlProgramme.stop
+                            .difference(xmlProgramme.start)
+                            .inMinutes)
+                    .abs();
+            if (durationDelta > 15) continue;
+            if (closest == null || distance < closest) {
+              match = candidate;
+              closest = distance;
+            }
+          }
+          if (match == null) return xmlProgramme;
+          used.add(match);
+          return EpgProgramme(
+            title: xmlProgramme.title,
+            description: xmlProgramme.description,
+            start: xmlProgramme.start,
+            stop: xmlProgramme.stop,
+            hasArchive: match.hasArchive,
+            rawStart: match.rawStart,
+          );
+        }(),
+    ];
   }
 
   void _storeNowNext(
@@ -1213,7 +1357,9 @@ enum _CatchupForm { pathTs, pathM3u8, php }
 class _CachedSchedule {
   final List<EpgProgramme> value;
   final DateTime fetchedAt;
-  _CachedSchedule(this.value) : fetchedAt = DateTime.now();
+  final int contextGeneration;
+  _CachedSchedule(this.value, {required this.contextGeneration})
+    : fetchedAt = DateTime.now();
 
   bool get isStale =>
       DateTime.now().difference(fetchedAt) >= IptvEpgService._scheduleTtl;
