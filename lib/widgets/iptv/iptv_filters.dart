@@ -55,6 +55,14 @@ class IptvFiltersBar extends StatelessWidget {
   final VoidCallback? onUpArrowPressed;
   final VoidCallback? onDownArrowPressed;
 
+  /// Non-null shows the Recordings entry (record-dot icon) at the bar's end —
+  /// the classic layout's only front door to the Recordings hub (the rail
+  /// that carries it on TV/desktop doesn't exist here). [recordingLive]
+  /// paints it red while any capture runs, so the page shows recording state
+  /// at a glance.
+  final VoidCallback? onOpenRecordings;
+  final bool recordingLive;
+
   const IptvFiltersBar({
     super.key,
     required this.playlists,
@@ -76,6 +84,8 @@ class IptvFiltersBar extends StatelessWidget {
     this.contentTypeFocusNode,
     this.onUpArrowPressed,
     this.onDownArrowPressed,
+    this.onOpenRecordings,
+    this.recordingLive = false,
   });
 
   @override
@@ -187,9 +197,56 @@ class IptvFiltersBar extends StatelessWidget {
                     ],
                   ),
               ],
+              if (onOpenRecordings != null) ...[
+                if (!showChannelCount) const Spacer(),
+                const SizedBox(width: 4),
+                _RecordingsButton(
+                  live: recordingLive,
+                  onPressed: onOpenRecordings!,
+                ),
+              ],
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// The bar's Recordings entry: a record-dot that reads dim when idle and
+/// red (with a soft glow) while any capture runs. Static styling only.
+class _RecordingsButton extends StatelessWidget {
+  final bool live;
+  final VoidCallback onPressed;
+  const _RecordingsButton({required this.live, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    const rec = Color(0xFFF43F5E);
+    return IconButton(
+      tooltip: live ? 'Recording now — open Recordings' : 'Recordings',
+      visualDensity: VisualDensity.compact,
+      onPressed: onPressed,
+      icon: Container(
+        decoration: live
+            ? BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: rec.withValues(alpha: 0.45),
+                    blurRadius: 9,
+                    spreadRadius: 1,
+                  ),
+                ],
+              )
+            : null,
+        child: Icon(
+          Icons.fiber_manual_record_rounded,
+          size: 20,
+          color: live
+              ? rec
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }

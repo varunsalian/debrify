@@ -70,6 +70,71 @@ class AndroidNativeDownloader {
     }
   }
 
+  /// Whether a finished recording can actually be published to Downloads on
+  /// this device (MediaStore.Downloads is API 29+). False means recording
+  /// should not be offered at all: the file could only ever land in
+  /// app-private storage, where the user cannot get at it.
+  static Future<bool> canPublishRecordings() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('canPublishRecordings') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// Register a recording temp file the moment libmpv starts writing it. The
+  /// native side keeps the entry until the file is successfully published to
+  /// Downloads, and re-attempts publication on the next app launch — so a
+  /// process killed mid-recording or mid-copy still surfaces the footage.
+  static Future<void> registerPendingRecording({
+    required String path,
+    required String fileName,
+    String subDir = 'Debrify/Recordings',
+    String mimeType = 'video/mp2t',
+  }) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('registerPendingRecording', {
+        'path': path,
+        'fileName': fileName,
+        'subDir': subDir,
+        'mimeType': mimeType,
+      });
+    } on PlatformException {
+      // Best effort — recording proceeds without crash insurance.
+    } on MissingPluginException {
+      // Best effort.
+    }
+  }
+
+  /// Copy an on-disk file into the MediaStore (Download/<subDir>) so it becomes
+  /// user-visible, then delete the source. Used to publish an IPTV recording
+  /// that libmpv wrote to app-private storage. Returns the content URI string
+  /// on success, or null on failure.
+  static Future<String?> saveLocalFile({
+    required String path,
+    required String fileName,
+    String subDir = 'Debrify/Recordings',
+    String mimeType = 'video/mp2t',
+  }) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await _channel.invokeMethod<String>('saveFileToMediaStore', {
+        'path': path,
+        'fileName': fileName,
+        'subDir': subDir,
+        'mimeType': mimeType,
+      });
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
   /// Native truth for reconciliation: every persisted task merged with the
   /// live in-memory registry. Status is one of running/paused/failed.
   static Future<List<Map<String, dynamic>>> queryTasks() async {

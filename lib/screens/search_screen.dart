@@ -8929,7 +8929,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
     return Positioned(
       left: 12,
-      right: 108, // clear the bottom-right "Menu" FAB
+      // Clear the bottom-right "Menu" FAB — which only the floating nav
+      // style has; the classic bar occupies its own strip below the page.
+      right: MainPageBridge.phoneNavStyleCached == 'floating' ? 108 : 12,
       bottom: 12 + bottomPad,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

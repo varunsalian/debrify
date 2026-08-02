@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPTV Redesign — Concept Gallery</title>
+<style>
+  :root{
+    --bg:#070A18; --panel:#0D1226; --card:rgba(255,255,255,.05);
+    --line:rgba(255,255,255,.08); --dim:rgba(255,255,255,.55); --dim2:rgba(255,255,255,.34);
+    --acc1:#4F74FF; --acc2:#8A5CFF; --gold:#F5C042; --rec:#F43F5E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:#EDEFFB;font:14px/1.5 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:44px 5vw 90px}
+  a{color:inherit;text-decoration:none}
+  h1{font-size:30px;font-weight:800}
+  h1 .tag{background:linear-gradient(90deg,var(--acc1),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);margin:8px 0 36px;max-width:900px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;margin-bottom:48px}
+  .c{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;transition:transform .15s, border-color .15s}
+  .c:hover{transform:translateY(-3px);border-color:rgba(138,92,255,.5)}
+  .c .art{height:120px;position:relative}
+  .c .num{position:absolute;top:12px;left:14px;font-weight:800;font-size:11px;letter-spacing:1.5px;color:rgba(255,255,255,.75);background:rgba(0,0,0,.35);padding:4px 9px;border-radius:6px}
+  .c .bd{padding:14px 16px 16px}
+  .c .t{font-weight:800;font-size:16px;margin-bottom:4px}
+  .c .d{color:var(--dim);font-size:12.5px}
+  .c .pill{display:inline-block;margin-top:10px;font-weight:800;font-size:10px;letter-spacing:1px;color:var(--gold);background:rgba(245,192,66,.12);padding:4px 9px;border-radius:99px}
+  table{border-collapse:collapse;width:100%;max-width:1050px;font-size:13px;margin:14px 0 8px}
+  th,td{padding:10px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{color:var(--dim2);font-size:11px;letter-spacing:1.1px;text-transform:uppercase}
+  td b{font-weight:700}
+  .rec{margin-top:44px;background:linear-gradient(140deg,rgba(79,116,255,.1),rgba(138,92,255,.07));border:1px solid rgba(138,92,255,.35);border-radius:16px;padding:22px 26px;max-width:1050px}
+  .rec h2{font-size:16px;font-weight:800;margin-bottom:10px}
+  .rec p{color:var(--dim);font-size:13.5px;margin-bottom:8px}
+  .rec b{color:#E4DCFF}
+  h2.sec{font-size:15px;font-weight:700;color:var(--dim);letter-spacing:1.4px;text-transform:uppercase;margin:10px 0 4px}
+</style></head><body>
+
+<h1>IPTV Redesign — <span class="tag">Concept Gallery</span></h1>
+<p class="sub">Five directions for the IPTV page + settings across phone, desktop, and Android TV — every one
+carries the full feature set (sources, Favorites/Continue/lists, Xtream live·movies·series, per-row EPG + catchup,
+global search, startup channel, and the whole new DVR: record-now, EPG scheduling, manual timers, background
+engine). Feature audit in <b>README.md</b>. The player is out of scope.</p>
+
+<div class="cards">
+  <a class="c" href="c1_live_deck.html">
+    <div class="art" style="background:radial-gradient(90% 130% at 75% 20%,rgba(79,116,255,.5),transparent 60%),linear-gradient(160deg,#182452,#0B0F24)">
+      <span class="num">CONCEPT 1</span>
+      <div style="position:absolute;left:14px;bottom:12px;right:14px;display:flex;gap:6px">
+        <div style="flex:2;height:34px;border-radius:6px;background:rgba(255,255,255,.1)"></div>
+        <div style="flex:1;height:34px;border-radius:6px;background:rgba(255,255,255,.06)"></div>
+        <div style="flex:1;height:34px;border-radius:6px;background:rgba(255,255,255,.06)"></div>
+      </div>
+    </div>
+    <div class="bd"><div class="t">Live Deck</div><div class="d">Streaming-app shelves: live hero + EPG-aware “On now” rails, Continue Watching, Favorites.</div><div class="pill">LEAN-BACK DISCOVERY</div></div>
+  </a>
+  <a class="c" href="c2_grid_guide.html">
+    <div class="art" style="background:linear-gradient(160deg,#131B3E,#0B0F24)">
+      <span class="num">CONCEPT 2</span>
+      <div style="position:absolute;left:14px;right:14px;bottom:12px;display:grid;grid-template-columns:44px 1fr 1.4fr .8fr;gap:4px">
+        <div style="height:14px;border-radius:3px;background:rgba(255,255,255,.12)"></div><div style="height:14px;border-radius:3px;background:rgba(79,116,255,.35)"></div><div style="height:14px;border-radius:3px;background:rgba(245,192,66,.4)"></div><div style="height:14px;border-radius:3px;background:rgba(255,255,255,.07)"></div>
+        <div style="height:14px;border-radius:3px;background:rgba(255,255,255,.12)"></div><div style="height:14px;border-radius:3px;background:rgba(255,255,255,.07)"></div><div style="height:14px;border-radius:3px;background:rgba(244,63,94,.35)"></div><div style="height:14px;border-radius:3px;background:rgba(255,255,255,.07)"></div>
+      </div>
+    </div>
+    <div class="bd"><div class="t">Grid Guide</div><div class="d">A real cable-style timeline grid with a NOW line — watch, replay, or record from any cell.</div><div class="pill">PLANNING + DVR</div></div>
+  </a>
+  <a class="c" href="c3_command_center.html">
+    <div class="art" style="background:linear-gradient(160deg,#141B3C,#0B0F24)">
+      <span class="num">CONCEPT 3</span>
+      <div style="position:absolute;inset:34px 14px 12px;display:flex;gap:6px">
+        <div style="width:22%;border-radius:6px;background:rgba(255,255,255,.07)"></div>
+        <div style="flex:1;border-radius:6px;background:rgba(255,255,255,.11)"></div>
+        <div style="width:30%;border-radius:6px;background:rgba(138,92,255,.25)"></div>
+      </div>
+    </div>
+    <div class="bd"><div class="t">Command Center</div><div class="d">Rail → channels → live stage + day schedule with inline REC. The shipped layout, finished.</div><div class="pill">LOWEST RISK · POWER USE</div></div>
+  </a>
+  <a class="c" href="c4_zapper.html">
+    <div class="art" style="background:radial-gradient(80% 120% at 60% 30%,rgba(79,116,255,.55),transparent 65%),linear-gradient(160deg,#141C42,#080C1E)">
+      <span class="num">CONCEPT 4</span>
+      <div style="position:absolute;left:14px;right:14px;bottom:12px;display:flex;gap:6px">
+        <div style="width:52px;height:26px;border-radius:6px;background:rgba(10,14,32,.8);border:1px solid rgba(245,192,66,.8)"></div>
+        <div style="width:52px;height:26px;border-radius:6px;background:rgba(10,14,32,.6)"></div>
+        <div style="width:52px;height:26px;border-radius:6px;background:rgba(10,14,32,.6)"></div>
+      </div>
+    </div>
+    <div class="bd"><div class="t">Zapper</div><div class="d">Full-bleed live TV IS the page; channel strip, guide, and one red record button as overlays.</div><div class="pill">FEELS LIKE TELEVISION</div></div>
+  </a>
+  <a class="c" href="c5_dvr_hub.html">
+    <div class="art" style="background:linear-gradient(160deg,#171331,#0B0F24)">
+      <span class="num">CONCEPT 5</span>
+      <div style="position:absolute;left:14px;top:40px;display:flex;gap:6px">
+        <div style="width:52px;height:18px;border-radius:5px;background:rgba(255,255,255,.08)"></div>
+        <div style="width:52px;height:18px;border-radius:5px;background:rgba(255,255,255,.08)"></div>
+        <div style="width:52px;height:18px;border-radius:5px;background:linear-gradient(90deg,#4F74FF,#8A5CFF)"></div>
+        <div style="width:60px;height:18px;border-radius:5px;background:rgba(255,255,255,.08)"></div>
+      </div>
+      <div style="position:absolute;left:14px;right:14px;bottom:12px;display:flex;gap:6px">
+        <div style="flex:1;height:30px;border-radius:6px;background:rgba(244,63,94,.25)"></div>
+        <div style="flex:1;height:30px;border-radius:6px;background:rgba(255,255,255,.07)"></div>
+        <div style="flex:1;height:30px;border-radius:6px;background:rgba(255,255,255,.07)"></div>
+        <div style="flex:1;height:30px;border-radius:6px;background:rgba(255,255,255,.07)"></div>
+      </div>
+    </div>
+    <div class="bd"><div class="t">DVR Hub</div><div class="d">Watch · Guide · Library · Scheduled — the recordings library and agenda made first-class.</div><div class="pill">THE DVR HEADLINE</div></div>
+  </a>
+  <a class="c" href="recordings_hub.html">
+    <div class="art" style="background:linear-gradient(160deg,#241028,#0B0F24)">
+      <span class="num">BUILT — C5'S LIBRARY</span>
+      <div style="position:absolute;left:14px;right:14px;bottom:12px;display:flex;flex-direction:column;gap:5px">
+        <div style="height:20px;border-radius:5px;background:rgba(244,63,94,.3);border:1px solid rgba(244,63,94,.5)"></div>
+        <div style="height:14px;border-radius:4px;background:rgba(138,92,255,.22)"></div>
+        <div style="height:14px;border-radius:4px;background:rgba(255,255,255,.08)"></div>
+      </div>
+    </div>
+    <div class="bd"><div class="t">Recordings Hub</div><div class="d">The shipped page behind the rail's Recordings entry: Recording Now · Scheduled · Library, play in-app.</div><div class="pill" style="color:#7CE7A5;background:rgba(124,231,165,.12)">SHIPPED</div></div>
+  </a>
+</div>
+
+<h2 class="sec">Trade-off matrix</h2>
+<table>
+  <tr><th>Concept</th><th>Time-to-live-TV</th><th>50k-catalog depth</th><th>DVR visibility</th><th>Build risk / reuse</th></tr>
+  <tr><td><b>1 · Live Deck</b></td><td>1 press (hero)</td><td>Weak — shelves hide depth; guide is a second hop</td><td>Medium (shelf + hero button)</td><td>Medium — new shelf system, EPG-driven rails</td></tr>
+  <tr><td><b>2 · Grid Guide</b></td><td>2 presses</td><td>Strong — grid pages the catalog like the list does</td><td><b>Strongest in-context</b> (record any cell)</td><td>Medium-high — new grid renderer, careful phone collapse</td></tr>
+  <tr><td><b>3 · Command Center</b></td><td>1 press</td><td><b>Strong</b> — the current list, denser</td><td>Strong (stage schedule w/ inline REC)</td><td><b>Lowest</b> — recomposition of shipped pieces</td></tr>
+  <tr><td><b>4 · Zapper</b></td><td><b>0 presses</b></td><td>Weak — everything behind overlays</td><td>Medium (REC pill + button)</td><td>Medium — mostly overlay work; GPU tax to manage</td></tr>
+  <tr><td><b>5 · DVR Hub</b></td><td>1 press (Watch tab)</td><td>Via Guide tab</td><td><b>Strongest as destination</b> (Library + agenda + conflicts)</td><td>Medium — IA change + the (needed anyway) Library page</td></tr>
+</table>
+
+<div class="rec">
+  <h2>Recommendation — compose, don’t pick</h2>
+  <p>These aren’t really competitors; they’re <b>layers of one app</b>:</p>
+  <p><b>Skeleton: C3 Command Center</b> — evolve the shipped rail/list/stage into the cockpit (stage day-schedule
+  with inline REC is the single highest-value, lowest-cost piece in all five mocks). Nothing regresses; ships
+  incrementally behind the existing redesign flag.</p>
+  <p><b>Guide surface: C2 Grid</b> — added as a view toggle on the page (and the player guide later). It is the
+  DVR’s natural home and the grammar TV users already know.</p>
+  <p><b>Destinations: C5 Library + Scheduled</b> — two rail entries in C3’s rail (phone: pushed pages). Library is
+  the missing piece regardless of which design wins.</p>
+  <p><b>Modes: C4 Zapper</b> is the startup-channel experience formalized (open-into-TV stays a setting), and
+  <b>C1’s On-Now shelves</b> become the Watch/home treatment where discovery matters.</p>
+  <p style="margin-top:12px;color:var(--dim2)">Suggested build order: ① stage schedule + inline REC (C3) →
+  ② rail Library/Scheduled destinations (C5) → ③ grid guide view (C2) → ④ On-Now shelves (C1) → ⑤ Zapper polish (C4).</p>
+</div>
+
+<p style="margin-top:34px;color:var(--dim2);font-size:12.5px">Files: c1_live_deck.html · c2_grid_guide.html ·
+c3_command_center.html · c4_zapper.html · c5_dvr_hub.html · README.md (feature audit)</p>
+</body></html>

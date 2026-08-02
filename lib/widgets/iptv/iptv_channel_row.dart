@@ -27,6 +27,11 @@ const double kIptvRowExtent = 74;
 const double kIptvNarrowRowExtent = 84;
 const double kIptvPosterRowExtent = 95;
 
+/// Cockpit rows (rail + stage eat width): the two-line name needs the extra
+/// height these carry over their single-line bases.
+const double kIptvRowTallExtent = 92;
+const double kIptvEpgRowTallExtent = 118;
+
 /// Row height for live channels when the rows carry their own EPG block
 /// (now-playing title, progress bar, up-next line) — the redesign's guide
 /// look. Taller than [kIptvRowExtent] because the block is three lines.
@@ -103,6 +108,11 @@ class IptvChannelRow extends StatefulWidget {
   /// data fall back to the classic "category • resolution" sub-line.
   final bool epg;
 
+  /// Cockpit rows: the center column is narrower (rail + stage), so channel
+  /// names get a second line instead of aggressive truncation. Pair with the
+  /// tall row extents.
+  final bool twoLineName;
+
   const IptvChannelRow({
     super.key,
     required this.channel,
@@ -122,6 +132,7 @@ class IptvChannelRow extends StatefulWidget {
     this.progress,
     this.poster = false,
     this.epg = false,
+    this.twoLineName = false,
   });
 
   @override
@@ -306,10 +317,10 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                       child: Text(
                         displayName,
                         // Phone-width rows have enough height for a second
-                        // title line. Keeping the desktop/TV row to one line
-                        // preserves its denser guide rhythm, while narrow
-                        // windows no longer discard most of a channel name.
-                        maxLines: isNarrow ? 2 : 1,
+                        // title line, and cockpit rows opt in explicitly
+                        // (their column is narrow; the tall extents carry the
+                        // room). Elsewhere one line keeps the denser rhythm.
+                        maxLines: (isNarrow || widget.twoLineName) ? 2 : 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white.withValues(

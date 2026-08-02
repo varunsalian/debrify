@@ -49,6 +49,7 @@ import 'services/magnet_link_handler.dart';
 import 'services/stremio_service.dart';
 import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
+import 'widgets/mobile_classic_nav.dart';
 import 'widgets/tv_ambient_art_stage.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
@@ -63,6 +64,7 @@ import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
+import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
 
 /// Flutter's default image cache (1000 images / 100 MB) is far too large for a
@@ -188,6 +190,10 @@ Future<void> main() async {
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
+  // Desktop scheduled recordings (Tier 1: fire while the app is running).
+  // Arms stored timers + late-joins anything already in its window; no-op on
+  // non-desktop platforms.
+  unawaited(DesktopScheduleService.instance.init());
   // Prepare the paged IPTV catalog while the user is on the startup/home
   // experience. The expensive file open and schema work run on a worker
   // isolate after first paint; opening IPTV later shares this future or finds
@@ -415,9 +421,7 @@ class DebrifyApp extends StatelessWidget {
         // TV: fast fade instead of the Material zoom push/pop (see
         // _TvAwarePageTransitionsBuilder). Phones/desktop keep their defaults.
         pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: _TvAwarePageTransitionsBuilder(),
-          },
+          builders: {TargetPlatform.android: _TvAwarePageTransitionsBuilder()},
         ),
         colorScheme: const ColorScheme.dark(
           primary: Color(
@@ -679,6 +683,32 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // runApp precisely so this initializer can read it; tab 13 is unconditional
   // in _computeVisibleNavIndices, so it can never be swallowed.
   int _selectedIndex = MainPageBridge.hasPendingIptvStartup ? 13 : 15;
+
+  // Phone nav chrome: 'classic' (bottom bar, default) vs 'floating' (the
+  // glass button). Nothing renders until the pref is read — a one-frame
+  // empty strip beats flashing the wrong chrome at a floating-style user.
+  String _phoneNavStyle = 'classic';
+  bool _phoneNavLoaded = false;
+
+  /// The classic bar's stored middle-slot picks (real indices; may contain
+  /// currently-hidden tabs — validated against visibility at build). Null =
+  /// never customized.
+  List<int>? _phoneNavBarPicks;
+
+  /// Backfill order when picks are missing/invalid: Discover, IPTV, Cloud,
+  /// Downloads, YouTube, Debrify TV, Stremio TV, Calendar, Addons, Settings.
+  static const List<int> _phoneNavDefaultOrder = [
+    18,
+    13,
+    16,
+    2,
+    14,
+    3,
+    9,
+    19,
+    7,
+    8,
+  ];
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   bool _hasRealDebridKey = false;
@@ -716,7 +746,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _showIptvStartupOverlay = false;
       return;
     }
-    if (_showIptvStartupOverlay) setState(() => _showIptvStartupOverlay = false);
+    if (_showIptvStartupOverlay)
+      setState(() => _showIptvStartupOverlay = false);
   }
 
   /// BACK / timeout during the startup launch. Cancels the attempt itself —
@@ -747,9 +778,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   final _TvContentDirectionalFocusAction _tvDirectionalFocusAction =
       _TvContentDirectionalFocusAction();
   late final Map<Type, Action<Intent>> _tvContentActions =
-      <Type, Action<Intent>>{
-        DirectionalFocusIntent: _tvDirectionalFocusAction,
-      };
+      <Type, Action<Intent>>{DirectionalFocusIntent: _tvDirectionalFocusAction};
   bool _tvFocusRecoveryInstalled = false;
 
   // Remote control state
@@ -849,6 +878,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         MainPageBridge.homeBoardReady.value = true;
       });
     }
+    unawaited(_loadPhoneNavPrefs());
+    MainPageBridge.navPrefsChanged = () {
+      if (mounted) unawaited(_loadPhoneNavPrefs());
+    };
     // Expose tab switcher for deep-link flows
     MainPageBridge.switchTab = (int index) {
       if (!mounted) return;
@@ -1034,8 +1067,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         };
         MainPageBridge.isTvSidebarFocused = () =>
             _tvSidebarKey.currentState?.hasFocus ?? false;
-        MainPageBridge.tvDirectionalLeft =
-            _tvDirectionalFocusAction.handleLeft;
+        MainPageBridge.tvDirectionalLeft = _tvDirectionalFocusAction.handleLeft;
         // The sidebar's nodes skip traversal, so if focus ever dies (a tab
         // with nothing focusable, or the focused widget got disposed and the
         // scope has no traversable descendants left) no DPAD press could
@@ -1070,6 +1102,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   void dispose() {
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.switchTab = null;
+    MainPageBridge.navPrefsChanged = null;
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
@@ -1866,12 +1899,59 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     );
   }
 
+  Future<void> _loadPhoneNavPrefs() async {
+    final style = await StorageService.getPhoneNavStyle();
+    final picks = await StorageService.getPhoneNavBarIndices();
+    if (!mounted) return;
+    MainPageBridge.phoneNavStyleCached = style;
+    setState(() {
+      _phoneNavStyle = style;
+      _phoneNavBarPicks = picks;
+      _phoneNavLoaded = true;
+    });
+  }
+
+  /// The classic bar's effective middle slots. The stored pick COUNT is the
+  /// user's choice and is respected (someone who wants a two-slot bar keeps
+  /// a two-slot bar); slots lost to GATING (debrid removed, Trakt
+  /// disconnected) heal from the defaults so the bar never shows a hole.
+  /// Never customized = a full three from the defaults.
+  List<int> _phoneNavEffectiveBar(List<int> visible) {
+    final stored = _phoneNavBarPicks;
+    final target = stored == null ? 3 : stored.length.clamp(0, 3);
+    final slots = <int>[];
+    for (final index in stored ?? const <int>[]) {
+      if (slots.length >= target) break;
+      if (!visible.contains(index)) continue;
+      if (index == MobileClassicNav.homeIndex) continue;
+      if (slots.contains(index)) continue;
+      slots.add(index);
+    }
+    for (final index in _phoneNavDefaultOrder) {
+      if (slots.length >= target) break;
+      if (index == MobileClassicNav.homeIndex) continue;
+      if (!visible.contains(index) || slots.contains(index)) continue;
+      slots.add(index);
+    }
+    for (final index in visible) {
+      if (slots.length >= target) break;
+      if (index == MobileClassicNav.homeIndex) continue;
+      if (slots.contains(index)) continue;
+      slots.add(index);
+    }
+    return slots;
+  }
+
   void _onItemTapped(int index) {
     final visible = _computeVisibleNavIndices();
     if (!visible.contains(index)) {
       return;
     }
     final changed = _selectedIndex != index;
+    // A tab switch invalidates a pending "press back again to exit" arm —
+    // otherwise tap-tap-back inside the 2s window could exit on what the
+    // user experienced as a single back press.
+    if (changed) _lastBackPressTime = null;
     setState(() {
       _selectedIndex = index;
     });
@@ -2513,6 +2593,20 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
               return;
             }
 
+            // Classic bottom-nav contract (non-TV): BACK from any non-Home
+            // tab walks to the Home tab first. Without this every tab was
+            // exit-adjacent — the first press armed the exit timer right
+            // there, so two quick presses anywhere closed the whole app,
+            // which read as "back randomly exits". Only Home arms
+            // double-back-to-exit.
+            if (!_isAndroidTv && _selectedIndex != 15) {
+              final visible = _computeVisibleNavIndices();
+              if (visible.contains(15)) {
+                _onItemTapped(15);
+                return;
+              }
+            }
+
             // At root level - platform-specific exit behavior
 
             // Desktop platforms: Don't exit on back button
@@ -2565,8 +2659,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   // The scope regular tab content lives in — the left-edge
                   // guard in _TvContentDirectionalFocusAction compares against
                   // it so nested focus-trap scopes stay trapped.
-                  _tvDirectionalFocusAction.contentScope =
-                      FocusScope.of(context);
+                  _tvDirectionalFocusAction.contentScope = FocusScope.of(
+                    context,
+                  );
                   return Scaffold(
                     backgroundColor: Colors.transparent,
                     // Sidebar is OVERLAID (Stack), not a Row sibling. The content
@@ -2607,12 +2702,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               valueListenable: _tvSidebarExpanded,
                               builder: (context, expanded, _) =>
                                   AnimatedOpacity(
-                                opacity: expanded ? 1.0 : 0.0,
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeOut,
-                                child:
-                                    const ColoredBox(color: Color(0x8A05060E)),
-                              ),
+                                    opacity: expanded ? 1.0 : 0.0,
+                                    duration: const Duration(milliseconds: 200),
+                                    curve: Curves.easeOut,
+                                    child: const ColoredBox(
+                                      color: Color(0x8A05060E),
+                                    ),
+                                  ),
                             ),
                           ),
                         ),
@@ -2635,44 +2731,44 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                             valueListenable: MainPageBridge.tvChromeDim,
                             builder: (context, target, child) =>
                                 TweenAnimationBuilder<double>(
-                              tween: Tween<double>(end: target),
-                              duration: const Duration(milliseconds: 240),
-                              curve: Curves.easeOut,
-                              child: child,
-                              builder: (context, t, kid) => Opacity(
-                                opacity: 1.0 - t.clamp(0.0, 1.0),
-                                child: kid,
-                              ),
-                            ),
+                                  tween: Tween<double>(end: target),
+                                  duration: const Duration(milliseconds: 240),
+                                  curve: Curves.easeOut,
+                                  child: child,
+                                  builder: (context, t, kid) => Opacity(
+                                    opacity: 1.0 - t.clamp(0.0, 1.0),
+                                    child: kid,
+                                  ),
+                                ),
                             child: TvSidebarNav(
                               key: _tvSidebarKey,
-                            currentIndex: tvSelected == -1 ? 0 : tvSelected,
-                            items: [
-                              for (final index in tvIndices)
-                                TvNavItem(
-                                  _icons[index],
-                                  _titles[index],
-                                  section: _navSectionForIndex(index),
-                                ),
-                            ],
-                            onTap: (relativeIndex) {
-                              final actualIndex = tvIndices[relativeIndex];
-                              _onItemTapped(actualIndex);
-                              // Focus is handled by sidebar via MainPageBridge
-                            },
-                            onFocusContent: () {
-                              // Fallback for screens without registered handler
-                              FocusScope.of(context).nextFocus();
-                            },
-                            onExpandedChanged: (expanded) {
-                              // No setState — see _tvSidebarExpanded's comment.
-                              if (mounted) {
-                                _tvSidebarExpanded.value = expanded;
-                                MainPageBridge.notifyTvSidebarFocusChanged(
-                                  expanded,
-                                );
-                              }
-                            },
+                              currentIndex: tvSelected == -1 ? 0 : tvSelected,
+                              items: [
+                                for (final index in tvIndices)
+                                  TvNavItem(
+                                    _icons[index],
+                                    _titles[index],
+                                    section: _navSectionForIndex(index),
+                                  ),
+                              ],
+                              onTap: (relativeIndex) {
+                                final actualIndex = tvIndices[relativeIndex];
+                                _onItemTapped(actualIndex);
+                                // Focus is handled by sidebar via MainPageBridge
+                              },
+                              onFocusContent: () {
+                                // Fallback for screens without registered handler
+                                FocusScope.of(context).nextFocus();
+                              },
+                              onExpandedChanged: (expanded) {
+                                // No setState — see _tvSidebarExpanded's comment.
+                                if (mounted) {
+                                  _tvSidebarExpanded.value = expanded;
+                                  MainPageBridge.notifyTvSidebarFocusChanged(
+                                    expanded,
+                                  );
+                                }
+                              },
                             ),
                           ),
                         ),
@@ -2701,8 +2797,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                     ? const Duration(milliseconds: 900)
                                     : const Duration(milliseconds: 250),
                                 curve: Curves.easeOut,
-                                child:
-                                    const ColoredBox(color: Color(0xEB0D0B1A)),
+                                child: const ColoredBox(
+                                  color: Color(0xEB0D0B1A),
+                                ),
                               ),
                             ),
                           ),
@@ -2731,6 +2828,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     ? DesktopSidebarNav.expandedWidth
                     : DesktopSidebarNav.width;
 
+                final classicBottomNav =
+                    !isDesktopWide &&
+                    _phoneNavLoaded &&
+                    _phoneNavStyle == 'classic';
                 return Scaffold(
                   // Opaque page ink rather than transparent-to-the-wallpaper.
                   //
@@ -2755,11 +2856,47 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   // TV keeps its transparent shell above — TvAmbientArtStage is
                   // the real background there.
                   backgroundColor: HomeTheme.bg,
+                  // The REAL Scaffold slot, not a body child: Scaffold then
+                  // owns the geometry — body inset above the bar, descendant
+                  // MediaQuery stripped of the bottom padding the bar
+                  // absorbs, and fixed SnackBars ("press back again to
+                  // exit") anchor ABOVE the bar instead of covering it.
+                  bottomNavigationBar: classicBottomNav
+                      ? MobileClassicNav(
+                          currentIndex: _selectedIndex,
+                          visibleIndices: nonTvIndices,
+                          barIndices: _phoneNavEffectiveBar(nonTvIndices),
+                          icons: _icons,
+                          titles: _titles,
+                          onTap: _onItemTapped,
+                          onBarEdited: (picks) {
+                            setState(() => _phoneNavBarPicks = picks);
+                            unawaited(
+                              StorageService.setPhoneNavBarIndices(picks),
+                            );
+                          },
+                          onRemoteControlTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const RemoteRolePickerScreen(),
+                              ),
+                            );
+                          },
+                        )
+                      : null,
                   body: Stack(
                     children: [
                       // This exact element chain stays mounted while rotating.
                       // Moving it sideways with Positioned changes constraints
                       // without changing the identity of the active page.
+                      // The classic bar OCCUPIES the bottom strip (unlike the
+                      // floating button, which overlays) — the page is inset
+                      // by the bar plus the safe area the bar absorbs, the
+                      // SafeArea below must not apply that inset twice, AND
+                      // the inset must be REMOVED from MediaQuery for the
+                      // subtree: SafeArea(bottom: false) doesn't strip it, so
+                      // pages with their own SafeArea/padding.bottom reads
+                      // would re-apply a 34px inset they no longer sit under.
                       Positioned.fill(
                         left: isDesktopWide ? desktopSidebarWidth : 0,
                         child: ClipRect(
@@ -2810,7 +2947,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                             },
                           ),
                         ),
-                      if (!isDesktopWide)
+                      if (!isDesktopWide &&
+                          _phoneNavLoaded &&
+                          _phoneNavStyle == 'floating')
                         MobileFloatingNav(
                           currentIndex: nonTvSelected == -1 ? 0 : nonTvSelected,
                           items: [

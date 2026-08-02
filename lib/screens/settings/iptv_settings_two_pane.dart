@@ -58,6 +58,16 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.onToggleStartup,
     required this.onStartupModeChanged,
     required this.onPickStartupChannel,
+    this.showRecordingSection = false,
+    this.showEngineToggle = true,
+    this.recordingEngineEnabled = true,
+    this.scheduledCount = 0,
+    this.onToggleRecordingEngine,
+    this.onOpenScheduledRecordings,
+    this.maxConcurrentRecordings = 2,
+    this.onPickMaxConcurrent,
+    this.batteryExempt,
+    this.onRequestBatteryExemption,
     this.openAddSource = false,
   });
 
@@ -77,6 +87,30 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final String lastLiveChannelLabel;
   final bool hasStartupChannel;
   final bool hasLastLiveChannel;
+
+  /// The Recording rail entry + pane exist where SOME recorder can run:
+  /// Android 10+ (engine + toggle) or desktop (in-app scheduler only). On
+  /// iOS/pre-Q the rail ends at Startup and nothing promises recording that
+  /// cannot run.
+  final bool showRecordingSection;
+
+  /// Android only — the engine-vs-tee choice is meaningless on desktop, whose
+  /// single recorder has no alternative to toggle to.
+  final bool showEngineToggle;
+  final bool recordingEngineEnabled;
+  final int scheduledCount;
+  final ValueChanged<bool>? onToggleRecordingEngine;
+  final VoidCallback? onOpenScheduledRecordings;
+
+  /// Simultaneous-recordings limit shown on (and picked from) the Recording
+  /// pane; the host page owns persistence.
+  final int maxConcurrentRecordings;
+  final VoidCallback? onPickMaxConcurrent;
+
+  /// Null hides the row (non-Android / TV); otherwise current exemption
+  /// state, label-driving.
+  final bool? batteryExempt;
+  final VoidCallback? onRequestBatteryExemption;
 
   /// 0 = from URL, 1 = from file, 2 = Xtream login. Owned by the parent so the
   /// existing TabController (and the phone layout) stay in sync with it.
@@ -137,6 +171,10 @@ class _ListsDest extends _Dest {
 
 class _StartupDest extends _Dest {
   const _StartupDest();
+}
+
+class _RecordingDest extends _Dest {
+  const _RecordingDest();
 }
 
 class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
@@ -211,7 +249,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   }
 
   /// Rail entries: every source, then Add, Lists, Startup.
-  int get _railCount => widget.playlists.length + 3;
+  int get _railCount =>
+      widget.playlists.length + 3 + (widget.showRecordingSection ? 1 : 0);
 
   /// Grow-only, deliberately. Shrinking would dispose a node while the
   /// *previous* tree still holds a [Focus] referencing it — didUpdateWidget
@@ -303,6 +342,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _AddDest() => widget.playlists.length,
       _ListsDest() => widget.playlists.length + 1,
       _StartupDest() => widget.playlists.length + 2,
+      _RecordingDest() => widget.playlists.length + 3,
     };
   }
 
@@ -313,7 +353,10 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return switch (index - widget.playlists.length) {
       0 => const _AddDest(),
       1 => const _ListsDest(),
-      _ => const _StartupDest(),
+      2 => const _StartupDest(),
+      _ => widget.showRecordingSection
+          ? const _RecordingDest()
+          : const _StartupDest(),
     };
   }
 
@@ -455,9 +498,33 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onFocused: () => _dest.value = const _StartupDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(widget.playlists.length + 1),
-                onDown: null,
+                onDown: widget.showRecordingSection
+                    ? () => _focusRail(widget.playlists.length + 3)
+                    : null,
                 onRight: _enterPane,
               ),
+              if (widget.showRecordingSection)
+                _RailEntry(
+                  focusNode: _railNodes[widget.playlists.length + 3],
+                  icon: Icons.fiber_manual_record_rounded,
+                  title: 'Recording',
+                  subtitle: !widget.showEngineToggle
+                      ? (widget.scheduledCount == 0
+                            ? 'Recordings'
+                            : '${widget.scheduledCount} scheduled')
+                      : widget.recordingEngineEnabled
+                      ? (widget.scheduledCount == 0
+                            ? 'Engine on'
+                            : 'Engine on · ${widget.scheduledCount} scheduled')
+                      : 'Player-tied',
+                  selected: selected == widget.playlists.length + 3,
+                  chevron: true,
+                  onFocused: () => _dest.value = const _RecordingDest(),
+                  onSelect: _enterPane,
+                  onUp: () => _focusRail(widget.playlists.length + 2),
+                  onDown: null,
+                  onRight: _enterPane,
+                ),
             ],
           );
         },
@@ -495,6 +562,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _AddDest() => _buildAddPane(),
       _ListsDest() => _buildListsPane(),
       _StartupDest() => _buildStartupPane(),
+      _RecordingDest() => _buildRecordingPane(),
     };
     // A key per destination gives each view its own scroll position, so
     // arriving from a scrolled-down Channel lists doesn't drop you into a
@@ -505,6 +573,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         _AddDest() => 'add',
         _ListsDest() => 'lists',
         _StartupDest() => 'startup',
+        _RecordingDest() => 'recording',
       }),
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 32),
       children: [child],
@@ -877,6 +946,85 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   isLast: true,
                 ),
             ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecordingPane() {
+    var row = 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _PaneHeader(
+          icon: Icons.fiber_manual_record_rounded,
+          title: 'Recording',
+          meta: 'Background captures that survive zapping and leaving the '
+              'app, plus programmes scheduled from the TV guide.',
+          badges: [],
+        ),
+        const SizedBox(height: 20),
+        _RowGroup(
+          children: [
+            if (widget.showEngineToggle)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.settings_backup_restore_rounded,
+                title: 'Background recording engine',
+                subtitle: 'Off returns to player-tied recording. Uses an '
+                    'extra connection to your provider.',
+                trailing: Switch(
+                  value: widget.recordingEngineEnabled,
+                  onChanged: widget.onToggleRecordingEngine,
+                ),
+                onTap: () => widget.onToggleRecordingEngine
+                    ?.call(!widget.recordingEngineEnabled),
+                onLeft: _returnToRail,
+                isLast: !widget.recordingEngineEnabled,
+              ),
+            if (!widget.showEngineToggle || widget.recordingEngineEnabled)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.filter_none_rounded,
+                title: 'Simultaneous recordings',
+                subtitle:
+                    '${widget.maxConcurrentRecordings} at a time — each is an '
+                    'extra provider connection',
+                trailing: _chevron,
+                onTap: () => widget.onPickMaxConcurrent?.call(),
+                onLeft: _returnToRail,
+                isLast: false,
+              ),
+            if ((!widget.showEngineToggle || widget.recordingEngineEnabled) &&
+                widget.batteryExempt != null)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.battery_alert_rounded,
+                title: 'Battery optimization',
+                subtitle: widget.batteryExempt == true
+                    ? 'Excluded — long recordings can run to the end'
+                    : 'Optimized — the phone may kill long recordings; '
+                          'tap to exclude Debrify',
+                trailing: _chevron,
+                onTap: () => widget.onRequestBatteryExemption?.call(),
+                onLeft: _returnToRail,
+                isLast: false,
+              ),
+            if (!widget.showEngineToggle || widget.recordingEngineEnabled)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.event_rounded,
+                title: 'Recordings',
+                subtitle: widget.scheduledCount == 0
+                    ? 'Live captures, schedules and your recorded files'
+                    : '${widget.scheduledCount} scheduled · live captures '
+                          'and recorded files',
+                trailing: _chevron,
+                onTap: () => widget.onOpenScheduledRecordings?.call(),
+                onLeft: _returnToRail,
+                isLast: true,
+              ),
           ],
         ),
       ],

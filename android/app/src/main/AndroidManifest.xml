@@ -6,10 +6,26 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Keep CPU + WiFi alive while the native download service streams -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Android 13+: recording/download notifications (REC progress, "Saved",
+         "Scheduled recording skipped") need the runtime grant; asked
+         contextually on the first record/schedule, never at app start. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Scheduled recordings: exact alarms wake the recording service at the
+         programme's start time. SCHEDULE_EXACT_ALARM covers Android 12 (where
+         it is granted by default); USE_EXACT_ALARM auto-grants on 13+ (fine for
+         sideload distribution — revisit if Play ever happens). The boot
+         receiver re-arms alarms, which reboots and app updates silently clear. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Storage permissions for file picker (Android 12 and below) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Recording destination on Android 9 and below (Mi Box class hardware):
+         MediaStore.Downloads doesn't exist pre-Q, so the engine writes a
+         plain file into public Download/ — which needs this, legacy-only. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     
     <!-- TV compatibility flags (do not restrict phone installs) -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -50,6 +66,28 @@
             android:name=".download.MediaStoreDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".recording.LiveRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <!-- exported=false is correct for both: android:exported only gates
+             NON-system senders, and these receive only protected system
+             broadcasts (BOOT_COMPLETED / MY_PACKAGE_REPLACED) and this app's
+             own alarm PendingIntents. -->
+        <receiver
+            android:name=".recording.RecordingAlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".recording.RecordingBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <!-- Granting "Alarms & reminders" must upgrade existing
+                     inexact schedules to exact ones. -->
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:exported="true"

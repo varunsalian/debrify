@@ -571,6 +571,47 @@ class StorageService {
     await prefs.setBool(_realDebridIntegrationEnabledKey, enabled);
   }
 
+  static const String _phoneNavStyleKey = 'phone_nav_style';
+  static const String _phoneNavBarIndicesKey = 'phone_nav_bar_indices';
+
+  /// Phone navigation chrome: 'classic' (bottom bar, the default) or
+  /// 'floating' (the glass button menu). TV and wide-desktop never read it.
+  static Future<String> getPhoneNavStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_phoneNavStyleKey);
+    return raw == 'floating' ? 'floating' : 'classic';
+  }
+
+  static Future<void> setPhoneNavStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _phoneNavStyleKey,
+      style == 'floating' ? 'floating' : 'classic',
+    );
+  }
+
+  /// The classic bar's user-chosen middle slots, as REAL tab indices (Home
+  /// and More are fixed anchors and never stored). Null = never customized
+  /// (defaults apply); an explicit short list is a deliberate choice and the
+  /// bar respects its length.
+  static Future<List<int>?> getPhoneNavBarIndices() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_phoneNavBarIndicesKey);
+    if (raw == null) return null;
+    return [
+      for (final s in raw)
+        if (int.tryParse(s) != null) int.parse(s),
+    ];
+  }
+
+  static Future<void> setPhoneNavBarIndices(List<int> indices) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _phoneNavBarIndicesKey,
+      [for (final i in indices) '$i'],
+    );
+  }
+
   static Future<bool> getRealDebridHiddenFromNav() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_realDebridHiddenFromNavKey) ?? false;

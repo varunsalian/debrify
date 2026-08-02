@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recordings Hub — as built</title>
+<style>
+  :root{
+    --bg:#070A18; --card:#10142A; --line:rgba(255,255,255,.07);
+    --dim:rgba(255,255,255,.5); --dim2:rgba(255,255,255,.34);
+    --acc:#8A5CFF; --gold:#F5C042; --rec:#F43F5E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#04060F;color:#EDEFFB;font:14px/1.5 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:40px 4vw 90px}
+  h1{font-size:26px;font-weight:800;margin-bottom:6px}
+  h1 .tag{background:linear-gradient(90deg,#4F74FF,var(--acc));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);margin-bottom:34px;max-width:880px}
+  .sub b{color:#E4DCFF}
+  .framewrap{margin-bottom:52px}
+  .cap{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim2);font-weight:800;margin-bottom:12px}
+  .cap span{color:var(--gold)}
+
+  /* ── TV frame ─────────────────────────────── */
+  .tv{width:min(1120px,100%);aspect-ratio:16/9;background:var(--bg);border-radius:14px;border:1px solid rgba(255,255,255,.1);overflow:hidden;display:flex;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+  .sidebar{width:54px;background:#05070F;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:18px;flex:none}
+  .sidebar .ico{width:20px;height:20px;border-radius:6px;background:rgba(255,255,255,.14)}
+  .sidebar .ico.on{background:linear-gradient(135deg,#4F74FF,var(--acc))}
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0}
+
+  .hubbar{display:flex;align-items:center;gap:10px;padding:14px 20px 10px 14px}
+  .backbtn{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.05);display:grid;place-items:center;color:rgba(255,255,255,.8);font-size:16px}
+  .recdot-s{width:13px;height:13px;border-radius:50%;background:var(--rec)}
+  .hubtitle{font-size:18px;font-weight:800}
+  .schedbtn{margin-left:auto;display:flex;align-items:center;gap:7px;background:rgba(138,92,255,.22);color:#D9CBFF;font-weight:800;font-size:12.5px;padding:9px 14px;border-radius:10px}
+  .schedbtn.focus{border:1.8px solid var(--gold);background:rgba(138,92,255,.42)}
+
+  .scroll{flex:1;overflow:hidden;padding:4px 20px 20px}
+  .sechead{display:flex;align-items:center;gap:10px;margin:10px 0 8px}
+  .sechead .lbl{font-size:10.5px;font-weight:800;letter-spacing:1.6px;color:rgba(255,255,255,.38)}
+  .chip{font-size:9.5px;font-weight:800;letter-spacing:.6px;padding:2px 7px;border-radius:5px}
+  .chip.rec{color:var(--rec);background:rgba(244,63,94,.14)}
+  .chip.acc{color:#B9A5FF;background:rgba(138,92,255,.14)}
+  .chip.dim{color:rgba(255,255,255,.55);background:rgba(255,255,255,.08)}
+
+  .livecard{display:flex;align-items:center;gap:12px;background:var(--card);border:1.2px solid rgba(244,63,94,.35);border-radius:14px;padding:13px 14px 13px 16px;box-shadow:0 0 18px 1px rgba(244,63,94,.07);margin-bottom:10px}
+  .recdot{width:14px;height:14px;border-radius:50%;background:var(--rec);box-shadow:0 0 8px rgba(244,63,94,.5);animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .livecard .t{font-weight:700;font-size:14px}
+  .livecard .m{color:var(--rec);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}
+  .stopbtn{margin-left:auto;display:flex;align-items:center;gap:6px;background:rgba(244,63,94,.16);color:#FF8CA3;font-weight:800;font-size:12px;padding:8px 14px;border-radius:10px}
+  .stopbtn.focus{border:1.8px solid var(--gold);background:rgba(244,63,94,.32)}
+
+  .row{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:10px 14px;margin-bottom:8px}
+  .row.focus{border:1.8px solid var(--gold);background:rgba(255,255,255,.07)}
+  .ring{width:29px;height:29px;border-radius:50%;border:2px solid rgba(244,63,94,.8);display:grid;place-items:center;flex:none}
+  .ring::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--rec)}
+  .row .tt{font-weight:700;font-size:13px}
+  .row .st{color:var(--dim);font-size:11px;margin-top:1px}
+  .cdown{margin-left:auto;font-size:10px;font-weight:800;color:#B9A5FF;background:rgba(138,92,255,.14);padding:3px 8px;border-radius:6px;font-variant-numeric:tabular-nums;flex:none}
+  .x{color:rgba(255,255,255,.35);font-size:14px;flex:none}
+
+  .thumb{width:66px;height:42px;border-radius:8px;background:linear-gradient(135deg,#1A1F3D,#0C0F22);position:relative;display:grid;place-items:center;flex:none}
+  .mono{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,#4F74FF,var(--acc));display:grid;place-items:center;font-size:10px;font-weight:800}
+  .pb{position:absolute;right:4px;bottom:4px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.55);display:grid;place-items:center;font-size:9px}
+  .row.focus .pb{background:var(--gold);color:#000}
+  .del{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:rgba(255,255,255,.4);font-size:14px;flex:none}
+  .del.focus{border:1.8px solid var(--gold);background:rgba(244,63,94,.2);color:#FF8CA3}
+  .foot{color:rgba(255,255,255,.3);font-size:10.5px;text-align:center;margin-top:14px}
+
+  /* ── phone frame ──────────────────────────── */
+  .phone{width:320px;height:640px;background:var(--bg);border-radius:28px;border:1px solid rgba(255,255,255,.12);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+  .phone .scroll{padding:2px 14px 14px}
+  .phone .hubbar{padding:12px 14px 8px 10px}
+  .phone .hubtitle{font-size:16px}
+  .phone .livecard .t{font-size:13px}
+  .phone .row{padding:9px 11px}
+  .grid2{display:flex;gap:44px;flex-wrap:wrap;align-items:flex-start}
+
+  .notes{max-width:900px;background:linear-gradient(140deg,rgba(79,116,255,.09),rgba(138,92,255,.06));border:1px solid rgba(138,92,255,.3);border-radius:16px;padding:20px 24px}
+  .notes h2{font-size:15px;font-weight:800;margin-bottom:10px}
+  .notes li{color:var(--dim);font-size:13px;margin:6px 0 6px 18px}
+  .notes b{color:#E4DCFF}
+</style></head><body>
+
+<h1>Recordings Hub — <span class="tag">as built</span></h1>
+<p class="sub">The rail's <b>Scheduled</b> entry is now <b>Recordings</b>, and the page behind it is the DVR's
+front door: three zones on one scroll — <b>Recording&nbsp;Now</b> (live captures, stoppable in place),
+<b>Scheduled</b> (countdown chips, cancel on OK, the manual timer behind the <b>Schedule</b> button),
+and <b>Library</b> (every finished recording; OK/tap plays in-app, delete sits at the row's right edge).</p>
+
+<div class="framewrap">
+  <div class="cap">Android TV · 54px collapsed app sidebar · gold = <span>DPAD focus</span> (on the live card's Stop)</div>
+  <div class="tv">
+    <div class="sidebar">
+      <div class="ico"></div><div class="ico"></div><div class="ico on"></div><div class="ico"></div><div class="ico"></div>
+    </div>
+    <div class="stage">
+      <div class="hubbar">
+        <div class="backbtn">←</div>
+        <div class="recdot-s"></div>
+        <div class="hubtitle">Recordings</div>
+        <div class="schedbtn">＋ Schedule</div>
+      </div>
+      <div class="scroll">
+        <div class="sechead"><span class="lbl">RECORDING NOW</span><span class="chip rec">1 LIVE</span></div>
+        <div class="livecard">
+          <div class="recdot"></div>
+          <div><div class="t">Sky Sports F1</div><div class="m">1:42:07 · 1.31 GB</div></div>
+          <div class="stopbtn focus">■ Stop</div>
+        </div>
+        <div class="sechead"><span class="lbl">SCHEDULED</span><span class="chip acc">2 UPCOMING</span></div>
+        <div class="row"><div class="ring"></div><div><div class="tt">Match of the Day</div><div class="st">BBC One · Today · 22:30 – 23:30</div></div><div class="cdown">in 2h 15m</div><div class="x">✕</div></div>
+        <div class="row"><div class="ring"></div><div><div class="tt">Rai 1</div><div class="st">Tomorrow · 20:00 – 21:00</div></div><div class="cdown">in 23h</div><div class="x">✕</div></div>
+        <div class="sechead"><span class="lbl">LIBRARY</span><span class="chip dim">3 · 4.05 GB</span></div>
+        <div class="row"><div class="thumb"><div class="mono">SS</div><div class="pb">▶</div></div><div><div class="tt">Sky Sports F1</div><div class="st">Yesterday 21:00 · 2.20 GB · 1h 32m</div></div><div class="del">🗑</div></div>
+        <div class="row"><div class="thumb"><div class="mono">BB</div><div class="pb">▶</div></div><div><div class="tt">BBC One</div><div class="st">Fri 31/7 22:30 · 1.12 GB · 58 min</div></div><div class="del">🗑</div></div>
+        <div class="foot">Recordings run even with the app closed · saved in Downloads/Debrify/Recordings</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="framewrap grid2">
+  <div>
+    <div class="cap">Phone — same page, same zones</div>
+    <div class="phone">
+      <div class="hubbar">
+        <div class="backbtn">←</div>
+        <div class="recdot-s"></div>
+        <div class="hubtitle">Recordings</div>
+        <div class="schedbtn">＋ Schedule</div>
+      </div>
+      <div class="scroll">
+        <div class="sechead"><span class="lbl">RECORDING NOW</span><span class="chip rec">1 LIVE</span></div>
+        <div class="livecard">
+          <div class="recdot"></div>
+          <div><div class="t">Sky Sports F1</div><div class="m">12:04 · 96 MB</div></div>
+          <div class="stopbtn">■ Stop</div>
+        </div>
+        <div class="sechead"><span class="lbl">SCHEDULED</span><span class="chip acc">1 UPCOMING</span></div>
+        <div class="row"><div class="ring"></div><div><div class="tt">Match of the Day</div><div class="st">Today · 22:30 – 23:30</div></div><div class="cdown">in 2h</div></div>
+        <div class="sechead"><span class="lbl">LIBRARY</span><span class="chip dim">2 · 3.3 GB</span></div>
+        <div class="row"><div class="thumb"><div class="mono">SS</div><div class="pb">▶</div></div><div><div class="tt">Sky Sports F1</div><div class="st">Yest 21:00 · 2.2 GB</div></div><div class="del">🗑</div></div>
+        <div class="row"><div class="thumb"><div class="mono">RA</div><div class="pb">▶</div></div><div><div class="tt">Rai 1</div><div class="st">Fri · 1.1 GB · 58m</div></div><div class="del">🗑</div></div>
+        <div class="foot">Saved in Downloads/Debrify/Recordings</div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <h2>Design decisions</h2>
+    <li><b>One page, not tabs</b> — DVR state is small; the three zones read top-to-bottom as "now → next → done", and empty zones collapse to a one-line hint instead of a dead tab.</li>
+    <li><b>Stop lives on the card</b> — a capture is never more than one press from ending; no menus.</li>
+    <li><b>Schedule is a header action</b>, not a FAB — reachable in DPAD scroll order, first thing UP from the content.</li>
+    <li><b>Library rows: OK plays, RIGHT reaches delete</b> — the same two-focusable row grammar as the cockpit stage; delete always confirms.</li>
+    <li><b>Countdown chips + elapsed timers</b> tick from one shared 1s clock that only runs while something is live or scheduled; on TV the REC dot doesn't pulse (house rule: no standing animations).</li>
+    <li><b>Recordings older than the index survive</b> — the library merges the store with an on-disk scan, so files recorded before this build (or by the tee) still appear.</li>
+    <li><b>Global empty state</b> ("Your DVR is empty") with a single autofocused Schedule button when all three zones are empty.</li>
+  </div>
+</div>
+
+</body></html>

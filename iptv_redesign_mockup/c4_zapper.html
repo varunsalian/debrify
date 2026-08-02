@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C4 · Zapper — IPTV Redesign</title>
+<style>
+  :root{
+    --bg:#070A18; --panel:#0D1226; --card:rgba(255,255,255,.06);
+    --line:rgba(255,255,255,.09); --dim:rgba(255,255,255,.6); --dim2:rgba(255,255,255,.36);
+    --acc1:#4F74FF; --acc2:#8A5CFF; --gold:#F5C042; --rec:#F43F5E; --live:#22C55E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:#EDEFFB;font:14px/1.45 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:34px 4vw 90px}
+  a{color:var(--acc1);text-decoration:none}
+  h1{font-size:26px;font-weight:800}
+  h1 .tag{background:linear-gradient(90deg,var(--acc1),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);margin:6px 0 30px;max-width:880px}
+  h2{font-size:15px;font-weight:700;color:var(--dim);letter-spacing:1.4px;text-transform:uppercase;margin:44px 0 16px}
+  .note{color:var(--dim2);font-size:12.5px;margin-top:10px;max-width:920px}
+  kbd{background:#181D33;border:1px solid var(--line);border-radius:5px;padding:1px 7px;font:600 11px monospace;color:var(--dim)}
+  .tv{width:min(1180px,96vw);aspect-ratio:16/9;border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.5);
+    background:
+      radial-gradient(75% 110% at 62% 30%,rgba(79,116,255,.42),transparent 62%),
+      radial-gradient(55% 90% at 20% 75%,rgba(138,92,255,.3),transparent 60%),
+      radial-gradient(40% 60% at 85% 80%,rgba(34,197,94,.14),transparent 60%),
+      linear-gradient(160deg,#141C42,#080C1E)}
+  .phone{width:375px;height:760px;border:1px solid var(--line);border-radius:34px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);
+    background:radial-gradient(120% 90% at 70% 30%,rgba(79,116,255,.4),transparent 62%),linear-gradient(160deg,#141C42,#080C1E)}
+  .row2{display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start}
+  .logo{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:14px;flex:none}
+  .badge{font:800 8.5px/1 sans-serif;letter-spacing:.8px;padding:3px 6px;border-radius:4px}
+  .b-rec{background:rgba(244,63,94,.2);color:#FF8CA3}
+  .b-4k{background:rgba(79,116,255,.22);color:#AFC2FF}
+  .prog{height:3px;border-radius:2px;background:rgba(255,255,255,.18);overflow:hidden}
+  .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--acc1),var(--acc2))}
+
+  /* overlays */
+  .ident{position:absolute;top:24px;left:28px;display:flex;gap:12px;align-items:center;background:rgba(5,8,20,.55);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:10px 16px 10px 10px}
+  .ident .n{font-weight:800;font-size:14.5px}
+  .ident .c{color:var(--dim);font-size:11px;font-weight:700}
+  .rec-pill{position:absolute;top:24px;right:28px;display:flex;gap:8px;align-items:center;background:rgba(244,63,94,.14);border:1px solid rgba(244,63,94,.4);border-radius:99px;padding:8px 14px;font-weight:800;font-size:12px;color:#FF8CA3}
+  .rec-pill i{width:9px;height:9px;border-radius:50%;background:var(--rec);box-shadow:0 0 12px var(--rec)}
+  .quick{position:absolute;right:24px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px}
+  .qbtn{width:46px;height:46px;border-radius:13px;background:rgba(5,8,20,.55);backdrop-filter:blur(8px);border:1px solid var(--line);display:grid;place-items:center;font-size:16px;color:var(--dim)}
+  .qbtn.focus{outline:2.5px solid var(--gold);outline-offset:2px;color:#fff}
+  .qbtn.rec{color:var(--rec)}
+
+  /* bottom strip */
+  .strip{position:absolute;left:0;right:0;bottom:0;padding:64px 26px 18px;background:linear-gradient(180deg,transparent,rgba(4,6,15,.92) 55%)}
+  .strip .nowinfo{margin-bottom:12px}
+  .strip .tt{font-size:20px;font-weight:800}
+  .strip .tm{color:var(--dim);font-size:12px;margin:2px 0 8px}
+  .strip .tm b{color:#D9DEFF}
+  .cards{display:flex;gap:10px;align-items:stretch}
+  .zc{width:184px;flex:none;background:rgba(10,14,32,.72);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:12px;padding:10px 11px}
+  .zc .hd{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .zc .nm{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .zc .no{color:var(--dim2);font-size:9.5px;font-weight:700}
+  .zc .now{color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+  .zc.focus{outline:2.5px solid var(--gold);outline-offset:2px;background:rgba(20,26,52,.85);transform:scale(1.04)}
+  .keycaps{position:absolute;left:28px;bottom:calc(100% + 8px);color:var(--dim2);font-size:11px;display:flex;gap:14px}
+  .striphints{color:var(--dim2);font-size:11px;display:flex;gap:16px;margin-top:10px}
+
+  /* phone bits */
+  .p-swipe{position:absolute;right:14px;top:42%;display:flex;flex-direction:column;gap:6px;align-items:center;color:var(--dim2);font-size:11px}
+  .p-swipe .ar{font-size:20px;color:var(--dim)}
+  .p-strip{position:absolute;left:0;right:0;bottom:0;padding:60px 14px 16px;background:linear-gradient(180deg,transparent,rgba(4,6,15,.94) 55%)}
+</style></head><body>
+
+<h1>Concept 4 · <span class="tag">Zapper</span></h1>
+<p class="sub">The page <b>is</b> the TV. Opening IPTV drops straight into the last channel playing full-bleed
+(your startup-channel feature, promoted to the default). Everything else is a translucent overlay: a channel
+strip on <kbd>▼</kbd>, guide on <kbd>OK</kbd>, sources on <kbd>◀</kbd>, number-pad zapping, one red record
+button. Zero chrome when idle — overlays fade out and it’s just television.</p>
+
+<h2>Android TV</h2>
+<div class="tv">
+  <div class="ident">
+    <div class="logo" style="background:#1B2A6B">S2</div>
+    <div><div class="n">SKY SPORT NEWS</div><div class="c">CH 22 · <span class="badge b-4k">UHD</span> · 8K source</div></div>
+  </div>
+  <div class="rec-pill"><i></i> REC 12:41 · 1.2 GB</div>
+  <div class="quick">
+    <div class="qbtn">☰</div>
+    <div class="qbtn focus rec">⏺</div>
+    <div class="qbtn">♥</div>
+    <div class="qbtn">🔢</div>
+    <div class="qbtn">🔍</div>
+  </div>
+  <div class="strip">
+    <div class="keycaps"><span><kbd>▲</kbd> hide</span><span><kbd>OK</kbd> guide</span><span><kbd>◀</kbd> sources</span><span><kbd>CH±</kbd> zap</span></div>
+    <div class="nowinfo">
+      <div class="tt">Man United vs Brighton</div>
+      <div class="tm"><b>09:30–11:30</b> · then Chelsea vs Sunderland · <span class="badge b-rec">next: REC scheduled</span></div>
+      <div class="prog" style="width:320px"><i style="width:62%"></i></div>
+    </div>
+    <div class="cards">
+      <div class="zc"><div class="hd"><div class="logo" style="width:28px;height:28px;font-size:11px;background:#14328C">P1</div><div><div class="nm">HUB PREMIER 1</div><div class="no">CH 21</div></div></div><div class="now">Arsenal vs Newcastle</div><div class="prog"><i style="width:72%"></i></div></div>
+      <div class="zc focus"><div class="hd"><div class="logo" style="width:28px;height:28px;font-size:11px;background:#1B2A6B">S2</div><div><div class="nm">SKY SPORT NEWS</div><div class="no">CH 22 · TUNED</div></div></div><div class="now">Man United vs Brighton</div><div class="prog"><i style="width:62%"></i></div></div>
+      <div class="zc"><div class="hd"><div class="logo" style="width:28px;height:28px;font-size:11px;background:#8C3214">F1</div><div><div class="nm">SKY F1 UHD</div><div class="no">CH 40</div></div></div><div class="now">Hungarian GP — Quali</div><div class="prog"><i style="width:31%"></i></div></div>
+      <div class="zc"><div class="hd"><div class="logo" style="width:28px;height:28px;font-size:11px;background:#14708C">TN</div><div><div class="nm">TNT SPORTS 2</div><div class="no">CH 44</div></div></div><div class="now">UFC prelims</div><div class="prog"><i style="width:12%"></i></div></div>
+      <div class="zc"><div class="hd"><div class="logo" style="width:28px;height:28px;font-size:11px;background:#8C1414">BB</div><div><div class="nm">BBC NEWS</div><div class="no">CH 3</div></div></div><div class="now">Newsday</div><div class="prog"><i style="width:47%"></i></div></div>
+    </div>
+    <div class="striphints"><span>Hold <kbd>OK</kbd> on a card · add to list</span><span><kbd>▶▶</kbd> jump category</span><span>strip follows the tuned category</span></div>
+  </div>
+</div>
+<p class="note"><b>Notice:</b> the REC pill (top-right) is the engine capture running with elapsed + size — it stays
+visible even with all other chrome faded. The strip cards are the zap ladder made visible: LEFT/RIGHT flips
+channels within the category, page-jump crosses categories — exactly your existing paging ladder, drawn on screen.
+The quick column’s ⏺ handles record-now AND (hold) schedule-from-guide.</p>
+
+<h2>Phone — swipe TV</h2>
+<div class="row2">
+<div class="phone">
+  <div class="ident" style="top:16px;left:14px;padding:8px 12px 8px 8px">
+    <div class="logo" style="width:30px;height:30px;font-size:11px;background:#1B2A6B">S2</div>
+    <div><div class="n" style="font-size:12.5px">SKY SPORT NEWS</div><div class="c" style="font-size:10px">CH 22 · UHD</div></div>
+  </div>
+  <div class="rec-pill" style="top:16px;right:14px;padding:6px 10px;font-size:10.5px"><i></i> REC</div>
+  <div class="p-swipe"><div class="ar">▲</div>zap<div class="ar">▼</div></div>
+  <div class="p-strip">
+    <div class="tt" style="font-size:16px;font-weight:800">Man United vs Brighton</div>
+    <div class="tm" style="color:var(--dim);font-size:11px;margin:2px 0 8px"><b style="color:#D9DEFF">09:30–11:30</b> · then Chelsea vs Sunderland</div>
+    <div class="prog" style="width:200px;margin-bottom:12px"><i style="width:62%"></i></div>
+    <div class="cards" style="overflow:hidden">
+      <div class="zc" style="width:150px"><div class="hd"><div class="logo" style="width:26px;height:26px;font-size:10px;background:#14328C">P1</div><div><div class="nm">HUB PREMIER 1</div></div></div><div class="now">Arsenal vs Newcastle</div><div class="prog"><i style="width:72%"></i></div></div>
+      <div class="zc focus" style="width:150px"><div class="hd"><div class="logo" style="width:26px;height:26px;font-size:10px;background:#1B2A6B">S2</div><div><div class="nm">SKY SPORT NEWS</div></div></div><div class="now">Man Utd vs Brighton</div><div class="prog"><i style="width:62%"></i></div></div>
+      <div class="zc" style="width:150px"><div class="hd"><div class="logo" style="width:26px;height:26px;font-size:10px;background:#8C3214">F1</div><div><div class="nm">SKY F1</div></div></div><div class="now">Quali</div><div class="prog"><i style="width:31%"></i></div></div>
+    </div>
+    <div class="striphints" style="margin-top:12px"><span>swipe ↑↓ zap</span><span>tap title · guide</span><span>⏺ record</span></div>
+  </div>
+</div>
+<div style="max-width:420px">
+  <h2 style="margin-top:0">Settings in this concept</h2>
+  <p class="note" style="margin-top:0">Nearly untouched — the Zapper is a MODE, not a reorganization. One new
+  setting: “Open IPTV into: Zapper / Browse” (generalizing today’s startup-channel toggle). Sources, lists,
+  recording all keep the current two-pane.</p>
+  <p class="note"><b>Why this concept:</b> it makes Debrify feel like a television, not an app about television.
+  Fastest possible time-to-picture; the DVR is one button while you watch.</p>
+  <p class="note"><b>Watch out:</b> browse/VOD/series need a second surface anyway (the guide overlay), always-on
+  playback costs bandwidth on metered phones, and a full-bleed preview under overlays is exactly the GPU tax your
+  TV perf playbook warns about — the strip must be a cheap layer, and idle chrome must fully unmount.</p>
+</div>
+</div>
+
+<p style="margin-top:50px"><a href="index.html">← All concepts</a></p>
+</body></html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C2 · Grid Guide — IPTV Redesign</title>
+<style>
+  :root{
+    --bg:#070A18; --panel:#0D1226; --card:rgba(255,255,255,.05);
+    --line:rgba(255,255,255,.08); --dim:rgba(255,255,255,.55); --dim2:rgba(255,255,255,.34);
+    --acc1:#4F74FF; --acc2:#8A5CFF; --gold:#F5C042; --rec:#F43F5E; --live:#22C55E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:#EDEFFB;font:14px/1.45 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:34px 4vw 90px}
+  a{color:var(--acc1);text-decoration:none}
+  h1{font-size:26px;font-weight:800}
+  h1 .tag{background:linear-gradient(90deg,var(--acc1),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);margin:6px 0 30px;max-width:880px}
+  h2{font-size:15px;font-weight:700;color:var(--dim);letter-spacing:1.4px;text-transform:uppercase;margin:44px 0 16px}
+  .note{color:var(--dim2);font-size:12.5px;margin-top:10px;max-width:920px}
+  kbd{background:#181D33;border:1px solid var(--line);border-radius:5px;padding:1px 7px;font:600 11px monospace;color:var(--dim)}
+  .tv{width:min(1180px,96vw);aspect-ratio:16/9;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.5);display:flex;flex-direction:column}
+  .phone{width:375px;height:760px;background:var(--panel);border:1px solid var(--line);border-radius:34px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .row2{display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start}
+  .logo{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:13px;flex:none}
+  .badge{font:800 8.5px/1 sans-serif;letter-spacing:.8px;padding:3px 6px;border-radius:4px}
+  .b-rec{background:rgba(244,63,94,.16);color:var(--rec)}
+  .b-rep{background:rgba(255,255,255,.09);color:var(--dim)}
+  .b-4k{background:rgba(79,116,255,.16);color:#9DB4FF}
+
+  /* top synopsis strip */
+  .top{height:27%;display:flex;gap:20px;padding:18px 26px 12px;background:
+    radial-gradient(80% 160% at 85% 0%,rgba(138,92,255,.22),transparent 60%),linear-gradient(180deg,#10173295,#0D1226)}
+  .pv{aspect-ratio:16/9;height:100%;border-radius:10px;flex:none;position:relative;overflow:hidden;
+    background:radial-gradient(90% 120% at 70% 25%,rgba(79,116,255,.5),transparent 60%),linear-gradient(160deg,#182452,#0B0F24);border:1px solid var(--line)}
+  .pv .lt{position:absolute;top:8px;left:10px;color:var(--live);font-weight:800;font-size:10px;letter-spacing:1.2px}
+  .syn{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .syn .ch{color:var(--dim);font-size:12px;font-weight:700;letter-spacing:.4px}
+  .syn .tt{font-size:21px;font-weight:800}
+  .syn .tm{color:var(--dim);font-size:12.5px}
+  .syn .tm b{color:#CFD6FF}
+  .syn .ds{color:var(--dim2);font-size:12.5px;max-width:640px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .syn .acts{display:flex;gap:8px;margin-top:auto}
+  .abtn{padding:7px 14px;border-radius:8px;font-weight:700;font-size:12px;background:var(--card);border:1px solid var(--line)}
+  .abtn.primary{background:linear-gradient(90deg,var(--acc1),var(--acc2));border:none}
+  .abtn.rec{color:var(--rec)}
+
+  /* chips row */
+  .chips{display:flex;gap:8px;padding:8px 26px;align-items:center;border-bottom:1px solid var(--line)}
+  .chip{padding:6px 13px;border-radius:99px;background:var(--card);border:1px solid var(--line);font-weight:700;font-size:11.5px;color:var(--dim)}
+  .chip.on{background:linear-gradient(90deg,var(--acc1),var(--acc2));color:#fff;border:none}
+  .chips .sp{flex:1}
+  .chips .day{color:var(--dim);font-weight:700;font-size:12px}
+
+  /* the grid */
+  .grid{flex:1;position:relative;overflow:hidden;font-size:12px}
+  .thead{display:grid;grid-template-columns:218px repeat(4,1fr);border-bottom:1px solid var(--line);color:var(--dim2);font-weight:700;font-size:11px;letter-spacing:.6px}
+  .thead div{padding:7px 10px;border-left:1px solid var(--line)}
+  .thead div:first-child{border-left:none;color:var(--dim)}
+  .rowg{display:grid;grid-template-columns:218px repeat(8,1fr);border-bottom:1px solid rgba(255,255,255,.05);height:52px}
+  .chcell{display:flex;gap:10px;align-items:center;padding:0 12px;background:rgba(255,255,255,.02)}
+  .chcell .nm{font-weight:700;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chcell .no{color:var(--dim2);font-size:10px;font-weight:700}
+  .cell{border-left:1px solid rgba(255,255,255,.06);padding:7px 10px;overflow:hidden;position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px}
+  .cell .t{font-weight:600;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#DDE2FF}
+  .cell .m{color:var(--dim2);font-size:10px;display:flex;gap:6px;align-items:center}
+  .cell.past .t{color:var(--dim2)}
+  .cell.now{background:rgba(79,116,255,.10)}
+  .cell.focus{outline:2.5px solid var(--gold);outline-offset:-2.5px;border-radius:6px;background:rgba(245,192,66,.07)}
+  .nowline{position:absolute;top:26px;bottom:0;left:calc(218px + 34%);width:2px;background:var(--live);box-shadow:0 0 10px var(--live);z-index:3}
+  .nowline::before{content:"NOW";position:absolute;top:-2px;left:-16px;background:var(--live);color:#04240F;font:800 8.5px/1 sans-serif;padding:2.5px 5px;border-radius:4px}
+  .keycaps{position:absolute;right:20px;bottom:10px;color:var(--dim2);font-size:11px;display:flex;gap:14px;background:rgba(7,10,24,.8);padding:4px 10px;border-radius:8px}
+
+  /* phone */
+  .p-top{display:flex;gap:8px;align-items:center;padding:16px 16px 10px}
+  .p-top .tt{font-weight:800;font-size:17px}
+  .p-top .sp{flex:1}
+  .icbtn{width:34px;height:34px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;color:var(--dim);font-size:14px}
+  .p-days{display:flex;gap:8px;padding:0 16px 10px}
+  .p-row{border-bottom:1px solid rgba(255,255,255,.05);padding:10px 16px}
+  .p-row .hd{display:flex;gap:10px;align-items:center}
+  .p-row .nm{font-weight:700;font-size:13.5px}
+  .p-row .no{color:var(--dim2);font-size:10.5px;font-weight:700}
+  .p-row .now{color:var(--dim);font-size:12px;margin-top:2px}
+  .p-row .now b{color:#D9DEFF;font-weight:600}
+  .prog{height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:6px}
+  .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--acc1),var(--acc2))}
+  .p-tl{display:flex;gap:6px;margin-top:10px;overflow:hidden}
+  .p-cell{flex:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:118px}
+  .p-cell .t{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
+  .p-cell .m{color:var(--dim2);font-size:9.5px;margin-top:2px;display:flex;gap:6px}
+  .p-cell.now{border-color:rgba(79,116,255,.5);background:rgba(79,116,255,.1)}
+</style></head><body>
+
+<h1>Concept 2 · <span class="tag">Grid Guide</span></h1>
+<p class="sub">The classic cable timeline grid, rebuilt modern: channels down, time across, a glowing NOW line,
+and <b>recording from any future cell with one press</b>. This is the shape every TV user already knows —
+and the one that shows off the DVR the hardest. The synopsis stage on top keeps live preview + actions in view.</p>
+
+<h2>Android TV</h2>
+<div class="tv">
+  <div class="top">
+    <div class="pv"><div class="lt">● LIVE</div></div>
+    <div class="syn">
+      <div class="ch">SKY SPORT NEWS · CH 22 · <span class="badge b-4k">UHD</span></div>
+      <div class="tt">Chelsea vs Sunderland</div>
+      <div class="tm"><b>11:30 – 13:30</b> · starts in 1h 12m · Matchweek 9</div>
+      <div class="ds">Enzo Maresca’s side host newly promoted Sunderland at Stamford Bridge. Coverage begins with build-up from the pitch.</div>
+      <div class="acts"><div class="abtn primary">▶ Watch channel</div><div class="abtn rec">● Record programme</div><div class="abtn">♥</div><div class="abtn">Details</div></div>
+    </div>
+  </div>
+  <div class="chips">
+    <div class="chip on">All</div><div class="chip">Sports</div><div class="chip">News</div><div class="chip">Movies</div><div class="chip">Kids</div><div class="chip">♥ Favorites</div>
+    <div class="sp"></div><div class="chip">🔍</div><div class="day">◀ &nbsp;Today · Sat 2 Aug&nbsp; ▶</div>
+  </div>
+  <div class="grid">
+    <div class="thead"><div>1,264 channels</div><div>09:00</div><div>10:00</div><div>11:00</div><div>12:00</div></div>
+    <div class="nowline"></div>
+
+    <div class="rowg">
+      <div class="chcell"><div class="logo" style="background:#1B2A6B">S2</div><div><div class="nm">SKY SPORT NEWS</div><div class="no">CH 22 · UHD</div></div></div>
+      <div class="cell past" style="grid-column:2/3"><div class="t">Matchday Live</div><div class="m">08:00 <span class="badge b-rep">↺ REPLAY</span></div></div>
+      <div class="cell now" style="grid-column:3/6"><div class="t">Man United vs Brighton</div><div class="m">09:30 · 62% elapsed</div></div>
+      <div class="cell focus" style="grid-column:6/10"><div class="t">Chelsea vs Sunderland</div><div class="m">11:30 <span class="badge b-rec">● REC?</span></div></div>
+    </div>
+    <div class="rowg">
+      <div class="chcell"><div class="logo" style="background:#14328C">P1</div><div><div class="nm">HUB PREMIER 1</div><div class="no">CH 21</div></div></div>
+      <div class="cell now" style="grid-column:2/6"><div class="t">Arsenal vs Newcastle</div><div class="m">08:30 <span class="badge b-rec">● RECORDING</span></div></div>
+      <div class="cell" style="grid-column:6/10"><div class="t">Brentford vs Liverpool</div><div class="m">11:30</div></div>
+    </div>
+    <div class="rowg">
+      <div class="chcell"><div class="logo" style="background:#8C3214">F1</div><div><div class="nm">SKY F1 UHD</div><div class="no">CH 40 · 4K</div></div></div>
+      <div class="cell past" style="grid-column:2/4"><div class="t">Practice 3</div><div class="m">08:00</div></div>
+      <div class="cell now" style="grid-column:4/7"><div class="t">Hungarian GP — Qualifying</div><div class="m">10:00</div></div>
+      <div class="cell" style="grid-column:7/10"><div class="t">Ted Kravitz Notebook</div><div class="m">12:00 <span class="badge b-rec" style="opacity:.6">SCHEDULED</span></div></div>
+    </div>
+    <div class="rowg">
+      <div class="chcell"><div class="logo" style="background:#8C1414">BB</div><div><div class="nm">BBC NEWS</div><div class="no">CH 3</div></div></div>
+      <div class="cell past" style="grid-column:2/4"><div class="t">Breakfast</div><div class="m">07:00</div></div>
+      <div class="cell now" style="grid-column:4/6"><div class="t">Newsday</div><div class="m">10:00</div></div>
+      <div class="cell" style="grid-column:6/8"><div class="t">Politics Live</div><div class="m">11:30</div></div>
+      <div class="cell" style="grid-column:8/10"><div class="t">World News</div><div class="m">12:30</div></div>
+    </div>
+    <div class="rowg">
+      <div class="chcell"><div class="logo" style="background:#4C148C">MX</div><div><div class="nm">MOVIES XTRA</div><div class="no">CH 102</div></div></div>
+      <div class="cell past" style="grid-column:2/5"><div class="t">Heat (1995)</div><div class="m">07:20 <span class="badge b-rep">↺ REPLAY</span></div></div>
+      <div class="cell now" style="grid-column:5/9"><div class="t">Mad Max: Fury Road</div><div class="m">10:40</div></div>
+      <div class="cell" style="grid-column:9/10"><div class="t">Sicario</div><div class="m">12:45</div></div>
+    </div>
+    <div class="keycaps"><span><kbd>OK</kbd> Watch / Record</span><span><kbd>⏩</kbd> +12h</span><span><kbd>0-9</kbd> Channel</span><span><kbd>▲</kbd> Stage</span></div>
+  </div>
+</div>
+<p class="note"><b>Notice:</b> the focused FUTURE cell (gold) previews “Record?” — OK opens the confirm; on a NOW
+cell OK tunes; on a REPLAY cell OK starts catchup. Live recordings and armed schedules render in-grid
+(● RECORDING / SCHEDULED), so DVR state is ambient, not hidden in settings. The grid virtualizes exactly like the
+current list (rows are channels; cells come from the day-schedule fetch you already cache per channel).</p>
+
+<h2>Phone — same guide, vertical grammar</h2>
+<div class="row2">
+<div class="phone">
+  <div class="p-top"><div class="tt">Guide</div><div class="sp"></div><div class="icbtn">🔍</div><div class="icbtn">⏺</div><div class="icbtn">⋮</div></div>
+  <div class="p-days"><div class="chip on">Today</div><div class="chip">Tomorrow</div><div class="chip">Mon 4</div><div class="chip" style="margin-left:auto">All ▾</div></div>
+
+  <div class="p-row">
+    <div class="hd"><div class="logo" style="background:#1B2A6B">S2</div><div style="flex:1"><div class="nm">SKY SPORT NEWS <span class="no">CH 22</span></div><div class="now"><b>Man United vs Brighton</b> · till 11:30</div></div><div class="icbtn" style="color:var(--rec)">●</div></div>
+    <div class="prog"><i style="width:62%"></i></div>
+    <div class="p-tl">
+      <div class="p-cell now"><div class="t">Man Utd vs Brighton</div><div class="m">NOW</div></div>
+      <div class="p-cell"><div class="t">Chelsea vs Sunderland</div><div class="m">11:30 <span class="badge b-rec">REC</span></div></div>
+      <div class="p-cell"><div class="t">Brentford vs Liverpool</div><div class="m">13:30</div></div>
+    </div>
+  </div>
+  <div class="p-row">
+    <div class="hd"><div class="logo" style="background:#14328C">P1</div><div style="flex:1"><div class="nm">HUB PREMIER 1 <span class="no">CH 21</span></div><div class="now"><b>Arsenal vs Newcastle</b> · <span class="badge b-rec">● RECORDING</span></div></div><div class="icbtn">▶</div></div>
+    <div class="prog"><i style="width:71%"></i></div>
+  </div>
+  <div class="p-row">
+    <div class="hd"><div class="logo" style="background:#8C3214">F1</div><div style="flex:1"><div class="nm">SKY F1 UHD <span class="no">CH 40</span></div><div class="now"><b>Hungarian GP — Qualifying</b></div></div><div class="icbtn">▶</div></div>
+    <div class="prog"><i style="width:31%"></i></div>
+  </div>
+  <div class="p-row">
+    <div class="hd"><div class="logo" style="background:#8C1414">BB</div><div style="flex:1"><div class="nm">BBC NEWS <span class="no">CH 3</span></div><div class="now"><b>Newsday</b></div></div><div class="icbtn">▶</div></div>
+    <div class="prog"><i style="width:47%"></i></div>
+  </div>
+  <div class="p-row">
+    <div class="hd"><div class="logo" style="background:#4C148C">MX</div><div style="flex:1"><div class="nm">MOVIES XTRA <span class="no">CH 102</span></div><div class="now"><b>Mad Max: Fury Road</b></div></div><div class="icbtn">▶</div></div>
+    <div class="prog"><i style="width:38%"></i></div>
+  </div>
+  <div style="padding:10px 16px;color:var(--dim2);font-size:11.5px">Tap a row to expand its timeline · long-press a future programme to record</div>
+</div>
+<div style="max-width:420px">
+  <h2 style="margin-top:0">Settings in this concept</h2>
+  <p class="note" style="margin-top:0">Unchanged two-pane, plus one guide-specific pane: <b>Guide</b> — day span
+  (1/3/7 days cached), grid density, “start on Guide vs start on last channel”, and the per-playlist EPG source
+  moved here from the source rows (it’s a guide concern, not a source concern).</p>
+  <p class="note"><b>Why this concept:</b> planning and recording become the page’s native verbs. Everyone’s
+  parents already know how to use it.</p>
+  <p class="note"><b>Watch out:</b> the day-schedule endpoint is per-channel — a visible grid of 8 rows needs 8
+  cached schedules. Your 30-min schedule cache + lazy row binding covers it, but the +12h jump must not fan out
+  50 fetches; it pages like the channel list does.</p>
+</div>
+</div>
+
+<p style="margin-top:50px"><a href="index.html">← All concepts</a></p>
+</body></html>

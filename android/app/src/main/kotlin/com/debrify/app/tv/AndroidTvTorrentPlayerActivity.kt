@@ -1,6 +1,7 @@
 package com.debrify.app.tv
 
 import android.animation.ValueAnimator
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -18,6 +19,11 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import androidx.core.content.ContextCompat
+import com.debrify.app.recording.LiveRecordingService
+import com.debrify.app.recording.RecordingAlarmReceiver
+import com.debrify.app.recording.RecordingRegistry
+import com.debrify.app.recording.RecordingSchedule
+import com.debrify.app.recording.RecordingScheduleStore
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -143,6 +149,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvNextButton: AppCompatButton? = null
     private var iptvGuideButton: AppCompatButton? = null
     private var iptvJumpButton: AppCompatButton? = null
+    private var iptvRecordButton: AppCompatButton? = null
+    // Tees the live progressive stream to a MediaStore file while playing.
+    private val iptvRecordingController by lazy { IptvRecordingController(this) }
     private var iptvUpPressActive = false
     private var iptvUpLongPressHandled = false
     private var originalControlDockOrder: List<View> = emptyList()
@@ -753,6 +762,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_android_tv_torrent_player)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // Engine captures start/stop outside this activity (notification Stop,
+        // duration cap) — the registry callback keeps the Record button honest.
+        RecordingRegistry.addListener(recordingRegistryListener)
+
         // Load default player settings from Flutter's SharedPreferences
         loadPlayerDefaults()
 
@@ -1224,9 +1237,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             dataSourceFactory
         }
 
+        // IPTV: tee the played bytes to a recording file on demand. Inert unless
+        // the user starts a recording (see IptvRecordingController); wraps the
+        // fully-resolved factory so recorded bytes carry the channel's headers.
+        val recordingDataSourceFactory = if (isIptvMode) {
+            // A write error (disk full, row revoked) ends the recording on the
+            // loader thread; without this the dock would keep saying "Stop".
+            iptvRecordingController.onAborted = {
+                updateRecordButtonState()
+                Toast.makeText(
+                    this,
+                    "Recording stopped — couldn't keep writing to storage",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+            RecordingDataSource.Factory(finalDataSourceFactory, iptvRecordingController)
+        } else {
+            finalDataSourceFactory
+        }
+
         // Create media source factory that uses the data source
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(finalDataSourceFactory)
+            .setDataSourceFactory(recordingDataSourceFactory)
 
         val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
@@ -1888,6 +1920,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvPrevButton = prevButton
         iptvGuideButton = playlistButton
         iptvJumpButton = playerView.findViewById(R.id.iptv_jump_channel_button)
+        iptvRecordButton = playerView.findViewById(R.id.iptv_record_button)
         playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)?.let { dock ->
             if (originalControlDockOrder.isEmpty()) {
                 originalControlDockOrder =
@@ -5531,6 +5564,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvPrevButton,
             iptvNextButton,
             iptvJumpButton,
+            iptvRecordButton,
             playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
         )
         buttons.forEach {
@@ -5538,6 +5572,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             it.setTextColor(
                 ContextCompat.getColorStateList(this, R.color.iptv_premium_button_text)
             )
+        }
+
+        iptvRecordButton?.setOnClickListener {
+            hideControlsMenu()
+            toggleIptvRecording()
         }
 
         iptvPrevButton?.apply {
@@ -5557,6 +5596,400 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
     }
 
+    // ── IPTV recording ──────────────────────────────────────────────────────
+
+    /**
+     * Engine vs tee. ON (default): Record starts a [LiveRecordingService]
+     * capture over its own connection — it survives zaps, Home, and player
+     * teardown, and stops only from the button, the notification, or its
+     * duration cap. OFF: the original in-player tee ([IptvRecordingController])
+     * with its record-what-you-watch, stops-with-the-player semantics.
+     * Dart owns the setting; fixed per activity launch (like the player
+     * defaults loaded in onCreate).
+     */
+    private val recordingEngineEnabled: Boolean by lazy {
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .getBoolean("flutter.recording_engine_enabled", true)
+    }
+
+    /** Repaints the Record button whenever an engine capture starts or ends —
+     *  including from the notification's Stop, which the activity never sees. */
+    private val recordingRegistryListener: () -> Unit = {
+        if (!isDestroyed && !isFinishing) updateRecordButtonState()
+    }
+
+    /**
+     * True when [url] is a SEGMENTED (adaptive) stream: HLS, DASH,
+     * SmoothStreaming. Neither recorder can capture those byte-for-byte — the
+     * manifest and the media segments live at different URIs, so a raw capture
+     * would be the manifest alone, an XML/text file wearing a .ts name.
+     */
+    private fun isSegmentedStreamUrl(url: String): Boolean {
+        val path = url.substringBefore('?').substringBefore('#').lowercase()
+        return path.endsWith(".m3u8") ||
+            path.endsWith(".m3u") ||
+            path.endsWith(".mpd") ||
+            path.endsWith(".ism") ||
+            path.endsWith(".isml") ||
+            path.endsWith("/manifest")
+    }
+
+    private fun isCurrentIptvSegmented(): Boolean {
+        val url = currentIptvStreamUrl ?: return true
+        return iptvHlsForcedUrls.contains(url) || isSegmentedStreamUrl(url)
+    }
+
+    /**
+     * Xtream panels serve every live channel in both containers — the `.ts`
+     * twin of a `/live/user/pass/id.m3u8` URL is the same channel as one
+     * progressive MPEG-TS stream, which IS engine-recordable. Strict path
+     * match only, and never for URLs carrying a query string (a twin stripped
+     * of its token would just 401); anything else returns null.
+     */
+    private fun xtreamTsTwin(url: String): String? {
+        if (url.contains('?')) return null
+        val clean = url.substringBefore('#')
+        val m = Regex(
+            "^(https?://[^/]+)/live/([^/]+)/([^/]+)/([^/.]+)\\.m3u8$",
+            RegexOption.IGNORE_CASE,
+        ).find(clean) ?: return null
+        val (host, user, pass, id) = m.destructured
+        return "$host/live/$user/$pass/$id.ts"
+    }
+
+    /** The URL the ENGINE would capture for [url], or null when it can't:
+     *  the URL itself when progressive, its Xtream `.ts` twin when that
+     *  rescues an `.m3u8` channel, nothing for true segmented streams or
+     *  non-HTTP transports (rtmp/rtsp/udp/... — the engine is a plain HTTP
+     *  client and would fail every attempt after reporting a start). */
+    private fun engineRecordableUrl(url: String): String? {
+        if (!url.startsWith("http://", ignoreCase = true) &&
+            !url.startsWith("https://", ignoreCase = true)
+        ) {
+            return null
+        }
+        if (!iptvHlsForcedUrls.contains(url) && !isSegmentedStreamUrl(url)) return url
+        return xtreamTsTwin(url)
+    }
+
+    /**
+     * Stricter gate for SCHEDULING: only URLs affirmatively known to be
+     * progressive TS. At alarm time nobody is watching, so there is no player
+     * probe to catch an extensionless HLS URL — which the raw engine would
+     * "record" as looping playlist text. Explicit `.ts` and Xtream live URLs
+     * (extensionless default IS TS) qualify.
+     */
+    private fun isSchedulableStreamUrl(url: String): Boolean {
+        val recordable = engineRecordableUrl(url) ?: return false
+        val path = recordable.substringBefore('?').substringBefore('#').lowercase()
+        if (path.endsWith(".ts") || path.endsWith(".mts") || path.endsWith(".m2ts")) return true
+        return Regex("^https?://[^/]+/(?:live/)?[^/]+/[^/]+/\\d+(?:\\.ts)?$")
+            .matches(path)
+    }
+
+    /** The live engine capture for the CURRENT channel, if any — matched on
+     *  the playing URL or its recordable twin. */
+    private fun engineTaskIdForCurrentChannel(): String? {
+        val url = currentIptvStreamUrl ?: return null
+        RecordingRegistry.taskIdForUrl(url)?.let { return it }
+        return engineRecordableUrl(url)?.let { RecordingRegistry.taskIdForUrl(it) }
+    }
+
+    /** Record is offered only when the stream AND the OS can support it.
+     *  Pre-Q needs-permission counts as offered: the button is how the user
+     *  triggers the storage grant in the first place. */
+    private fun canRecordCurrentIptv(): Boolean {
+        if (recordingEngineEnabled) {
+            if (!LiveRecordingService.isSupported(this) &&
+                !LiveRecordingService.needsLegacyPermission(this)
+            ) {
+                return false
+            }
+            val url = currentIptvStreamUrl ?: return false
+            return engineRecordableUrl(url) != null
+        }
+        return IptvRecordingController.isSupported && !isCurrentIptvSegmented()
+    }
+
+    /** Reflect record availability + active state on the button. */
+    private fun updateRecordButtonState() {
+        val button = iptvRecordButton ?: return
+        val engineActive = recordingEngineEnabled && engineTaskIdForCurrentChannel() != null
+        if (engineActive || iptvRecordingController.isActive) {
+            button.text = "Stop"
+            button.isEnabled = true
+            button.isFocusable = true
+            button.alpha = 1f
+        } else {
+            val recordable = canRecordCurrentIptv()
+            button.text = "Record"
+            button.isEnabled = recordable
+            // A disabled button can still trap D-pad focus; drop it from the
+            // focus order so segmented channels skip past it cleanly.
+            button.isFocusable = recordable
+            button.alpha = if (recordable) 1f else 0.4f
+        }
+    }
+
+    private fun toggleIptvRecording() {
+        if (recordingEngineEnabled) {
+            toggleEngineRecording()
+            return
+        }
+        if (iptvRecordingController.isActive) {
+            val result = iptvRecordingController.stop()
+            updateRecordButtonState()
+            Toast.makeText(
+                this,
+                if (result.published) {
+                    "Recording saved to Downloads/Debrify/Recordings"
+                } else {
+                    "Recording stopped, but couldn't be added to Downloads"
+                },
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        if (!IptvRecordingController.isSupported) {
+            Toast.makeText(this, "Recording needs Android 10 or newer", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isCurrentIptvSegmented()) {
+            Toast.makeText(this, "Recording isn't supported for this stream", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val url = currentIptvStreamUrl
+        if (url.isNullOrEmpty()) return
+        val entry = iptvChannels.getOrNull(currentIptvIndex)
+        val fileName = "${sanitizeRecordingName(entry?.name ?: "recording")}_${recordingTimestamp()}.ts"
+        if (iptvRecordingController.start(url, fileName, "video/mp2t")) {
+            updateRecordButtonState()
+            Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Couldn't start recording", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Android 13+ notification permission, asked contextually on the first
+     *  record/schedule — same asked-once pref the phone activity uses, so
+     *  the user is asked at most once app-wide. Non-blocking: recording
+     *  proceeds while the dialog is up (it works without the grant; only
+     *  the notifications go silent). */
+    private fun maybeAskNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) return
+        val prefs = getSharedPreferences("debrify_permissions", MODE_PRIVATE)
+        if (prefs.getBoolean("notification_permission_asked", false)) return
+        prefs.edit().putBoolean("notification_permission_asked", true).apply()
+        androidx.core.app.ActivityCompat.requestPermissions(
+            this,
+            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+            notificationPermissionRequestCode,
+        )
+    }
+
+    private fun toggleEngineRecording() {
+        engineTaskIdForCurrentChannel()?.let { taskId ->
+            // Finalization is async in the service; its "Saved" notification is
+            // the confirmation. The registry listener repaints the button.
+            try {
+                startService(
+                    Intent(this, LiveRecordingService::class.java).apply {
+                        action = LiveRecordingService.ACTION_STOP
+                        putExtra(LiveRecordingService.EXTRA_TASK_ID, taskId)
+                    },
+                )
+                Toast.makeText(this, "Recording stopped — saving…", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Couldn't stop recording", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        if (LiveRecordingService.needsLegacyPermission(this)) {
+            // Pre-Q: the grant IS the enable switch. Ask, tell the user to
+            // press Record again once allowed; onRequestPermissionsResult
+            // repaints the button.
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                legacyStoragePermissionRequestCode,
+            )
+            Toast.makeText(
+                this,
+                "Allow storage access, then press Record again",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        if (!LiveRecordingService.isSupported(this)) {
+            Toast.makeText(this, "Recording isn't available on this device", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val url = currentIptvStreamUrl
+        if (url.isNullOrEmpty()) return
+        val recordUrl = engineRecordableUrl(url)
+        if (recordUrl == null) {
+            Toast.makeText(this, "Recording isn't supported for this stream", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val recordingLimit = LiveRecordingService.maxConcurrent(this)
+        if (RecordingRegistry.live.size >= recordingLimit) {
+            Toast.makeText(
+                this,
+                "Recording limit reached ($recordingLimit at a time) — " +
+                    "stop one, or raise the limit in IPTV settings",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        maybeAskNotificationPermission()
+        val entry = iptvChannels.getOrNull(currentIptvIndex)
+        val fileName = "${sanitizeRecordingName(entry?.name ?: "recording")}_${recordingTimestamp()}.ts"
+        try {
+            ContextCompat.startForegroundService(
+                this,
+                LiveRecordingService.buildStartIntent(
+                    context = this,
+                    taskId = "rec-${System.currentTimeMillis()}",
+                    url = recordUrl,
+                    fileName = fileName,
+                    channelName = entry?.name ?: "Live channel",
+                    headers = HashMap(currentIptvHttpHeaders),
+                    maxDurationMs = LiveRecordingService.MAX_DURATION_DEFAULT_MS,
+                ),
+            )
+            Toast.makeText(
+                this,
+                "Recording in background — keeps going if you zap or leave",
+                Toast.LENGTH_LONG,
+            ).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Couldn't start recording", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Confirm-and-schedule for a FUTURE programme picked in the EPG guide.
+     *  Everything stays native: the schedule store and alarms need no Dart. */
+    private fun promptScheduleRecording(entry: IptvChannelEntry, program: IptvEpgProgram) {
+        if (!recordingEngineEnabled) {
+            Toast.makeText(this, "Scheduled recording isn't available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (LiveRecordingService.needsLegacyPermission(this)) {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                legacyStoragePermissionRequestCode,
+            )
+            Toast.makeText(
+                this,
+                "Allow storage access, then pick the programme again",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        if (!LiveRecordingService.isSupported(this)) {
+            Toast.makeText(this, "Scheduled recording isn't available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!RecordingAlarmReceiver.exactAlarmsGranted(this)) {
+            // An inexact fire couldn't legally start the recording service from
+            // the background — refuse rather than schedule something doomed.
+            Toast.makeText(
+                this,
+                "Allow \"Alarms & reminders\" for Debrify in system settings to schedule recordings",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        if (!isSchedulableStreamUrl(entry.url)) {
+            Toast.makeText(this, "This channel can't be scheduled", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val recordUrl = engineRecordableUrl(entry.url)
+        if (recordUrl == null) {
+            Toast.makeText(this, "This channel can't be recorded", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (RecordingScheduleStore.findDuplicate(this, recordUrl, program.startMs) != null) {
+            Toast.makeText(this, "Already scheduled", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val timeFormat = android.text.format.DateFormat.getTimeFormat(this)
+        val range = "${timeFormat.format(java.util.Date(program.startMs))} – " +
+            timeFormat.format(java.util.Date(program.stopMs))
+        // Capacity check folded into the confirm dialog: Android's runtime
+        // rule is fire-time skip, so scheduling anyway is honest — but the
+        // user must hear about the conflict NOW, while they can still fix it.
+        val limit = LiveRecordingService.maxConcurrent(this)
+        val peak = RecordingScheduleStore.peakOverlap(this, program.startMs, program.stopMs)
+        val conflictNote = if (peak + 1 > limit) {
+            val names = RecordingScheduleStore
+                .overlappingTitles(this, program.startMs, program.stopMs)
+                .take(3)
+                .joinToString(" · ")
+            "\n\nConflicts with $names — only $limit can record at once, so " +
+                "this may be skipped. Raise the limit in IPTV settings, or " +
+                "cancel another recording."
+        } else {
+            ""
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(if (conflictNote.isEmpty()) "Record programme" else "Recording conflict")
+            .setMessage("${program.title}\n${entry.name} · $range$conflictNote")
+            .setPositiveButton("Record") { _, _ ->
+                maybeAskNotificationPermission()
+                RecordingScheduleStore.put(
+                    this,
+                    RecordingSchedule(
+                        id = "sched-${System.currentTimeMillis()}",
+                        channelName = entry.name,
+                        url = recordUrl,
+                        headers = HashMap(entry.httpHeaders),
+                        startMs = program.startMs,
+                        endMs = program.stopMs,
+                        programmeTitle = program.title,
+                        createdAt = System.currentTimeMillis(),
+                    ),
+                )
+                RecordingAlarmReceiver.registerAll(this)
+                Toast.makeText(this, "Recording scheduled", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Finalize any active recording (channel change / exit). Safe when idle.
+     *  Silent on success — the user didn't ask for this stop — but a failed
+     *  publish is worth saying out loud, since the file is invisible. */
+    private fun finalizeIptvRecordingIfActive() {
+        if (!iptvRecordingController.isActive) return
+        val result = iptvRecordingController.stop()
+        updateRecordButtonState()
+        if (result.wasRecording && !result.published && !isFinishing) {
+            Toast.makeText(
+                this,
+                "Recording stopped, but couldn't be added to Downloads",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    private fun sanitizeRecordingName(raw: String): String {
+        val cleaned = raw.replace(Regex("[^A-Za-z0-9 _-]"), "")
+            .trim()
+            .replace(Regex("\\s+"), "_")
+        return cleaned.take(60).ifEmpty { "recording" }
+    }
+
+    private fun recordingTimestamp(): String =
+        java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+            .format(java.util.Date())
+
     private fun updateIptvControlPresentation(entry: IptvChannelEntry?) {
         val live = entry?.isLive != false
         val vodVisibility = if (live) View.GONE else View.VISIBLE
@@ -5572,6 +6005,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nightModeButton?.visibility = View.VISIBLE
         iptvJumpButton?.visibility = if (live) View.VISIBLE else View.GONE
         iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
+        // Visibility follows the ACTIVE recorder: the engine records pre-Q
+        // once storage is granted (and shows the button so it CAN be
+        // granted); the tee remains Q+-only.
+        val recorderAvailable = if (recordingEngineEnabled) {
+            LiveRecordingService.isSupported(this) ||
+                LiveRecordingService.needsLegacyPermission(this)
+        } else {
+            IptvRecordingController.isSupported
+        }
+        iptvRecordButton?.visibility =
+            if (live && recorderAvailable) View.VISIBLE else View.GONE
+        updateRecordButtonState()
         if (!live && iptvGuideVisible) hideIptvGuide()
         if (live) {
             cinemaSeekMode = false
@@ -5583,9 +6028,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** Live IPTV uses a balanced nine-action dock:
-     *  Audio · Subs · Aspect | CH- · Play/Pause · CH+ | Guide · Jump · Night.
-     *  The XML order remains the standard cinema/VOD order; only the live
+    /** Live IPTV uses a balanced dock:
+     *  Audio · Subs · Aspect | CH- · Play/Pause · CH+ | Guide · Jump · Record · Night.
+     *  Record is present only for progressive streams (disabled for HLS). The
+     *  XML order remains the standard cinema/VOD order; only the live
      *  presentation is rearranged, so movies and episodes keep their old UX. */
     private fun arrangeLiveIptvControlDock() {
         val dock =
@@ -5602,6 +6048,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             playerView.findViewById<View>(R.id.debrify_controls_right_divider),
             iptvGuideButton,
             iptvJumpButton,
+            iptvRecordButton,
             nightModeButton,
         )
         replaceControlDockOrder(dock, desired)
@@ -5643,6 +6090,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvNextButton,
             iptvGuideButton,
             iptvJumpButton,
+            iptvRecordButton,
         )
         standardButtons.forEach {
             it.setBackgroundResource(R.drawable.cinema_button_bg)
@@ -5721,9 +6169,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         iptvEpgList?.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
-        iptvEpgAdapter = IptvEpgAdapter(emptyList()) { program ->
-            iptvEpgEntry?.let { entry -> requestIptvCatchup(entry, program) }
-        }
+        iptvEpgAdapter = IptvEpgAdapter(
+            emptyList(),
+            onReplay = { program ->
+                iptvEpgEntry?.let { entry -> requestIptvCatchup(entry, program) }
+            },
+            onRecordFuture = { program ->
+                iptvEpgEntry?.let { entry -> promptScheduleRecording(entry, program) }
+            },
+        )
         iptvEpgList?.adapter = iptvEpgAdapter
 
         val premiumButtonIds = intArrayOf(
@@ -8834,6 +9288,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     /** The shared ExoPlayer media-item swap both IPTV entry points use. */
     private fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String) {
+        // A genuine channel change while recording: finalize the previous
+        // channel's file before the stream identity flips. An HLS-fallback retry
+        // re-enters with the SAME url and is handled via abortAndDelete instead.
+        if (iptvRecordingController.isActive && streamUrl != currentIptvStreamUrl) {
+            finalizeIptvRecordingIfActive()
+        }
+
         val metadata = MediaMetadata.Builder()
             .setTitle(entry.name)
             .setArtist(entry.group ?: "IPTV")
@@ -8878,6 +9339,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // the progress ticker here — without this the Flutter side is told
         // nothing about on-demand playback and can't save a resume position.
         restartProgressUpdates()
+
+        // Reflect the new stream's HLS-ness on the record button (progressive →
+        // enabled, HLS → disabled).
+        updateRecordButtonState()
     }
 
     /**
@@ -8908,8 +9373,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "AndroidTvPlayer",
             "Unrecognized format for ${entry.name} — retrying as HLS"
         )
+        // The stream is HLS, so any tee-recorded bytes are an unusable
+        // playlist/segment mix — discard them and lock the button off.
+        if (iptvRecordingController.isActive) {
+            iptvRecordingController.abortAndDelete()
+            Toast.makeText(
+                this,
+                "Recording stopped — this channel is HLS",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
         iptvHlsForcedUrls.add(url)
         setIptvMediaItem(entry, url)
+        updateRecordButtonState()
         // Stremio candidate: give the forced-HLS attempt a FULL stall window
         // (arming re-cancels the one ticking since candidate start — a slow
         // panel can eat most of that window on the failed sniff alone, and
@@ -8927,6 +9403,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * candidate 0 — [tryNextIptvStremioCandidate] walks the rest on error.
      */
     private fun beginIptvPlayback(entry: IptvChannelEntry) {
+        // The channel change starts HERE, so the outgoing channel's recording
+        // ends here too. Waiting for setIptvMediaItem would strand it whenever
+        // a Stremio resolve returns nothing: the row would stay pending while
+        // the UI already shows the new channel.
+        finalizeIptvRecordingIfActive()
+
         iptvStremioToken++
         val token = iptvStremioToken
         iptvStremioChannelKey = null
@@ -11282,6 +11764,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        // Publish the recording HERE, not just in onDestroy: Home / app-switch
+        // runs onStop and Android may kill the process afterwards without ever
+        // calling onDestroy, which would strand the row IS_PENDING (invisible,
+        // still eating storage) with no persisted state to recover it from.
+        // Nothing is lost by stopping now — the pause below ends the byte flow
+        // the recording tees anyway.
+        finalizeIptvRecordingIfActive()
         player?.pause()
         // Stop waking the main thread 4x/second while the activity isn't visible;
         // state is preserved and onStart restarts the ticker.
@@ -11322,9 +11811,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         })
     }
 
+    private val legacyStoragePermissionRequestCode = 7402
+    private val notificationPermissionRequestCode = 7403
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == legacyStoragePermissionRequestCode) {
+            // Granted or not, the button's enabled/label state may change.
+            updateRecordButtonState()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         ActivityTracker.currentActivity = this
+        // A recording finished while storage was misbehaving stays written but
+        // invisible; coming back to the player is a good moment to retry.
+        if (iptvRecordingController.hasUnpublishedRecording &&
+            iptvRecordingController.retryPendingPublish()
+        ) {
+            Toast.makeText(
+                this,
+                "Earlier recording added to Downloads/Debrify/Recordings",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
     }
 
     override fun onPause() {
@@ -11360,6 +11875,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        RecordingRegistry.removeListener(recordingRegistryListener)
+        // Finalize any in-progress TEE recording so its MediaStore row isn't
+        // left pending (invisible) when the player is torn down. Engine
+        // captures deliberately ignore player teardown.
+        finalizeIptvRecordingIfActive()
+
         // Clean up seek feedback manager
         if (::seekFeedbackManager.isInitialized) {
             seekFeedbackManager.destroy()
@@ -13478,6 +13999,7 @@ private data class IptvEpgProgram(
 private class IptvEpgAdapter(
     private var programs: List<IptvEpgProgram>,
     private val onReplay: (IptvEpgProgram) -> Unit,
+    private val onRecordFuture: (IptvEpgProgram) -> Unit,
 ) : RecyclerView.Adapter<IptvEpgAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -13517,7 +14039,12 @@ private class IptvEpgAdapter(
         holder.itemView.alpha =
             if (program.stopMs < nowMs && !replayable) 0.55f else 1f
         holder.itemView.setOnClickListener {
-            if (replayable) onReplay(program)
+            when {
+                replayable -> onReplay(program)
+                // Future programme: OK offers to schedule a recording. The
+                // activity gates (engine on, channel recordable) and confirms.
+                program.startMs > System.currentTimeMillis() -> onRecordFuture(program)
+            }
         }
     }
 

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C3 · Command Center — IPTV Redesign</title>
+<style>
+  :root{
+    --bg:#070A18; --panel:#0D1226; --card:rgba(255,255,255,.05);
+    --line:rgba(255,255,255,.08); --dim:rgba(255,255,255,.55); --dim2:rgba(255,255,255,.34);
+    --acc1:#4F74FF; --acc2:#8A5CFF; --gold:#F5C042; --rec:#F43F5E; --live:#22C55E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:#EDEFFB;font:14px/1.45 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:34px 4vw 90px}
+  a{color:var(--acc1);text-decoration:none}
+  h1{font-size:26px;font-weight:800}
+  h1 .tag{background:linear-gradient(90deg,var(--acc1),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);margin:6px 0 30px;max-width:880px}
+  h2{font-size:15px;font-weight:700;color:var(--dim);letter-spacing:1.4px;text-transform:uppercase;margin:44px 0 16px}
+  .note{color:var(--dim2);font-size:12.5px;margin-top:10px;max-width:920px}
+  kbd{background:#181D33;border:1px solid var(--line);border-radius:5px;padding:1px 7px;font:600 11px monospace;color:var(--dim)}
+  .tv{width:min(1180px,96vw);aspect-ratio:16/9;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.5);display:flex}
+  .phone{width:375px;height:760px;background:var(--panel);border:1px solid var(--line);border-radius:34px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .row2{display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start}
+  .logo{width:36px;height:36px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:13px;flex:none}
+  .badge{font:800 8.5px/1 sans-serif;letter-spacing:.8px;padding:3px 6px;border-radius:4px}
+  .b-rec{background:rgba(244,63,94,.16);color:var(--rec)}
+  .b-4k{background:rgba(79,116,255,.16);color:#9DB4FF}
+  .b-rep{background:rgba(255,255,255,.09);color:var(--dim)}
+  .prog{height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+  .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--acc1),var(--acc2))}
+
+  /* app sidebar — the ALWAYS-PRESENT collapsed icon rail Android TV ships */
+  .appside{width:54px;flex:none;background:rgba(3,5,12,.85);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:8px}
+  .appside .ai{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--dim2);font-size:15px}
+  .appside .ai.on{background:rgba(138,92,255,.22);color:#C9BBFF;box-shadow:0 0 0 1px rgba(138,92,255,.35) inset}
+  .appside .brand{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--acc1),var(--acc2));display:grid;place-items:center;font-weight:800;font-size:13px;color:#fff;margin-bottom:8px}
+
+  /* rail */
+  .rail{width:200px;flex:none;background:rgba(4,6,16,.6);border-right:1px solid var(--line);padding:16px 10px;display:flex;flex-direction:column;gap:2px;font-size:12.5px}
+  .rail .hd{color:var(--dim2);font-weight:800;font-size:10px;letter-spacing:1.4px;margin:12px 8px 6px}
+  .ritem{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;color:var(--dim);font-weight:600}
+  .ritem .cnt{margin-left:auto;color:var(--dim2);font-size:10.5px;font-weight:700}
+  .ritem.on{background:rgba(138,92,255,.16);color:#E4DCFF}
+  .ritem.focus{outline:2.5px solid var(--gold);outline-offset:-2px}
+  .ritem .dotrec{width:7px;height:7px;border-radius:50%;background:var(--rec);box-shadow:0 0 8px var(--rec)}
+
+  /* center list */
+  .list{flex:1;min-width:0;display:flex;flex-direction:column}
+  .lt{display:flex;gap:8px;align-items:center;padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+  .chip{padding:6px 13px;border-radius:99px;background:var(--card);border:1px solid var(--line);font-weight:700;font-size:11.5px;color:var(--dim)}
+  .chip.on{background:linear-gradient(90deg,var(--acc1),var(--acc2));color:#fff;border:none}
+  .lt .search{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px 12px;color:var(--dim2);font-size:12px;min-width:150px}
+  .crow{display:flex;gap:12px;align-items:center;padding:9px 16px;border-bottom:1px solid rgba(255,255,255,.04)}
+  .crow .mid{flex:1;min-width:0}
+  .crow .nm{font-weight:700;font-size:13.5px;display:flex;gap:8px;align-items:center}
+  .crow .no{color:var(--dim2);font-size:10.5px;font-weight:700}
+  .crow .now{color:var(--dim);font-size:11.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .crow .now b{color:#D9DEFF;font-weight:600}
+  .crow .next{color:var(--dim2);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .crow .prog{width:64px;flex:none}
+  .crow.focus{background:rgba(245,192,66,.06);outline:2.5px solid var(--gold);outline-offset:-2.5px;border-radius:10px}
+  .crow .fav{color:var(--gold);font-size:13px}
+
+  /* stage */
+  .stage{width:34%;flex:none;border-left:1px solid var(--line);display:flex;flex-direction:column;background:linear-gradient(180deg,#0F1530,#0B0F22)}
+  .spv{aspect-ratio:16/9;position:relative;background:radial-gradient(90% 130% at 70% 20%,rgba(79,116,255,.5),transparent 60%),linear-gradient(160deg,#182452,#0B0F24);border-bottom:1px solid var(--line)}
+  .spv .lt2{position:absolute;top:10px;left:12px;color:var(--live);font-weight:800;font-size:10px;letter-spacing:1.4px}
+  .spv .idn{position:absolute;left:12px;bottom:10px;right:12px}
+  .spv .idn .n{font-weight:800;font-size:15px}
+  .spv .idn .c{color:var(--dim);font-size:11px;font-weight:700}
+  .sinfo{padding:12px 14px 8px}
+  .sinfo .tt{font-weight:800;font-size:14.5px}
+  .sinfo .tm{color:var(--dim);font-size:11.5px;margin:2px 0 8px}
+  .sacts{display:flex;gap:7px;padding:0 14px 10px;flex-wrap:wrap}
+  .abtn{padding:7px 12px;border-radius:8px;font-weight:700;font-size:11.5px;background:var(--card);border:1px solid var(--line)}
+  .abtn.primary{background:linear-gradient(90deg,var(--acc1),var(--acc2));border:none}
+  .abtn.rec{color:var(--rec)}
+  .sched{flex:1;overflow:hidden;border-top:1px solid var(--line);padding:10px 14px}
+  .sched .h{color:var(--dim2);font-weight:800;font-size:10px;letter-spacing:1.3px;margin-bottom:8px}
+  .sit{display:flex;gap:10px;align-items:baseline;padding:5.5px 0;font-size:12px;border-bottom:1px dashed rgba(255,255,255,.05)}
+  .sit .t{color:var(--dim);font-weight:700;font-size:11px;width:40px;flex:none}
+  .sit .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#D9DEFF}
+  .sit.past .n{color:var(--dim2)}
+  .keycaps{padding:8px 14px;color:var(--dim2);font-size:10.5px;display:flex;gap:12px;border-top:1px solid var(--line)}
+
+  /* phone */
+  .p-top{display:flex;gap:8px;align-items:center;padding:16px 16px 10px}
+  .p-src{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px}
+  .icbtn{width:34px;height:34px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;color:var(--dim);font-size:14px}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#131a33;border-radius:22px 22px 0 0;border-top:1px solid var(--line);padding:14px 18px 22px;box-shadow:0 -20px 50px rgba(0,0,0,.55)}
+  .sheet .grab{width:36px;height:4px;border-radius:3px;background:rgba(255,255,255,.2);margin:0 auto 12px}
+</style></head><body>
+
+<h1>Concept 3 · <span class="tag">Command Center</span></h1>
+<p class="sub">The current rail→list→stage layout, finished: the rail absorbs <b>every destination</b> (sources,
+Favorites, Continue, custom lists, Library, Scheduled — with live counts and a pulsing dot while recording), the
+channel list gets dense EPG rows, and the stage becomes a real cockpit — live preview + the focused channel’s
+day schedule + every action without leaving the page. Lowest-risk evolution; ships in pieces behind the existing flag.</p>
+
+<h2>Android TV · Desktop</h2>
+<div class="tv">
+  <div class="appside">
+    <div class="brand">▶</div>
+    <div class="ai">⌂</div>
+    <div class="ai">🔍</div>
+    <div class="ai">📺</div>
+    <div class="ai on">🛰</div>
+    <div class="ai">☁</div>
+    <div class="ai">⬇</div>
+    <div class="ai" style="margin-top:auto">⚙</div>
+  </div>
+  <div class="rail">
+    <div class="hd">LIBRARY</div>
+    <div class="ritem"><span>♥</span> Favorites <span class="cnt">42</span></div>
+    <div class="ritem"><span>▶</span> Continue <span class="cnt">6</span></div>
+    <div class="ritem"><span class="dotrec"></span> Recordings <span class="cnt">12</span></div>
+    <div class="ritem"><span>⏰</span> Scheduled <span class="cnt">3</span></div>
+    <div class="hd">SOURCES</div>
+    <div class="ritem on focus"><span>⚡</span> 8K <span class="cnt">55,340</span></div>
+    <div class="ritem"><span>⚡</span> Trex <span class="cnt">55,148</span></div>
+    <div class="ritem"><span>☰</span> iptv-org <span class="cnt">13,512</span></div>
+    <div class="ritem"><span>☰</span> Samsung <span class="cnt">2,204</span></div>
+    <div class="hd">LISTS</div>
+    <div class="ritem"><span>◧</span> Football <span class="cnt">18</span></div>
+    <div class="ritem"><span>◧</span> Kids OK <span class="cnt">9</span></div>
+    <div class="ritem" style="margin-top:auto"><span>⚙</span> Manage sources</div>
+  </div>
+
+  <div class="list">
+    <div class="lt">
+      <div class="chip on">Live</div><div class="chip">Movies</div><div class="chip">Series</div>
+      <div class="chip">Sports ▾</div>
+      <div class="search">🔍 Search 55,340 channels…</div>
+    </div>
+    <div class="crow">
+      <div class="logo" style="background:#14328C">P1</div>
+      <div class="mid"><div class="nm">HUB PREMIER 1 <span class="no">CH 21</span> <span class="badge b-rec">● REC</span></div>
+        <div class="now"><b>Arsenal vs Newcastle</b> · till 11:30</div><div class="next">next: Brentford vs Liverpool</div></div>
+      <div class="prog"><i style="width:72%"></i></div><div class="fav">★</div>
+    </div>
+    <div class="crow focus">
+      <div class="logo" style="background:#1B2A6B">S2</div>
+      <div class="mid"><div class="nm">SKY SPORT NEWS <span class="no">CH 22</span> <span class="badge b-4k">UHD</span></div>
+        <div class="now"><b>Man United vs Brighton</b> · till 11:30</div><div class="next">next: Chelsea vs Sunderland</div></div>
+      <div class="prog"><i style="width:62%"></i></div><div class="fav">★</div>
+    </div>
+    <div class="crow">
+      <div class="logo" style="background:#8C3214">F1</div>
+      <div class="mid"><div class="nm">SKY F1 UHD <span class="no">CH 40</span> <span class="badge b-4k">4K</span></div>
+        <div class="now"><b>Hungarian GP — Qualifying</b></div><div class="next">next: Ted Kravitz Notebook</div></div>
+      <div class="prog"><i style="width:31%"></i></div><div style="width:13px"></div>
+    </div>
+    <div class="crow">
+      <div class="logo" style="background:#14708C">TN</div>
+      <div class="mid"><div class="nm">TNT SPORTS 2 <span class="no">CH 44</span></div>
+        <div class="now"><b>UFC Fight Night prelims</b></div><div class="next">next: Main card</div></div>
+      <div class="prog"><i style="width:12%"></i></div><div style="width:13px"></div>
+    </div>
+    <div class="crow">
+      <div class="logo" style="background:#8C1414">BB</div>
+      <div class="mid"><div class="nm">BBC NEWS <span class="no">CH 3</span></div>
+        <div class="now"><b>Newsday</b></div><div class="next">next: Politics Live</div></div>
+      <div class="prog"><i style="width:47%"></i></div><div style="width:13px"></div>
+    </div>
+    <div class="crow">
+      <div class="logo" style="background:#4C148C">MX</div>
+      <div class="mid"><div class="nm">MOVIES XTRA <span class="no">CH 102</span></div>
+        <div class="now"><b>Mad Max: Fury Road</b></div><div class="next">next: Sicario</div></div>
+      <div class="prog"><i style="width:38%"></i></div><div style="width:13px"></div>
+    </div>
+    <div class="keycaps"><span><kbd>OK</kbd> Watch</span><span><kbd>OK</kbd> hold · Lists</span><span><kbd>▶</kbd> Stage</span><span><kbd>◀</kbd> Rail</span><span><kbd>0-9</kbd> Channel</span></div>
+  </div>
+
+  <div class="stage">
+    <div class="spv">
+      <div class="lt2">● LIVE PREVIEW</div>
+      <div class="idn"><div class="n">SKY SPORT NEWS</div><div class="c">CH 22 · SPORT ON AIR · UHD</div></div>
+    </div>
+    <div class="sinfo">
+      <div class="tt">Man United vs Brighton</div>
+      <div class="tm">09:30 – 11:30 · 62% elapsed</div>
+      <div class="prog"><i style="width:62%"></i></div>
+    </div>
+    <div class="sacts">
+      <div class="abtn primary">▶ Watch</div>
+      <div class="abtn rec">● Record now</div>
+      <div class="abtn">♥</div>
+    </div>
+    <div class="sched">
+      <div class="h">TODAY ON SKY SPORT NEWS</div>
+      <div class="sit past"><div class="t">07:30</div><div class="n">Newcastle vs Arsenal (MW06)</div><span class="badge b-rep">↺</span></div>
+      <div class="sit"><div class="t">09:30</div><div class="n"><b>Man United vs Brighton</b></div><span class="badge" style="background:rgba(34,197,94,.15);color:var(--live)">NOW</span></div>
+      <div class="sit"><div class="t">11:30</div><div class="n">Chelsea vs Sunderland</div><span class="badge b-rec">REC</span></div>
+      <div class="sit"><div class="t">13:30</div><div class="n">Brentford vs Liverpool</div><span class="badge b-rec">REC</span></div>
+      <div class="sit"><div class="t">15:30</div><div class="n">Forest vs Man United</div><span class="badge b-rec">REC</span></div>
+    </div>
+  </div>
+</div>
+<p class="note"><b>Notice:</b> the far-left 54px strip is the app’s ALWAYS-VISIBLE collapsed sidebar (IPTV lit) —
+the true TV real-estate budget: 54px app strip + 200px page rail + list + 34% stage. The stage’s schedule IS the
+guide for the focused channel — future rows carry the REC affordance inline, so “see what’s on → schedule it”
+happens without opening anything. The rail’s Recordings row pulses while the engine captures. Every element
+already exists in some form (source rail, EPG rows, stage, schedule pane, REC rows) — this concept is a
+re-composition, not a rebuild. LEFT from the page rail expands the app strip into the full sidebar (next frame).</p>
+
+<h2>Android TV — with the APP sidebar open (one more <kbd>◀</kbd>)</h2>
+<div class="tv" style="background:#0A0E1F">
+  <!-- dimmed page behind -->
+  <div style="position:absolute;inset:0;opacity:.28;pointer-events:none;display:flex">
+    <div style="width:218px;border-right:1px solid var(--line);padding:16px 10px">
+      <div style="height:10px;width:70px;border-radius:4px;background:rgba(255,255,255,.15);margin:8px"></div>
+      <div style="height:26px;border-radius:8px;background:rgba(255,255,255,.08);margin:6px 4px"></div>
+      <div style="height:26px;border-radius:8px;background:rgba(255,255,255,.08);margin:6px 4px"></div>
+      <div style="height:26px;border-radius:8px;background:rgba(138,92,255,.3);margin:6px 4px"></div>
+      <div style="height:26px;border-radius:8px;background:rgba(255,255,255,.08);margin:6px 4px"></div>
+    </div>
+    <div style="flex:1;padding:16px">
+      <div style="height:30px;border-radius:9px;background:rgba(255,255,255,.08);margin-bottom:12px;width:70%"></div>
+      <div style="height:44px;border-radius:10px;background:rgba(255,255,255,.07);margin-bottom:8px"></div>
+      <div style="height:44px;border-radius:10px;background:rgba(245,192,66,.12);margin-bottom:8px"></div>
+      <div style="height:44px;border-radius:10px;background:rgba(255,255,255,.07);margin-bottom:8px"></div>
+      <div style="height:44px;border-radius:10px;background:rgba(255,255,255,.07)"></div>
+    </div>
+    <div style="width:34%;border-left:1px solid var(--line)">
+      <div style="aspect-ratio:16/9;background:radial-gradient(90% 130% at 70% 20%,rgba(79,116,255,.5),transparent 60%),linear-gradient(160deg,#182452,#0B0F24)"></div>
+    </div>
+  </div>
+  <!-- scrim -->
+  <div style="position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,5,12,.88) 0%,rgba(3,5,12,.72) 300px,rgba(3,5,12,.45))"></div>
+  <!-- app sidebar overlay -->
+  <div style="position:absolute;left:0;top:0;bottom:0;width:238px;background:rgba(6,9,20,.97);border-right:1px solid rgba(138,92,255,.25);box-shadow:30px 0 80px rgba(0,0,0,.6);padding:22px 12px;display:flex;flex-direction:column;gap:3px">
+    <div style="display:flex;gap:10px;align-items:center;padding:4px 10px 18px">
+      <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--acc1),var(--acc2));display:grid;place-items:center;font-weight:800;font-size:14px">▶</div>
+      <div style="font-weight:800;letter-spacing:.4px">DEBRIFY</div>
+    </div>
+    <div class="ritem"><span>⌂</span> Home</div>
+    <div class="ritem"><span>🔍</span> Search</div>
+    <div class="ritem"><span>📺</span> Debrify TV</div>
+    <div class="ritem on focus"><span>🛰</span> IPTV <span class="cnt" style="color:#C9BBFF">●</span></div>
+    <div class="ritem"><span>☁</span> Cloud</div>
+    <div class="ritem"><span>⬇</span> Downloads</div>
+    <div class="ritem"><span>▶</span> YouTube</div>
+    <div class="ritem" style="margin-top:auto"><span>⚙</span> Settings</div>
+    <div style="color:var(--dim2);font-size:10px;padding:10px 10px 0"><kbd>▶</kbd> or <kbd>BACK</kbd> returns to the page rail</div>
+  </div>
+  <div class="keycaps" style="position:absolute;right:20px;bottom:12px"><span>LEFT cascade: <kbd>◀</kbd> stage → list → page rail → <b>app sidebar</b></span></div>
+</div>
+<p class="note"><b>How the two rails coexist (this already ships today — the current IPTV source rail lives beside
+the app sidebar under the same rule):</b> the app sidebar stays <i>skipTraversal</i> — DPAD can never wander into
+it; only the explicit LEFT-at-the-page-rail global action opens it, exactly your LEFT-only policy. It overlays
+with a scrim rather than reflowing the page, so the cockpit never resizes. Visually the two are kept unmistakable:
+app sidebar = app icons + wordmark, overlay, darker glass; page rail = content destinations with counts, in-page,
+flat. RIGHT or BACK from the sidebar lands you back on the page rail entry you left.</p>
+
+<h2>Phone — list first, cockpit as a sheet</h2>
+<div class="row2">
+<div class="phone">
+  <div class="p-top">
+    <div class="p-src">⚡ 8K <span style="color:var(--dim2)">▾</span></div>
+    <div style="flex:1"></div>
+    <div class="icbtn">🔍</div><div class="icbtn" style="color:var(--rec)">⏺</div><div class="icbtn">⚙</div>
+  </div>
+  <div style="display:flex;gap:8px;padding:0 16px 10px">
+    <div class="chip on">Live</div><div class="chip">Movies</div><div class="chip">Series</div><div class="chip">♥</div>
+  </div>
+  <div class="crow"><div class="logo" style="background:#14328C">P1</div>
+    <div class="mid"><div class="nm">HUB PREMIER 1 <span class="badge b-rec">● REC</span></div><div class="now"><b>Arsenal vs Newcastle</b></div></div>
+    <div class="prog" style="width:44px"><i style="width:72%"></i></div></div>
+  <div class="crow" style="background:rgba(138,92,255,.08)"><div class="logo" style="background:#1B2A6B">S2</div>
+    <div class="mid"><div class="nm">SKY SPORT NEWS</div><div class="now"><b>Man United vs Brighton</b></div></div>
+    <div class="prog" style="width:44px"><i style="width:62%"></i></div></div>
+  <div class="crow"><div class="logo" style="background:#8C3214">F1</div>
+    <div class="mid"><div class="nm">SKY F1 UHD</div><div class="now"><b>Hungarian GP — Qualifying</b></div></div>
+    <div class="prog" style="width:44px"><i style="width:31%"></i></div></div>
+  <div class="crow"><div class="logo" style="background:#8C1414">BB</div>
+    <div class="mid"><div class="nm">BBC NEWS</div><div class="now"><b>Newsday</b></div></div>
+    <div class="prog" style="width:44px"><i style="width:47%"></i></div></div>
+
+  <div class="sheet">
+    <div class="grab"></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+      <div class="logo" style="background:#1B2A6B;width:42px;height:42px">S2</div>
+      <div><div style="font-weight:800">SKY SPORT NEWS</div><div style="color:var(--dim);font-size:11.5px">CH 22 · Man United vs Brighton · 62%</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin:10px 0 12px">
+      <div class="abtn primary" style="flex:1;text-align:center">▶ Watch</div>
+      <div class="abtn rec" style="flex:1;text-align:center">● Record</div>
+      <div class="abtn">♥</div><div class="abtn">＋List</div>
+    </div>
+    <div class="sit"><div class="t">11:30</div><div class="n">Chelsea vs Sunderland</div><span class="badge b-rec">REC</span></div>
+    <div class="sit"><div class="t">13:30</div><div class="n">Brentford vs Liverpool</div><span class="badge b-rec">REC</span></div>
+    <div style="text-align:center;color:var(--dim2);font-size:11px;margin-top:8px">Pull up for full schedule</div>
+  </div>
+</div>
+<div style="max-width:420px">
+  <h2 style="margin-top:0">Settings in this concept</h2>
+  <p class="note" style="margin-top:0">Settings shrink: sources, lists, startup, and recording all became rail
+  destinations ON the page, so the settings screen keeps only what’s configuration, not navigation — source CRUD
+  and EPG URLs, the engine toggle, startup mode. The two-pane rail mirrors the page rail 1:1, so muscle memory
+  transfers.</p>
+  <p class="note"><b>Why this concept:</b> everything the app can do is visible from one screen; nothing regresses
+  because every piece already ships. The stage-schedule-with-REC is the single highest-value addition.</p>
+  <p class="note"><b>Watch out:</b> phone width can’t afford three zones — the sheet IS the stage there, and it must
+  not fight the existing hold-OK list picker gesture.</p>
+</div>
+</div>
+
+<p style="margin-top:50px"><a href="index.html">← All concepts</a></p>
+</body></html>

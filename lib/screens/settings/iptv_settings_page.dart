@@ -1,3 +1,7 @@
+import 'dart:async' show unawaited;
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,8 +16,13 @@ import '../../utils/m3u_parser.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../../utils/tv_reveal.dart';
+import '../../services/android_native_downloader.dart';
+import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
+import '../../services/live_recording_service.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
+import 'recordings_page.dart';
+import '../../widgets/recording_limit_dialogs.dart';
 import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 import '../../widgets/tv_text_field.dart';
 import 'iptv_settings_two_pane.dart';
@@ -33,7 +42,7 @@ class IptvSettingsPage extends StatefulWidget {
 }
 
 class _IptvSettingsPageState extends State<IptvSettingsPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _epgUrlController = TextEditingController();
@@ -103,6 +112,29 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   bool _twoPaneActive = false;
   final GlobalKey<IptvSettingsTwoPaneState> _twoPaneKey = GlobalKey();
 
+  // Recording engine + scheduled recordings. The section exists where SOME
+  // recorder can run: Android 10+ (engine + toggle) or desktop (in-app
+  // scheduler, no toggle). On iOS/pre-Q the page must not promise recording
+  // that native methods will just refuse.
+  bool _recordingSectionVisible = false;
+  bool _engineToggleVisible = false;
+  bool _recordingEngineOn = true;
+  int _scheduledCount = 0;
+  int _maxConcurrent = LiveRecordingService.maxConcurrentDefault;
+
+  /// Null while unknown / non-Android; battery exemption drives the row's
+  /// label so users can see at a glance whether long recordings are safe.
+  bool? _batteryExempt;
+  final FocusNode _scheduledRecordingsFocusNode = FocusNode(
+    debugLabel: 'iptv-scheduled-recordings',
+  );
+  final FocusNode _maxConcurrentFocusNode = FocusNode(
+    debugLabel: 'iptv-max-concurrent',
+  );
+  final FocusNode _batteryFocusNode = FocusNode(
+    debugLabel: 'iptv-battery-exemption',
+  );
+
   // Startup channel
   bool _startupEnabled = false;
   String _startupMode = StorageService.startupIptvModeLast;
@@ -119,6 +151,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     AnalyticsService.screenView('iptv_settings');
     _tabController = TabController(length: 3, vsync: this);
     // Rebuild on tab change so the inactive tabs' ExcludeFocus updates —
@@ -189,6 +222,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _urlTabFocusNode.dispose();
     _fileTabFocusNode.dispose();
     _xcTabFocusNode.dispose();
+    _scheduledRecordingsFocusNode.dispose();
+    _maxConcurrentFocusNode.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _batteryFocusNode.dispose();
     for (final node in _playlistFocusNodes) {
       node.dispose();
     }
@@ -295,6 +332,22 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final startupMode = await StorageService.getStartupIptvMode();
     final startupChannel = await StorageService.getStartupIptvChannel();
     final lastLive = await StorageService.getIptvLastLiveChannel();
+    final engineSupported =
+        !kIsWeb &&
+        Platform.isAndroid &&
+        (await LiveRecordingService.engineSupport()) != 'unsupported';
+    final desktopSched = DesktopScheduleService.instance.isSupported;
+    final recordingEngineOn =
+        engineSupported && await LiveRecordingService.engineEnabled();
+    final scheduleCount = engineSupported
+        ? (await LiveRecordingService.listSchedules()).length
+        : desktopSched
+        ? (await DesktopScheduleService.instance.list()).length
+        : 0;
+    final maxConcurrent = await LiveRecordingService.maxConcurrent();
+    final batteryExempt = engineSupported && !PlatformUtil.isAndroidTvCached
+        ? await LiveRecordingService.isIgnoringBatteryOptimizations()
+        : null;
 
     if (!mounted) return;
 
@@ -306,6 +359,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _startupMode = startupMode;
       _startupChannel = startupChannel;
       _lastLiveChannel = lastLive;
+      _recordingSectionVisible = engineSupported || desktopSched;
+      _engineToggleVisible = engineSupported;
+      _recordingEngineOn = recordingEngineOn;
+      _scheduledCount = scheduleCount;
+      _maxConcurrent = maxConcurrent;
+      _batteryExempt = batteryExempt;
       _loading = false;
     });
     _ensureFocusNodes();
@@ -1491,6 +1550,19 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       },
       onStartupModeChanged: _setStartupMode,
       onPickStartupChannel: _pickStartupChannel,
+      showRecordingSection: _recordingSectionVisible,
+      showEngineToggle: _engineToggleVisible,
+      recordingEngineEnabled: _recordingEngineOn,
+      scheduledCount: _scheduledCount,
+      onToggleRecordingEngine: (enabled) async {
+        await LiveRecordingService.setEngineEnabled(enabled);
+        if (mounted) setState(() => _recordingEngineOn = enabled);
+      },
+      onOpenScheduledRecordings: () => unawaited(_openScheduledRecordings()),
+      maxConcurrentRecordings: _maxConcurrent,
+      onPickMaxConcurrent: () => unawaited(_pickMaxConcurrent()),
+      batteryExempt: _batteryExempt,
+      onRequestBatteryExemption: () => unawaited(_requestBatteryExemption()),
     );
   }
 
@@ -1672,6 +1744,65 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           ),
           const SizedBox(height: 24),
 
+          // Recording — only where the engine can actually run (Android 10+).
+          if (_recordingSectionVisible) ...[
+            const SettingsSectionLabel('Recording'),
+            const SizedBox(height: 6),
+            Card(
+              child: Column(
+                children: [
+                  if (_engineToggleVisible)
+                    SwitchListTile(
+                      title: const Text('Background recording engine'),
+                      subtitle: const Text(
+                        'Recordings keep running when you zap or leave the '
+                        'app, and programmes can be scheduled from the TV '
+                        'guide. Off returns to player-tied recording. Uses an '
+                        'extra connection to your provider.',
+                      ),
+                      value: _recordingEngineOn,
+                      onChanged: (enabled) async {
+                        await LiveRecordingService.setEngineEnabled(enabled);
+                        if (mounted) {
+                          setState(() => _recordingEngineOn = enabled);
+                        }
+                      },
+                    ),
+                  if (!_engineToggleVisible || _recordingEngineOn) ...[
+                    if (_engineToggleVisible) const Divider(height: 1),
+                    _FocusableSettingsTile(
+                      focusNode: _maxConcurrentFocusNode,
+                      icon: Icons.filter_none_rounded,
+                      label: 'Simultaneous recordings ($_maxConcurrent)',
+                      onTap: _pickMaxConcurrent,
+                    ),
+                    if (_batteryExempt != null) ...[
+                      const Divider(height: 1),
+                      _FocusableSettingsTile(
+                        focusNode: _batteryFocusNode,
+                        icon: Icons.battery_alert_rounded,
+                        label: _batteryExempt == true
+                            ? 'Battery optimization — excluded ✓'
+                            : 'Battery optimization — tap to exclude',
+                        onTap: _requestBatteryExemption,
+                      ),
+                    ],
+                    const Divider(height: 1),
+                    _FocusableSettingsTile(
+                      focusNode: _scheduledRecordingsFocusNode,
+                      icon: Icons.fiber_manual_record_rounded,
+                      label: _scheduledCount == 0
+                          ? 'Recordings'
+                          : 'Recordings ($_scheduledCount scheduled)',
+                      onTap: _openScheduledRecordings,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
           // Default Playlist Info
           if (_defaultPlaylistId != null)
             const SettingsInfoBanner(
@@ -1681,6 +1812,43 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         ],
       ),
     );
+  }
+
+  /// The exemption dialog is a separate activity: the request call returns
+  /// the moment it LAUNCHES, so reading state right after it sees the old
+  /// value. The truth arrives when this app resumes.
+  bool _recheckBatteryOnResume = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !_recheckBatteryOnResume) return;
+    _recheckBatteryOnResume = false;
+    unawaited(
+      LiveRecordingService.isIgnoringBatteryOptimizations().then((exempt) {
+        if (mounted) setState(() => _batteryExempt = exempt);
+      }),
+    );
+  }
+
+  Future<void> _requestBatteryExemption() async {
+    _recheckBatteryOnResume = true;
+    await LiveRecordingService.requestIgnoreBatteryOptimizations();
+  }
+
+  Future<void> _pickMaxConcurrent() async {
+    final picked = await showRecordingLimitPicker(context);
+    if (picked != null && mounted) setState(() => _maxConcurrent = picked);
+  }
+
+  Future<void> _openScheduledRecordings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const RecordingsPage()));
+    // Additions/cancellations on the page change the count shown here.
+    final count = DesktopScheduleService.instance.isSupported
+        ? (await DesktopScheduleService.instance.list()).length
+        : (await LiveRecordingService.listSchedules()).length;
+    if (mounted) setState(() => _scheduledCount = count);
   }
 }
 

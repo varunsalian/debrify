@@ -85,6 +85,11 @@ abstract final class SettingsRows {
     title: 'Remote',
     subtitle: 'Send setup or receive from another device',
   );
+  static const navigationStyle = SettingsRowContent(
+    icon: Icons.call_to_action_rounded,
+    title: 'Navigation',
+    subtitle: 'Classic bottom bar or floating button',
+  );
   static const searchSettings = SettingsRowContent(
     icon: Icons.search_rounded,
     title: 'Search Settings',
