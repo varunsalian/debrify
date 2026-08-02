@@ -3938,6 +3938,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     // the list — the worst time to do it three times over.
     final items = await StorageService.getIptvContinueWatching();
     if (!mounted) return;
+    // A recording may have been started (or stopped) from inside the player —
+    // the header's record-dot must not lag until the next resume.
+    _armAndroidRecStateRefresh();
     await _loadFavorites();
     if (!mounted) return;
     _refreshContinueShelfPresence(items.isNotEmpty);
@@ -4184,6 +4187,16 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// would also pass VOD movies (direct http, non-segmented) — and "Record"
   /// on a movie is a broken duplicate of Download, spinning the engine on a
   /// static file for up to 6 hours.
+  /// Any capture running right now, either backend — drives the classic
+  /// header's record-dot. Android state comes from the same url→task map the
+  /// stage uses (refreshed at init, on resume, and on hub/player returns);
+  /// desktop reads the service directly and repaints via its revision
+  /// listener.
+  bool get _anyRecordingLive =>
+      _androidRecordingsByUrl.isNotEmpty ||
+      (DesktopRecordingService.instance.isSupported &&
+          DesktopRecordingService.instance.captures.isNotEmpty);
+
   bool _channelEngineRecordable(IptvChannel channel) =>
       channel.isLive &&
       LiveRecordingService.engineRecordableUrl(channel.url) != null;
@@ -4755,6 +4768,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           contentTypeFocusNode: _contentTypeFocusNode,
           onUpArrowPressed: widget.onUpArrowFromFilters,
           onDownArrowPressed: _focusFirstChannel,
+          onOpenRecordings: _pageCanRecord ? _openScheduledRecordings : null,
+          recordingLive: _anyRecordingLive,
         ),
 
         // Content
