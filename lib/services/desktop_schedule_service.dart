@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'desktop_recording_service.dart';
 import 'live_recording_service.dart';
+import 'recording_capacity.dart' show peakOverlap;
 
 /// One desktop schedule. Same shape as the Android native store's entries,
 /// plus headers (which desktop must persist itself — there is no native side
@@ -111,6 +112,9 @@ class DesktopScheduleService {
   Future<void> init() async {
     if (!isSupported || _initialized) return;
     _initialized = true;
+    // Primes LiveRecordingService.maxConcurrentCached for the recording
+    // service's synchronous start path.
+    await LiveRecordingService.maxConcurrent();
     await _armAll();
     _tick = Timer.periodic(const Duration(seconds: 30), (_) {
       // Wall-clock safety net for sleep/wake drift.
@@ -178,10 +182,17 @@ class DesktopScheduleService {
     if (schedules.any((s) => s.url == recordUrl && s.startMs == startMs)) {
       return const RecordingCallResult(errorCode: 'duplicate');
     }
-    // Desktop runs ONE capture at a time, so overlapping schedules are a
-    // promise the second one can't keep — reject at creation, when the user
-    // can still pick another slot, instead of silently losing it at fire time.
-    if (schedules.any((s) => s.startMs < endMs && startMs < s.endMs)) {
+    // Capacity, not mere overlap: with the user-set limit L, a new schedule
+    // is rejected only when some moment of its window would need more than L
+    // simultaneous captures — a promise fire time couldn't keep. Reject at
+    // creation, when the user can still resolve it, instead of silently
+    // losing a recording later. (The UI pre-checks with the same math and a
+    // richer dialog; this is the backstop.)
+    final limit = await LiveRecordingService.maxConcurrent();
+    final intervals = [
+      for (final s in schedules) (s.startMs, s.endMs),
+    ];
+    if (peakOverlap(intervals, startMs, endMs) + 1 > limit) {
       return const RecordingCallResult(errorCode: 'overlap');
     }
     final schedule = DesktopSchedule(
@@ -256,15 +267,28 @@ class DesktopScheduleService {
       debugPrint('DesktopSchedule: ${schedule.id} fully missed, dropping');
       return;
     }
-    if (DesktopRecordingService.instance.active != null) {
-      // One capture at a time, and a live one (a manual button recording)
-      // wins — but the schedule is KEPT, not consumed: the 30s tick re-fires
-      // it, so when the live capture ends the remainder of the programme
-      // still gets recorded. It only truly dies if the live capture outlasts
-      // the whole window, at which point the missed-check above cleans it up.
+    if (DesktopRecordingService.instance.captureForUrl(schedule.url) != null) {
+      // This channel is ALREADY being captured — a manual record-now, or the
+      // previous back-to-back programme still flushing its file. Consuming
+      // the entry now would glue it to that other capture: start() answers
+      // with the existing capture (success-shaped), this schedule records
+      // nothing, and its auto-stop timer would end a recording it doesn't
+      // own. KEEP the entry — the 30s tick re-fires it the moment the
+      // capture ends, recording the remainder of the window.
       debugPrint(
-        'DesktopSchedule: ${schedule.id} deferred — a recording is already '
-        'running',
+        'DesktopSchedule: ${schedule.id} deferred — channel already recording',
+      );
+      return;
+    }
+    if (DesktopRecordingService.instance.activeCount >=
+        await LiveRecordingService.maxConcurrent()) {
+      // At capacity — running captures win, but the schedule is KEPT, not
+      // consumed: the 30s tick re-fires it, so when a slot frees up the
+      // remainder of the programme still gets recorded. It only truly dies
+      // if capacity stays full past the whole window, at which point the
+      // missed-check above cleans it up.
+      debugPrint(
+        'DesktopSchedule: ${schedule.id} deferred — recording limit reached',
       );
       return;
     }
@@ -294,7 +318,20 @@ class DesktopScheduleService {
           debugPrint('DesktopSchedule: ${schedule.id} ended ($end, $bytes B)'),
     );
     if (capture == null) {
-      debugPrint('DesktopSchedule: ${schedule.id} could not start');
+      // Lost a same-instant race for the last slot (two fires straddling
+      // each other's await gaps both pass the capacity check), or the
+      // recorder refused. The entry was already consumed above — put it
+      // back so the 30s tick retries while its window lasts, instead of
+      // silently losing the recording.
+      final restored = await list();
+      if (!restored.any((s) => s.id == schedule.id)) {
+        await _save([...restored, schedule]);
+        // The consume above already bumped the revision — bump again so the
+        // UI's schedule rows come back instead of lying "gone" while the
+        // tick quietly retries.
+        LiveRecordingService.schedulesRevision.value++;
+      }
+      debugPrint('DesktopSchedule: ${schedule.id} could not start — re-queued');
       return;
     }
     // Auto-stop at the scheduled end. The capture's own 6h cap remains the

@@ -54,6 +54,7 @@ import '../../services/desktop_recording_service.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_source_stats.dart';
 import '../../services/live_recording_service.dart';
+import '../recording_limit_dialogs.dart';
 
 typedef _TabletChannelIdentity = ({
   int? channelNumber,
@@ -4246,11 +4247,11 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// Record↔Stop button: with no notifications on desktop, that button is a
   /// page-started capture's ONLY stop surface.
   DesktopRecordingCapture? _desktopCaptureFor(IptvChannel channel) {
-    final capture = DesktopRecordingService.instance.active;
-    if (capture == null) return null;
-    if (capture.url == channel.url) return capture;
+    final service = DesktopRecordingService.instance;
+    final direct = service.captureForUrl(channel.url);
+    if (direct != null) return direct;
     final twin = LiveRecordingService.xtreamTsTwin(channel.url);
-    return (twin != null && capture.url == twin) ? capture : null;
+    return twin != null ? service.captureForUrl(twin) : null;
   }
 
   Future<void> _stageStopDesktopRecording(
@@ -4289,6 +4290,8 @@ class IptvResultsViewState extends State<IptvResultsView>
         return;
       }
       if (!mounted) return;
+      if (!await ensureRecordingCapacity(context)) return;
+      if (!mounted) return;
       final result = await LiveRecordingService.start(
         url: recordUrl,
         fileName: _stageRecordingFileName(channel.name),
@@ -4309,7 +4312,8 @@ class IptvResultsViewState extends State<IptvResultsView>
                       'notification'
                 : switch (result.errorCode) {
                     'recording_limit_reached' =>
-                      'Recording limit reached (2 at a time)',
+                      'Recording limit reached \u2014 free a slot or raise '
+                          'the limit in IPTV settings',
                     _ => "Couldn't start recording",
                   },
           ),
@@ -4318,14 +4322,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       return;
     }
     if (!DesktopRecordingService.instance.isSupported) return;
-    if (DesktopRecordingService.instance.active != null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Already recording a channel — stop that one first'),
-        ),
-      );
-      return;
-    }
+    if (!await ensureRecordingCapacity(context)) return;
+    if (!mounted) return;
     final path = await DesktopScheduleService.buildRecordingPath(channel.name);
     if (!mounted) return;
     final capture = DesktopRecordingService.instance.start(
@@ -4401,6 +4399,15 @@ class IptvResultsViewState extends State<IptvResultsView>
         Platform.isAndroid &&
         !await LiveRecordingService.ensureEngineReady()) {
       return 'Storage access is needed to save recordings';
+    }
+    if (!mounted) return null;
+    if (!await ensureRecordingCapacity(
+      context,
+      startMs: programme.start.millisecondsSinceEpoch,
+      endMs: programme.stop.millisecondsSinceEpoch,
+      candidateUrl: recordUrl,
+    )) {
+      return null;
     }
     if (!mounted) return null;
     String clock(DateTime t) => MaterialLocalizations.of(

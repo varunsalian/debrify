@@ -64,6 +64,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
     this.scheduledCount = 0,
     this.onToggleRecordingEngine,
     this.onOpenScheduledRecordings,
+    this.maxConcurrentRecordings = 2,
+    this.onPickMaxConcurrent,
     this.openAddSource = false,
   });
 
@@ -97,6 +99,11 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final int scheduledCount;
   final ValueChanged<bool>? onToggleRecordingEngine;
   final VoidCallback? onOpenScheduledRecordings;
+
+  /// Simultaneous-recordings limit shown on (and picked from) the Recording
+  /// pane; the host page owns persistence.
+  final int maxConcurrentRecordings;
+  final VoidCallback? onPickMaxConcurrent;
 
   /// 0 = from URL, 1 = from file, 2 = Xtream login. Owned by the parent so the
   /// existing TabController (and the phone layout) stay in sync with it.
@@ -968,6 +975,19 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                     ?.call(!widget.recordingEngineEnabled),
                 onLeft: _returnToRail,
                 isLast: !widget.recordingEngineEnabled,
+              ),
+            if (!widget.showEngineToggle || widget.recordingEngineEnabled)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.filter_none_rounded,
+                title: 'Simultaneous recordings',
+                subtitle:
+                    '${widget.maxConcurrentRecordings} at a time — each is an '
+                    'extra provider connection',
+                trailing: _chevron,
+                onTap: () => widget.onPickMaxConcurrent?.call(),
+                onLeft: _returnToRail,
+                isLast: false,
               ),
             if (!widget.showEngineToggle || widget.recordingEngineEnabled)
               _PaneRow(

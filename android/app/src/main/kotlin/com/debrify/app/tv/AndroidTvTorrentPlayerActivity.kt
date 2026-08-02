@@ -5814,11 +5814,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             Toast.makeText(this, "Recording isn't supported for this stream", Toast.LENGTH_SHORT).show()
             return
         }
-        if (RecordingRegistry.live.size >= LiveRecordingService.MAX_CONCURRENT) {
+        val recordingLimit = LiveRecordingService.maxConcurrent(this)
+        if (RecordingRegistry.live.size >= recordingLimit) {
             Toast.makeText(
                 this,
-                "Recording limit reached (${LiveRecordingService.MAX_CONCURRENT} at a time)",
-                Toast.LENGTH_SHORT,
+                "Recording limit reached ($recordingLimit at a time) — " +
+                    "stop one, or raise the limit in IPTV settings",
+                Toast.LENGTH_LONG,
             ).show()
             return
         }
@@ -5897,9 +5899,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val timeFormat = android.text.format.DateFormat.getTimeFormat(this)
         val range = "${timeFormat.format(java.util.Date(program.startMs))} – " +
             timeFormat.format(java.util.Date(program.stopMs))
+        // Capacity check folded into the confirm dialog: Android's runtime
+        // rule is fire-time skip, so scheduling anyway is honest — but the
+        // user must hear about the conflict NOW, while they can still fix it.
+        val limit = LiveRecordingService.maxConcurrent(this)
+        val peak = RecordingScheduleStore.peakOverlap(this, program.startMs, program.stopMs)
+        val conflictNote = if (peak + 1 > limit) {
+            val names = RecordingScheduleStore
+                .overlappingTitles(this, program.startMs, program.stopMs)
+                .take(3)
+                .joinToString(" · ")
+            "\n\nConflicts with $names — only $limit can record at once, so " +
+                "this may be skipped. Raise the limit in IPTV settings, or " +
+                "cancel another recording."
+        } else {
+            ""
+        }
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Record programme")
-            .setMessage("${program.title}\n${entry.name} · $range")
+            .setTitle(if (conflictNote.isEmpty()) "Record programme" else "Recording conflict")
+            .setMessage("${program.title}\n${entry.name} · $range$conflictNote")
             .setPositiveButton("Record") { _, _ ->
                 RecordingScheduleStore.put(
                     this,

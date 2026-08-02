@@ -22,6 +22,7 @@ import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/live_recording_service.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
 import 'recordings_page.dart';
+import '../../widgets/recording_limit_dialogs.dart';
 import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 import '../../widgets/tv_text_field.dart';
 import 'iptv_settings_two_pane.dart';
@@ -119,8 +120,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   bool _engineToggleVisible = false;
   bool _recordingEngineOn = true;
   int _scheduledCount = 0;
+  int _maxConcurrent = LiveRecordingService.maxConcurrentDefault;
   final FocusNode _scheduledRecordingsFocusNode = FocusNode(
     debugLabel: 'iptv-scheduled-recordings',
+  );
+  final FocusNode _maxConcurrentFocusNode = FocusNode(
+    debugLabel: 'iptv-max-concurrent',
   );
 
   // Startup channel
@@ -210,6 +215,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _fileTabFocusNode.dispose();
     _xcTabFocusNode.dispose();
     _scheduledRecordingsFocusNode.dispose();
+    _maxConcurrentFocusNode.dispose();
     for (final node in _playlistFocusNodes) {
       node.dispose();
     }
@@ -327,6 +333,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         : desktopSched
             ? (await DesktopScheduleService.instance.list()).length
             : 0;
+    final maxConcurrent = await LiveRecordingService.maxConcurrent();
 
     if (!mounted) return;
 
@@ -342,6 +349,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _engineToggleVisible = engineSupported;
       _recordingEngineOn = recordingEngineOn;
       _scheduledCount = scheduleCount;
+      _maxConcurrent = maxConcurrent;
       _loading = false;
     });
     _ensureFocusNodes();
@@ -1536,6 +1544,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         if (mounted) setState(() => _recordingEngineOn = enabled);
       },
       onOpenScheduledRecordings: () => unawaited(_openScheduledRecordings()),
+      maxConcurrentRecordings: _maxConcurrent,
+      onPickMaxConcurrent: () => unawaited(_pickMaxConcurrent()),
     );
   }
 
@@ -1744,6 +1754,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   if (!_engineToggleVisible || _recordingEngineOn) ...[
                     if (_engineToggleVisible) const Divider(height: 1),
                     _FocusableSettingsTile(
+                      focusNode: _maxConcurrentFocusNode,
+                      icon: Icons.filter_none_rounded,
+                      label: 'Simultaneous recordings ($_maxConcurrent)',
+                      onTap: _pickMaxConcurrent,
+                    ),
+                    const Divider(height: 1),
+                    _FocusableSettingsTile(
                       focusNode: _scheduledRecordingsFocusNode,
                       icon: Icons.fiber_manual_record_rounded,
                       label: _scheduledCount == 0
@@ -1767,6 +1784,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         ],
       ),
     );
+  }
+
+  Future<void> _pickMaxConcurrent() async {
+    final picked = await showRecordingLimitPicker(context);
+    if (picked != null && mounted) setState(() => _maxConcurrent = picked);
   }
 
   Future<void> _openScheduledRecordings() async {

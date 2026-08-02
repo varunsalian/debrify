@@ -1052,12 +1052,14 @@ class MainActivity : FlutterActivity() {
 							result.error("engine_unsupported", "requires Android 10+", null)
 							return@setMethodCallHandler
 						}
+						val recordingLimit =
+							com.debrify.app.recording.LiveRecordingService.maxConcurrent(this)
 						if (com.debrify.app.recording.RecordingRegistry.live.size >=
-							com.debrify.app.recording.LiveRecordingService.MAX_CONCURRENT
+							recordingLimit
 						) {
 							result.error(
 								"recording_limit_reached",
-								"limit is ${com.debrify.app.recording.LiveRecordingService.MAX_CONCURRENT}",
+								"limit is $recordingLimit",
 								null,
 							)
 							return@setMethodCallHandler

@@ -9,6 +9,7 @@ import '../../../services/android_native_downloader.dart';
 import '../../../services/desktop_schedule_service.dart';
 import '../../../services/iptv_epg_service.dart';
 import '../../../services/live_recording_service.dart';
+import '../../../widgets/recording_limit_dialogs.dart';
 import '../../../services/storage_service.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
@@ -1264,6 +1265,15 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           content: Text('Storage access is needed to save recordings'),
         ),
       );
+      return;
+    }
+    if (!mounted) return;
+    if (!await ensureRecordingCapacity(
+      context,
+      startMs: programme.start.millisecondsSinceEpoch,
+      endMs: programme.stop.millisecondsSinceEpoch,
+      candidateUrl: recordUrl,
+    )) {
       return;
     }
     if (!mounted) return;

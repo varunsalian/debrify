@@ -18,6 +18,7 @@ import '../services/audio_effect_session_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
+import '../widgets/recording_limit_dialogs.dart';
 import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/alldebrid_service.dart';
@@ -4142,15 +4143,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// desktop SCHEDULER started shows up on (and stops from) the Record button
   /// too when its channel is being watched.
   DesktopRecordingCapture? _desktopCaptureForCurrent() {
-    final capture = DesktopRecordingService.instance.active;
-    if (capture == null) return null;
     final channel = _currentIptvChannel;
     if (channel == null) return null;
     final playing = _playingLiveUrl(channel);
     if (playing == null) return null;
-    if (capture.url == playing) return capture;
+    final service = DesktopRecordingService.instance;
+    final direct = service.captureForUrl(playing);
+    if (direct != null) return direct;
     final twin = LiveRecordingService.xtreamTsTwin(playing);
-    return (twin != null && capture.url == twin) ? capture : null;
+    return twin != null ? service.captureForUrl(twin) : null;
   }
 
   Future<void> _toggleRecording() async {
@@ -4201,6 +4202,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final channel = _currentIptvChannel;
       final recordUrl = await _engineRecordUrlForCurrent();
       if (channel != null && recordUrl != null) {
+        if (!await ensureRecordingCapacity(context)) return;
+        if (!mounted) return;
         final result = await LiveRecordingService.start(
           url: recordUrl,
           fileName: _recordingFileName(channel.name),
@@ -4220,7 +4223,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           );
         } else if (result.errorCode == 'recording_limit_reached') {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Recording limit reached (2 at a time)')),
+            const SnackBar(
+              content: Text(
+                'Recording limit reached — free a slot or raise the limit '
+                'in IPTV settings',
+              ),
+            ),
           );
         } else if (result.errorCode == 'engine_unsupported' ||
             result.errorCode == 'fgs_not_allowed' ||
@@ -4255,16 +4263,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
         return;
       }
-      if (DesktopRecordingService.instance.active != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Already recording another channel — stop that one first',
-            ),
-          ),
-        );
-        return;
-      }
+      if (!await ensureRecordingCapacity(context)) return;
+      if (!mounted) return;
       // Raw byte copy → the capture IS a transport stream: .ts, not the
       // tee's .mkv.
       final path = await _recordingTargetPath(channel.name, extension: 'ts');

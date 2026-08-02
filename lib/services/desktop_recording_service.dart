@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'live_recording_service.dart' show RecordingLibraryEntry;
+import 'live_recording_service.dart'
+    show LiveRecordingService, RecordingLibraryEntry;
 
 /// How a desktop capture ended.
 enum DesktopRecordingEnd {
@@ -203,9 +204,11 @@ class DesktopRecordingCapture {
   }
 }
 
-/// Desktop recording: one capture at a time (matching the in-player surface —
-/// with no notifications on desktop, the Record button is the only stop
-/// control, so parallel invisible captures would be unstoppable).
+/// Desktop recording: up to the user-set limit of simultaneous captures
+/// (LiveRecordingService.maxConcurrent, default 2). The Recordings hub
+/// renders one stoppable card per capture, and the player/stage Record
+/// buttons are URL-scoped — every capture always has a visible stop surface,
+/// which is what made lifting the original one-at-a-time rule safe.
 class DesktopRecordingService {
   DesktopRecordingService._();
   static final DesktopRecordingService instance = DesktopRecordingService._();
@@ -216,21 +219,32 @@ class DesktopRecordingService {
   /// button too.
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
-  DesktopRecordingCapture? _active;
+  final List<DesktopRecordingCapture> _captures = [];
 
-  /// The running capture, or null.
-  DesktopRecordingCapture? get active {
-    final capture = _active;
-    if (capture == null || !capture.isActive) return null;
-    return capture;
+  /// The running captures (finished ones are pruned on read), oldest first.
+  List<DesktopRecordingCapture> get captures {
+    _captures.removeWhere((c) => !c.isActive);
+    return List.unmodifiable(_captures);
+  }
+
+  int get activeCount => captures.length;
+
+  /// The running capture of [url], or null. Callers match a channel by its
+  /// own URL and, for Xtream channels, the `.ts` twin they record under.
+  DesktopRecordingCapture? captureForUrl(String url) {
+    for (final capture in captures) {
+      if (capture.url == url) return capture;
+    }
+    return null;
   }
 
   bool get isSupported =>
       !kIsWeb &&
       (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
-  /// Begin capturing [url] to [path]. Returns null when another capture is
-  /// already running.
+  /// Begin capturing [url] to [path]. Returns the already-running capture if
+  /// this URL is being recorded (never two connections for one channel), and
+  /// null when the simultaneous-recordings limit is reached.
   DesktopRecordingCapture? start({
     required String url,
     required String path,
@@ -238,7 +252,13 @@ class DesktopRecordingService {
     required Map<String, String> headers,
     void Function(DesktopRecordingEnd end, int bytes)? onFinished,
   }) {
-    if (active != null) return null;
+    final existing = captureForUrl(url);
+    if (existing != null) return existing;
+    if (activeCount >= LiveRecordingService.maxConcurrentCached) return null;
+    // Two same-second starts of identically-named channels would compute the
+    // same target path (the exists() probe sees neither file yet) and write
+    // into one file — something the old one-at-a-time rule made impossible.
+    if (captures.any((c) => c.path == path)) return null;
     final capture = DesktopRecordingCapture._(
       url: url,
       path: path,
@@ -246,16 +266,17 @@ class DesktopRecordingService {
       headers: headers,
       onFinished: onFinished,
     );
-    _active = capture;
+    _captures.add(capture);
     revision.value++;
     unawaited(capture._run());
     return capture;
   }
 
-  /// Stop the running capture, if any; resolves once its file is closed.
+  /// Stop every running capture; resolves once their files are closed.
   Future<void> stopAll() async {
-    final capture = active;
-    if (capture != null) await capture.stop();
+    for (final capture in captures) {
+      await capture.stop();
+    }
   }
 
   /// Where desktop recordings live: `<Downloads>/Debrify/Recordings`. One
@@ -278,11 +299,11 @@ class DesktopRecordingService {
     if (!instance.isSupported) return const [];
     final dir = await recordingsDir();
     if (!await dir.exists()) return const [];
-    final activePath = instance.active?.path;
+    final activePaths = {for (final c in instance.captures) c.path};
     final out = <RecordingLibraryEntry>[];
     try {
       await for (final item in dir.list(followLinks: false)) {
-        if (item is! File || item.path == activePath) continue;
+        if (item is! File || activePaths.contains(item.path)) continue;
         final name = item.path.split(Platform.pathSeparator).last;
         final dot = name.lastIndexOf('.');
         final ext = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
@@ -312,9 +333,9 @@ class DesktopRecordingService {
     return out;
   }
 
-  /// Delete a finished desktop recording. Refuses the active capture's file.
+  /// Delete a finished desktop recording. Refuses any active capture's file.
   static Future<bool> deleteRecordingFile(String path) async {
-    if (instance.active?.path == path) return false;
+    if (instance.captures.any((c) => c.path == path)) return false;
     try {
       final file = File(path);
       if (await file.exists()) await file.delete();

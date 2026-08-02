@@ -165,6 +165,39 @@ class LiveRecordingService {
     await prefs.setBool(_engineEnabledPref, enabled);
   }
 
+  static const String _maxConcurrentPref = 'recording_max_concurrent';
+  static const int maxConcurrentDefault = 2;
+
+  /// Picker ceiling. Every recording is a full extra connection to the
+  /// provider ON TOP of whatever is being watched, and most IPTV accounts
+  /// allow 1–3 connections total — past 4 the realistic outcome is the
+  /// provider kicking streams, not more recordings.
+  static const int maxConcurrentCeiling = 4;
+
+  /// Synchronous mirror of [maxConcurrent] for desktop's start path (which
+  /// can't await a prefs read). Primed at desktop scheduler init, refreshed
+  /// by every [maxConcurrent]/[setMaxConcurrent] call. Android never reads
+  /// it — Kotlin reads the pref directly at each start.
+  static int maxConcurrentCached = maxConcurrentDefault;
+
+  /// User-set cap on simultaneous recordings (1..[maxConcurrentCeiling],
+  /// default 2). Kotlin reads the same key from FlutterSharedPreferences
+  /// (`flutter.recording_max_concurrent`).
+  static Future<int> maxConcurrent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = (prefs.getInt(_maxConcurrentPref) ?? maxConcurrentDefault)
+        .clamp(1, maxConcurrentCeiling);
+    maxConcurrentCached = value;
+    return value;
+  }
+
+  static Future<void> setMaxConcurrent(int value) async {
+    final clamped = value.clamp(1, maxConcurrentCeiling);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_maxConcurrentPref, clamped);
+    maxConcurrentCached = clamped;
+  }
+
   // ── URL classification (mirrors the Kotlin helpers; keep in sync) ─────────
 
   /// Segmented (adaptive) stream by URL shape — HLS/DASH/SmoothStreaming.

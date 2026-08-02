@@ -11,6 +11,7 @@ import '../../services/live_recording_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+import '../../widgets/recording_limit_dialogs.dart';
 import '../../widgets/iptv/iptv_stage_panel.dart' show IptvMonogram;
 import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 
@@ -72,10 +73,10 @@ class _RecordingsPageState extends State<RecordingsPage>
   bool get _isAndroid => !kIsWeb && Platform.isAndroid;
   bool get _desktop => DesktopScheduleService.instance.isSupported;
 
-  DesktopRecordingCapture? get _desktopCapture =>
-      _desktop ? DesktopRecordingService.instance.active : null;
+  List<DesktopRecordingCapture> get _desktopCaptures =>
+      _desktop ? DesktopRecordingService.instance.captures : const [];
 
-  bool get _anythingLive => _live.isNotEmpty || _desktopCapture != null;
+  bool get _anythingLive => _live.isNotEmpty || _desktopCaptures.isNotEmpty;
 
   @override
   void initState() {
@@ -435,6 +436,19 @@ class _RecordingsPageState extends State<RecordingsPage>
     if (startsImmediately) start = now;
     final end = start.add(duration);
 
+    // Conflict gate — no Manage button here: the rows to stop or cancel are
+    // right behind the dialog.
+    if (!await ensureRecordingCapacity(
+      context,
+      startMs: start.millisecondsSinceEpoch,
+      endMs: end.millisecondsSinceEpoch,
+      candidateUrl: recordUrl,
+      offerManage: false,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     final result = _desktop
         ? await DesktopScheduleService.instance.add(
             url: recordUrl,
@@ -475,8 +489,8 @@ class _RecordingsPageState extends State<RecordingsPage>
         : switch (result.errorCode) {
             'duplicate' => 'Already scheduled at that time',
             'overlap' =>
-              'Overlaps another scheduled recording — desktop '
-                  'records one channel at a time',
+              'Would exceed the simultaneous-recordings limit — raise it '
+                  'in IPTV settings or pick another slot',
             'bad_time' => 'That time has already passed',
             _ => "Couldn't schedule recording",
           };
@@ -582,8 +596,8 @@ class _RecordingsPageState extends State<RecordingsPage>
 
   @override
   Widget build(BuildContext context) {
-    final desktopCapture = _desktopCapture;
-    final liveCount = _live.length + (desktopCapture != null ? 1 : 0);
+    final desktopCaptures = _desktopCaptures;
+    final liveCount = _live.length + desktopCaptures.length;
     final totalBytes = _library.fold<int>(0, (sum, e) => sum + e.bytes);
     final empty = !_loading &&
         liveCount == 0 &&
@@ -639,17 +653,19 @@ class _RecordingsPageState extends State<RecordingsPage>
                                 chip: '$liveCount LIVE',
                                 chipColor: _kRec,
                               ),
-                              if (desktopCapture != null)
+                              for (final (i, capture)
+                                  in desktopCaptures.indexed)
                                 _LiveCard(
-                                  channelName: desktopCapture.channelName,
-                                  startedAt: desktopCapture.startedAt,
+                                  channelName: capture.channelName,
+                                  startedAt: capture.startedAt,
                                   now: _now,
-                                  bytesOf: () => desktopCapture.bytes,
+                                  bytesOf: () => capture.bytes,
                                   fmtBytes: _fmtBytes,
                                   fmtElapsed: _fmtElapsed,
-                                  autofocus: PlatformUtil.isAndroidTvCached,
+                                  autofocus: PlatformUtil.isAndroidTvCached &&
+                                      i == 0,
                                   onStop: () =>
-                                      unawaited(_stopDesktop(desktopCapture)),
+                                      unawaited(_stopDesktop(capture)),
                                 ),
                               for (final (i, rec) in _live.indexed)
                                 _LiveCard(
@@ -665,7 +681,7 @@ class _RecordingsPageState extends State<RecordingsPage>
                                   fmtElapsed: _fmtElapsed,
                                   autofocus: PlatformUtil.isAndroidTvCached &&
                                       i == 0 &&
-                                      desktopCapture == null,
+                                      desktopCaptures.isEmpty,
                                   onStop: () => unawaited(_stopAndroid(rec)),
                                 ),
                               const SizedBox(height: 18),

@@ -67,6 +67,41 @@ object RecordingScheduleStore {
 	fun findDuplicate(context: Context, url: String, startMs: Long): RecordingSchedule? =
 		all(context).values.firstOrNull { it.url == url && it.startMs == startMs }
 
+	/**
+	 * Peak number of stored schedules simultaneously active anywhere inside
+	 * `[startMs, endMs)`. Half-open windows: a schedule ending exactly when
+	 * another starts never overlaps it. The candidate itself is NOT counted —
+	 * callers compare `peak + 1 > limit`.
+	 */
+	fun peakOverlap(context: Context, startMs: Long, endMs: Long): Int {
+		val events = ArrayList<Pair<Long, Int>>()
+		for (s in all(context).values) {
+			val from = maxOf(s.startMs, startMs)
+			val to = minOf(s.endMs, endMs)
+			if (to <= from) continue
+			events.add(from to 1)
+			events.add(to to -1)
+		}
+		// Ends before starts at the same instant.
+		events.sortWith(compareBy({ it.first }, { it.second }))
+		var current = 0
+		var peak = 0
+		for ((_, delta) in events) {
+			current += delta
+			if (current > peak) peak = current
+		}
+		return peak
+	}
+
+	/** Display labels of schedules overlapping `[startMs, endMs)`, for the
+	 *  conflict warning. */
+	fun overlappingTitles(context: Context, startMs: Long, endMs: Long): List<String> =
+		all(context).values
+			.filter { it.startMs < endMs && startMs < it.endMs }
+			.sortedBy { it.startMs }
+			.map { it.programmeTitle.ifEmpty { it.channelName } }
+			.distinct()
+
 	private fun prefs(context: Context) =
 		context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

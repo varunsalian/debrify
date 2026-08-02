@@ -72,9 +72,33 @@ class LiveRecordingService : Service() {
 		const val RELATIVE_PATH = "Download/Debrify/Recordings"
 		const val MIME_TYPE = "video/mp2t"
 
-		/** Concurrent live captures. Cheap TV boxes have real IO/bandwidth
-		 *  limits, and every capture is a full extra connection. */
-		const val MAX_CONCURRENT = 2
+		/** Default cap on concurrent live captures. Cheap TV boxes have real
+		 *  IO/bandwidth limits, and every capture is a full extra connection. */
+		const val DEFAULT_MAX_CONCURRENT = 2
+
+		/** The user-set cap (Settings → IPTV → Simultaneous recordings), read
+		 *  fresh at every start decision. shared_preferences stores Dart ints
+		 *  as longs; the getInt fallback covers any legacy write. */
+		fun maxConcurrent(context: Context): Int {
+			val prefs = context.getSharedPreferences(
+				"FlutterSharedPreferences",
+				Context.MODE_PRIVATE,
+			)
+			val raw = try {
+				prefs.getLong(
+					"flutter.recording_max_concurrent",
+					DEFAULT_MAX_CONCURRENT.toLong(),
+				)
+			} catch (_: ClassCastException) {
+				runCatching {
+					prefs.getInt(
+						"flutter.recording_max_concurrent",
+						DEFAULT_MAX_CONCURRENT,
+					).toLong()
+				}.getOrDefault(DEFAULT_MAX_CONCURRENT.toLong())
+			}
+			return raw.toInt().coerceIn(1, 6)
+		}
 
 		/** Safety ceiling per recording — also keeps a single capture inside
 		 *  Android 15's rolling dataSync foreground budget. */
@@ -300,7 +324,8 @@ class LiveRecordingService : Service() {
 			return
 		}
 		val fromSchedule = intent.getBooleanExtra(EXTRA_FROM_SCHEDULE, false)
-		if (states.values.count { !it.finished.get() } >= MAX_CONCURRENT) {
+		val limit = maxConcurrent(this)
+		if (states.values.count { !it.finished.get() } >= limit) {
 			// The manual path pre-checks in MainActivity, so this is mostly the
 			// scheduled path racing live recordings — and with no UI in sight, a
 			// notification is the only honest channel.
@@ -308,7 +333,7 @@ class LiveRecordingService : Service() {
 			postEventNotification(
 				id = ("limit-$taskId").hashCode(),
 				title = if (fromSchedule) "Scheduled recording skipped" else "Recording not started",
-				text = "Recording limit reached ($MAX_CONCURRENT at a time)",
+				text = "Recording limit reached ($limit at a time) — raise it in IPTV settings or free a slot",
 			)
 			stopIfIdle()
 			return
