@@ -527,14 +527,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Filesystem path libmpv is writing the active recording to.
   String? _recordingTempPath;
 
-  /// Watches for the app leaving the foreground. A TEE recording here is
-  /// backed by nothing but this widget — no foreground service — so once the
-  /// app is backgrounded the process can be killed with the file never
-  /// published. Finishing at that moment mirrors what the native TV player
-  /// does in onStop, and costs nothing: a backgrounded player isn't reading
-  /// bytes. ENGINE recordings ignore all of this — surviving backgrounding is
-  /// their whole reason to exist.
-  AppLifecycleListener? _recordingLifecycle;
+  /// Watches for the app leaving the foreground, on behalf of two jobs.
+  ///
+  /// A TEE recording here is backed by nothing but this widget — no
+  /// foreground service — so once the app is backgrounded the process can be
+  /// killed with the file never published. Finishing at that moment mirrors
+  /// what the native TV player does in onStop, and costs nothing: a
+  /// backgrounded player isn't reading bytes. ENGINE recordings ignore all of
+  /// this — surviving backgrounding is their whole reason to exist.
+  ///
+  /// PLAYBACK pauses at the same moment. There is no background-audio service
+  /// or media notification, so "keep playing" after Home/power really meant
+  /// mpv decoding video into an invisible surface — for hours, on devices
+  /// where the user granted the battery-optimization exemption recording asks
+  /// for. Picture-in-Picture is unaffected for the same reason recording is:
+  /// a visible PiP activity reports `inactive`, never `paused`.
+  AppLifecycleListener? _lifecycle;
+
+  /// True while playback is paused because the APP left the foreground, not
+  /// because the user asked — the flag that authorizes the matching
+  /// auto-resume on return, so coming back to the player looks exactly like
+  /// it always has (playing). A user's own pause never sets it and is never
+  /// resumed over.
+  bool _pausedByLifecycle = false;
 
   /// The recording ENGINE's capture of the CURRENTLY PLAYING live channel
   /// (LiveRecordingService task id), or null. Independent of the tee's
@@ -869,9 +884,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // onPause fires on the transition to AppLifecycleState.paused — Android's
     // onStop, i.e. Home or an app switch. Picture-in-Picture keeps the
     // activity visible and reports `inactive` instead, so a PiP'd stream keeps
-    // recording.
-    _recordingLifecycle = AppLifecycleListener(
-      onPause: () => unawaited(_stopRecording(userInitiated: false)),
+    // recording AND keeps playing. Deliberately not onInactive: that fires for
+    // the notification shade, permission dialogs and the app switcher peek,
+    // none of which should stop the video.
+    _lifecycle = AppLifecycleListener(
+      onPause: () {
+        unawaited(_stopRecording(userInitiated: false));
+        _pauseForBackground();
+      },
+      onResume: _resumeFromBackground,
     );
 
     // Launch-time subtitles (e.g. YouTube captions): wrap into a single loaded
@@ -945,6 +966,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       DeviceOrientation.landscapeRight,
     ]);
     _landscapeLocked = true;
+    // Held for the LOADING phase only — a slow debrid resolve must not let
+    // the screen sleep before the first frame. From the first playing event
+    // onward the lock follows play/pause (see _syncWakelock).
     try {
       WakelockPlus.enable();
     } catch (_) {
@@ -1812,8 +1836,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (mounted) setState(() {});
     });
     _playSub = _player.stream.playing.listen((p) {
+      // Backgrounded via the lifecycle pause, yet something started playing:
+      // an open(play: true) that was already in flight when Home was pressed
+      // (a zap, an episode load) landing after the pause. Re-pause instead of
+      // letting it decode invisibly — the exact drain the lifecycle pause
+      // exists to stop. Early return, before any scrobble/heartbeat side
+      // effects can arm off a playback that is being taken back down.
+      if (p && _pausedByLifecycle && !_isPipActive) {
+        unawaited(_player.pause());
+        return;
+      }
       final wasPlaying = _isPlaying;
       _isPlaying = p;
+      _syncWakelock(p);
       _pushPipState();
       // Startup-channel memory — armed only by real playback, never by a tune.
       if (p) _noteLiveChannelPlaying();
@@ -5746,13 +5781,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Check if current episode should be marked as finished (for manual seeking)
-  Future<void> _checkAndMarkEpisodeAsFinished() async {
+  ///
+  /// Sync on purpose: this runs on EVERY position event — dozens of times a
+  /// second for the whole session — and as an async function each of those
+  /// calls allocated a Future and a microtask just to hit the first early
+  /// return. The actual marking stays async and is fired unawaited, exactly
+  /// as the position listener already treated it.
+  void _checkAndMarkEpisodeAsFinished() {
     if (_currentEpisodeMarkedAsFinished) return;
     // Only check if we're near the end of the video (within last 30 seconds)
     if (_duration > Duration.zero && _position > Duration.zero) {
       final timeRemaining = _duration - _position;
       if (timeRemaining <= VideoPlayerTimingConstants.endingThreshold) {
-        await _markCurrentEpisodeAsFinished();
+        unawaited(_markCurrentEpisodeAsFinished());
       }
     }
   }
@@ -6799,9 +6840,58 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// The app left the foreground (Home, power button, app switch): stop
+  /// playback instead of decoding video nobody can see. Mobile only — on
+  /// desktop a minimized/covered window keeping its audio is normal use, and
+  /// desktop power budgets are not why this exists. PiP never gets here: a
+  /// visible PiP activity stays at `inactive` (see [_lifecycle]).
+  void _pauseForBackground() {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    // _isTransitioning too, not just _isPlaying: mid-switch (next episode, a
+    // zap) `playing` is briefly false while an open(play: true) is in flight.
+    // Backgrounding in that window must still arm the flag, or the open lands
+    // moments later and plays behind the backgrounded app with the guard in
+    // the playing listener disarmed. A user's own pause has neither set.
+    if (!_playerCreated || (!_isPlaying && !_isTransitioning)) return;
+    _pausedByLifecycle = true;
+    unawaited(_player.pause());
+  }
+
+  /// Undo [_pauseForBackground] when the app returns, restoring the
+  /// pre-existing contract that coming back to this screen shows it playing.
+  /// A pause the user made themselves (flag unset) stays a pause.
+  void _resumeFromBackground() {
+    if (!_pausedByLifecycle) return;
+    // Cleared BEFORE play(): the playing event this triggers must not read as
+    // "playback restarted behind a backgrounded app" to the guard in the
+    // playing listener.
+    _pausedByLifecycle = false;
+    if (!_playerCreated || !mounted) return;
+    unawaited(_player.play());
+  }
+
+  /// The screen wakelock follows PLAYBACK, not this screen's lifetime: a
+  /// paused video left on a table must not pin the display on until the
+  /// route pops — on phones the display is the single biggest battery
+  /// consumer. Buffering stalls keep the lock (media_kit's `playing` tracks
+  /// the pause property, which stays false during a stall). initState still
+  /// takes the lock up front so the screen can't sleep through a slow
+  /// resolve/open before the first playing event arrives.
+  void _syncWakelock(bool playing) {
+    try {
+      if (playing) {
+        WakelockPlus.enable();
+      } else {
+        WakelockPlus.disable();
+      }
+    } catch (_) {
+      // Wakelock not supported on this platform (e.g., Linux).
+    }
+  }
+
   @override
   void dispose() {
-    _recordingLifecycle?.dispose();
+    _lifecycle?.dispose();
     // Desktop capture THIS SCREEN started: closing the player closes its only
     // stop control, so finish it now (flushes and closes the file; a raw .ts
     // is playable however it ends). Captures the desktop SCHEDULER started
