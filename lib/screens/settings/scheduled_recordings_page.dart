@@ -105,6 +105,16 @@ class _ScheduledRecordingsPageState extends State<ScheduledRecordingsPage> {
   /// seconds, which also makes this the fastest way to TEST the whole
   /// alarm → service → capture chain on a device.
   Future<void> _createManualSchedule() async {
+    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Storage access is needed to save recordings'),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
     final choice = await showIptvStartupChannelPicker(
       context,
       title: 'Record which channel?',

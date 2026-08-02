@@ -189,6 +189,10 @@ class DesktopRecordingCapture {
     debugPrint(
       'DesktopRecording: ended ($end) — $_bytes bytes at $path',
     );
+    // In the capture itself, NOT an onFinished wrapper: callers may null
+    // onFinished (the player does at dispose), and the UI revision must bump
+    // for every ending regardless.
+    DesktopRecordingService.instance.revision.value++;
     if (!_completion.isCompleted) _completion.complete(_bytes);
     try {
       onFinished?.call(end, _bytes);
@@ -202,6 +206,12 @@ class DesktopRecordingCapture {
 class DesktopRecordingService {
   DesktopRecordingService._();
   static final DesktopRecordingService instance = DesktopRecordingService._();
+
+  /// Bumped when a capture starts or ends — UI (the IPTV stage's Record↔Stop
+  /// button) observes this instead of only sampling on its own rebuilds, so
+  /// a SCHEDULED capture starting while focus parks on the channel flips the
+  /// button too.
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
   DesktopRecordingCapture? _active;
 
@@ -234,6 +244,7 @@ class DesktopRecordingService {
       onFinished: onFinished,
     );
     _active = capture;
+    revision.value++;
     unawaited(capture._run());
     return capture;
   }

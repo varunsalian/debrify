@@ -119,6 +119,17 @@ class DesktopScheduleService {
     });
   }
 
+  /// Stop the tick and every armed timer (tests / teardown). init() re-arms.
+  void shutdown() {
+    _tick?.cancel();
+    _tick = null;
+    for (final timer in _timers.values) {
+      timer.cancel();
+    }
+    _timers.clear();
+    _initialized = false;
+  }
+
   Future<List<DesktopSchedule>> list() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
@@ -186,6 +197,7 @@ class DesktopScheduleService {
     schedules.add(schedule);
     await _save(schedules);
     await _armAll();
+    LiveRecordingService.schedulesRevision.value++;
     return RecordingCallResult(id: schedule.id);
   }
 
@@ -193,6 +205,7 @@ class DesktopScheduleService {
     final schedules = (await list()).where((s) => s.id != id).toList();
     await _save(schedules);
     _timers.remove(id)?.cancel();
+    LiveRecordingService.schedulesRevision.value++;
   }
 
   Future<void> _armAll() async {
@@ -260,6 +273,7 @@ class DesktopScheduleService {
     // double-fire finds nothing the second time.
     await _save(schedules.where((s) => s.id != schedule.id).toList());
     _timers.remove(schedule.id)?.cancel();
+    LiveRecordingService.schedulesRevision.value++;
     final path = await _targetPath(
       schedule.programmeTitle.isNotEmpty
           ? schedule.programmeTitle
@@ -292,7 +306,11 @@ class DesktopScheduleService {
   }
 
   /// `Downloads/Debrify/Recordings/<name>_<stamp>.ts` with the same
-  /// collision-avoidance as the player's recorder.
+  /// collision-avoidance as the player's recorder. Public: the IPTV page's
+  /// stage Record button builds desktop capture paths through this too.
+  static Future<String> buildRecordingPath(String name) =>
+      instance._targetPath(name);
+
   Future<String> _targetPath(String name) async {
     final safeName = name
         .replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '')

@@ -32,6 +32,7 @@ import '../services/pikpak_api_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/stremio_service.dart';
 import '../services/android_native_downloader.dart';
+import '../services/live_recording_service.dart';
 import '../services/update_service.dart';
 import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
@@ -138,11 +139,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadSummaries();
     _loadSupportConfig();
     _loadDownloadLocation();
-    // IPTV recording exists only where its engine can run (Android 10+) — the
-    // search index must not advertise it elsewhere.
+    // IPTV recording exists where its engine can run (Android 10+, or pre-Q
+    // with the grantable legacy storage path) — the search index must not
+    // advertise it elsewhere.
     if (!kIsWeb && Platform.isAndroid) {
-      AndroidNativeDownloader.canPublishRecordings().then((supported) {
-        if (supported && mounted) {
+      LiveRecordingService.engineSupport().then((support) {
+        if (support != 'unsupported' && mounted) {
           setState(() => _recordingSearchable = true);
         }
       });

@@ -207,6 +207,25 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** The MethodChannel result awaiting the legacy-storage permission dialog
+     *  (pre-Q recording destination). One at a time; resolved in
+     *  [onRequestPermissionsResult]. */
+    private var pendingStoragePermissionResult: MethodChannel.Result? = null
+    private val legacyStoragePermissionRequestCode = 7401
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != legacyStoragePermissionRequestCode) return
+        val granted = grantResults.isNotEmpty() &&
+            grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+        pendingStoragePermissionResult?.success(granted)
+        pendingStoragePermissionResult = null
+    }
+
     // ── Pending-recording registry ──────────────────────────────────────────
     // Durability for IPTV recording publication without a foreground service:
     // Dart registers a recording's temp path the moment libmpv starts writing
@@ -803,6 +822,42 @@ class MainActivity : FlutterActivity() {
 						result.error("fgs_not_allowed", e.message, null)
 					}
 				}
+				"engineRecordingSupport" -> {
+					// Three-state, unlike the tee's Q+-only canPublishRecordings:
+					// pre-Q devices must SHOW the affordances so the first press
+					// can request the legacy storage grant — a plain false would
+					// hide the feature with no path to ever enable it.
+					result.success(
+						when {
+							com.debrify.app.recording.LiveRecordingService
+								.isSupported(this) -> "supported"
+							com.debrify.app.recording.LiveRecordingService
+								.needsLegacyPermission(this) -> "needs_permission"
+							else -> "unsupported"
+						},
+					)
+				}
+				"requestLegacyStoragePermission" -> {
+					if (!com.debrify.app.recording.LiveRecordingService
+							.needsLegacyPermission(this)
+					) {
+						result.success(
+							com.debrify.app.recording.LiveRecordingService
+								.isSupported(this),
+						)
+						return@setMethodCallHandler
+					}
+					if (pendingStoragePermissionResult != null) {
+						result.error("in_flight", "request already showing", null)
+						return@setMethodCallHandler
+					}
+					pendingStoragePermissionResult = result
+					androidx.core.app.ActivityCompat.requestPermissions(
+						this,
+						arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
+						legacyStoragePermissionRequestCode,
+					)
+				}
 				"canPublishRecordings" -> {
 					// MediaStore.Downloads is API 29+, and the app ships no
 					// WRITE_EXTERNAL_STORAGE, so below Q a finished recording
@@ -863,7 +918,7 @@ class MainActivity : FlutterActivity() {
 							result.error("bad_args", "url is required", null)
 							return@setMethodCallHandler
 						}
-						if (!com.debrify.app.recording.LiveRecordingService.isSupported()) {
+						if (!com.debrify.app.recording.LiveRecordingService.isSupported(this)) {
 							result.error("engine_unsupported", "requires Android 10+", null)
 							return@setMethodCallHandler
 						}
@@ -997,7 +1052,7 @@ class MainActivity : FlutterActivity() {
 							result.error("bad_args", "url/startMs/endMs required", null)
 							return@setMethodCallHandler
 						}
-						if (!com.debrify.app.recording.LiveRecordingService.isSupported()) {
+						if (!com.debrify.app.recording.LiveRecordingService.isSupported(this)) {
 							result.error("engine_unsupported", "requires Android 10+", null)
 							return@setMethodCallHandler
 						}

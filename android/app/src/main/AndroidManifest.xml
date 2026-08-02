@@ -18,6 +18,10 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Storage permissions for file picker (Android 12 and below) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Recording destination on Android 9 and below (Mi Box class hardware):
+         MediaStore.Downloads doesn't exist pre-Q, so the engine writes a
+         plain file into public Download/ — which needs this, legacy-only. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     
     <!-- TV compatibility flags (do not restrict phone installs) -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

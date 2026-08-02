@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C1 · Live Deck — IPTV Redesign</title>
+<style>
+  :root{
+    --bg:#070A18; --panel:#0D1226; --card:rgba(255,255,255,.05);
+    --line:rgba(255,255,255,.08); --dim:rgba(255,255,255,.55); --dim2:rgba(255,255,255,.34);
+    --acc1:#4F74FF; --acc2:#8A5CFF; --gold:#F5C042; --rec:#F43F5E; --live:#22C55E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:#EDEFFB;font:14px/1.45 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:34px 4vw 90px}
+  a{color:var(--acc1);text-decoration:none}
+  h1{font-size:26px;font-weight:800;letter-spacing:.2px}
+  h1 .tag{background:linear-gradient(90deg,var(--acc1),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);margin:6px 0 30px;max-width:860px}
+  h2{font-size:15px;font-weight:700;color:var(--dim);letter-spacing:1.4px;text-transform:uppercase;margin:44px 0 16px}
+  .note{color:var(--dim2);font-size:12.5px;margin-top:10px;max-width:900px}
+  kbd{background:#181D33;border:1px solid var(--line);border-radius:5px;padding:1px 7px;font:600 11px monospace;color:var(--dim)}
+
+  /* ————— frames ————— */
+  .tv{width:min(1180px,96vw);aspect-ratio:16/9;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+  .phone{width:375px;height:760px;background:var(--panel);border:1px solid var(--line);border-radius:34px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .row2{display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start}
+
+  /* ————— shared bits ————— */
+  .logo{width:40px;height:40px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:15px;flex:none}
+  .badge{font:800 8.5px/1 sans-serif;letter-spacing:.8px;padding:3px 6px;border-radius:4px}
+  .b-live{background:rgba(34,197,94,.15);color:var(--live)}
+  .b-rec{background:rgba(244,63,94,.16);color:var(--rec)}
+  .b-4k{background:rgba(79,116,255,.16);color:#9DB4FF}
+  .prog{height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+  .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--acc1),var(--acc2))}
+  .focus{outline:2.5px solid var(--gold);outline-offset:2px;border-radius:12px}
+
+  /* ————— TV hero ————— */
+  .hero{height:56%;position:relative;background:
+    radial-gradient(90% 130% at 78% 20%,rgba(79,116,255,.34),transparent 55%),
+    radial-gradient(70% 120% at 20% 90%,rgba(138,92,255,.25),transparent 60%),
+    linear-gradient(180deg,#101735,#0A0F22)}
+  .hero::after{content:"";position:absolute;inset:auto 0 0 0;height:46%;background:linear-gradient(180deg,transparent,var(--panel))}
+  .hero .liveTag{position:absolute;top:26px;right:30px;display:flex;gap:8px;align-items:center;color:var(--live);font-weight:800;font-size:12px;letter-spacing:1.5px}
+  .hero .liveTag i{width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 12px var(--live)}
+  .heroInfo{position:absolute;left:56px;bottom:26px;z-index:2;max-width:56%}
+  .ident{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .ident .logo{width:46px;height:46px;background:linear-gradient(135deg,#1B2A6B,#3B2C86)}
+  .ident .ch{color:var(--dim);font-weight:700;font-size:12.5px;letter-spacing:.6px}
+  .heroTitle{font-size:30px;font-weight:800;letter-spacing:.2px;margin-bottom:6px}
+  .heroMeta{color:var(--dim);font-size:13px;margin-bottom:12px}
+  .heroMeta b{color:#CFD6FF;font-weight:700}
+  .heroProg{width:340px;margin-bottom:16px}
+  .actions{display:flex;gap:10px}
+  .btn{display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;font-weight:700;font-size:13.5px;background:var(--card);border:1px solid var(--line);color:#E8EBFF}
+  .btn.primary{background:linear-gradient(90deg,var(--acc1),var(--acc2));border:none;box-shadow:0 6px 24px rgba(99,102,241,.45)}
+  .btn.rec{color:var(--rec)}
+  .btn .dot{width:9px;height:9px;border-radius:50%;background:var(--rec)}
+
+  /* left mini-rail */
+  .mini-rail{position:absolute;left:0;top:0;bottom:0;width:56px;background:rgba(4,6,16,.72);backdrop-filter:blur(6px);display:flex;flex-direction:column;align-items:center;padding:18px 0;gap:16px;z-index:5;border-right:1px solid var(--line)}
+  .mini-rail .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:15px;color:var(--dim2)}
+  .mini-rail .ic.on{background:rgba(138,92,255,.2);color:#C9BBFF}
+
+  /* shelves */
+  .shelves{position:absolute;left:56px;right:0;top:56%;bottom:0;padding:6px 30px 0 26px;overflow:hidden}
+  .shelf h3{font-size:12.5px;font-weight:800;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase;margin:10px 0 8px;display:flex;gap:10px;align-items:center}
+  .shelf h3 .cnt{color:var(--dim2);font-weight:600;letter-spacing:0}
+  .cards{display:flex;gap:12px}
+  .chCard{width:198px;flex:none;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 12px 10px}
+  .chCard .top{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  .chCard .nm{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chCard .no{color:var(--dim2);font-size:10.5px;font-weight:700}
+  .chCard .now{color:var(--dim);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:7px}
+  .chCard .now b{color:#D9DEFF;font-weight:600}
+  .poster{width:118px;flex:none;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+  .poster .art{aspect-ratio:2/3;background:linear-gradient(160deg,#22306B,#472B75) center/cover;display:grid;place-items:end start;padding:8px}
+  .poster .t{font-size:11px;font-weight:700;padding:7px 8px 8px;background:var(--card)}
+  .keycaps{position:absolute;right:22px;bottom:12px;color:var(--dim2);font-size:11px;display:flex;gap:14px;z-index:6}
+
+  /* ————— phone ————— */
+  .p-hero{height:238px;position:relative;background:radial-gradient(120% 140% at 80% 10%,rgba(79,116,255,.35),transparent 60%),linear-gradient(180deg,#111838,#0D1226)}
+  .p-hero .heroInfo{left:18px;bottom:14px;max-width:82%}
+  .p-hero .heroTitle{font-size:19px}
+  .p-hero .actions .btn{padding:8px 13px;font-size:12px}
+  .p-chips{display:flex;gap:8px;padding:12px 16px 4px}
+  .chip{padding:7px 14px;border-radius:99px;background:var(--card);border:1px solid var(--line);font-weight:700;font-size:12px;color:var(--dim)}
+  .chip.on{background:linear-gradient(90deg,var(--acc1),var(--acc2));color:#fff;border:none}
+  .p-shelves{padding:4px 0 0 16px;overflow:hidden}
+  .p-shelves .cards{overflow:hidden}
+  .p-topbar{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
+  .p-topbar .src{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px}
+  .p-topbar .sp{flex:1}
+  .icbtn{width:36px;height:36px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;color:var(--dim)}
+</style></head><body>
+
+<h1>Concept 1 · <span class="tag">Live Deck</span></h1>
+<p class="sub">The IPTV page becomes a streaming app: a live hero of the focused channel up top, then
+<b>EPG-aware shelves</b> — Continue Watching, Favorites, and “On now” rails built per category from guide
+data. Browsing is lean-back; the full catalog and grid live one click away behind <kbd>Guide</kbd>.</p>
+
+<h2>Android TV</h2>
+<div class="tv">
+  <div class="mini-rail">
+    <div class="ic on">📺</div><div class="ic">♥</div><div class="ic">▶</div><div class="ic">⏺</div><div class="ic">🔍</div><div class="ic" style="margin-top:auto">⚙</div>
+  </div>
+  <div class="hero">
+    <div class="liveTag"><i></i>LIVE · 8K SOURCE</div>
+    <div class="heroInfo">
+      <div class="ident">
+        <div class="logo">S2</div>
+        <div><div style="font-weight:800">SKY SPORT NEWS</div><div class="ch">CH 22 · SPORT ON AIR · <span class="badge b-4k">UHD</span></div></div>
+      </div>
+      <div class="heroTitle">Man United vs Brighton</div>
+      <div class="heroMeta"><b>09:30–11:30</b> · Matchweek 9 · then: <b>Chelsea vs Sunderland</b> 11:30</div>
+      <div class="heroProg prog"><i style="width:38%"></i></div>
+      <div class="actions">
+        <div class="btn primary">▶ Watch</div>
+        <div class="btn rec"><span class="dot"></span> Record</div>
+        <div class="btn">☰ Guide</div>
+        <div class="btn">♥</div>
+      </div>
+    </div>
+  </div>
+  <div class="shelves">
+    <div class="shelf">
+      <h3>Continue watching <span class="cnt">· 6</span></h3>
+      <div class="cards">
+        <div class="poster focus"><div class="art"></div><div class="t">Interstellar <div class="prog" style="margin-top:5px"><i style="width:64%"></i></div></div></div>
+        <div class="poster"><div class="art" style="background:linear-gradient(160deg,#173a5e,#3b2c86)"></div><div class="t">Severance S2E4 <div class="prog" style="margin-top:5px"><i style="width:21%"></i></div></div></div>
+        <div class="poster"><div class="art" style="background:linear-gradient(160deg,#5e173a,#2c3a86)"></div><div class="t">Dune Part Two <div class="prog" style="margin-top:5px"><i style="width:83%"></i></div></div></div>
+        <div class="poster"><div class="art" style="background:linear-gradient(160deg,#175e4c,#2c5586)"></div><div class="t">The Bear S3E1 <div class="prog" style="margin-top:5px"><i style="width:9%"></i></div></div></div>
+        <div class="poster"><div class="art" style="background:linear-gradient(160deg,#4c175e,#86552c)"></div><div class="t">Oppenheimer <div class="prog" style="margin-top:5px"><i style="width:45%"></i></div></div></div>
+      </div>
+    </div>
+    <div class="shelf">
+      <h3>On now · Sports <span class="cnt">· from the guide</span></h3>
+      <div class="cards">
+        <div class="chCard"><div class="top"><div class="logo" style="background:#14328C">P1</div><div><div class="nm">HUB PREMIER 1</div><div class="no">CH 21</div></div><span class="badge b-rec" style="margin-left:auto">● REC</span></div><div class="now"><b>Arsenal vs Newcastle</b></div><div class="prog"><i style="width:72%"></i></div></div>
+        <div class="chCard"><div class="top"><div class="logo" style="background:#8C3214">F1</div><div><div class="nm">SKY F1 UHD</div><div class="no">CH 40</div></div><span class="badge b-4k" style="margin-left:auto">4K</span></div><div class="now"><b>Hungarian GP — Qualifying</b></div><div class="prog"><i style="width:31%"></i></div></div>
+        <div class="chCard"><div class="top"><div class="logo" style="background:#14708C">TN</div><div><div class="nm">TNT SPORTS 2</div><div class="no">CH 44</div></div></div><div class="now"><b>UFC Fight Night prelims</b></div><div class="prog"><i style="width:12%"></i></div></div>
+        <div class="chCard"><div class="top"><div class="logo" style="background:#4C148C">ES</div><div><div class="nm">ESPN HD</div><div class="no">CH 51</div></div></div><div class="now"><b>SportsCenter</b></div><div class="prog"><i style="width:55%"></i></div></div>
+        <div class="chCard"><div class="top"><div class="logo" style="background:#8C6B14">GO</div><div><div class="nm">GOLF+</div><div class="no">CH 58</div></div></div><div class="now"><b>The Open — Round 3</b></div><div class="prog"><i style="width:88%"></i></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="keycaps"><span><kbd>OK</kbd> Watch</span><span><kbd>⏺</kbd> Hold: list</span><span><kbd>▲</kbd> Hero</span><span><kbd>◀</kbd> Rail</span></div>
+</div>
+<p class="note"><b>Notice:</b> the hero is the live preview stage you already ship, promoted to the page’s anchor.
+Shelves are computed from EPG now/next — “On now · Sports” only exists because guide data says so. REC badge on
+HUB PREMIER 1 = engine capture running. Rail icons: Sources · Favorites · Continue · Recordings · Search · Settings.</p>
+
+<h2>Phone</h2>
+<div class="row2">
+<div class="phone">
+  <div class="p-topbar">
+    <div class="src">⚡ 8K <span style="color:var(--dim2)">▾</span></div>
+    <div class="sp"></div>
+    <div class="icbtn">🔍</div><div class="icbtn">⏺</div><div class="icbtn">⚙</div>
+  </div>
+  <div class="p-hero hero">
+    <div class="liveTag" style="top:14px;right:16px">LIVE</div>
+    <div class="heroInfo">
+      <div class="ident"><div class="logo" style="width:36px;height:36px">S2</div><div><div style="font-weight:800;font-size:13.5px">SKY SPORT NEWS</div><div class="ch" style="font-size:11px">CH 22 · UHD</div></div></div>
+      <div class="heroTitle">Man United vs Brighton</div>
+      <div class="heroProg prog" style="width:220px;margin-bottom:12px"><i style="width:38%"></i></div>
+      <div class="actions"><div class="btn primary">▶ Watch</div><div class="btn rec"><span class="dot"></span></div><div class="btn">☰</div></div>
+    </div>
+  </div>
+  <div class="p-chips"><div class="chip on">Live</div><div class="chip">Movies</div><div class="chip">Series</div><div class="chip">♥</div></div>
+  <div class="p-shelves">
+    <div class="shelf"><h3>Continue watching</h3>
+      <div class="cards">
+        <div class="poster" style="width:104px"><div class="art"></div><div class="t">Interstellar<div class="prog" style="margin-top:4px"><i style="width:64%"></i></div></div></div>
+        <div class="poster" style="width:104px"><div class="art" style="background:linear-gradient(160deg,#173a5e,#3b2c86)"></div><div class="t">Severance<div class="prog" style="margin-top:4px"><i style="width:21%"></i></div></div></div>
+        <div class="poster" style="width:104px"><div class="art" style="background:linear-gradient(160deg,#5e173a,#2c3a86)"></div><div class="t">Dune 2<div class="prog" style="margin-top:4px"><i style="width:83%"></i></div></div></div>
+        <div class="poster" style="width:104px"><div class="art" style="background:linear-gradient(160deg,#175e4c,#2c5586)"></div><div class="t">The Bear<div class="prog" style="margin-top:4px"><i style="width:9%"></i></div></div></div>
+      </div>
+    </div>
+    <div class="shelf"><h3>On now · News</h3>
+      <div class="cards">
+        <div class="chCard" style="width:172px"><div class="top"><div class="logo" style="background:#8C1414">BB</div><div><div class="nm">BBC NEWS</div><div class="no">CH 3</div></div></div><div class="now"><b>Newsday</b></div><div class="prog"><i style="width:47%"></i></div></div>
+        <div class="chCard" style="width:172px"><div class="top"><div class="logo" style="background:#144A8C">CN</div><div><div class="nm">CNN INTL</div><div class="no">CH 5</div></div></div><div class="now"><b>Amanpour</b></div><div class="prog"><i style="width:23%"></i></div></div>
+        <div class="chCard" style="width:172px"><div class="top"><div class="logo" style="background:#8C6B14">AJ</div><div><div class="nm">AL JAZEERA</div><div class="no">CH 7</div></div></div><div class="now"><b>Inside Story</b></div><div class="prog"><i style="width:76%"></i></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div style="max-width:420px">
+  <h2 style="margin-top:0">Settings in this concept</h2>
+  <p class="note" style="margin-top:0">Settings stay close to today’s two-pane, but the rail order mirrors the deck:
+  <b>Sources → Recording → Lists → Startup</b>. Each source row carries its counts and a one-tap “On-now shelves”
+  toggle (which categories get a rail). The Recording pane gains the future <b>Library</b> row.</p>
+  <p class="note"><b>Why this concept:</b> zero-thought browsing — the guide works for you. Channel-number die-hards
+  and 50k-catalog spelunkers drop into the Guide overlay instead; the deck never tries to list everything.</p>
+  <p class="note"><b>Watch out:</b> shelves need now/next for every visible channel — the per-row EPG budget you
+  already manage (lazy fetch as rows bind) becomes the page’s heartbeat.</p>
+</div>
+</div>
+
+<p style="margin-top:50px"><a href="index.html">← All concepts</a></p>
+</body></html>

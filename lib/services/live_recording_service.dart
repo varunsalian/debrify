@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -104,6 +105,13 @@ class LiveRecordingService {
   static const MethodChannel _channel = MethodChannel(
     'com.debrify.app/downloader',
   );
+
+  /// Bumped whenever THIS process mutates the schedule set (page, player
+  /// sheet, manual timer, desktop scheduler firing) — UI badges listen
+  /// instead of polling. Native-side mutations (an Android alarm firing
+  /// while the app is backgrounded) can't bump it; listeners pair this with
+  /// an on-resume refresh.
+  static final ValueNotifier<int> schedulesRevision = ValueNotifier<int>(0);
 
   static const String _engineEnabledPref = 'recording_engine_enabled';
 
@@ -270,10 +278,12 @@ class LiveRecordingService {
         },
       );
       if (raw == null) return const RecordingCallResult(errorCode: 'no_result');
-      return RecordingCallResult(
+      final result = RecordingCallResult(
         id: raw['id']?.toString(),
         exact: raw['exact'] == true,
       );
+      if (result.ok) schedulesRevision.value++;
+      return result;
     } on PlatformException catch (e) {
       return RecordingCallResult(errorCode: e.code, errorMessage: e.message);
     } on MissingPluginException {
@@ -281,8 +291,11 @@ class LiveRecordingService {
     }
   }
 
-  static Future<bool> cancelSchedule(String id) =>
-      _invokeBool('cancelScheduledRecording', {'id': id});
+  static Future<bool> cancelSchedule(String id) async {
+    final ok = await _invokeBool('cancelScheduledRecording', {'id': id});
+    if (ok) schedulesRevision.value++;
+    return ok;
+  }
 
   static Future<List<ScheduledRecording>> listSchedules() async {
     if (!Platform.isAndroid) return const [];
@@ -298,6 +311,40 @@ class LiveRecordingService {
       return const [];
     } on MissingPluginException {
       return const [];
+    }
+  }
+
+  /// Engine availability, three-state: 'supported' (Android 10+, or pre-Q
+  /// with the legacy storage grant), 'needs_permission' (pre-Q, grantable),
+  /// 'unsupported'. Pre-Q devices must SHOW recording affordances in the
+  /// needs_permission state — the first press is how the grant happens.
+  static Future<String> engineSupport() async {
+    if (!Platform.isAndroid) return 'unsupported';
+    try {
+      return await _channel.invokeMethod<String>('engineRecordingSupport') ??
+          'unsupported';
+    } on PlatformException {
+      return 'unsupported';
+    } on MissingPluginException {
+      return 'unsupported';
+    }
+  }
+
+  /// Show the legacy storage permission dialog (pre-Q). Resolves true once
+  /// granted (or when no grant was needed).
+  static Future<bool> requestLegacyStoragePermission() =>
+      _invokeBool('requestLegacyStoragePermission');
+
+  /// Gate for every engine action: true when recording can proceed NOW —
+  /// requesting the pre-Q grant on the spot if that's all that's missing.
+  static Future<bool> ensureEngineReady() async {
+    switch (await engineSupport()) {
+      case 'supported':
+        return true;
+      case 'needs_permission':
+        return requestLegacyStoragePermission();
+      default:
+        return false;
     }
   }
 

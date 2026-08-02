@@ -116,7 +116,35 @@ class LiveRecordingService : Service() {
 		private const val RECONNECT_BACKOFF_MS = 2_000L
 		private const val NOTIFY_THROTTLE_MS = 2_000L
 
-		fun isSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+		/** Q+ always (MediaStore destination); pre-Q with the legacy storage
+		 *  grant writes a plain file into public Download/ instead. */
+		fun isSupported(context: Context): Boolean =
+			Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+				legacyStorageGranted(context)
+
+		/** Pre-Q only: whether WRITE_EXTERNAL_STORAGE is granted (install-time
+		 *  on API 21-22, runtime on 23-28). */
+		fun legacyStorageGranted(context: Context): Boolean {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return false
+			return androidx.core.content.ContextCompat.checkSelfPermission(
+				context,
+				android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+			) == android.content.pm.PackageManager.PERMISSION_GRANTED
+		}
+
+		/** Pre-Q device that could record once the user grants storage. */
+		fun needsLegacyPermission(context: Context): Boolean =
+			Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+				!legacyStorageGranted(context)
+
+		/** The legacy destination directory (public Downloads). */
+		fun legacyRecordingsDir(): java.io.File = java.io.File(
+			@Suppress("DEPRECATION")
+			Environment.getExternalStoragePublicDirectory(
+				Environment.DIRECTORY_DOWNLOADS,
+			),
+			"Debrify/Recordings",
+		)
 
 		/** Build a START intent; shared by MainActivity, the TV player and the
 		 *  alarm receiver so the extras can never drift apart. */
@@ -237,7 +265,7 @@ class LiveRecordingService : Service() {
 		val url = intent.getStringExtra(EXTRA_URL)
 		val taskId = intent.getStringExtra(EXTRA_TASK_ID)
 			?: System.currentTimeMillis().toString()
-		if (url.isNullOrEmpty() || !isSupported()) {
+		if (url.isNullOrEmpty() || !isSupported(this)) {
 			stopIfIdle()
 			return
 		}
@@ -343,17 +371,43 @@ class LiveRecordingService : Service() {
 		}
 
 		val uri: Uri
-		try {
-			val values = ContentValues().apply {
-				put(MediaStore.Downloads.DISPLAY_NAME, state.fileName)
-				put(MediaStore.Downloads.MIME_TYPE, MIME_TYPE)
-				put(MediaStore.Downloads.RELATIVE_PATH, RELATIVE_PATH)
-				put(MediaStore.Downloads.IS_PENDING, 1)
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+			try {
+				val values = ContentValues().apply {
+					put(MediaStore.Downloads.DISPLAY_NAME, state.fileName)
+					put(MediaStore.Downloads.MIME_TYPE, MIME_TYPE)
+					put(MediaStore.Downloads.RELATIVE_PATH, RELATIVE_PATH)
+					put(MediaStore.Downloads.IS_PENDING, 1)
+				}
+				uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+					?: return Outcome.Failed("could not create destination")
+			} catch (e: Exception) {
+				return Outcome.Failed(e.message ?: "could not create destination")
 			}
-			uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-				?: return Outcome.Failed("could not create destination")
-		} catch (e: Exception) {
-			return Outcome.Failed(e.message ?: "could not create destination")
+		} else {
+			// Legacy (API 21-28): a plain file in public Download/. No pending
+			// rows, no publish step — a file that exists is already visible,
+			// which also collapses the crash-reconcile story to a media scan.
+			try {
+				val dir = legacyRecordingsDir()
+				if (!dir.exists() && !dir.mkdirs()) {
+					return Outcome.Failed("could not create recordings folder")
+				}
+				var file = java.io.File(dir, state.fileName)
+				if (file.exists()) {
+					// Same collision rule as everywhere else: an existing file
+					// means "in use" — step aside with a suffix.
+					val base = state.fileName.removeSuffix(".ts")
+					var n = 2
+					while (file.exists() && n < 100) {
+						file = java.io.File(dir, "${base}_$n.ts")
+						n++
+					}
+				}
+				uri = Uri.fromFile(file)
+			} catch (e: Exception) {
+				return Outcome.Failed(e.message ?: "could not create destination")
+			}
 		}
 		state.uri = uri
 
@@ -374,14 +428,22 @@ class LiveRecordingService : Service() {
 		persist(state, status = "recording")
 
 		var outPfd: ParcelFileDescriptor? = null
+		var outFd: java.io.FileDescriptor? = null
 		var out: BufferedOutputStream? = null
 		var endedNote: String? = null
 		var storageFailed = false
 		try {
-			val pfd = contentResolver.openFileDescriptor(uri, "rw")
-				?: return Outcome.Failed("could not open destination")
-			outPfd = pfd
-			out = BufferedOutputStream(FileOutputStream(pfd.fileDescriptor))
+			if (uri.scheme == "file") {
+				val fos = FileOutputStream(java.io.File(uri.path!!))
+				outFd = fos.fd
+				out = BufferedOutputStream(fos)
+			} else {
+				val pfd = contentResolver.openFileDescriptor(uri, "rw")
+					?: return Outcome.Failed("could not open destination")
+				outPfd = pfd
+				outFd = pfd.fileDescriptor
+				out = BufferedOutputStream(FileOutputStream(pfd.fileDescriptor))
+			}
 
 			val buffer = ByteArray(256 * 1024)
 			var consecutiveDeadConnects = 0
@@ -485,7 +547,7 @@ class LiveRecordingService : Service() {
 		} finally {
 			// Bytes must be durable before ANY terminal state is applied.
 			try { out?.flush() } catch (_: Exception) {}
-			try { outPfd?.fileDescriptor?.sync() } catch (_: Exception) {}
+			try { outFd?.sync() } catch (_: Exception) {}
 			try { out?.close() } catch (_: Exception) {}
 			try { outPfd?.close() } catch (_: Exception) {}
 		}
@@ -530,8 +592,8 @@ class LiveRecordingService : Service() {
 			}
 			is Outcome.Failed -> {
 				// A failed capture holds nothing worth keeping: a 0-byte (or
-				// never-created) destination. Delete the pending row.
-				uri?.let { runCatching { contentResolver.delete(it, null, null) } }
+				// never-created) destination. Delete the pending row / file.
+				uri?.let { RecordingTaskStore.deleteDestination(this, it) }
 				persist(state, status = "failed", errorMessage = outcome.message)
 				notifyTask(state, "Recording failed: ${outcome.message}", completed = true)
 			}

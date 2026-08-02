@@ -318,7 +318,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final lastLive = await StorageService.getIptvLastLiveChannel();
     final engineSupported = !kIsWeb &&
         Platform.isAndroid &&
-        await AndroidNativeDownloader.canPublishRecordings();
+        (await LiveRecordingService.engineSupport()) != 'unsupported';
     final desktopSched = DesktopScheduleService.instance.isSupported;
     final recordingEngineOn =
         engineSupported && await LiveRecordingService.engineEnabled();

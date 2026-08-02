@@ -119,9 +119,7 @@ object RecordingTaskStore {
 							),
 						)
 					} else {
-						uri?.let {
-							runCatching { context.contentResolver.delete(it, null, null) }
-						}
+						uri?.let { deleteDestination(context, it) }
 						put(
 							context,
 							entry.copy(
@@ -155,6 +153,12 @@ object RecordingTaskStore {
 	}
 
 	fun fileSize(context: Context, uri: Uri): Long {
+		if (uri.scheme == "file") {
+			return try {
+				val file = java.io.File(uri.path!!)
+				if (file.exists()) file.length() else -1L
+			} catch (_: Exception) { -1L }
+		}
 		return try {
 			context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
 				java.io.FileInputStream(pfd.fileDescriptor).use { fis -> fis.channel.size() }
@@ -162,15 +166,41 @@ object RecordingTaskStore {
 		} catch (_: Exception) { -1L }
 	}
 
-	/** Clear IS_PENDING; false when the row could NOT be made visible (update
-	 *  threw or matched no rows). Callers persist that so the file stays
-	 *  recoverable instead of silently invisible. */
+	/** Make the finished recording user-visible. MediaStore rows get their
+	 *  IS_PENDING cleared; legacy `file://` destinations (pre-Q) are already
+	 *  visible on disk — a media scan just tells gallery-ish apps about them,
+	 *  and can't fail in a way that loses the file. Returns false only when a
+	 *  MediaStore row could NOT be published (callers persist that so the
+	 *  file stays recoverable instead of silently invisible). */
 	fun publishRow(context: Context, uri: Uri): Boolean {
+		if (uri.scheme == "file") {
+			runCatching {
+				android.media.MediaScannerConnection.scanFile(
+					context,
+					arrayOf(uri.path!!),
+					null,
+					null,
+				)
+			}
+			return true
+		}
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
 		val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
 		return runCatching {
 			context.contentResolver.update(uri, done, null, null)
 		}.getOrDefault(0) > 0
+	}
+
+	/** Remove a recording destination, whichever kind it is. */
+	fun deleteDestination(context: Context, uri: Uri) {
+		if (uri.scheme == "file") {
+			runCatching {
+				val file = java.io.File(uri.path!!)
+				if (file.exists()) file.delete()
+			}
+			return
+		}
+		runCatching { context.contentResolver.delete(uri, null, null) }
 	}
 
 	private fun prefs(context: Context) =

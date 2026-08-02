@@ -5695,10 +5695,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return engineRecordableUrl(url)?.let { RecordingRegistry.taskIdForUrl(it) }
     }
 
-    /** Record is offered only when the stream AND the OS can support it. */
+    /** Record is offered only when the stream AND the OS can support it.
+     *  Pre-Q needs-permission counts as offered: the button is how the user
+     *  triggers the storage grant in the first place. */
     private fun canRecordCurrentIptv(): Boolean {
         if (recordingEngineEnabled) {
-            if (!LiveRecordingService.isSupported()) return false
+            if (!LiveRecordingService.isSupported(this) &&
+                !LiveRecordingService.needsLegacyPermission(this)
+            ) {
+                return false
+            }
             val url = currentIptvStreamUrl ?: return false
             return engineRecordableUrl(url) != null
         }
@@ -5781,8 +5787,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             return
         }
-        if (!LiveRecordingService.isSupported()) {
-            Toast.makeText(this, "Recording needs Android 10 or newer", Toast.LENGTH_SHORT).show()
+        if (LiveRecordingService.needsLegacyPermission(this)) {
+            // Pre-Q: the grant IS the enable switch. Ask, tell the user to
+            // press Record again once allowed; onRequestPermissionsResult
+            // repaints the button.
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                legacyStoragePermissionRequestCode,
+            )
+            Toast.makeText(
+                this,
+                "Allow storage access, then press Record again",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        if (!LiveRecordingService.isSupported(this)) {
+            Toast.makeText(this, "Recording isn't available on this device", Toast.LENGTH_SHORT).show()
             return
         }
         val url = currentIptvStreamUrl
@@ -5828,7 +5850,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** Confirm-and-schedule for a FUTURE programme picked in the EPG guide.
      *  Everything stays native: the schedule store and alarms need no Dart. */
     private fun promptScheduleRecording(entry: IptvChannelEntry, program: IptvEpgProgram) {
-        if (!recordingEngineEnabled || !LiveRecordingService.isSupported()) {
+        if (!recordingEngineEnabled) {
+            Toast.makeText(this, "Scheduled recording isn't available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (LiveRecordingService.needsLegacyPermission(this)) {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                legacyStoragePermissionRequestCode,
+            )
+            Toast.makeText(
+                this,
+                "Allow storage access, then pick the programme again",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        if (!LiveRecordingService.isSupported(this)) {
             Toast.makeText(this, "Scheduled recording isn't available", Toast.LENGTH_SHORT).show()
             return
         }
@@ -5924,9 +5963,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nightModeButton?.visibility = View.VISIBLE
         iptvJumpButton?.visibility = if (live) View.VISIBLE else View.GONE
         iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
-        // Pre-Q has no destination for a recording at all — hide, don't tease.
+        // Visibility follows the ACTIVE recorder: the engine records pre-Q
+        // once storage is granted (and shows the button so it CAN be
+        // granted); the tee remains Q+-only.
+        val recorderAvailable = if (recordingEngineEnabled) {
+            LiveRecordingService.isSupported(this) ||
+                LiveRecordingService.needsLegacyPermission(this)
+        } else {
+            IptvRecordingController.isSupported
+        }
         iptvRecordButton?.visibility =
-            if (live && IptvRecordingController.isSupported) View.VISIBLE else View.GONE
+            if (live && recorderAvailable) View.VISIBLE else View.GONE
         updateRecordButtonState()
         if (!live && iptvGuideVisible) hideIptvGuide()
         if (live) {
@@ -11720,6 +11767,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    private val legacyStoragePermissionRequestCode = 7402
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == legacyStoragePermissionRequestCode) {
+            // Granted or not, the button's enabled/label state may change.
+            updateRecordButtonState()
+        }
     }
 
     override fun onResume() {

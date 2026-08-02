@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C5 · DVR Hub — IPTV Redesign</title>
+<style>
+  :root{
+    --bg:#070A18; --panel:#0D1226; --card:rgba(255,255,255,.05);
+    --line:rgba(255,255,255,.08); --dim:rgba(255,255,255,.55); --dim2:rgba(255,255,255,.34);
+    --acc1:#4F74FF; --acc2:#8A5CFF; --gold:#F5C042; --rec:#F43F5E; --live:#22C55E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:#EDEFFB;font:14px/1.45 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:34px 4vw 90px}
+  a{color:var(--acc1);text-decoration:none}
+  h1{font-size:26px;font-weight:800}
+  h1 .tag{background:linear-gradient(90deg,var(--acc1),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);margin:6px 0 30px;max-width:880px}
+  h2{font-size:15px;font-weight:700;color:var(--dim);letter-spacing:1.4px;text-transform:uppercase;margin:44px 0 16px}
+  .note{color:var(--dim2);font-size:12.5px;margin-top:10px;max-width:920px}
+  kbd{background:#181D33;border:1px solid var(--line);border-radius:5px;padding:1px 7px;font:600 11px monospace;color:var(--dim)}
+  .tv{width:min(1180px,96vw);aspect-ratio:16/9;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.5);display:flex;flex-direction:column}
+  .phone{width:375px;height:760px;background:var(--panel);border:1px solid var(--line);border-radius:34px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5);display:flex;flex-direction:column}
+  .row2{display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start}
+  .badge{font:800 8.5px/1 sans-serif;letter-spacing:.8px;padding:3px 6px;border-radius:4px}
+  .b-rec{background:rgba(244,63,94,.16);color:var(--rec)}
+  .b-live{background:rgba(34,197,94,.15);color:var(--live)}
+  .b-new{background:rgba(245,192,66,.15);color:var(--gold)}
+  .prog{height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+  .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--acc1),var(--acc2))}
+  .logo{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none}
+
+  /* tabs */
+  .tabs{display:flex;gap:6px;align-items:center;padding:16px 26px 12px;border-bottom:1px solid var(--line)}
+  .tab{padding:9px 18px;border-radius:10px;font-weight:800;font-size:13.5px;color:var(--dim)}
+  .tab.on{background:linear-gradient(90deg,var(--acc1),var(--acc2));color:#fff;box-shadow:0 6px 20px rgba(99,102,241,.4)}
+  .tab.focus{outline:2.5px solid var(--gold);outline-offset:2px}
+  .tabs .sp{flex:1}
+  .tabs .src{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-weight:700;font-size:12px;color:var(--dim)}
+  .tabs .recdot{display:flex;gap:7px;align-items:center;color:var(--rec);font-weight:800;font-size:11.5px}
+  .tabs .recdot i{width:8px;height:8px;border-radius:50%;background:var(--rec);box-shadow:0 0 10px var(--rec)}
+
+  /* library grid */
+  .lib{flex:1;padding:16px 26px;overflow:hidden}
+  .lib .hd{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .lib .hd .t{font-weight:800;font-size:16px}
+  .lib .hd .m{color:var(--dim2);font-size:12px}
+  .lib .hd .chip{margin-left:auto;padding:5px 12px;border-radius:99px;background:var(--card);border:1px solid var(--line);font-weight:700;font-size:11px;color:var(--dim)}
+  .lgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .rcard{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .rcard .thumb{aspect-ratio:16/9;position:relative;background:linear-gradient(160deg,#22306B,#472B75)}
+  .rcard .thumb .dur{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.65);border-radius:5px;padding:2.5px 7px;font-weight:700;font-size:10.5px}
+  .rcard .thumb .lv{position:absolute;left:8px;top:8px}
+  .rcard .bd{padding:10px 12px 11px}
+  .rcard .t{font-weight:700;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rcard .m{color:var(--dim2);font-size:10.5px;margin-top:3px}
+  .rcard.focus{outline:2.5px solid var(--gold);outline-offset:2px}
+  .storage{display:flex;align-items:center;gap:14px;padding:12px 26px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+  .storage .bar{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden}
+  .storage .bar i{display:block;height:100%;width:34%;background:linear-gradient(90deg,var(--acc1),var(--acc2))}
+  .keycaps{color:var(--dim2);font-size:11px;display:flex;gap:14px}
+
+  /* scheduled strip (tv) */
+  .schedstrip{border-top:1px solid var(--line);padding:12px 26px;background:rgba(255,255,255,.02)}
+  .schedstrip .h{color:var(--dim2);font-weight:800;font-size:10px;letter-spacing:1.3px;margin-bottom:8px}
+  .srow{display:flex;gap:12px;align-items:center;padding:6px 0;font-size:12.5px}
+  .srow .when{width:120px;flex:none;color:var(--dim);font-weight:700;font-size:11.5px}
+  .srow .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .srow .n b{font-weight:700}
+  .srow .ch{color:var(--dim2);font-size:11px;width:150px;flex:none}
+  .cd{background:rgba(245,192,66,.13);color:var(--gold);font-weight:800;font-size:10px;padding:3px 8px;border-radius:99px}
+
+  /* phone */
+  .p-body{flex:1;overflow:hidden;padding:0 0 8px}
+  .p-hd{display:flex;align-items:center;gap:10px;padding:16px 16px 12px}
+  .p-hd .t{font-weight:800;font-size:18px}
+  .p-hd .sp{flex:1}
+  .icbtn{width:34px;height:34px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;color:var(--dim);font-size:14px}
+  .p-sitem{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05)}
+  .p-sitem .dot{width:10px;height:10px;border-radius:50%;background:var(--rec);margin-top:5px;flex:none}
+  .p-sitem .dot.dim{background:rgba(255,255,255,.2)}
+  .p-sitem .t{font-weight:700;font-size:13.5px}
+  .p-sitem .m{color:var(--dim);font-size:11.5px;margin-top:2px}
+  .p-sitem .m2{color:var(--dim2);font-size:10.5px;margin-top:1px}
+  .fab{position:absolute;right:18px;bottom:86px;background:linear-gradient(90deg,var(--acc1),var(--acc2));border-radius:16px;padding:13px 20px;font-weight:800;font-size:13px;box-shadow:0 10px 30px rgba(99,102,241,.5)}
+  .p-tabs{display:flex;border-top:1px solid var(--line);background:rgba(4,6,16,.8)}
+  .p-tab{flex:1;text-align:center;padding:10px 0 14px;color:var(--dim2);font-size:10px;font-weight:700}
+  .p-tab i{display:block;font-size:17px;font-style:normal;margin-bottom:3px}
+  .p-tab.on{color:#C9BBFF}
+</style></head><body>
+
+<h1>Concept 5 · <span class="tag">DVR Hub</span></h1>
+<p class="sub">Recording becomes the identity: IPTV reorganizes into four destinations — <b>Watch · Guide ·
+Library · Scheduled</b>. Library is the in-app recordings browser the engine has been missing (play, resume bars,
+NEW badges, delete, storage meter); Scheduled is a real agenda with countdowns and conflict warnings. Watch and
+Guide carry the live/browse duties (Concept 1’s shelves and Concept 2’s grid slot straight in).</p>
+
+<h2>Android TV — Library tab</h2>
+<div class="tv">
+  <div class="tabs">
+    <div class="tab">Watch</div><div class="tab">Guide</div><div class="tab on focus">Library</div><div class="tab">Scheduled</div>
+    <div class="sp"></div>
+    <div class="recdot"><i></i> RECORDING 1</div>
+    <div class="src">⚡ 8K ▾</div>
+    <div class="src">🔍</div><div class="src">⚙</div>
+  </div>
+  <div class="lib">
+    <div class="hd"><div class="t">Recordings</div><div class="m">12 items · newest first</div><div class="chip">All sources ▾</div><div class="chip" style="margin-left:8px">Sort: Date ▾</div></div>
+    <div class="lgrid">
+      <div class="rcard focus">
+        <div class="thumb"><span class="lv badge b-rec">● RECORDING</span><div class="dur">1:12:41</div></div>
+        <div class="bd"><div class="t">Arsenal vs Newcastle</div><div class="m">HUB PREMIER 1 · today 08:30 · 1.2 GB</div></div>
+      </div>
+      <div class="rcard">
+        <div class="thumb" style="background:linear-gradient(160deg,#173a5e,#3b2c86)"><span class="lv badge b-new">NEW</span><div class="dur">2:03:10</div></div>
+        <div class="bd"><div class="t">Man United vs Brighton</div><div class="m">SKY SPORT NEWS · today 09:30 · 2.1 GB</div><div class="prog" style="margin-top:7px"><i style="width:0%"></i></div></div>
+      </div>
+      <div class="rcard">
+        <div class="thumb" style="background:linear-gradient(160deg,#5e173a,#2c3a86)"><div class="dur">1:58:22</div></div>
+        <div class="bd"><div class="t">Hungarian GP — Qualifying</div><div class="m">SKY F1 UHD · yesterday · 3.4 GB</div><div class="prog" style="margin-top:7px"><i style="width:64%"></i></div></div>
+      </div>
+      <div class="rcard">
+        <div class="thumb" style="background:linear-gradient(160deg,#175e4c,#2c5586)"><div class="dur">0:47:05</div></div>
+        <div class="bd"><div class="t">Newsday</div><div class="m">BBC NEWS · Thu · 480 MB</div><div class="prog" style="margin-top:7px"><i style="width:100%"></i></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="schedstrip">
+    <div class="h">UP NEXT — SCHEDULED</div>
+    <div class="srow"><div class="when"><span class="cd">in 1h 12m</span></div><div class="n"><b>Chelsea vs Sunderland</b></div><div class="ch">SKY SPORT NEWS</div><div class="badge b-rec">11:30–13:30</div></div>
+    <div class="srow"><div class="when">today 15:30</div><div class="n"><b>Forest vs Man United</b> <span class="badge" style="background:rgba(244,63,94,.1);color:#FF8CA3">⚠ overlaps GP race</span></div><div class="ch">SKY SPORT NEWS</div><div class="badge b-rec">15:30–17:30</div></div>
+  </div>
+  <div class="storage">
+    <span>Downloads/Debrify/Recordings</span>
+    <div class="bar"><i></i></div>
+    <span>18.4 GB used · 41 GB free</span>
+    <div class="keycaps" style="margin-left:16px"><span><kbd>OK</kbd> Play</span><span><kbd>OK</kbd> hold · Delete/Rename</span></div>
+  </div>
+</div>
+<p class="note"><b>Notice:</b> the live capture appears IN the library as its own card (● RECORDING, growing
+duration/size) — stopping it, playing finished ones, and seeing storage all live in one place. The Scheduled strip
+surfaces the next timer and, critically, the <b>conflict warning</b> the 2-capture cap makes possible today and a
+1-capture desktop makes mandatory. Watch/Guide tabs reuse C1/C2 wholesale — this concept is mostly information
+architecture.</p>
+
+<h2>Phone — Scheduled tab</h2>
+<div class="row2">
+<div class="phone">
+  <div class="p-hd"><div class="t">Scheduled</div><div class="sp"></div><div class="icbtn">🔔</div><div class="icbtn">⚙</div></div>
+  <div class="p-body">
+    <div class="p-sitem"><div class="dot"></div><div style="flex:1">
+      <div class="t">Chelsea vs Sunderland</div>
+      <div class="m">SKY SPORT NEWS · Today · 11:30 – 13:30</div>
+      <div class="m2"><span class="cd">starts in 1h 12m</span></div></div>
+      <div class="icbtn">✕</div></div>
+    <div class="p-sitem"><div class="dot"></div><div style="flex:1">
+      <div class="t">Forest vs Man United</div>
+      <div class="m">SKY SPORT NEWS · Today · 15:30 – 17:30</div>
+      <div class="m2" style="color:#FF8CA3">⚠ overlaps “Hungarian GP — Race” — one will be skipped</div></div>
+      <div class="icbtn">✕</div></div>
+    <div class="p-sitem"><div class="dot dim"></div><div style="flex:1">
+      <div class="t">Hungarian GP — Race</div>
+      <div class="m">SKY F1 UHD · Tomorrow · 14:00 – 16:30</div>
+      <div class="m2">manual timer</div></div>
+      <div class="icbtn">✕</div></div>
+    <div style="padding:16px;color:var(--dim2);font-size:11.5px">Recordings run even with the app closed. Files land in Downloads/Debrify/Recordings.</div>
+  </div>
+  <div class="fab">＋ Schedule</div>
+  <div class="p-tabs">
+    <div class="p-tab"><i>📺</i>Watch</div>
+    <div class="p-tab"><i>☰</i>Guide</div>
+    <div class="p-tab"><i>🎬</i>Library</div>
+    <div class="p-tab on"><i>⏰</i>Scheduled</div>
+  </div>
+</div>
+<div style="max-width:420px">
+  <h2 style="margin-top:0">Settings in this concept</h2>
+  <p class="note" style="margin-top:0">The Recording section GROWS into the hub’s config: default recording
+  quality-of-life (end padding on/off for manual timers, concurrent cap display, storage location + meter) — and
+  everything navigational (scheduled list, library) moves OUT of settings onto the tabs where it belongs. Sources/
+  lists/startup keep the two-pane.</p>
+  <p class="note"><b>Why this concept:</b> you just built a DVR nobody can see. This makes it the headline —
+  and Library is the missing piece users will ask for the day recording ships.</p>
+  <p class="note"><b>Watch out:</b> four tabs is a bigger navigation change than the others; zap-first users must
+  still get to live TV in one press (Watch tab = startup-channel behavior preserved).</p>
+</div>
+</div>
+
+<p style="margin-top:50px"><a href="index.html">← All concepts</a></p>
+</body></html>

@@ -175,8 +175,10 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       unawaited(() async {
         final on = await LiveRecordingService.engineEnabled();
         if (!on) return;
-        final canPublish = await AndroidNativeDownloader.canPublishRecordings();
-        if (canPublish && mounted) {
+        // needs_permission still shows the REC rows — pressing one requests
+        // the pre-Q storage grant.
+        final support = await LiveRecordingService.engineSupport();
+        if (support != 'unsupported' && mounted) {
           setState(() => _recordSchedulingAvailable = true);
         }
       }());
@@ -1253,6 +1255,17 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     if (!LiveRecordingService.isSchedulableUrl(channel.url)) return;
     final recordUrl = LiveRecordingService.engineRecordableUrl(channel.url);
     if (recordUrl == null || !mounted) return;
+    if (Platform.isAndroid &&
+        !await LiveRecordingService.ensureEngineReady()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Storage access is needed to save recordings'),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
     String clock(DateTime t) => MaterialLocalizations.of(context)
         .formatTimeOfDay(TimeOfDay.fromDateTime(t));
     final confirmed = await showDialog<bool>(
