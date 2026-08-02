@@ -135,6 +135,161 @@ class MainActivity : FlutterActivity() {
 
     private fun isTelevision(): Boolean = televisionDetected
 
+    /**
+     * Copy [path] into the MediaStore (`Download/<subDir>`) so it becomes
+     * user-visible, then delete the source. Mirrors
+     * MediaStoreDownloadService.createViaMediaStore. Used to publish an IPTV
+     * recording that libmpv wrote to app-private storage. Runs on a worker
+     * thread; returns the content URI string or null on failure.
+     *
+     * Pre-Q there is no MediaStore.Downloads class and the app holds no
+     * WRITE_EXTERNAL_STORAGE, so publishing is impossible: return null and let
+     * the caller keep the recording at its app-private path (touching the
+     * class would throw NoClassDefFoundError — an Error, uncatchable by the
+     * catch below, on this worker thread it would take the process down).
+     */
+    private fun saveRecordingToMediaStore(
+        path: String,
+        fileName: String,
+        subDir: String,
+        mimeType: String,
+    ): String? {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return null
+        val source = java.io.File(path)
+        if (!source.exists()) return null
+        // Held outside the try so EVERY unsuccessful exit — including a throw
+        // from openOutputStream/copyTo (disk full, storage revoked) — can drop
+        // the pending row instead of leaking it, invisible, forever.
+        var created: android.net.Uri? = null
+        return try {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, "Download/$subDir")
+                put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val resolver = contentResolver
+            val uri = resolver.insert(
+                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                values,
+            ) ?: return null
+            created = uri
+            val wrote = resolver.openOutputStream(uri)?.use { out ->
+                java.io.FileInputStream(source).use { input -> input.copyTo(out) }
+                true
+            } ?: false
+            if (!wrote) {
+                runCatching { resolver.delete(uri, null, null) }
+                return null
+            }
+            val done = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+            }
+            val published = runCatching {
+                resolver.update(uri, done, null, null)
+            }.getOrDefault(0) > 0
+            if (!published) {
+                // The copy landed but can't be made visible (volume ejected,
+                // provider refused). Reporting success here would be a lie that
+                // costs the user the recording: an invisible pending row, and
+                // the source deleted below. Drop the row and fail — the caller
+                // keeps the file at its app-private path.
+                runCatching { resolver.delete(uri, null, null) }
+                created = null
+                return null
+            }
+            created = null
+            runCatching { source.delete() }
+            uri.toString()
+        } catch (e: Exception) {
+            created?.let { runCatching { contentResolver.delete(it, null, null) } }
+            null
+        }
+    }
+
+    // ── Pending-recording registry ──────────────────────────────────────────
+    // Durability for IPTV recording publication without a foreground service:
+    // Dart registers a recording's temp path the moment libmpv starts writing
+    // it, and the entry is forgotten only after a SUCCESSFUL publish. If the
+    // process dies mid-recording, mid-copy (Home-press publish on a plain
+    // thread), or the MediaStore publish fails outright, the temp file is
+    // still on disk and the entry still in prefs — the sweep on next launch
+    // publishes it then. A pending row leaked by a killed copy is reaped by
+    // MediaStore itself (~week); the bytes are what must survive, and they do.
+
+    private val pendingRecordingLock = Any()
+
+    private fun pendingRecordingPrefs() =
+        getSharedPreferences("debrify_pending_recordings", MODE_PRIVATE)
+
+    /** Entry format: path|fileName|subDir|mimeType. Safe: sanitized recording
+     *  filenames and app-storage paths never contain '|'. */
+    private fun rememberPendingRecording(
+        path: String,
+        fileName: String,
+        subDir: String,
+        mimeType: String,
+    ) {
+        synchronized(pendingRecordingLock) {
+            val prefs = pendingRecordingPrefs()
+            val entries = HashSet(prefs.getStringSet("entries", emptySet()) ?: emptySet())
+            entries.add(listOf(path, fileName, subDir, mimeType).joinToString("|"))
+            prefs.edit().putStringSet("entries", entries).apply()
+        }
+    }
+
+    private fun forgetPendingRecording(path: String) {
+        synchronized(pendingRecordingLock) {
+            val prefs = pendingRecordingPrefs()
+            val entries = HashSet(prefs.getStringSet("entries", emptySet()) ?: emptySet())
+            if (entries.removeAll { it == path || it.startsWith("$path|") }) {
+                prefs.edit().putStringSet("entries", entries).apply()
+            }
+        }
+    }
+
+    /** Publish every registered recording that never made it to Downloads.
+     *  Runs once per process at engine setup. The snapshot is taken
+     *  SYNCHRONOUSLY, before configureFlutterEngine installs the method
+     *  channel — so an entry a LIVE tee recording registers moments later can
+     *  never enter it. (Snapshotting inside the worker thread would race that
+     *  registration, and the sweep both copies mid-write AND deletes the
+     *  source it copied — destroying the active recording.) Entries in the
+     *  snapshot are by definition from a previous process, whose writer is
+     *  dead. */
+    private fun retryPendingRecordingPublishes() {
+        if (pendingRecordingRetryRan) return
+        pendingRecordingRetryRan = true
+        val entries: List<String> = synchronized(pendingRecordingLock) {
+            (pendingRecordingPrefs().getStringSet("entries", emptySet()) ?: emptySet()).toList()
+        }
+        if (entries.isEmpty()) return
+        Thread {
+            for (entry in entries) {
+                val parts = entry.split("|")
+                if (parts.size != 4) {
+                    // Unparseable — drop it rather than retry forever.
+                    synchronized(pendingRecordingLock) {
+                        val prefs = pendingRecordingPrefs()
+                        val set = HashSet(prefs.getStringSet("entries", emptySet()) ?: emptySet())
+                        if (set.remove(entry)) prefs.edit().putStringSet("entries", set).apply()
+                    }
+                    continue
+                }
+                val (path, fileName, subDir, mimeType) = parts
+                if (!java.io.File(path).exists()) {
+                    // Source gone (published elsewhere, or a cancelled stub) —
+                    // nothing left to recover.
+                    forgetPendingRecording(path)
+                    continue
+                }
+                val uri = saveRecordingToMediaStore(path, fileName, subDir, mimeType)
+                if (uri != null) forgetPendingRecording(path)
+                // On failure the entry stays for the launch after this one.
+            }
+        }.start()
+    }
+
     /** The Dart-owned setting (Settings → Home Page → Native Trailer Surface),
      *  read from the shared_preferences plugin's store. Must be checked here
      *  too: the transparency mode is fixed at activity creation, so flipping
@@ -330,6 +485,12 @@ class MainActivity : FlutterActivity() {
     }
 
     companion object {
+        /** Once per PROCESS, not per activity: recreation must not re-run the
+         *  pending-recording retry sweep alongside a live one. */
+        @JvmStatic
+        @Volatile
+        private var pendingRecordingRetryRan = false
+
         @JvmStatic
         private var androidTvPlayerChannel: MethodChannel? = null
 
@@ -576,6 +737,27 @@ class MainActivity : FlutterActivity() {
 		// Lets system audio-effect apps (Wavelet, OEM equalizers) attach to the
 		// phone player's audio session — see AudioEffectSession.
 		com.debrify.app.audio.AudioEffectSession.register(flutterEngine, this)
+		// Recordings a previous process never managed to publish (killed
+		// mid-copy, failed MediaStore update, died while recording).
+		retryPendingRecordingPublishes()
+		// Recording engine housekeeping, off the main thread: finalize captures
+		// a dead process left mid-write, and re-arm schedule alarms — the only
+		// revival path after a force-stop (no alarms, no boot broadcast reach a
+		// force-stopped app until the user opens it again).
+		Thread {
+			runCatching {
+				com.debrify.app.recording.RecordingTaskStore.reconcileDeadEntries(this)
+			}
+			runCatching {
+				// Tee recordings whose IS_PENDING clear failed in a dead
+				// activity (often during its own onDestroy) — the only retry
+				// path that survives the controller's in-memory list.
+				com.debrify.app.recording.TeeUnpublishedStore.retryAll(this)
+			}
+			runCatching {
+				com.debrify.app.recording.RecordingAlarmReceiver.registerAll(this)
+			}
+		}.start()
 		MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
 			when (call.method) {
 				"startMediaStoreDownload" -> {
@@ -621,7 +803,302 @@ class MainActivity : FlutterActivity() {
 						result.error("fgs_not_allowed", e.message, null)
 					}
 				}
-				"queryDownloadTasks" -> {
+				"canPublishRecordings" -> {
+					// MediaStore.Downloads is API 29+, and the app ships no
+					// WRITE_EXTERNAL_STORAGE, so below Q a finished recording
+					// could never leave app-private storage. Dart hides the
+					// record control rather than write a file the user can't
+					// reach.
+					result.success(
+						android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
+					)
+				}
+				"saveFileToMediaStore" -> {
+						val path = call.argument<String>("path")
+						val fileName = call.argument<String>("fileName") ?: "recording.ts"
+						val subDir = call.argument<String>("subDir") ?: "Debrify/Recordings"
+						val mimeType = call.argument<String>("mimeType") ?: "video/mp2t"
+						if (path.isNullOrEmpty()) {
+							result.error("bad_args", "path is required", null)
+							return@setMethodCallHandler
+						}
+						// Copy off the main thread (recordings can be large); post
+						// the MethodChannel result back on the main thread. Only
+						// SUCCESS clears the registry entry — a failed or killed
+						// copy leaves it for the next-launch retry sweep.
+						Thread {
+							val savedUri = saveRecordingToMediaStore(path, fileName, subDir, mimeType)
+							if (savedUri != null) forgetPendingRecording(path)
+							runOnUiThread {
+								if (savedUri != null) result.success(savedUri)
+								else result.error("save_failed", "could not save file", null)
+							}
+						}.start()
+					}
+					"registerPendingRecording" -> {
+						// Called when libmpv STARTS writing a recording, so the
+						// file survives any later death of the process: the
+						// next-launch sweep publishes whatever is on disk.
+						val path = call.argument<String>("path")
+						val fileName = call.argument<String>("fileName") ?: "recording.ts"
+						val subDir = call.argument<String>("subDir") ?: "Debrify/Recordings"
+						val mimeType = call.argument<String>("mimeType") ?: "video/mp2t"
+						if (path.isNullOrEmpty()) {
+							result.error("bad_args", "path is required", null)
+							return@setMethodCallHandler
+						}
+						rememberPendingRecording(path, fileName, subDir, mimeType)
+						result.success(true)
+					}
+					// ── Recording engine (LiveRecordingService) ─────────────
+					"startLiveRecording" -> {
+						val url = call.argument<String>("url")
+						val fileName = call.argument<String>("fileName") ?: "recording.ts"
+						val channelName = call.argument<String>("channelName") ?: "Live channel"
+						val maxDurationMs = call.argument<Number>("maxDurationMs")?.toLong()
+							?: com.debrify.app.recording.LiveRecordingService.MAX_DURATION_DEFAULT_MS
+						@Suppress("UNCHECKED_CAST")
+						val headers = call.argument<HashMap<String, String>>("headers") ?: hashMapOf()
+						if (url.isNullOrEmpty()) {
+							result.error("bad_args", "url is required", null)
+							return@setMethodCallHandler
+						}
+						if (!com.debrify.app.recording.LiveRecordingService.isSupported()) {
+							result.error("engine_unsupported", "requires Android 10+", null)
+							return@setMethodCallHandler
+						}
+						if (com.debrify.app.recording.RecordingRegistry.live.size >=
+							com.debrify.app.recording.LiveRecordingService.MAX_CONCURRENT
+						) {
+							result.error(
+								"recording_limit_reached",
+								"limit is ${com.debrify.app.recording.LiveRecordingService.MAX_CONCURRENT}",
+								null,
+							)
+							return@setMethodCallHandler
+						}
+						// ONE atomic claim-or-existing across the live registry
+						// AND the pending claims: separate reads could straddle
+						// the worker's pending→live move, see the url in neither
+						// map, and mint an id the service then discards as a
+						// duplicate. The claim placed here is cleared by the
+						// service on every resolution path (registered /
+						// rejected / failed) — no timers involved.
+						val taskId = "rec-${System.currentTimeMillis()}"
+						val existingId = com.debrify.app.recording.RecordingRegistry
+							.claimOrExisting(url, taskId)
+						if (existingId != null) {
+							// Same channel already being captured (or mid-start):
+							// hand back the responsible task instead of opening a
+							// second identical connection.
+							result.success(existingId)
+							return@setMethodCallHandler
+						}
+						val intent = com.debrify.app.recording.LiveRecordingService.buildStartIntent(
+							context = this,
+							taskId = taskId,
+							url = url,
+							fileName = fileName,
+							channelName = channelName,
+							headers = headers,
+							maxDurationMs = maxDurationMs,
+						)
+						try {
+							androidx.core.content.ContextCompat.startForegroundService(this, intent)
+							result.success(taskId)
+						} catch (e: Exception) {
+							// The service never saw the intent; nothing will
+							// resolve the claim — take it back ourselves.
+							com.debrify.app.recording.RecordingRegistry
+								.resolvePendingStart(url, taskId)
+							result.error("fgs_not_allowed", e.message, null)
+						}
+					}
+					"stopLiveRecording" -> {
+						val taskId = call.argument<String>("taskId")
+						if (taskId.isNullOrEmpty()) {
+							result.error("bad_args", "taskId required", null)
+							return@setMethodCallHandler
+						}
+						val intent = Intent(this, com.debrify.app.recording.LiveRecordingService::class.java).apply {
+							action = com.debrify.app.recording.LiveRecordingService.ACTION_STOP
+							putExtra(com.debrify.app.recording.LiveRecordingService.EXTRA_TASK_ID, taskId)
+						}
+						// The service is necessarily foreground while a capture
+						// runs, so a plain startService reaches it from anywhere.
+						try {
+							startService(intent)
+							result.success(true)
+						} catch (e: Exception) {
+							result.error("stop_failed", e.message, null)
+						}
+					}
+					"stopAllLiveRecordings" -> {
+						val intent = Intent(this, com.debrify.app.recording.LiveRecordingService::class.java).apply {
+							action = com.debrify.app.recording.LiveRecordingService.ACTION_STOP_ALL
+						}
+						try {
+							startService(intent)
+							result.success(true)
+						} catch (e: Exception) {
+							result.error("stop_failed", e.message, null)
+						}
+					}
+					"queryLiveRecordings" -> {
+						// Reconcile first so a process death shows up as a
+						// finalized recording, never a phantom "recording" row.
+						Thread {
+							val list = try {
+								com.debrify.app.recording.RecordingTaskStore.reconcileDeadEntries(this)
+								com.debrify.app.recording.RecordingTaskStore.all(this).values.map { e ->
+									val live = com.debrify.app.recording.RecordingRegistry.live[e.taskId]
+									mapOf(
+										"taskId" to e.taskId,
+										"status" to if (live != null) "recording" else e.status,
+										"url" to e.url,
+										"fileName" to e.fileName,
+										"channelName" to e.channelName,
+										"bytes" to (live?.bytes ?: e.bytes),
+										"startedAtMs" to e.startedAtMs,
+										"uri" to e.uri,
+										"errorMessage" to e.errorMessage,
+										"updatedAt" to e.updatedAt,
+									)
+								}
+							} catch (e: Exception) {
+								null
+							}
+							runOnUiThread {
+								if (list != null) result.success(list)
+								else result.error("query_failed", "recordings query failed", null)
+							}
+						}.start()
+					}
+					"forgetLiveRecording" -> {
+						val taskId = call.argument<String>("taskId")
+						if (taskId.isNullOrEmpty()) {
+							result.error("bad_args", "taskId required", null)
+							return@setMethodCallHandler
+						}
+						com.debrify.app.recording.RecordingTaskStore.remove(this, taskId)
+						result.success(true)
+					}
+					// ── Scheduled recordings ────────────────────────────────
+					"scheduleRecording" -> {
+						val url = call.argument<String>("url")
+						val channelName = call.argument<String>("channelName") ?: "Live channel"
+						val programmeTitle = call.argument<String>("programmeTitle") ?: ""
+						val startMs = call.argument<Number>("startMs")?.toLong()
+						val endMs = call.argument<Number>("endMs")?.toLong()
+						val force = call.argument<Boolean>("force") ?: false
+						@Suppress("UNCHECKED_CAST")
+						val headers = call.argument<HashMap<String, String>>("headers") ?: hashMapOf()
+						if (url.isNullOrEmpty() || startMs == null || endMs == null) {
+							result.error("bad_args", "url/startMs/endMs required", null)
+							return@setMethodCallHandler
+						}
+						if (!com.debrify.app.recording.LiveRecordingService.isSupported()) {
+							result.error("engine_unsupported", "requires Android 10+", null)
+							return@setMethodCallHandler
+						}
+						if (url.startsWith("stremio-tv://")) {
+							result.error("unsupported_channel", "Stremio channels can't be scheduled", null)
+							return@setMethodCallHandler
+						}
+						// Without the exact-alarm grant the fire would arrive as an
+						// INEXACT broadcast, which carries no foreground-service
+						// start exemption — the recording could not reliably start
+						// at all. Refuse honestly instead of promising "a bit
+						// late"; the UI links straight to the grant.
+						if (!com.debrify.app.recording.RecordingAlarmReceiver.exactAlarmsGranted(this)) {
+							result.error(
+								"exact_alarms_required",
+								"allow exact alarms in system settings",
+								null,
+							)
+							return@setMethodCallHandler
+						}
+						val now = System.currentTimeMillis()
+						if (endMs <= now + 60_000L || endMs <= startMs) {
+							result.error("bad_time", "programme is over or times invalid", null)
+							return@setMethodCallHandler
+						}
+						val dup = com.debrify.app.recording.RecordingScheduleStore
+							.findDuplicate(this, url, startMs)
+						if (dup != null && !force) {
+							result.error("duplicate", "already scheduled", null)
+							return@setMethodCallHandler
+						}
+						val id = "sched-${System.currentTimeMillis()}"
+						com.debrify.app.recording.RecordingScheduleStore.put(
+							this,
+							com.debrify.app.recording.RecordingSchedule(
+								id = id,
+								channelName = channelName,
+								url = url,
+								headers = headers,
+								startMs = startMs,
+								endMs = endMs,
+								programmeTitle = programmeTitle,
+								createdAt = now,
+							),
+						)
+						com.debrify.app.recording.RecordingAlarmReceiver.registerAll(this)
+						result.success(mapOf(
+							"id" to id,
+							"exact" to com.debrify.app.recording.RecordingAlarmReceiver
+								.exactAlarmsGranted(this),
+						))
+					}
+					"cancelScheduledRecording" -> {
+						val id = call.argument<String>("id")
+						if (id.isNullOrEmpty()) {
+							result.error("bad_args", "id required", null)
+							return@setMethodCallHandler
+						}
+						com.debrify.app.recording.RecordingScheduleStore.remove(this, id)
+						com.debrify.app.recording.RecordingAlarmReceiver.cancelAlarm(this, id)
+						result.success(true)
+					}
+					"listScheduledRecordings" -> {
+						val list = com.debrify.app.recording.RecordingScheduleStore.all(this)
+							.values
+							.sortedBy { it.startMs }
+							.map { s ->
+								mapOf(
+									"id" to s.id,
+									"channelName" to s.channelName,
+									"url" to s.url,
+									"programmeTitle" to s.programmeTitle,
+									"startMs" to s.startMs,
+									"endMs" to s.endMs,
+								)
+							}
+						result.success(list)
+					}
+					"exactAlarmState" -> {
+						result.success(
+							com.debrify.app.recording.RecordingAlarmReceiver.exactAlarmsGranted(this),
+						)
+					}
+					"openExactAlarmSettings" -> {
+						if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+							try {
+								startActivity(
+									Intent(
+										android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+										android.net.Uri.parse("package:$packageName"),
+									),
+								)
+								result.success(true)
+							} catch (e: Exception) {
+								result.success(false)
+							}
+						} else {
+							result.success(false)
+						}
+					}
+					"queryDownloadTasks" -> {
 					// Native truth for Dart reconciliation: the persisted store
 					// merged with the live in-memory registry. A stored
 					// "running" with no live worker means the process died

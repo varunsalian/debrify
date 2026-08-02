@@ -16,6 +16,8 @@ import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
 import '../services/android_native_downloader.dart';
+import '../services/desktop_recording_service.dart';
+import '../services/live_recording_service.dart';
 import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/alldebrid_service.dart';
@@ -515,6 +517,61 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// right-hand one was painted from launch state a zap never refreshed.
   bool get _iptvZapBannerOwnsIdentity => _currentIptvChannel?.isLive == true;
 
+  // ── IPTV recording (libmpv `stream-record`) ─────────────────────────────
+  /// True once the player is confirmed to run on a native (libmpv) backend —
+  /// recording is unavailable on the web backend.
+  bool _recordingSupported = false;
+  bool _isRecording = false;
+  /// Filesystem path libmpv is writing the active recording to.
+  String? _recordingTempPath;
+
+  /// Watches for the app leaving the foreground. A TEE recording here is
+  /// backed by nothing but this widget — no foreground service — so once the
+  /// app is backgrounded the process can be killed with the file never
+  /// published. Finishing at that moment mirrors what the native TV player
+  /// does in onStop, and costs nothing: a backgrounded player isn't reading
+  /// bytes. ENGINE recordings ignore all of this — surviving backgrounding is
+  /// their whole reason to exist.
+  AppLifecycleListener? _recordingLifecycle;
+
+  /// The recording ENGINE's capture of the CURRENTLY PLAYING live channel
+  /// (LiveRecordingService task id), or null. Independent of the tee's
+  /// [_isRecording]: an engine capture belongs to the service, not this
+  /// widget, so nothing in this screen's lifecycle may stop it implicitly.
+  String? _engineTaskId;
+
+  /// Engine-vs-tee flag (Settings → IPTV → Recording), loaded at player setup.
+  bool _engineFlagOn = false;
+
+  /// Supersedes stale engine-state refreshes (zap during a query round-trip).
+  int _engineRefreshTicket = 0;
+
+  /// Tap on mpv's log stream while a TEE recording is armed. stream-record
+  /// failing INSIDE mpv (its own fopen refused, demuxer that can't dump) is
+  /// completely invisible otherwise — the property set succeeds, Dart sees no
+  /// error, and no file ever appears. Only errors surface by default (the
+  /// player config requests error-level logs), which is exactly the band
+  /// stream-record failures log in.
+  StreamSubscription<mk.PlayerLog>? _recordLogSub;
+
+  /// The desktop recorder's capture, when this screen started one. Desktop
+  /// has no tee (mpv can't mux on media_kit's libs) and no Android engine —
+  /// this raw HTTP copy is the only recorder there. It survives zaps but is
+  /// stopped when the player screen closes: with no notifications on desktop,
+  /// this screen's Record button is the only stop control it has.
+  DesktopRecordingCapture? _desktopCapture;
+
+  /// Bumped whenever a stop, a channel change or a teardown supersedes an
+  /// in-flight [_startRecording]. That start does async work (storage lookup,
+  /// mkdir) during which `_isRecording` is still false, so the stop-if-
+  /// recording checks elsewhere cannot see it; without this token the awaits
+  /// could resume and arm libmpv on the NEW channel under the OLD channel's
+  /// filename, or arm an already-disposed player and leave the file untracked.
+  int _recordingStartGen = 0;
+
+  /// Record is offered only for live IPTV on a libmpv backend.
+  bool get _canRecord => _recordingSupported && _iptvZapBannerOwnsIdentity;
+
   /// Bumped whenever the guide reports a browse the user drove (a category
   /// pick, a search, a source change). An in-flight re-anchor that predates
   /// the change must not land: it would reset the ring and the persisted
@@ -806,6 +863,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // raised from several places that never go through _toggleControls
     // (volume keys, pointer wake). Watching the notifier catches all of them.
     _controlsVisible.addListener(_onControlsVisibilityChanged);
+
+    // onPause fires on the transition to AppLifecycleState.paused — Android's
+    // onStop, i.e. Home or an app switch. Picture-in-Picture keeps the
+    // activity visible and reports `inactive` instead, so a PiP'd stream keeps
+    // recording.
+    _recordingLifecycle = AppLifecycleListener(
+      onPause: () => unawaited(_stopRecording(userInitiated: false)),
+    );
 
     // Launch-time subtitles (e.g. YouTube captions): wrap into a single loaded
     // provider group so they appear in the subtitle menu without an addon
@@ -1606,6 +1671,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
     _playerCreated = true;
     _videoController = mkv.VideoController(_player);
+    // libmpv exposes `stream-record`; the web backend does not. Gate the
+    // record control on having a native player — and, on Android, on the
+    // finished file being publishable at all. Below API 29 there is no
+    // MediaStore.Downloads and no WRITE_EXTERNAL_STORAGE, so a recording
+    // could only sit in app-private storage the user can't reach — offering
+    // the button would just be a way to lose footage.
+    //
+    // Deny-by-default: Android starts unsupported and flips true only on a
+    // positive probe. The opposite order would leave a rebuild window where
+    // an API 21–28 device shows Record, and a tap in that window starts a
+    // recording whose Stop button the probe then hides.
+    final nativeBackend = _player.platform is mk.NativePlayer;
+    _recordingSupported = nativeBackend && !Platform.isAndroid;
+    if (nativeBackend && Platform.isAndroid) {
+      unawaited(
+        AndroidNativeDownloader.canPublishRecordings().then((canPublish) {
+          if (!canPublish || !mounted) return;
+          setState(() => _recordingSupported = true);
+        }),
+      );
+      // Engine flag + any capture of this channel already running (a recording
+      // started in an earlier player session survives into this one).
+      unawaited(
+        LiveRecordingService.engineEnabled().then((on) {
+          if (!mounted) return;
+          _engineFlagOn = on;
+          if (on) unawaited(_refreshEngineRecordingState());
+        }),
+      );
+    }
 
     // Must happen before the first open() — mpv reads both audio options when
     // it creates the audio output, which is on first playback.
@@ -4042,9 +4137,536 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// The desktop capture, when it belongs to the CURRENTLY PLAYING channel —
+  /// asked of the SERVICE, not this screen's own field, so a capture the
+  /// desktop SCHEDULER started shows up on (and stops from) the Record button
+  /// too when its channel is being watched.
+  DesktopRecordingCapture? _desktopCaptureForCurrent() {
+    final capture = DesktopRecordingService.instance.active;
+    if (capture == null) return null;
+    final channel = _currentIptvChannel;
+    if (channel == null) return null;
+    final playing = _playingLiveUrl(channel);
+    if (playing == null) return null;
+    if (capture.url == playing) return capture;
+    final twin = LiveRecordingService.xtreamTsTwin(playing);
+    return (twin != null && capture.url == twin) ? capture : null;
+  }
+
+  Future<void> _toggleRecording() async {
+    // Desktop capture of the current channel: stop it.
+    final desktopCapture = _desktopCaptureForCurrent();
+    if (desktopCapture != null) {
+      final savedPath = desktopCapture.path;
+      final bytes = await desktopCapture.stop();
+      if (!mounted) return;
+      setState(() => _desktopCapture = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            bytes > 0
+                ? 'Recording saved: $savedPath'
+                : 'Recording failed — nothing was captured',
+          ),
+        ),
+      );
+      return;
+    }
+    // Engine capture of the current channel: stop it. Finalization is async in
+    // the service; its "Saved" notification is the confirmation.
+    final engineTask = _engineTaskId;
+    if (engineTask != null) {
+      setState(() => _engineTaskId = null);
+      final ok = await LiveRecordingService.stop(engineTask);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Recording stopped — saving to Downloads/Debrify/Recordings'
+                : "Couldn't stop recording",
+          ),
+        ),
+      );
+      return;
+    }
+    if (_isRecording) {
+      await _stopRecording();
+      return;
+    }
+    // Engine first on Android: its capture survives zaps, Home, even the app
+    // dying. The tee stays as the fallback — and as the only recorder for true
+    // HLS, which mpv can capture but the engine cannot.
+    if (Platform.isAndroid && _engineFlagOn && _recordingSupported) {
+      final channel = _currentIptvChannel;
+      final recordUrl = await _engineRecordUrlForCurrent();
+      if (channel != null && recordUrl != null) {
+        final result = await LiveRecordingService.start(
+          url: recordUrl,
+          fileName: _recordingFileName(channel.name),
+          channelName: channel.name,
+          headers: channel.playbackHeaders,
+        );
+        if (!mounted) return;
+        if (result.ok) {
+          setState(() => _engineTaskId = result.id);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Recording in background — keeps going if you zap or leave. '
+                'Stop from here or the notification.',
+              ),
+            ),
+          );
+        } else if (result.errorCode == 'recording_limit_reached') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Recording limit reached (2 at a time)')),
+          );
+        } else if (result.errorCode == 'engine_unsupported' ||
+            result.errorCode == 'fgs_not_allowed' ||
+            result.errorCode == 'missing_plugin') {
+          // Engine unreachable: the tee still works, with its semantics.
+          await _startRecording();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Couldn't start recording")),
+          );
+        }
+        return;
+      }
+      // recordUrl == null: true segmented stream (no Xtream twin) — only the
+      // tee can capture what mpv is demuxing. Fall through.
+    }
+    // Desktop: the raw HTTP capture is the ONLY recorder that works — the mpv
+    // tee is dead on media_kit's stock libs (no muxers in its FFmpeg). Never
+    // fall through to the tee here; for unrecordable streams say so instead
+    // of starting something that provably writes nothing.
+    if (DesktopRecordingService.instance.isSupported && _recordingSupported) {
+      final channel = _currentIptvChannel;
+      final recordUrl = await _engineRecordUrlForCurrent();
+      if (channel == null) return;
+      if (recordUrl == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "This channel can't be recorded on desktop (HLS stream)",
+            ),
+          ),
+        );
+        return;
+      }
+      if (DesktopRecordingService.instance.active != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Already recording another channel — stop that one first',
+            ),
+          ),
+        );
+        return;
+      }
+      // Raw byte copy → the capture IS a transport stream: .ts, not the
+      // tee's .mkv.
+      final path = await _recordingTargetPath(channel.name, extension: 'ts');
+      // The screen may have closed during that await — dispose() has already
+      // run and saw no capture to stop, so starting one NOW would leave it
+      // running unowned until the 6h cap.
+      if (!mounted) return;
+      final capture = DesktopRecordingService.instance.start(
+        url: recordUrl,
+        path: path,
+        channelName: channel.name,
+        headers: channel.playbackHeaders,
+        onFinished: (end, bytes) {
+          if (!mounted) return;
+          // Self-terminations (stream died, 6h cap) need a repaint and a
+          // word; user stops already reported in the toggle.
+          if (_desktopCapture != null && !_desktopCapture!.isActive) {
+            setState(() => _desktopCapture = null);
+          }
+          final message = switch (end) {
+            DesktopRecordingEnd.streamEnded =>
+              'Recording ended — the stream stopped',
+            DesktopRecordingEnd.durationCap => 'Recording saved (6h limit)',
+            DesktopRecordingEnd.failed => 'Recording failed — see logs',
+            DesktopRecordingEnd.stopped => null,
+          };
+          if (message != null) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(message)));
+          }
+        },
+      );
+      if (!mounted) return;
+      if (capture == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't start recording")),
+        );
+        return;
+      }
+      setState(() => _desktopCapture = capture);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Recording — keeps going while the player is open. '
+            'Stop from this button.',
+          ),
+        ),
+      );
+      return;
+    }
+    await _startRecording();
+  }
+
+  /// The URL actually PLAYING for [channel]. NOT `_currentStreamUrl` for
+  /// plain channels — the zap path never updates that field, so after a zap
+  /// it still holds the previous channel's URL, and matching on it would pin
+  /// the Record button (and its Stop!) to the wrong capture. The channel's
+  /// own URL is the identity for everything except Stremio, whose playing URL
+  /// is the resolved candidate only `_currentStreamUrl` knows.
+  String? _playingLiveUrl(IptvChannel channel) {
+    if (!channel.url.startsWith('stremio-tv://')) return channel.url;
+    final resolved = _currentStreamUrl;
+    if (resolved == null || resolved.startsWith('stremio-tv://')) return null;
+    return resolved;
+  }
+
+  /// The URL the ENGINE should capture for the current live channel, or null
+  /// when only the tee can record it. mpv's own `file-format` is ground truth
+  /// for what's actually playing (extension-less URLs lie); the URL shape is
+  /// the fallback when the probe is unavailable.
+  Future<String?> _engineRecordUrlForCurrent() async {
+    final channel = _currentIptvChannel;
+    if (channel == null || channel.isLive != true) return null;
+    final playing = _playingLiveUrl(channel);
+    if (playing == null || playing.isEmpty) return null;
+    // The engine speaks HTTP only. rtmp/rtsp/udp/... channels go to the tee —
+    // mpv plays them, so mpv can record them. Checked BEFORE the probe: mpv
+    // reports e.g. "flv" for RTMP, which would read as progressive below.
+    if (!playing.startsWith('http://') && !playing.startsWith('https://')) {
+      return null;
+    }
+    String format = '';
+    final platform = _player.platform;
+    if (platform is mk.NativePlayer) {
+      try {
+        format = await platform.getProperty('file-format');
+      } catch (_) {}
+    }
+    final lower = format.toLowerCase();
+    if (lower.contains('hls') || lower.contains('dash')) {
+      // Segmented for sure — only an Xtream `.ts` twin can rescue it.
+      return LiveRecordingService.xtreamTsTwin(playing);
+    }
+    if (lower.isNotEmpty) {
+      // Probe says progressive: record exactly what's playing.
+      return playing;
+    }
+    return LiveRecordingService.engineRecordableUrl(playing);
+  }
+
+  /// Re-derive [_engineTaskId] from the native registry — a capture may have
+  /// been started in an earlier player session, or stopped from the
+  /// notification while this screen was open.
+  Future<void> _refreshEngineRecordingState() async {
+    if (!Platform.isAndroid || !_engineFlagOn) return;
+    final channel = _currentIptvChannel;
+    if (channel == null || channel.isLive != true) {
+      if (_engineTaskId != null && mounted) {
+        setState(() => _engineTaskId = null);
+      }
+      return;
+    }
+    final ticket = ++_engineRefreshTicket;
+    final playing = _playingLiveUrl(channel);
+    if (playing == null) {
+      if (_engineTaskId != null) setState(() => _engineTaskId = null);
+      return;
+    }
+    final twin = LiveRecordingService.xtreamTsTwin(playing);
+    final recordings = await LiveRecordingService.query();
+    if (!mounted || ticket != _engineRefreshTicket) return;
+    String? found;
+    for (final r in recordings) {
+      if (r.isRecording && (r.url == playing || (twin != null && r.url == twin))) {
+        found = r.taskId;
+        break;
+      }
+    }
+    if (found != _engineTaskId) {
+      setState(() => _engineTaskId = found);
+    }
+  }
+
+  /// `<Channel>_<yyyyMMdd_HHmmss>.ts` — same shape as the tee's target path
+  /// (which additionally uniquifies against its own directory; MediaStore
+  /// uniquifies for the engine).
+  String _recordingFileName(String channelName) {
+    final safeName = channelName
+        .replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '_');
+    var base = safeName.isEmpty ? 'recording' : safeName;
+    if (base.length > 60) base = base.substring(0, 60);
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final stamp =
+        '${now.year}${two(now.month)}${two(now.day)}_'
+        '${two(now.hour)}${two(now.minute)}${two(now.second)}';
+    return '${base}_$stamp.ts';
+  }
+
+  /// Print mpv log lines that matter while a tee recording runs.
+  void _tapMpvLogsForRecording() {
+    _recordLogSub?.cancel();
+    _recordLogSub = _player.stream.log.listen((log) {
+      debugPrint('VideoPlayer: mpv[${log.level}] ${log.prefix}: ${log.text}');
+    });
+  }
+
+  void _untapMpvLogs() {
+    _recordLogSub?.cancel();
+    _recordLogSub = null;
+  }
+
+  Future<void> _startRecording() async {
+    if (!_playerCreated) return;
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) return;
+    final channel = _currentIptvChannel;
+    if (channel == null) return;
+    final gen = ++_recordingStartGen;
+    try {
+      final path = await _recordingTargetPath(channel.name);
+      final parent = Directory(path).parent;
+      if (!await parent.exists()) {
+        await parent.create(recursive: true);
+      }
+      // The channel (or the whole screen) may have gone while the storage work
+      // ran. Arming now would tee the NEW stream into the old channel's file.
+      if (gen != _recordingStartGen || !mounted || !_playerCreated) return;
+      _tapMpvLogsForRecording();
+      await platform.setProperty('stream-record', path);
+      // Read the property back: proves whether mpv actually ACCEPTED the
+      // target (a silent internal failure leaves it set but writes nothing —
+      // the log tap above catches that case).
+      var echoed = '';
+      try {
+        echoed = await platform.getProperty('stream-record');
+      } catch (_) {}
+      debugPrint(
+        'VideoPlayer: stream-record armed — mpv reports "$echoed" '
+        '(want "$path")',
+      );
+      if (gen != _recordingStartGen || !mounted) {
+        // Lost the race inside setProperty itself: disarm rather than leave an
+        // untracked recording running on someone else's stream.
+        _untapMpvLogs();
+        await _disarmStrayRecording(platform, path);
+        return;
+      }
+      setState(() {
+        _isRecording = true;
+        _recordingTempPath = path;
+      });
+      // Crash insurance: registered natively so the file gets published on
+      // next launch even if this process never reaches _stopRecording.
+      if (Platform.isAndroid) {
+        unawaited(AndroidNativeDownloader.registerPendingRecording(
+          path: path,
+          fileName: path.split(Platform.pathSeparator).last,
+          mimeType: 'video/x-matroska',
+        ));
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            // The tee records what the player reads, so on Android (where the
+            // engine exists as the contrast) say the semantics out loud.
+            Platform.isAndroid
+                ? 'Recording started (stops if you leave the channel)'
+                : 'Recording started',
+          ),
+        ),
+      );
+    } catch (e) {
+      _untapMpvLogs();
+      debugPrint('VideoPlayer: start recording failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not start recording')),
+      );
+    }
+  }
+
+  /// Undo a recording that got armed after its channel or screen went away.
+  /// The stub file is milliseconds old, so dropping it loses nothing a user
+  /// would recognise as a recording.
+  Future<void> _disarmStrayRecording(mk.NativePlayer platform, String path) async {
+    try {
+      await platform.setProperty('stream-record', '');
+    } catch (e) {
+      debugPrint('VideoPlayer: disarm stray recording failed: $e');
+    }
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      debugPrint('VideoPlayer: stray recording cleanup failed: $e');
+    }
+  }
+
+  /// Stop the active recording. Auto-stops (channel change / dispose) pass
+  /// [userInitiated] = false to stay quiet.
+  Future<void> _stopRecording({bool userInitiated = true}) async {
+    // A stop supersedes an in-flight start too — including one that has not
+    // yet flipped `_isRecording` and so is invisible to the check below.
+    _recordingStartGen++;
+    if (!_isRecording) return;
+    final path = _recordingTempPath;
+    final platform = _playerCreated ? _player.platform : null;
+    // Flip state first so a rapid re-tap / channel switch can't double-stop.
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _recordingTempPath = null;
+      });
+    } else {
+      _isRecording = false;
+      _recordingTempPath = null;
+    }
+    try {
+      if (platform is mk.NativePlayer) {
+        await platform.setProperty('stream-record', '');
+      }
+    } catch (e) {
+      debugPrint('VideoPlayer: stop recording failed: $e');
+    }
+    _untapMpvLogs();
+    if (path == null) return;
+    // VERIFY before claiming anything: mpv can accept `stream-record` and
+    // still write nothing (internal fopen refused, undumpable demuxer) — the
+    // first macOS test hit exactly that, with a "saved" message over an empty
+    // folder.
+    var fileBytes = 0;
+    try {
+      final file = File(path);
+      if (await file.exists()) fileBytes = await file.length();
+    } catch (_) {}
+    debugPrint(
+      'VideoPlayer: tee recording stopped — $fileBytes bytes on disk at $path',
+    );
+    final fileOk = fileBytes > 0;
+    // Publish to a user-visible location. On Android the file lives in
+    // app-private storage, so hand it to the native MediaStore publisher; on
+    // desktop it's already under the user's Downloads.
+    if (fileOk && Platform.isAndroid) {
+      unawaited(_publishRecording(path, userInitiated: userInitiated));
+    } else if (userInitiated && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            fileOk
+                ? 'Recording saved: $path'
+                : 'Recording failed — mpv wrote no file (see logs)',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _publishRecording(
+    String path, {
+    required bool userInitiated,
+  }) async {
+    var published = false;
+    try {
+      final fileName = path.split(Platform.pathSeparator).last;
+      final uri = await AndroidNativeDownloader.saveLocalFile(
+        path: path,
+        fileName: fileName,
+        mimeType: 'video/x-matroska',
+      );
+      published = uri != null;
+    } catch (e) {
+      debugPrint('VideoPlayer: publish recording failed: $e');
+    }
+    if (!userInitiated || !mounted) return;
+    // On failure, don't claim a save the user can't find: the file sits in
+    // app-private storage, its registry entry survives (only a successful
+    // publish clears it), and the next app launch re-attempts the publish.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          published
+              ? 'Recording saved to Downloads/Debrify/Recordings'
+              : "Recording couldn't be added to Downloads — "
+                  'will retry next launch',
+        ),
+      ),
+    );
+  }
+
+  /// A path no other recording is using. The second-resolution stamp alone
+  /// collides when the same channel is stopped and restarted inside one
+  /// second, and that collision is destructive: libmpv would truncate (or
+  /// append to) the previous file, and on Android the still-running publisher
+  /// deletes its source once copied — taking the NEW recording with it. An
+  /// existing file therefore means "in use": step aside with a suffix.
+  ///
+  /// Default `.mkv` (the TEE): mpv's recorder picks the output muxer from the
+  /// filename, and media_kit's decode-trimmed FFmpeg ships no `mpegts` muxer
+  /// ("recorder: Output format not found" → recording silently disabled —
+  /// found live on macOS). Matroska is the only sane target IF a muxer
+  /// exists. Raw byte copiers (the desktop capture, the Android engine) pass
+  /// `extension: 'ts'` — their bytes ARE a transport stream, no muxer
+  /// involved.
+  Future<String> _recordingTargetPath(
+    String channelName, {
+    String extension = 'mkv',
+  }) async {
+    final safeName = channelName
+        .replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '_');
+    var base = safeName.isEmpty ? 'recording' : safeName;
+    if (base.length > 60) base = base.substring(0, 60);
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final stamp =
+        '${now.year}${two(now.month)}${two(now.day)}_'
+        '${two(now.hour)}${two(now.minute)}${two(now.second)}';
+
+    Directory dir;
+    if (Platform.isAndroid) {
+      dir = (await getExternalStorageDirectory()) ??
+          await getApplicationDocumentsDirectory();
+    } else {
+      dir = (await getDownloadsDirectory()) ??
+          await getApplicationDocumentsDirectory();
+    }
+    final sep = Platform.pathSeparator;
+    final prefix = '${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp';
+
+    var candidate = '$prefix.$extension';
+    for (var n = 2; n < 100 && await File(candidate).exists(); n++) {
+      candidate = '${prefix}_$n.$extension';
+    }
+    // Pathological (99 restarts in one second): fall back to microseconds,
+    // which cannot collide with any of the names tried above.
+    if (await File(candidate).exists()) {
+      candidate = '${prefix}_${now.microsecondsSinceEpoch}.$extension';
+    }
+    return candidate;
+  }
+
   Future<void> _switchToIptvChannel(int index) async {
     final channels = _effectiveIptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
+    // A channel change ends the current recording (the stream identity flips).
+    // Unconditional: it must also cancel a start still awaiting its storage
+    // setup, which `_isRecording` would not report yet.
+    await _stopRecording(userInitiated: false);
     _cancelPendingIptvCatchup();
     final ticket = ++_iptvSwitchTicket;
     // This switch owns the error gate now (a superseded ladder's state doesn't
@@ -4199,6 +4821,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _rainbowActive = false;
       if (mounted) setState(() {});
     });
+
+    // The NEW channel may itself already be recording (engine captures keep
+    // running across zaps) — repaint the Record button from native truth.
+    if (_engineFlagOn) unawaited(_refreshEngineRecordingState());
   }
 
   /// Open [url] and wait until it demonstrably plays (a decoded video size or
@@ -4209,6 +4835,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     String url, {
     Duration timeout = const Duration(seconds: 12),
   }) async {
+    // Every live media replacement ends the recording, not just a channel zap:
+    // picking another row in the Sources sheet lands here via
+    // _switchToIptvSource, and mpv makes no promise about `stream-record`
+    // across an open() — it may quietly stop or overwrite the file while
+    // `_isRecording` still claims it is running. Redundant (and harmless) on
+    // the _switchToIptvChannel path, which already stopped before its ladder.
+    await _stopRecording(userInitiated: false);
+
     final completer = Completer<bool>();
     void finish(bool ok) {
       if (!completer.isCompleted) completer.complete(ok);
@@ -6153,6 +6787,58 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    _recordingLifecycle?.dispose();
+    // Desktop capture THIS SCREEN started: closing the player closes its only
+    // stop control, so finish it now (flushes and closes the file; a raw .ts
+    // is playable however it ends). Captures the desktop SCHEDULER started
+    // are deliberately left running — they have their own end timer and their
+    // contract is "while the app is open", not "while the player is open".
+    final ownCapture = _desktopCapture;
+    if (ownCapture != null) {
+      ownCapture.onFinished = null;
+      if (ownCapture.isActive) unawaited(ownCapture.stop());
+      _desktopCapture = null;
+    }
+    // Finalize any in-progress recording before the player is torn down. The
+    // bump also cancels a start still awaiting its storage setup (it would
+    // otherwise arm a disposed player and leave the file untracked).
+    //
+    // Done inline rather than through `_stopRecording`: dispose() cannot await,
+    // so that call would race `_player.dispose()` a few lines below AND reach
+    // its own setState() mid-teardown. The order that matters is preserved by
+    // hand — state cleared now, publish handed off immediately (it reads the
+    // .ts from disk and never touches mpv), property clear issued best-effort.
+    // A live .ts stays playable even if its tail is lost to the teardown, and
+    // the lifecycle listener above already caught the common backgrounding
+    // case with a clean, awaited flush.
+    _recordingStartGen++;
+    if (_isRecording) {
+      final path = _recordingTempPath;
+      final platform = _playerCreated ? _player.platform : null;
+      _isRecording = false;
+      _recordingTempPath = null;
+      if (platform is mk.NativePlayer) {
+        // Publication is CHAINED after the property clear, not run alongside
+        // it: libmpv keeps appending until stream-record is cleared, and a
+        // concurrent copy could reach EOF early, publish a truncated file and
+        // delete the source out from under the still-writing muxer.
+        unawaited(
+          platform
+              .setProperty('stream-record', '')
+              .catchError(
+                (Object e) => debugPrint(
+                    'VideoPlayer: stop recording on dispose failed: $e'),
+              )
+              .whenComplete(() {
+            if (path != null && Platform.isAndroid) {
+              _publishRecording(path, userInitiated: false);
+            }
+          }),
+        );
+      } else if (path != null && Platform.isAndroid) {
+        unawaited(_publishRecording(path, userInitiated: false));
+      }
+    }
     _iptvCatchupRequests.cancel();
     // Detach from PiP (disarms auto-enter); ignored if a newer player already
     // took ownership, so route replacement can't disarm the incoming screen.
@@ -6186,6 +6872,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _seekHud.dispose();
     _verticalHud.dispose();
     _speedHoldHud.dispose();
+    _recordLogSub?.cancel();
     _posSub?.cancel();
     _durSub?.cancel();
     _playSub?.cancel();
@@ -6824,7 +7511,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // The dock carries its own copy of the panel, so the floating one goes the
     // instant the dock opens. Fading it would cross-dissolve two copies of the
     // same panel at two different heights.
-    if (_controlsVisible.value) _hideIptvZapBanner(immediate: true);
+    if (_controlsVisible.value) {
+      _hideIptvZapBanner(immediate: true);
+      // The Record button is about to be looked at — make sure it reflects
+      // engine captures stopped from the notification (which this screen
+      // otherwise never hears about).
+      if (_engineFlagOn) unawaited(_refreshEngineRecordingState());
+    }
     _syncIptvBannerTicker();
   }
 
@@ -8016,6 +8709,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 : null,
                             showPipButton: PipService.isOwner(this),
                             onPip: PipService.isOwner(this) ? _enterPip : null,
+                            hasRecord: _canRecord,
+                            isRecording: _isRecording ||
+                                _engineTaskId != null ||
+                                _desktopCaptureForCurrent() != null,
+                            onRecord: _canRecord ? _toggleRecording : null,
                           ),
                         ),
                       );

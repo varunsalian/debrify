@@ -72,6 +72,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Focus node for the first connection card (Real-Debrid) for TV navigation
   final FocusNode _firstCardFocusNode = FocusNode(debugLabel: 'firstCardFocus');
 
+  /// IPTV recording engine availability (Android 10+); gates its search entry.
+  bool _recordingSearchable = false;
+
   // TV content focus handler (stored for proper unregistration)
   VoidCallback? _tvContentFocusHandler;
 
@@ -135,6 +138,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadSummaries();
     _loadSupportConfig();
     _loadDownloadLocation();
+    // IPTV recording exists only where its engine can run (Android 10+) — the
+    // search index must not advertise it elsewhere.
+    if (!kIsWeb && Platform.isAndroid) {
+      AndroidNativeDownloader.canPublishRecordings().then((supported) {
+        if (supported && mounted) {
+          setState(() => _recordingSearchable = true);
+        }
+      });
+    }
 
     // Register TV sidebar focus handler (tab index 8 = Settings)
     _tvContentFocusHandler = () {
@@ -793,6 +805,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
         onTap: _openIptvSettings,
       ),
+      if (_recordingSearchable)
+        SettingsSearchEntry(
+          icon: Icons.fiber_manual_record_rounded,
+          title: 'IPTV recording',
+          subtitle:
+              'Background recording engine and scheduled recordings from the '
+              'TV guide',
+          category: 'Connections',
+          keywords: const [
+            'record',
+            'recording',
+            'recordings',
+            'dvr',
+            'capture',
+            'schedule',
+            'scheduled',
+            'timer',
+            'rec',
+            'iptv',
+            'live tv',
+            'engine',
+          ],
+          onTap: _openIptvSettings,
+        ),
       conn(_indexerManagersInfo, const [
         'indexer',
         'torznab',

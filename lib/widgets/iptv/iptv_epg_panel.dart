@@ -583,12 +583,16 @@ class IptvSchedulePane extends StatelessWidget {
   /// Rows only offer it when [IptvEpgService.isCatchupAvailable] says so.
   final void Function(EpgProgramme programme)? onPlayProgramme;
 
+  /// Schedule a future programme for recording (see [EpgScheduleList]).
+  final void Function(EpgProgramme programme)? onRecordProgramme;
+
   const IptvSchedulePane({
     super.key,
     required this.channel,
     required this.onClose,
     this.isTelevision = true,
     this.onPlayProgramme,
+    this.onRecordProgramme,
   });
 
   @override
@@ -671,6 +675,7 @@ class IptvSchedulePane extends StatelessWidget {
                     channel: channel,
                     isTelevision: isTelevision,
                     onPlayProgramme: onPlayProgramme,
+                    onRecordProgramme: onRecordProgramme,
                   ),
                 ),
               ],
@@ -691,6 +696,7 @@ Future<void> showIptvScheduleSheet(
   BuildContext context,
   IptvChannel channel, {
   void Function(EpgProgramme programme)? onPlayProgramme,
+  void Function(EpgProgramme programme)? onRecordProgramme,
   bool isTelevision = false,
 }) {
   return showModalBottomSheet<void>(
@@ -753,6 +759,9 @@ Future<void> showIptvScheduleSheet(
                         Navigator.of(sheetContext).pop();
                         onPlayProgramme(programme);
                       },
+                // Scheduling shows its own confirm dialog and leaves the sheet
+                // up — unlike replay, nothing is about to cover the screen.
+                onRecordProgramme: onRecordProgramme,
               ),
             ),
           ],
@@ -783,11 +792,18 @@ class EpgScheduleList extends StatefulWidget {
   final IptvChannel channel;
   final bool isTelevision;
   final void Function(EpgProgramme programme)? onPlayProgramme;
+
+  /// Schedule a FUTURE programme for recording (the engine's alarm path).
+  /// Null hides the affordance entirely — callers gate on the recording
+  /// engine being on, Android 10+, and the channel being engine-recordable.
+  final void Function(EpgProgramme programme)? onRecordProgramme;
+
   const EpgScheduleList({
     super.key,
     required this.channel,
     required this.isTelevision,
     this.onPlayProgramme,
+    this.onRecordProgramme,
   });
 
   @override
@@ -949,6 +965,8 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
           final replayable =
               onPlay != null &&
               IptvEpgService.isCatchupAvailable(widget.channel, programme);
+          final onRecord = widget.onRecordProgramme;
+          final recordable = onRecord != null && programme.start.isAfter(now);
           return _ScheduleRow(
             programme: programme,
             isNow: index == _nowIndex,
@@ -958,6 +976,7 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
                 widget.isTelevision &&
                 (index == _nowIndex || (_nowIndex == -1 && index == 1)),
             onPlay: replayable ? () => onPlay(programme) : null,
+            onRecord: recordable ? () => onRecord(programme) : null,
           );
         },
       ),
@@ -977,6 +996,12 @@ class _ScheduleRow extends StatefulWidget {
   /// tag instead of fading out like ordinary past entries.
   final VoidCallback? onPlay;
 
+  /// Non-null when this FUTURE programme can be scheduled for recording —
+  /// OK/tap opens the confirm flow, and the row wears a REC tag. Mutually
+  /// exclusive with [onPlay] by construction (replay is past, record is
+  /// future).
+  final VoidCallback? onRecord;
+
   const _ScheduleRow({
     required this.programme,
     required this.isNow,
@@ -984,6 +1009,7 @@ class _ScheduleRow extends StatefulWidget {
     required this.isTelevision,
     required this.autofocus,
     this.onPlay,
+    this.onRecord,
   });
 
   @override
@@ -1067,15 +1093,21 @@ class _ScheduleRowState extends State<_ScheduleRow> {
             const Padding(
               padding: EdgeInsets.only(left: 8),
               child: _EpgTag('REPLAY', dim: true),
+            )
+          else if (widget.onRecord != null)
+            const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: _EpgTag('REC', dim: true),
             ),
         ],
       ),
     );
 
     if (!widget.isTelevision) {
-      if (!replayable) return row;
+      final onTap = widget.onPlay ?? widget.onRecord;
+      if (onTap == null) return row;
       return GestureDetector(
-        onTap: widget.onPlay,
+        onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: row,
       );
@@ -1098,10 +1130,11 @@ class _ScheduleRowState extends State<_ScheduleRow> {
         }
       },
       onKeyEvent: (node, event) {
-        // OK replays an archived programme; on anything else it's swallowed
-        // so it can't fall through to whatever sits behind the pane.
+        // OK replays an archived programme, or schedules a future one for
+        // recording; on inert rows it's swallowed so it can't fall through to
+        // whatever sits behind the pane.
         if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
-          widget.onPlay?.call();
+          (widget.onPlay ?? widget.onRecord)?.call();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;

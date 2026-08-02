@@ -44,8 +44,9 @@ class IptvStartupChannelChoice {
 /// and a startup channel is something the user has already decided matters —
 /// which is what starring it means. Returns null if dismissed.
 Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
-  BuildContext context,
-) async {
+  BuildContext context, {
+  String title = 'Startup channel',
+}) async {
   final lists = await StorageService.getIptvLists();
   final snapshot = await StorageService.getIptvMembershipSnapshot();
   final choices = <IptvStartupChannelChoice>[];
@@ -97,20 +98,26 @@ Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
   if (!context.mounted) return null;
   return showDialog<IptvStartupChannelChoice>(
     context: context,
-    builder: (context) => _StartupChannelDialog(choices: choices, lists: lists),
+    builder: (context) =>
+        _StartupChannelDialog(choices: choices, lists: lists, title: title),
   );
 }
 
 class _StartupChannelDialog extends StatelessWidget {
   final List<IptvStartupChannelChoice> choices;
   final List<IptvListMeta> lists;
+  final String title;
 
-  const _StartupChannelDialog({required this.choices, required this.lists});
+  const _StartupChannelDialog({
+    required this.choices,
+    required this.lists,
+    required this.title,
+  });
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Startup channel'),
+      title: Text(title),
       content: SizedBox(
         width: 420,
         child: choices.isEmpty

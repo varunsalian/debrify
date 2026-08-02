@@ -63,6 +63,7 @@ import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
+import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
 
 /// Flutter's default image cache (1000 images / 100 MB) is far too large for a
@@ -188,6 +189,10 @@ Future<void> main() async {
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
+  // Desktop scheduled recordings (Tier 1: fire while the app is running).
+  // Arms stored timers + late-joins anything already in its window; no-op on
+  // non-desktop platforms.
+  unawaited(DesktopScheduleService.instance.init());
   // Prepare the paged IPTV catalog while the user is on the startup/home
   // experience. The expensive file open and schema work run on a worker
   // isolate after first paint; opening IPTV later shares this future or finds

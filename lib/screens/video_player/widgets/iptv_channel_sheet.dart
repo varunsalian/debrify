@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../services/android_native_downloader.dart';
+import '../../../services/desktop_schedule_service.dart';
 import '../../../services/iptv_epg_service.dart';
+import '../../../services/live_recording_service.dart';
 import '../../../services/storage_service.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
@@ -104,6 +108,10 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   _FocusZone _focusZone = _FocusZone.channels;
   _CompactPane _compactPane = _CompactPane.channels;
   IptvChannel? _scheduleChannel;
+
+  /// Engine flag + Android 10+ probe passed — future EPG rows may offer
+  /// "Record" (still gated per channel on recordability).
+  bool _recordSchedulingAvailable = false;
   late List<String> _categories;
   late String? _sourceId;
   late String _sourceName;
@@ -158,6 +166,23 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       _scheduleChannel = _channels.first;
     }
     unawaited(_loadFavorites());
+
+    // Whether future programmes may offer "Record": on Android, engine flag
+    // on AND the device can publish recordings (10+); on desktop, the in-app
+    // scheduler exists unconditionally. Per-channel recordability is checked
+    // where the schedule pane builds.
+    if (Platform.isAndroid) {
+      unawaited(() async {
+        final on = await LiveRecordingService.engineEnabled();
+        if (!on) return;
+        final canPublish = await AndroidNativeDownloader.canPublishRecordings();
+        if (canPublish && mounted) {
+          setState(() => _recordSchedulingAvailable = true);
+        }
+      }());
+    } else if (DesktopScheduleService.instance.isSupported) {
+      _recordSchedulingAvailable = true;
+    }
 
     // Slide + fade in
     _animController = AnimationController(
@@ -1202,10 +1227,106 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 : (programme) {
                     unawaited(widget.onPlayProgramme!(channel, programme));
                   },
+            // isSchedulableUrl, not engineRecordableUrl: with nobody watching
+            // at alarm time there is no player probe, so only URLs KNOWN to be
+            // progressive TS may be scheduled (an extensionless HLS URL would
+            // record playlist text and call it saved).
+            onRecordProgramme: !_recordSchedulingAvailable ||
+                    !LiveRecordingService.isSchedulableUrl(channel.url)
+                ? null
+                : (programme) {
+                    unawaited(_confirmScheduleRecording(channel, programme));
+                  },
           ),
         ),
       ],
     );
+  }
+
+  /// Confirm-and-schedule for a future programme. Self-contained: the sheet
+  /// holds the channel context (url, headers, name), so the host player never
+  /// needs to know scheduling exists.
+  Future<void> _confirmScheduleRecording(
+    IptvChannel channel,
+    EpgProgramme programme,
+  ) async {
+    if (!LiveRecordingService.isSchedulableUrl(channel.url)) return;
+    final recordUrl = LiveRecordingService.engineRecordableUrl(channel.url);
+    if (recordUrl == null || !mounted) return;
+    String clock(DateTime t) => MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay.fromDateTime(t));
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF14141D),
+        title: const Text(
+          'Record programme',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '${programme.title}\n'
+          '${channel.name} · ${clock(programme.start)} – ${clock(programme.stop)}',
+          style: const TextStyle(color: Colors.white70, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Record'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final result = DesktopScheduleService.instance.isSupported
+        ? await DesktopScheduleService.instance.add(
+            url: recordUrl,
+            channelName: channel.name,
+            programmeTitle: programme.title,
+            startMs: programme.start.millisecondsSinceEpoch,
+            endMs: programme.stop.millisecondsSinceEpoch,
+            headers: channel.playbackHeaders,
+          )
+        : await LiveRecordingService.schedule(
+            url: recordUrl,
+            channelName: channel.name,
+            programmeTitle: programme.title,
+            startMs: programme.start.millisecondsSinceEpoch,
+            endMs: programme.stop.millisecondsSinceEpoch,
+            headers: channel.playbackHeaders,
+          );
+    if (!mounted) return;
+    if (result.errorCode == 'exact_alarms_required') {
+      // Without the grant an inexact alarm couldn't legally start the
+      // recording service from the background, so scheduling is refused
+      // outright — offer the grant right here.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Allow "Alarms & reminders" for Debrify to schedule recordings',
+          ),
+          action: SnackBarAction(
+            label: 'Settings',
+            onPressed: () =>
+                unawaited(LiveRecordingService.openExactAlarmSettings()),
+          ),
+        ),
+      );
+      return;
+    }
+    final message = result.ok
+        ? 'Recording scheduled'
+        : switch (result.errorCode) {
+            'duplicate' => 'Already scheduled',
+            'overlap' => 'Overlaps another scheduled recording',
+            'bad_time' => 'This programme is already over',
+            _ => "Couldn't schedule recording",
+          };
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildKeyboardHints() {

@@ -51,6 +51,12 @@ class Controls extends StatelessWidget {
   final bool showPipButton;
   final VoidCallback? onPip;
 
+  /// Record control for live IPTV (libmpv `stream-record`). Shown only when a
+  /// live channel is playing on a native (libmpv) backend.
+  final bool hasRecord;
+  final bool isRecording;
+  final VoidCallback? onRecord;
+
   /// Optional panel glued to the top edge of the bottom bar, so the two read
   /// as one surface. Live IPTV puts its channel identity and now/next here:
   /// the dock owns this strip, so the zap banner joins it rather than
@@ -100,6 +106,9 @@ class Controls extends StatelessWidget {
     this.onShowStremioSources,
     this.showPipButton = false,
     this.onPip,
+    this.hasRecord = false,
+    this.isRecording = false,
+    this.onRecord,
     this.infoPanel,
   }) : super(key: key);
 
@@ -430,6 +439,17 @@ class Controls extends StatelessWidget {
                                     icon: Icons.swap_horiz_rounded,
                                     label: 'Sources',
                                     onPressed: onShowStremioSources!,
+                                    isCompact: true,
+                                  ),
+
+                                // Record button (live IPTV, libmpv backend)
+                                if (hasRecord && onRecord != null)
+                                  NetflixControlButton(
+                                    icon: isRecording
+                                        ? Icons.stop_circle_rounded
+                                        : Icons.fiber_manual_record_rounded,
+                                    label: isRecording ? 'Stop' : 'Record',
+                                    onPressed: onRecord!,
                                     isCompact: true,
                                   ),
 
