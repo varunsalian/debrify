@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/webdav_item.dart';
 import '../services/main_page_bridge.dart';
+import '../utils/platform_util.dart';
 
 import '../services/analytics_service.dart';
 import '../services/account_service.dart';
@@ -676,6 +677,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
+      onOpenNavigationSettings: _openNavigationSettings,
       isAndroidTv: _isAndroidTv,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
@@ -894,6 +896,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'setup',
         ],
       ),
+      if (!PlatformUtil.isAndroidTvCached)
+        nav(
+          SettingsRows.navigationStyle,
+          'General',
+          _openNavigationSettings,
+          keywords: const [
+            'navigation',
+            'nav',
+            'bottom bar',
+            'tabs',
+            'floating',
+            'classic',
+            'menu',
+          ],
+        ),
 
       // Search
       nav(
@@ -1448,6 +1465,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await pushSettingsPage(context, const MdblistSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
+  }
+
+  /// Phone/small-window chrome choice: classic bottom bar (default) vs the
+  /// floating glass button. Applies live — MainPageBridge tells the shell.
+  Future<void> _openNavigationSettings() async {
+    final current = await StorageService.getPhoneNavStyle();
+    if (!mounted) return;
+    Future<void> choose(String style) async {
+      await StorageService.setPhoneNavStyle(style);
+      MainPageBridge.navPrefsChanged?.call();
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        Widget option({
+          required IconData icon,
+          required String title,
+          required String subtitle,
+          required String value,
+        }) {
+          final selected = current == value;
+          return ListTile(
+            leading: Icon(
+              icon,
+              color: selected ? const Color(0xFFC7BFFF) : null,
+            ),
+            title: Text(
+              title,
+              style: TextStyle(
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+            trailing: selected
+                ? const Icon(Icons.check_rounded, color: Color(0xFFC7BFFF))
+                : null,
+            onTap: () {
+              Navigator.of(dialogContext).pop();
+              unawaited(choose(value));
+            },
+          );
+        }
+
+        return AlertDialog(
+          title: const Text('Navigation'),
+          contentPadding: const EdgeInsets.fromLTRB(0, 16, 0, 12),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              option(
+                icon: Icons.call_to_action_rounded,
+                title: 'Classic bar',
+                subtitle:
+                    'Bottom tabs \u2014 Home, three slots you pick, More '
+                    'holds the rest',
+                value: 'classic',
+              ),
+              option(
+                icon: Icons.blur_on_rounded,
+                title: 'Floating button',
+                subtitle: 'The glass button with the expanding menu',
+                value: 'floating',
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _openIptvSettings() async {
@@ -2686,6 +2772,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
+  final Future<void> Function() onOpenNavigationSettings;
   final bool isAndroidTv;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
@@ -2720,6 +2807,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenHomePageSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
+    required this.onOpenNavigationSettings,
     required this.isAndroidTv,
     required this.onClearDownloads,
     required this.onClearPlayback,
@@ -2782,6 +2870,13 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.remote,
                       onTap: () async => onOpenRemoteControl(),
                     ),
+                    // Phone/small-window chrome only — TVs navigate by
+                    // sidebar and never read the style.
+                    if (!isAndroidTv)
+                      SettingsTile.spec(
+                        SettingsRows.navigationStyle,
+                        onTap: onOpenNavigationSettings,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 24),

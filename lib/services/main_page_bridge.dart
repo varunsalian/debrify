@@ -9,6 +9,15 @@ import '../models/torbox_torrent.dart';
 
 class MainPageBridge {
   static void Function(int index)? switchTab;
+
+  /// Fired by Settings when the phone-nav style or bar slots change, so the
+  /// main shell swaps chrome without a restart.
+  static VoidCallback? navPrefsChanged;
+
+  /// Last loaded phone-nav style, for synchronous layout reads (e.g. the
+  /// keyword bar's clearance for the floating button, which the classic bar
+  /// doesn't have). 'classic' | 'floating'.
+  static String phoneNavStyleCached = 'classic';
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;

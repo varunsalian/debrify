@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C2 · Your Five</title>
+<style>
+  :root{--bg:#0D0B1A;--line:rgba(255,255,255,.08);--dim:rgba(255,255,255,.55);--dim2:rgba(255,255,255,.34);--acc1:#6366F1;--acc2:#8B5CF6;--gold:#F5C042}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#080714;color:#EDEFFB;font:14px/1.5 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:36px 4vw 80px}
+  a{color:inherit;text-decoration:none}
+  .back{color:var(--dim2);font-size:12px}
+  h1{font-size:24px;font-weight:800;margin:6px 0 4px}
+  h1 .tag{background:linear-gradient(90deg,var(--acc1),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);max-width:880px;margin-bottom:30px}
+  .sub b{color:#E4DCFF}
+  .row{display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start;margin-bottom:36px}
+  .cap{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim2);font-weight:800;margin:0 0 10px 2px}
+  .cap b{color:var(--gold)}
+
+  .phone{width:300px;height:620px;background:var(--bg);border-radius:26px;border:1px solid rgba(255,255,255,.12);overflow:hidden;position:relative;box-shadow:0 26px 70px rgba(0,0,0,.55)}
+  .status{height:26px;display:flex;justify-content:space-between;align-items:center;padding:0 16px;font-size:10px;color:var(--dim2)}
+  .page{position:absolute;top:26px;left:0;right:0;bottom:64px;padding:12px 14px;overflow:hidden}
+  .hero{height:150px;border-radius:14px;background:linear-gradient(140deg,#1D1A3E,#0F0D22);margin-bottom:12px}
+  .shelfcap{width:90px;height:9px;border-radius:3px;background:rgba(255,255,255,.14);margin:10px 0 8px}
+  .shelf{display:flex;gap:8px}
+  .poster{width:72px;height:104px;border-radius:9px;background:linear-gradient(160deg,#191631,#0E0C1F)}
+
+  .nav{position:absolute;left:0;right:0;bottom:0;height:64px;background:rgba(18,16,31,.97);border-top:1px solid var(--line);display:flex}
+  .it{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .it .ic{font-size:17px;line-height:1;filter:grayscale(.5) opacity(.75);position:relative}
+  .it .lb{font-size:9px;font-weight:700;color:var(--dim2);position:relative}
+  .it.on .ic{filter:none}
+  .it.on .lb{color:#C7BFFF}
+  .it.on .pillbg{position:absolute;width:46px;height:26px;border-radius:13px;background:linear-gradient(135deg,rgba(99,102,241,.32),rgba(139,92,246,.32));margin-top:-4px}
+
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#161327;border-radius:18px 18px 0 0;border-top:1px solid rgba(255,255,255,.12);padding:10px 16px 18px}
+  .grab{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin:2px auto 10px}
+  .sheethead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .sheett{font-size:11px;font-weight:800;letter-spacing:1.3px;color:var(--dim2)}
+  .editbtn{font-size:10px;font-weight:800;color:#C7BFFF;background:rgba(139,92,246,.18);border:1px solid rgba(139,92,246,.4);padding:4px 10px;border-radius:8px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .cell{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px 6px 10px;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .cell .ic{font-size:19px}
+  .cell .lb{font-size:9.5px;font-weight:700;color:var(--dim)}
+
+  .zonecap{font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--dim2);margin:14px 2px 8px}
+  .zonecap b{color:var(--gold)}
+  .zone{border:1.5px dashed rgba(245,192,66,.35);border-radius:14px;padding:10px;display:flex;gap:8px;flex-wrap:wrap;min-height:56px}
+  .zone.menu{border-color:rgba(255,255,255,.14)}
+  .chip{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:7px 10px;font-size:10.5px;font-weight:700;color:#DDD9F2}
+  .chip .h{color:var(--dim2);font-size:11px}
+  .chip.fixed{opacity:.55;border-style:dotted}
+
+  .notes{max-width:880px;background:linear-gradient(140deg,rgba(99,102,241,.09),rgba(139,92,246,.06));border:1px solid rgba(139,92,246,.3);border-radius:16px;padding:20px 24px}
+  .notes h2{font-size:15px;font-weight:800;margin-bottom:10px}
+  .notes li{color:var(--dim);font-size:13px;margin:6px 0 6px 18px}
+  .notes b{color:#E4DCFF}
+</style></head><body>
+
+<a class="back" href="index.html">← concept gallery</a>
+<h1>Concept 2 — <span class="tag">Your Five</span> <span style="font-size:11px;color:#7CE7A5;background:rgba(124,231,165,.12);padding:4px 10px;border-radius:99px;vertical-align:middle;letter-spacing:1px;font-weight:800">RECOMMENDED</span></h1>
+<p class="sub">Concept 1's shell, one upgrade: <b>slots 2–4 belong to the user.</b> Home anchors the left, More anchors the
+right, and the middle three are whatever this person actually lives in — the IPTV-first user below picked
+IPTV · Downloads · Debrify TV. Defaults are exactly C1, so nobody is forced to learn anything; the edit hides
+behind the More sheet for those who want it. This matches Debrify's existing DNA: nav is already per-user
+(hidden integrations, gated Calendar).</p>
+
+<div class="row">
+  <div>
+    <div class="cap">A · A customized bar — this user's five</div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮ 5G</span></div>
+      <div class="page">
+        <div class="hero"></div>
+        <div class="shelfcap"></div>
+        <div class="shelf"><div class="poster"></div><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+        <div class="shelfcap"></div>
+        <div class="shelf"><div class="poster"></div><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+      </div>
+      <div class="nav">
+        <div class="it"><div class="ic">🏠</div><div class="lb">Home</div></div>
+        <div class="it on"><div class="pillbg"></div><div class="ic">📺</div><div class="lb">IPTV</div></div>
+        <div class="it"><div class="ic">⬇️</div><div class="lb">Downloads</div></div>
+        <div class="it"><div class="ic">🎬</div><div class="lb">Debrify TV</div></div>
+        <div class="it"><div class="ic">▦</div><div class="lb">More</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap">B · More sheet — with the Edit door</div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮ 5G</span></div>
+      <div class="page"><div class="hero"></div><div class="shelfcap"></div>
+        <div class="shelf"><div class="poster"></div><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="sheethead"><span class="sheett">ALL OF DEBRIFY</span><span class="editbtn">✎ Edit bar</span></div>
+        <div class="grid">
+          <div class="cell"><div class="ic">🧭</div><div class="lb">Discover</div></div>
+          <div class="cell"><div class="ic">☁️</div><div class="lb">Cloud</div></div>
+          <div class="cell"><div class="ic">▶️</div><div class="lb">YouTube</div></div>
+          <div class="cell"><div class="ic">🛰️</div><div class="lb">Stremio TV</div></div>
+          <div class="cell"><div class="ic">📅</div><div class="lb">Calendar</div></div>
+          <div class="cell"><div class="ic">🧩</div><div class="lb">Addons</div></div>
+          <div class="cell"><div class="ic">⚙️</div><div class="lb">Settings</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap">C · Edit mode — drag between bar and menu</div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮ 5G</span></div>
+      <div class="scrim" style="top:0"></div>
+      <div class="sheet" style="top:130px;border-radius:18px 18px 0 0">
+        <div class="grab"></div>
+        <div class="sheethead"><span class="sheett">EDIT NAVIGATION</span><span class="editbtn">Done</span></div>
+        <div class="zonecap">IN YOUR BAR · <b>pick 3</b> (Home &amp; More are fixed)</div>
+        <div class="zone">
+          <span class="chip fixed">🏠 Home</span>
+          <span class="chip"><span class="h">≡</span> 📺 IPTV</span>
+          <span class="chip"><span class="h">≡</span> ⬇️ Downloads</span>
+          <span class="chip"><span class="h">≡</span> 🎬 Debrify TV</span>
+          <span class="chip fixed">▦ More</span>
+        </div>
+        <div class="zonecap" style="color:rgba(255,255,255,.3)">IN THE MENU</div>
+        <div class="zone menu">
+          <span class="chip"><span class="h">≡</span> 🧭 Discover</span>
+          <span class="chip"><span class="h">≡</span> ☁️ Cloud</span>
+          <span class="chip"><span class="h">≡</span> ▶️ YouTube</span>
+          <span class="chip"><span class="h">≡</span> 🛰️ Stremio TV</span>
+          <span class="chip"><span class="h">≡</span> 📅 Calendar</span>
+          <span class="chip"><span class="h">≡</span> 🧩 Addons</span>
+          <span class="chip"><span class="h">≡</span> ⚙️ Settings</span>
+        </div>
+        <div style="margin-top:14px;font-size:10px;color:var(--dim2);text-align:center">A tab that gets gated off (debrid removed, Trakt disconnected)<br>drops out of the bar and its slot falls back to the default.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <h2>Why this wins</h2>
+  <li><b>Day one it IS Concept 1</b> — classic defaults, no setup, Ezrik never needs to find the edit.</li>
+  <li><b>The five are never wrong for long</b> — one drag fixes them, and gating (no debrid, no Trakt) self-heals the bar to defaults instead of leaving corpses.</li>
+  <li><b>House-consistent</b>: Debrify already lets users hide integrations from nav; this is the same philosophy pointed at phones.</li>
+  <li>Build: C1 + a reorder sheet + one persisted list; the morphing More slot and gating rules are shared with C1 unchanged.</li>
+</div>
+
+</body></html>

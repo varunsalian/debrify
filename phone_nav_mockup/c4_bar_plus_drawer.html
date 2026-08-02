@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C4 · Bar + Drawer</title>
+<style>
+  :root{--bg:#0D0B1A;--line:rgba(255,255,255,.08);--dim:rgba(255,255,255,.55);--dim2:rgba(255,255,255,.34);--acc1:#6366F1;--acc2:#8B5CF6;--gold:#F5C042}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#080714;color:#EDEFFB;font:14px/1.5 -apple-system,'SF Pro Text',Segoe UI,Roboto,sans-serif;padding:36px 4vw 80px}
+  a{color:inherit;text-decoration:none}
+  .back{color:var(--dim2);font-size:12px}
+  h1{font-size:24px;font-weight:800;margin:6px 0 4px}
+  h1 .tag{background:linear-gradient(90deg,var(--acc1),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--dim);max-width:860px;margin-bottom:30px}
+  .sub b{color:#E4DCFF}
+  .row{display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start;margin-bottom:36px}
+  .cap{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim2);font-weight:800;margin:0 0 10px 2px}
+
+  .phone{width:300px;height:620px;background:var(--bg);border-radius:26px;border:1px solid rgba(255,255,255,.12);overflow:hidden;position:relative;box-shadow:0 26px 70px rgba(0,0,0,.55)}
+  .status{height:26px;display:flex;justify-content:space-between;align-items:center;padding:0 16px;font-size:10px;color:var(--dim2)}
+  .appbar{height:44px;display:flex;align-items:center;gap:12px;padding:0 14px}
+  .appbar .burger{font-size:16px;color:#DDD9F2}
+  .appbar .t{font-size:15px;font-weight:800}
+  .page{position:absolute;top:70px;left:0;right:0;bottom:64px;padding:8px 14px;overflow:hidden}
+  .hero{height:140px;border-radius:14px;background:linear-gradient(140deg,#1D1A3E,#0F0D22);margin-bottom:12px}
+  .shelfcap{width:90px;height:9px;border-radius:3px;background:rgba(255,255,255,.14);margin:10px 0 8px}
+  .shelf{display:flex;gap:8px}
+  .poster{width:72px;height:104px;border-radius:9px;background:linear-gradient(160deg,#191631,#0E0C1F)}
+
+  .nav{position:absolute;left:0;right:0;bottom:0;height:64px;background:rgba(18,16,31,.97);border-top:1px solid var(--line);display:flex}
+  .it{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .it .ic{font-size:17px;line-height:1;filter:grayscale(.5) opacity(.75);position:relative}
+  .it .lb{font-size:9px;font-weight:700;color:var(--dim2);position:relative}
+  .it.on .ic{filter:none}
+  .it.on .lb{color:#C7BFFF}
+  .it.on .pillbg{position:absolute;width:46px;height:26px;border-radius:13px;background:linear-gradient(135deg,rgba(99,102,241,.32),rgba(139,92,246,.32));margin-top:-4px}
+
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+  .drawer{position:absolute;top:0;bottom:0;left:0;width:220px;background:#141224;border-right:1px solid rgba(255,255,255,.1);padding:18px 12px}
+  .brand{display:flex;align-items:center;gap:9px;margin:2px 6px 16px}
+  .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--acc1),var(--acc2))}
+  .brand .t{font-weight:800;font-size:14px}
+  .dsec{font-size:9px;font-weight:800;letter-spacing:1.4px;color:var(--dim2);margin:12px 8px 5px}
+  .drow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;font-size:12px;font-weight:700;color:#D9D5EC}
+  .drow .ic{font-size:14px}
+  .drow.on{background:linear-gradient(135deg,rgba(99,102,241,.25),rgba(139,92,246,.25));color:#E4DCFF}
+
+  .notes{max-width:860px;background:linear-gradient(140deg,rgba(99,102,241,.09),rgba(139,92,246,.06));border:1px solid rgba(139,92,246,.3);border-radius:16px;padding:20px 24px}
+  .notes h2{font-size:15px;font-weight:800;margin-bottom:10px}
+  .notes li{color:var(--dim);font-size:13px;margin:6px 0 6px 18px}
+  .notes b{color:#E4DCFF}
+</style></head><body>
+
+<a class="back" href="index.html">← concept gallery</a>
+<h1>Concept 4 — <span class="tag">Bar + Drawer</span></h1>
+<p class="sub">Classic Android in the <i>original</i> sense: a four-slot bottom bar for the daily core
+(<b>Home · Discover · IPTV · Downloads</b>) and a hamburger drawer carrying the complete sectioned list —
+the same sections the desktop rail uses. Nothing is ever more than the burger away, and the drawer doubles
+as a "you are here" map.</p>
+
+<div class="row">
+  <div>
+    <div class="cap">A · App bar + four-slot bottom bar</div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮ 5G</span></div>
+      <div class="appbar"><span class="burger">☰</span><span class="t">Home</span></div>
+      <div class="page">
+        <div class="hero"></div>
+        <div class="shelfcap"></div>
+        <div class="shelf"><div class="poster"></div><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+        <div class="shelfcap"></div>
+        <div class="shelf"><div class="poster"></div><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+      </div>
+      <div class="nav">
+        <div class="it on"><div class="pillbg"></div><div class="ic">🏠</div><div class="lb">Home</div></div>
+        <div class="it"><div class="ic">🧭</div><div class="lb">Discover</div></div>
+        <div class="it"><div class="ic">📺</div><div class="lb">IPTV</div></div>
+        <div class="it"><div class="ic">⬇️</div><div class="lb">Downloads</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap">B · The drawer — the full sectioned map</div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮ 5G</span></div>
+      <div class="appbar"><span class="burger">☰</span><span class="t">Home</span></div>
+      <div class="page"><div class="hero"></div><div class="shelfcap"></div>
+        <div class="shelf"><div class="poster"></div><div class="poster"></div><div class="poster"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="drawer">
+        <div class="brand"><div class="logo"></div><div class="t">Debrify</div></div>
+        <div class="dsec">MAIN</div>
+        <div class="drow on"><span class="ic">🏠</span> Home</div>
+        <div class="drow"><span class="ic">🧭</span> Discover</div>
+        <div class="drow"><span class="ic">⬇️</span> Downloads</div>
+        <div class="drow"><span class="ic">📅</span> Calendar</div>
+        <div class="dsec">BROWSE</div>
+        <div class="drow"><span class="ic">📺</span> IPTV</div>
+        <div class="drow"><span class="ic">▶️</span> YouTube</div>
+        <div class="dsec">TV</div>
+        <div class="drow"><span class="ic">🎬</span> Debrify TV</div>
+        <div class="drow"><span class="ic">🛰️</span> Stremio TV</div>
+        <div class="dsec">LIBRARY · SETUP</div>
+        <div class="drow"><span class="ic">☁️</span> Cloud</div>
+        <div class="drow"><span class="ic">🧩</span> Addons</div>
+        <div class="drow"><span class="ic">⚙️</span> Settings</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <h2>Why / why not</h2>
+  <li><b>The complete map is always one gesture away</b>, sectioned exactly like desktop — coherent cross-platform mental model.</li>
+  <li><b>Costs an app bar</b> — today's phone pages are edge-to-edge with no top chrome; the burger needs a home on every tab, which is a visual tax on all of them.</li>
+  <li><b>Drawers are the dated pattern</b> — Material moved away from them for primary nav; discoverability of edge-swipe is poor, and current-tab state inside the drawer is invisible until opened.</li>
+  <li>Build: low, but it reshapes every page's header — wider blast radius than it looks.</li>
+</div>
+
+</body></html>
