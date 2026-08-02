@@ -1245,9 +1245,10 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     );
   }
 
-  /// Confirm-and-schedule for a future programme. Self-contained: the sheet
-  /// holds the channel context (url, headers, name), so the host player never
-  /// needs to know scheduling exists.
+  /// Confirm-and-schedule for a now-airing (records the rest) or future
+  /// programme. Self-contained: the sheet holds the channel context (url,
+  /// headers, name), so the host player never needs to know scheduling
+  /// exists.
   Future<void> _confirmScheduleRecording(
     IptvChannel channel,
     EpgProgramme programme,
@@ -1268,6 +1269,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     if (!mounted) return;
     String clock(DateTime t) => MaterialLocalizations.of(context)
         .formatTimeOfDay(TimeOfDay.fromDateTime(t));
+    final airsNow = !programme.start.isAfter(DateTime.now()) &&
+        programme.stop.isAfter(DateTime.now());
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1278,7 +1281,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
         ),
         content: Text(
           '${programme.title}\n'
-          '${channel.name} · ${clock(programme.start)} – ${clock(programme.stop)}',
+          '${channel.name} · ${clock(programme.start)} – ${clock(programme.stop)}'
+          '${airsNow ? '\n\nAlready airing — records the rest, '
+              'from now until it ends.' : ''}',
           style: const TextStyle(color: Colors.white70, height: 1.4),
         ),
         actions: [
@@ -1332,7 +1337,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       return;
     }
     final message = result.ok
-        ? 'Recording scheduled'
+        ? (airsNow
+              ? 'Recording starts in a few seconds'
+              : 'Recording scheduled')
         : switch (result.errorCode) {
             'duplicate' => 'Already scheduled',
             'overlap' => 'Overlaps another scheduled recording',

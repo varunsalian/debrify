@@ -4406,6 +4406,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     String clock(DateTime t) => MaterialLocalizations.of(
       context,
     ).formatTimeOfDay(TimeOfDay.fromDateTime(t));
+    final airsNow = !programme.start.isAfter(DateTime.now()) &&
+        programme.stop.isAfter(DateTime.now());
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -4417,7 +4419,9 @@ class IptvResultsViewState extends State<IptvResultsView>
         content: Text(
           '${programme.title}\n'
           '${channel.name} · ${clock(programme.start)} – '
-          '${clock(programme.stop)}',
+          '${clock(programme.stop)}'
+          '${airsNow ? '\n\nAlready airing — records the rest, '
+              'from now until it ends.' : ''}',
           style: const TextStyle(color: Colors.white70, height: 1.4),
         ),
         actions: [
@@ -4456,7 +4460,9 @@ class IptvResultsViewState extends State<IptvResultsView>
       return 'Allow "Alarms & reminders" for Debrify to schedule recordings';
     }
     return result.ok
-        ? 'Recording scheduled'
+        ? (airsNow
+              ? 'Recording starts in a few seconds'
+              : 'Recording scheduled')
         : switch (result.errorCode) {
             'duplicate' => 'Already scheduled',
             'overlap' => 'Overlaps another scheduled recording',

@@ -9,9 +9,10 @@ import '../../utils/tv_keys.dart';
 import '../browse/brand_accent.dart';
 
 /// The Command Center stage's lower half: identity + now/next, an action row
-/// (Watch · Record · ♥ · Guide), and a compact "Today on <channel>" schedule
-/// whose FUTURE rows carry the inline REC affordance — "see what's on →
-/// schedule it" without leaving the page.
+/// (Watch · Record · ♥ · Guide), and a compact "Today on [channel]" schedule
+/// whose NOW and future rows carry an inline Record chip — "see what's on →
+/// record it" without leaving the page (the NOW row records the rest of the
+/// programme, ending on schedule).
 ///
 /// Perf contract (TV): the schedule fetch is debounced 450ms behind focus
 /// settling and served by IptvEpgService's 30-minute cache + in-flight
@@ -198,7 +199,7 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
               IptvEpgService.isCatchupAvailable(channel, p)) ||
           (widget.canRecord &&
               widget.onScheduleProgramme != null &&
-              p.start.isAfter(now));
+              p.stop.isAfter(now));
       if (actionable) lastActionableIndex = i;
     }
 
@@ -274,9 +275,13 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
                                             channel,
                                             window[i],
                                           ),
+                                      // Now-airing counts: recording it means
+                                      // "capture the rest, stop at its end" —
+                                      // the schedule backend late-joins a
+                                      // past start within seconds.
                                       recordable: widget.canRecord &&
                                           widget.onScheduleProgramme != null &&
-                                          window[i].start.isAfter(now),
+                                          window[i].stop.isAfter(now),
                                       isLastFocusable:
                                           i == lastActionableIndex,
                                       onExitLeft: widget.onExitLeft,
@@ -296,15 +301,28 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
 
   void _onRowActivate(EpgProgramme p, DateTime now) {
     final channel = widget.channel;
-    if (p.start.isAfter(now)) {
-      final schedule = widget.onScheduleProgramme;
-      if (schedule == null) return;
+    final schedule =
+        widget.canRecord ? widget.onScheduleProgramme : null;
+    void record() {
       unawaited(() async {
-        final message = await schedule(channel, p);
+        final message = await schedule!(channel, p);
         if (message == null || !mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));
       }());
+    }
+
+    if (p.start.isAfter(now)) {
+      // A future row is ONLY a record affordance — never fall through to
+      // watch when scheduling isn't available.
+      if (schedule != null) record();
+      return;
+    }
+    // The NOW row records too (the rest of the programme, ending on time) —
+    // behind the same confirm dialog, so a stray OK can't silently start
+    // anything. Watching is the big Watch button's job.
+    if (p.stop.isAfter(now) && schedule != null) {
+      record();
       return;
     }
     if (!p.stop.isAfter(now) &&
@@ -312,7 +330,6 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
       widget.onPlayProgramme?.call(channel, p);
       return;
     }
-    // The NOW row: watching it is what the big button is for.
     widget.onWatch();
   }
 }
@@ -615,12 +632,16 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
               ),
             ),
           ),
-          if (widget.isNow)
-            const _Tag('NOW', Color(0xFF22C55E))
-          else if (widget.replayable)
-            _Tag('REPLAY', Colors.white.withValues(alpha: 0.55))
-          else if (widget.recordable)
-            const _Tag('REC', Color(0xFFF43F5E)),
+          if (widget.isNow) const _Tag('NOW', Color(0xFF22C55E)),
+          if (widget.replayable)
+            _Tag('REPLAY', Colors.white.withValues(alpha: 0.55)),
+          // A chip that reads as the button it is — the old 8px "REC" text
+          // looked like metadata, so nobody knew the rows record. On the
+          // NOW row it sits beside the NOW tag: "record the rest".
+          if (widget.recordable) ...[
+            if (widget.isNow) const SizedBox(width: 5),
+            _RecordChip(emphasized: _focused),
+          ],
         ],
       ),
     );
@@ -659,6 +680,54 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
         return KeyEventResult.ignored;
       },
       child: row,
+    );
+  }
+}
+
+/// The schedule rows' record affordance: a bordered dot+label pill sized to
+/// read as a button, brightening with the row's focus. Static styling only —
+/// no animations (TV).
+class _RecordChip extends StatelessWidget {
+  final bool emphasized;
+  const _RecordChip({required this.emphasized});
+
+  @override
+  Widget build(BuildContext context) {
+    const rec = Color(0xFFF43F5E);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(5),
+        color: rec.withValues(alpha: emphasized ? 0.30 : 0.12),
+        border: Border.all(
+          color: rec.withValues(alpha: emphasized ? 0.9 : 0.45),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: rec,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'Record',
+            style: TextStyle(
+              color: emphasized
+                  ? const Color(0xFFFFD9E0)
+                  : const Color(0xFFFF8CA3),
+              fontSize: 8.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
