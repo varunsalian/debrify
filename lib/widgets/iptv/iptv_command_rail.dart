@@ -7,7 +7,7 @@ import '../../utils/tv_keys.dart';
 import 'iptv_stage_panel.dart' show IptvMonogram;
 
 /// The Command Center's left rail: every destination on one column —
-/// LIBRARY (Favorites · Continue · Scheduled), SOURCES (playlists with
+/// LIBRARY (Favorites · Continue · Recordings), SOURCES (playlists with
 /// counts), LISTS (the user's own), and a Manage footer.
 ///
 /// DPAD contract: items are plain focusables, so geometry does the work —
@@ -28,12 +28,12 @@ class IptvCommandRail extends StatelessWidget {
   final int favoritesCount;
   final int scheduledCount;
 
-  /// False hides the Scheduled entry entirely — recording disabled or
-  /// unsupported must not advertise a scheduler that would refuse to work
-  /// (settings hides its scheduled row in the same state).
+  /// False hides the Recordings entry entirely — recording disabled or
+  /// unsupported must not advertise a DVR that would refuse to work
+  /// (settings hides its recordings row in the same state).
   final bool showScheduled;
 
-  /// True while the recording engine is capturing — the Scheduled entry
+  /// True while the recording engine is capturing — the Recordings entry
   /// wears a live dot. (Optional; false hides it.)
   final bool recordingActive;
 
@@ -101,7 +101,7 @@ class IptvCommandRail extends StatelessWidget {
               _RailItem(
                 icon: Icons.fiber_manual_record_rounded,
                 iconColor: const Color(0xFFF43F5E),
-                label: 'Scheduled',
+                label: 'Recordings',
                 count: scheduledCount,
                 selected: false,
                 chevron: true,

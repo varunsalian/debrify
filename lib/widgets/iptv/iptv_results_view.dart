@@ -49,7 +49,7 @@ import 'iptv_empty_state.dart';
 import 'iptv_epg_panel.dart';
 import 'iptv_command_rail.dart';
 import 'iptv_stage_panel.dart';
-import '../../screens/settings/scheduled_recordings_page.dart';
+import '../../screens/settings/recordings_page.dart';
 import '../../services/desktop_recording_service.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_source_stats.dart';
@@ -4147,10 +4147,15 @@ class IptvResultsViewState extends State<IptvResultsView>
       Navigator.of(context)
           .push(
             MaterialPageRoute<void>(
-              builder: (_) => const ScheduledRecordingsPage(),
+              builder: (_) => const RecordingsPage(),
             ),
           )
-          .then((_) => _refreshScheduledCount()),
+          .then((_) {
+            unawaited(_refreshScheduledCount());
+            // A capture stopped inside the hub must flip the stage's
+            // Record button back too.
+            unawaited(_refreshAndroidRecordingState());
+          }),
     );
   }
 

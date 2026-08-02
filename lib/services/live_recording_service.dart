@@ -75,6 +75,43 @@ class ScheduledRecording {
   }
 }
 
+/// One finished recording in the library — from the Android store/scan merge
+/// or a desktop directory listing. [uri] is whatever plays it: `content://`
+/// (Android Q+), `file://` (pre-Q), or a plain absolute path (desktop).
+class RecordingLibraryEntry {
+  /// Set when the Android recording store indexes this file (which is what
+  /// carries [channelName] and [durationMs]); null for scan-only files.
+  final String? taskId;
+  final String uri;
+  final String name;
+  final String? channelName;
+  final int bytes;
+  final int recordedAtMs;
+  final int? durationMs;
+
+  const RecordingLibraryEntry({
+    required this.taskId,
+    required this.uri,
+    required this.name,
+    required this.channelName,
+    required this.bytes,
+    required this.recordedAtMs,
+    required this.durationMs,
+  });
+
+  factory RecordingLibraryEntry.fromMap(Map<String, dynamic> map) {
+    return RecordingLibraryEntry(
+      taskId: map['taskId']?.toString(),
+      uri: map['uri']?.toString() ?? '',
+      name: map['name']?.toString() ?? 'recording.ts',
+      channelName: map['channelName']?.toString(),
+      bytes: (map['bytes'] as num?)?.toInt() ?? 0,
+      recordedAtMs: (map['recordedAtMs'] as num?)?.toInt() ?? 0,
+      durationMs: (map['durationMs'] as num?)?.toInt(),
+    );
+  }
+}
+
 /// Result of an engine start / schedule call: an id on success, otherwise the
 /// native error code (`recording_limit_reached`, `duplicate`, `bad_time`,
 /// `engine_unsupported`, `fgs_not_allowed`, ...).
@@ -249,6 +286,39 @@ class LiveRecordingService {
 
   static Future<bool> forget(String taskId) =>
       _invokeBool('forgetLiveRecording', {'taskId': taskId});
+
+  // ── Library ───────────────────────────────────────────────────────────────
+
+  /// Finished recordings on this device: the native store's `done` entries
+  /// merged with an on-disk scan of the recordings folder (which also finds
+  /// files the store no longer indexes). Android only — desktop lists its
+  /// folder in [DesktopRecordingService].
+  static Future<List<RecordingLibraryEntry>> queryLibrary() async {
+    if (!Platform.isAndroid) return const [];
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>(
+        'queryRecordingsLibrary',
+      );
+      if (raw == null) return const [];
+      return raw
+          .map(
+            (e) => RecordingLibraryEntry.fromMap(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
+          .where((e) => e.uri.isNotEmpty)
+          .toList(growable: false);
+    } on PlatformException {
+      return const [];
+    } on MissingPluginException {
+      return const [];
+    }
+  }
+
+  /// Delete a finished recording's file AND its store entry. Refused natively
+  /// (`recording_live`) while that file is still being captured.
+  static Future<bool> deleteRecordingFile(String uri) =>
+      _invokeBool('deleteRecordingFile', {'uri': uri});
 
   // ── Schedules ─────────────────────────────────────────────────────────────
 

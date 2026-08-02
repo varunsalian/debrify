@@ -812,8 +812,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.fiber_manual_record_rounded,
           title: 'IPTV recording',
           subtitle:
-              'Background recording engine and scheduled recordings from the '
-              'TV guide',
+              'Recording engine, scheduled recordings and your recordings '
+              'library',
           category: 'Connections',
           keywords: const [
             'record',
@@ -828,6 +828,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'iptv',
             'live tv',
             'engine',
+            'library',
           ],
           onTap: _openIptvSettings,
         ),

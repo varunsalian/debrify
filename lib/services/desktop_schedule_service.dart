@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'desktop_recording_service.dart';
@@ -323,10 +322,9 @@ class DesktopScheduleService {
     final stamp =
         '${now.year}${two(now.month)}${two(now.day)}_'
         '${two(now.hour)}${two(now.minute)}${two(now.second)}';
-    final dir = (await getDownloadsDirectory()) ??
-        await getApplicationDocumentsDirectory();
+    final dir = await DesktopRecordingService.recordingsDir();
     final sep = Platform.pathSeparator;
-    final prefix = '${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp';
+    final prefix = '${dir.path}$sep${base}_$stamp';
     var candidate = '$prefix.ts';
     for (var n = 2; n < 100 && await File(candidate).exists(); n++) {
       candidate = '${prefix}_$n.ts';

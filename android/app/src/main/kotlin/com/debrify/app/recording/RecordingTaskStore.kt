@@ -46,13 +46,23 @@ object RecordingTaskStore {
 	private const val KEY = "tasks_v1"
 	private val lock = Any()
 
-	/** Terminal entries older than this are pruned on reconcile. */
+	/** Prune age for terminal entries with NO surviving file to index —
+	 *  `failed` rows and `done` rows without a uri. `done` entries WITH a
+	 *  file are the recordings library's index and live as long as the file
+	 *  does (existence-checked on reconcile), never by TTL. */
 	private const val TERMINAL_TTL_MS = 24L * 60 * 60 * 1000
 
 	/** A `recording` entry younger than this is never treated as dead — it may
 	 *  be a worker that has persisted but not yet reached the registry insert
 	 *  visible to the caller's thread. */
 	private const val DEAD_MIN_AGE_MS = 15_000L
+
+	/** The library existence sweep runs one provider query per indexed
+	 *  recording; reconcile runs as often as every few seconds while the hub
+	 *  polls a live capture, so the sweep is throttled. The library query
+	 *  forces it. */
+	private const val EXISTENCE_SWEEP_INTERVAL_MS = 5L * 60 * 1000
+	@Volatile private var lastExistenceSweepMs = 0L
 
 	fun get(context: Context, taskId: String): RecordingEntry? = all(context)[taskId]
 
@@ -98,8 +108,11 @@ object RecordingTaskStore {
 	 * row has no bytes (or no row at all) has nothing worth keeping: delete the
 	 * row, mark failed.
 	 */
-	fun reconcileDeadEntries(context: Context) {
+	fun reconcileDeadEntries(context: Context, forceFileCheck: Boolean = false) {
 		val now = System.currentTimeMillis()
+		val checkFiles =
+			forceFileCheck || now - lastExistenceSweepMs > EXISTENCE_SWEEP_INTERVAL_MS
+		if (checkFiles) lastExistenceSweepMs = now
 		for ((taskId, entry) in all(context)) {
 			when (entry.status) {
 				"recording" -> {
@@ -116,6 +129,10 @@ object RecordingTaskStore {
 								bytes = size,
 								published = published,
 								updatedAt = now,
+								// Marks the finish time as reconcile time, NOT
+								// capture end — the library must not derive a
+								// duration from it.
+								errorMessage = "finalized after interruption",
 							),
 						)
 					} else {
@@ -134,14 +151,37 @@ object RecordingTaskStore {
 					// A finished capture whose row never got IS_PENDING cleared
 					// (provider hiccup at stop time): the bytes exist but the
 					// file is invisible. Retry — the provider may be back.
+					// updatedAt is NOT rewritten on success: for done entries
+					// it is the capture's finish time, which the library shows
+					// as the recording's duration.
 					if (!entry.published) {
 						val uri = entry.uri?.let { Uri.parse(it) }
 						if (uri != null && publishRow(context, uri)) {
-							put(context, entry.copy(published = true, updatedAt = now))
+							put(context, entry.copy(published = true))
 							continue
 						}
+						// Only an AUTHORITATIVE "row is gone" (user cleared it,
+						// system reaped it) ends the retry loop — a provider
+						// that merely couldn't answer must not: pruning here
+						// orphans a still-pending, invisible file forever.
+						if (uri != null && destinationExists(context, uri) == false) {
+							remove(context, taskId)
+						}
+						continue
 					}
-					if (entry.published && now - entry.updatedAt > TERMINAL_TTL_MS) {
+					// Published entries ARE the recordings library's index: they
+					// live exactly as long as their file does, not for a TTL.
+					// Existence is only trustworthy while storage is readable —
+					// a revoked pre-Q grant makes exists() lie "false", and a
+					// down provider answers with null — neither may prune.
+					val uri = entry.uri?.let { Uri.parse(it) }
+					if (uri == null) {
+						if (now - entry.updatedAt > TERMINAL_TTL_MS) remove(context, taskId)
+					} else if (
+						checkFiles &&
+						LiveRecordingService.isSupported(context) &&
+						destinationExists(context, uri) == false
+					) {
 						remove(context, taskId)
 					}
 				}
@@ -150,6 +190,48 @@ object RecordingTaskStore {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Tri-state destination existence: true/false only when the answer is
+	 * AUTHORITATIVE (the provider answered, or the file API did), null when
+	 * it couldn't be trusted (provider down/restarting). Callers deciding to
+	 * prune must act only on `== false` — [fileSize]'s -1 conflates "gone"
+	 * with "couldn't ask", which is fine for sizing but not for deleting an
+	 * index entry.
+	 */
+	fun destinationExists(context: Context, uri: Uri): Boolean? {
+		if (uri.scheme == "file") {
+			return try {
+				java.io.File(uri.path!!).exists()
+			} catch (_: Exception) { null }
+		}
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+		return try {
+			val projection = arrayOf(MediaStore.MediaColumns._ID)
+			// Include pending rows explicitly: the unpublished entries this
+			// guards are exactly the still-IS_PENDING ones, and a query that
+			// silently filtered them would report a live row as "gone".
+			val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+				val args = android.os.Bundle().apply {
+					putInt(
+						MediaStore.QUERY_ARG_MATCH_PENDING,
+						MediaStore.MATCH_INCLUDE,
+					)
+				}
+				context.contentResolver.query(uri, projection, args, null)
+			} else {
+				@Suppress("DEPRECATION")
+				context.contentResolver.query(
+					MediaStore.setIncludePending(uri),
+					projection,
+					null,
+					null,
+					null,
+				)
+			}
+			cursor?.use { it.count > 0 }
+		} catch (_: Exception) { null }
 	}
 
 	fun fileSize(context: Context, uri: Uri): Long {

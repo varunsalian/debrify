@@ -496,7 +496,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   title: 'Recording',
                   subtitle: !widget.showEngineToggle
                       ? (widget.scheduledCount == 0
-                            ? 'Scheduled recordings'
+                            ? 'Recordings'
                             : '${widget.scheduledCount} scheduled')
                       : widget.recordingEngineEnabled
                       ? (widget.scheduledCount == 0
@@ -973,11 +973,11 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               _PaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.event_rounded,
-                title: 'Scheduled recordings',
+                title: 'Recordings',
                 subtitle: widget.scheduledCount == 0
-                    ? 'Nothing scheduled — pick an upcoming programme in a '
-                          'channel\'s TV guide, or set a time yourself'
-                    : '${widget.scheduledCount} upcoming',
+                    ? 'Live captures, schedules and your recorded files'
+                    : '${widget.scheduledCount} scheduled · live captures '
+                          'and recorded files',
                 trailing: _chevron,
                 onTap: () => widget.onOpenScheduledRecordings?.call(),
                 onLeft: _returnToRail,

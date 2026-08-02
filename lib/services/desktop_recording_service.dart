@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'live_recording_service.dart' show RecordingLibraryEntry;
 
 /// How a desktop capture ended.
 enum DesktopRecordingEnd {
@@ -253,5 +256,71 @@ class DesktopRecordingService {
   Future<void> stopAll() async {
     final capture = active;
     if (capture != null) await capture.stop();
+  }
+
+  /// Where desktop recordings live: `<Downloads>/Debrify/Recordings`. One
+  /// truth shared by the capture path builder and the library listing. Not
+  /// created here — captures create it on first write.
+  static Future<Directory> recordingsDir() async {
+    final base =
+        (await getDownloadsDirectory()) ??
+        await getApplicationDocumentsDirectory();
+    final sep = Platform.pathSeparator;
+    return Directory('${base.path}${sep}Debrify${sep}Recordings');
+  }
+
+  static const _libraryExtensions = {'ts', 'mts', 'm2ts', 'mkv', 'mp4'};
+
+  /// Finished recordings on disk (the folder IS the desktop library — there
+  /// is no index to go stale). The active capture's still-growing file is
+  /// excluded; it belongs to the "recording now" surface.
+  static Future<List<RecordingLibraryEntry>> listLibrary() async {
+    if (!instance.isSupported) return const [];
+    final dir = await recordingsDir();
+    if (!await dir.exists()) return const [];
+    final activePath = instance.active?.path;
+    final out = <RecordingLibraryEntry>[];
+    try {
+      await for (final item in dir.list(followLinks: false)) {
+        if (item is! File || item.path == activePath) continue;
+        final name = item.path.split(Platform.pathSeparator).last;
+        final dot = name.lastIndexOf('.');
+        final ext = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+        if (!_libraryExtensions.contains(ext)) continue;
+        final FileStat stat;
+        try {
+          stat = await item.stat();
+        } catch (_) {
+          continue;
+        }
+        if (stat.size <= 0) continue;
+        out.add(
+          RecordingLibraryEntry(
+            taskId: null,
+            uri: item.path,
+            name: name,
+            channelName: null,
+            bytes: stat.size,
+            recordedAtMs: stat.modified.millisecondsSinceEpoch,
+            durationMs: null,
+          ),
+        );
+      }
+    } catch (_) {
+      // Unreadable folder — an empty library beats a crash loop.
+    }
+    return out;
+  }
+
+  /// Delete a finished desktop recording. Refuses the active capture's file.
+  static Future<bool> deleteRecordingFile(String path) async {
+    if (instance.active?.path == path) return false;
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }

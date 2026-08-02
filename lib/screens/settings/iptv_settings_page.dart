@@ -21,7 +21,7 @@ import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/live_recording_service.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
-import 'scheduled_recordings_page.dart';
+import 'recordings_page.dart';
 import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 import '../../widgets/tv_text_field.dart';
 import 'iptv_settings_two_pane.dart';
@@ -1747,8 +1747,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                       focusNode: _scheduledRecordingsFocusNode,
                       icon: Icons.fiber_manual_record_rounded,
                       label: _scheduledCount == 0
-                          ? 'Scheduled recordings'
-                          : 'Scheduled recordings ($_scheduledCount)',
+                          ? 'Recordings'
+                          : 'Recordings ($_scheduledCount scheduled)',
                       onTap: _openScheduledRecordings,
                     ),
                   ],
@@ -1772,7 +1772,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _openScheduledRecordings() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const ScheduledRecordingsPage(),
+        builder: (_) => const RecordingsPage(),
       ),
     );
     // Additions/cancellations on the page change the count shown here.

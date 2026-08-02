@@ -309,6 +309,136 @@ class MainActivity : FlutterActivity() {
         }.start()
     }
 
+    /** Finished recordings for the hub's Library zone: the recording store's
+     *  `done` entries (which carry channel name + duration) merged with a scan
+     *  of the on-disk destination — MediaStore on Q+ (a no-permission query
+     *  only ever returns OUR rows), a plain dir listing pre-Q (only when the
+     *  legacy grant is held). Scan-only files (tee recordings, entries the old
+     *  TTL pruned) surface with metadata read off the file itself. Call from a
+     *  worker thread — reconcile + scan are IO. */
+    private fun buildRecordingsLibrary(): List<Map<String, Any?>> {
+        com.debrify.app.recording.RecordingTaskStore
+            .reconcileDeadEntries(this, forceFileCheck = true)
+        val entries = com.debrify.app.recording.RecordingTaskStore.all(this)
+        val out = ArrayList<Map<String, Any?>>()
+
+        // Every uri any entry owns — including LIVE captures, whose growing
+        // file must not be double-listed by the scans below.
+        val coveredIds = HashSet<Long>()
+        val coveredPaths = HashSet<String>()
+        for (entry in entries.values) {
+            val raw = entry.uri ?: continue
+            val uri = android.net.Uri.parse(raw)
+            if (uri.scheme == "file") {
+                uri.path?.let { coveredPaths.add(it) }
+            } else {
+                runCatching { android.content.ContentUris.parseId(uri) }
+                    .getOrNull()?.let { coveredIds.add(it) }
+            }
+        }
+
+        for ((taskId, entry) in entries) {
+            if (entry.status != "done") continue
+            val raw = entry.uri ?: continue
+            // Duration = finish (the final store write, which normal engine
+            // finishes stamp and publish retries preserve) minus start. A
+            // crash-finalized entry's updatedAt is reconcile time, not the
+            // capture's end — those carry an errorMessage marker and report
+            // no duration rather than a wild number.
+            val durationMs =
+                if (entry.errorMessage == null) entry.updatedAt - entry.startedAtMs
+                else -1L
+            out.add(
+                mapOf(
+                    "taskId" to taskId,
+                    "uri" to raw,
+                    "name" to entry.fileName,
+                    "channelName" to entry.channelName.takeIf { it.isNotEmpty() },
+                    "bytes" to entry.bytes,
+                    "recordedAtMs" to entry.startedAtMs,
+                    "durationMs" to durationMs.takeIf {
+                        it in 1_000L..(12L * 60 * 60 * 1000)
+                    },
+                ),
+            )
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val projection = arrayOf(
+                android.provider.MediaStore.Downloads._ID,
+                android.provider.MediaStore.Downloads.DISPLAY_NAME,
+                android.provider.MediaStore.Downloads.SIZE,
+                android.provider.MediaStore.Downloads.DATE_MODIFIED,
+            )
+            runCatching {
+                contentResolver.query(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    projection,
+                    "${android.provider.MediaStore.Downloads.RELATIVE_PATH} LIKE ?",
+                    arrayOf(
+                        "${com.debrify.app.recording.LiveRecordingService.RELATIVE_PATH}%",
+                    ),
+                    null,
+                )?.use { cursor ->
+                    val idCol = cursor.getColumnIndexOrThrow(
+                        android.provider.MediaStore.Downloads._ID,
+                    )
+                    val nameCol = cursor.getColumnIndexOrThrow(
+                        android.provider.MediaStore.Downloads.DISPLAY_NAME,
+                    )
+                    val sizeCol = cursor.getColumnIndexOrThrow(
+                        android.provider.MediaStore.Downloads.SIZE,
+                    )
+                    val dateCol = cursor.getColumnIndexOrThrow(
+                        android.provider.MediaStore.Downloads.DATE_MODIFIED,
+                    )
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(idCol)
+                        if (id in coveredIds) continue
+                        val uri = android.content.ContentUris.withAppendedId(
+                            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            id,
+                        )
+                        out.add(
+                            mapOf(
+                                "taskId" to null,
+                                "uri" to uri.toString(),
+                                "name" to (cursor.getString(nameCol) ?: "recording.ts"),
+                                "channelName" to null,
+                                "bytes" to cursor.getLong(sizeCol),
+                                // DATE_MODIFIED is in SECONDS.
+                                "recordedAtMs" to cursor.getLong(dateCol) * 1000L,
+                                "durationMs" to null,
+                            ),
+                        )
+                    }
+                }
+            }
+        } else if (
+            com.debrify.app.recording.LiveRecordingService.legacyStorageGranted(this)
+        ) {
+            val dir = com.debrify.app.recording.LiveRecordingService.legacyRecordingsDir()
+            val files = runCatching { dir.listFiles() }.getOrNull() ?: emptyArray()
+            for (file in files) {
+                if (!file.isFile || file.absolutePath in coveredPaths) continue
+                val ext = file.extension.lowercase()
+                if (ext !in setOf("ts", "mts", "m2ts", "mkv", "mp4")) continue
+                out.add(
+                    mapOf(
+                        "taskId" to null,
+                        "uri" to android.net.Uri.fromFile(file).toString(),
+                        "name" to file.name,
+                        "channelName" to null,
+                        "bytes" to file.length(),
+                        "recordedAtMs" to file.lastModified(),
+                        "durationMs" to null,
+                    ),
+                )
+            }
+        }
+        return out
+    }
+
     /** The Dart-owned setting (Settings → Home Page → Native Trailer Surface),
      *  read from the shared_preferences plugin's store. Must be checked here
      *  too: the transparency mode is fixed at activity creation, so flipping
@@ -1037,6 +1167,59 @@ class MainActivity : FlutterActivity() {
 						}
 						com.debrify.app.recording.RecordingTaskStore.remove(this, taskId)
 						result.success(true)
+					}
+					"queryRecordingsLibrary" -> {
+						// Finished recordings for the Recordings hub. The store's
+						// `done` entries are the index (channel name + duration),
+						// merged with a MediaStore scan of our own rows under the
+						// recordings path — the scan is what surfaces tee-recorded
+						// files and recordings whose entries the old 24h TTL
+						// already pruned. Worker thread: reconcile + scan are IO.
+						Thread {
+							val list = try { buildRecordingsLibrary() } catch (e: Exception) { null }
+							runOnUiThread {
+								if (list != null) result.success(list)
+								else result.error("query_failed", "library query failed", null)
+							}
+						}.start()
+					}
+					"deleteRecordingFile" -> {
+						val uriString = call.argument<String>("uri")
+						if (uriString.isNullOrEmpty()) {
+							result.error("bad_args", "uri required", null)
+							return@setMethodCallHandler
+						}
+						// A live capture's destination must be stopped, not
+						// deleted out from under the worker's file descriptor.
+						val liveEntry = com.debrify.app.recording.RecordingTaskStore
+							.all(this).values.firstOrNull {
+								it.uri == uriString &&
+									it.status == "recording" &&
+									com.debrify.app.recording.RecordingRegistry.live
+										.containsKey(it.taskId)
+							}
+						if (liveEntry != null) {
+							result.error("recording_live", "stop the recording first", null)
+							return@setMethodCallHandler
+						}
+						Thread {
+							val ok = try {
+								val uri = android.net.Uri.parse(uriString)
+								com.debrify.app.recording.RecordingTaskStore
+									.deleteDestination(this, uri)
+								for ((taskId, entry) in
+									com.debrify.app.recording.RecordingTaskStore.all(this)
+								) {
+									if (entry.uri == uriString) {
+										com.debrify.app.recording.RecordingTaskStore
+											.remove(this, taskId)
+									}
+								}
+								com.debrify.app.recording.TeeUnpublishedStore.remove(this, uri)
+								true
+							} catch (e: Exception) { false }
+							runOnUiThread { result.success(ok) }
+						}.start()
 					}
 					// ── Scheduled recordings ────────────────────────────────
 					"scheduleRecording" -> {
