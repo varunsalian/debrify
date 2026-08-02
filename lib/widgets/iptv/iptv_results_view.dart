@@ -53,6 +53,8 @@ import '../../screens/settings/recordings_page.dart';
 import '../../services/desktop_recording_service.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_source_stats.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../services/live_recording_service.dart';
 import '../recording_limit_dialogs.dart';
 
@@ -137,6 +139,14 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// Whether this platform can record at all (engine on Android 10+, the
   /// desktop capture elsewhere) — gates the stage's Record/REC affordances.
   bool _pageCanRecord = false;
+
+  /// iOS only: a one-time dismissible notice that recording doesn't exist
+  /// there (Apple allows no background capture and no scheduled wake-ups) —
+  /// otherwise iOS users go hunting for a Record button that isn't hidden
+  /// by a setting, it's hidden by the platform.
+  bool _showIosRecordingNotice = false;
+  static const String _iosNoticeDismissedPref =
+      'iptv_ios_recording_notice_dismissed';
   IptvPlaylist? _selectedPlaylist;
   bool _settingsLoaded = false;
 
@@ -540,6 +550,16 @@ class IptvResultsViewState extends State<IptvResultsView>
     // Stage cockpit: recording availability + the rail's Scheduled badge.
     // Off the critical path; only ever ENABLES affordances.
     unawaited(_initRecordingSupport());
+    if (!kIsWeb && Platform.isIOS) {
+      unawaited(
+        SharedPreferences.getInstance().then((prefs) {
+          if (!mounted) return;
+          if (!(prefs.getBool(_iosNoticeDismissedPref) ?? false)) {
+            setState(() => _showIosRecordingNotice = true);
+          }
+        }),
+      );
+    }
     // Observe, don't sample: schedule mutations from ANY in-process surface
     // (player sheet, manual timer, desktop scheduler firing) update the rail
     // badge, and desktop capture starts/ends flip the stage's Record↔Stop —
@@ -4575,10 +4595,72 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
     // The background-refresh chip floats over whichever layout is active.
     // passthrough: hand the parent's constraints to the body unmodified so
-    // the wrap is provably layout-neutral.
+    // the wrap is provably layout-neutral. The iOS notice wraps only while
+    // visible, so every other platform's layout path stays byte-identical.
+    final Widget page = _showIosRecordingNotice
+        ? Column(
+            children: [
+              _buildIosRecordingNotice(),
+              Expanded(child: body),
+            ],
+          )
+        : body;
     return Stack(
       fit: StackFit.passthrough,
-      children: [body, _buildCatalogChip()],
+      children: [page, _buildCatalogChip()],
+    );
+  }
+
+  /// The iOS-only "no recording here" banner: dismiss is remembered forever.
+  Widget _buildIosRecordingNotice() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+      padding: const EdgeInsets.fromLTRB(12, 8, 2, 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.fiber_manual_record_rounded,
+            size: 14,
+            color: Colors.white.withValues(alpha: 0.3),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "Recording isn't available on iOS — Apple doesn't let "
+              'apps capture streams in the background.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: Colors.white.withValues(alpha: 0.55),
+              ),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Dismiss',
+            icon: Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: Colors.white.withValues(alpha: 0.45),
+            ),
+            onPressed: _dismissIosRecordingNotice,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _dismissIosRecordingNotice() {
+    setState(() => _showIosRecordingNotice = false);
+    unawaited(
+      SharedPreferences.getInstance().then(
+        (prefs) => prefs.setBool(_iosNoticeDismissedPref, true),
+      ),
     );
   }
 
