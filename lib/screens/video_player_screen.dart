@@ -523,6 +523,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// recording is unavailable on the web backend.
   bool _recordingSupported = false;
   bool _isRecording = false;
+
   /// Filesystem path libmpv is writing the active recording to.
   String? _recordingTempPath;
 
@@ -4204,6 +4205,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (channel != null && recordUrl != null) {
         if (!await ensureRecordingCapacity(context)) return;
         if (!mounted) return;
+        // This path skips ensureEngineReady (support was pre-checked), so
+        // the one-time notification ask lives here explicitly — fire-and-
+        // forget, so an unanswered dialog can't delay the capture.
+        unawaited(LiveRecordingService.ensureNotificationPermission());
         final result = await LiveRecordingService.start(
           url: recordUrl,
           fileName: _recordingFileName(channel.name),
@@ -4292,8 +4297,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             DesktopRecordingEnd.stopped => null,
           };
           if (message != null) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text(message)));
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
           }
         },
       );
@@ -4388,7 +4394,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted || ticket != _engineRefreshTicket) return;
     String? found;
     for (final r in recordings) {
-      if (r.isRecording && (r.url == playing || (twin != null && r.url == twin))) {
+      if (r.isRecording &&
+          (r.url == playing || (twin != null && r.url == twin))) {
         found = r.taskId;
         break;
       }
@@ -4472,11 +4479,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Crash insurance: registered natively so the file gets published on
       // next launch even if this process never reaches _stopRecording.
       if (Platform.isAndroid) {
-        unawaited(AndroidNativeDownloader.registerPendingRecording(
-          path: path,
-          fileName: path.split(Platform.pathSeparator).last,
-          mimeType: 'video/x-matroska',
-        ));
+        unawaited(
+          AndroidNativeDownloader.registerPendingRecording(
+            path: path,
+            fileName: path.split(Platform.pathSeparator).last,
+            mimeType: 'video/x-matroska',
+          ),
+        );
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -4502,7 +4511,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Undo a recording that got armed after its channel or screen went away.
   /// The stub file is milliseconds old, so dropping it loses nothing a user
   /// would recognise as a recording.
-  Future<void> _disarmStrayRecording(mk.NativePlayer platform, String path) async {
+  Future<void> _disarmStrayRecording(
+    mk.NativePlayer platform,
+    String path,
+  ) async {
     try {
       await platform.setProperty('stream-record', '');
     } catch (e) {
@@ -4601,7 +4613,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           published
               ? 'Recording saved to Downloads/Debrify/Recordings'
               : "Recording couldn't be added to Downloads — "
-                  'will retry next launch',
+                    'will retry next launch',
         ),
       ),
     );
@@ -4639,10 +4651,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     Directory dir;
     if (Platform.isAndroid) {
-      dir = (await getExternalStorageDirectory()) ??
+      dir =
+          (await getExternalStorageDirectory()) ??
           await getApplicationDocumentsDirectory();
     } else {
-      dir = (await getDownloadsDirectory()) ??
+      dir =
+          (await getDownloadsDirectory()) ??
           await getApplicationDocumentsDirectory();
     }
     final sep = Platform.pathSeparator;
@@ -6827,13 +6841,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               .setProperty('stream-record', '')
               .catchError(
                 (Object e) => debugPrint(
-                    'VideoPlayer: stop recording on dispose failed: $e'),
+                  'VideoPlayer: stop recording on dispose failed: $e',
+                ),
               )
               .whenComplete(() {
-            if (path != null && Platform.isAndroid) {
-              _publishRecording(path, userInitiated: false);
-            }
-          }),
+                if (path != null && Platform.isAndroid) {
+                  _publishRecording(path, userInitiated: false);
+                }
+              }),
         );
       } else if (path != null && Platform.isAndroid) {
         unawaited(_publishRecording(path, userInitiated: false));
@@ -8710,7 +8725,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             showPipButton: PipService.isOwner(this),
                             onPip: PipService.isOwner(this) ? _enterPip : null,
                             hasRecord: _canRecord,
-                            isRecording: _isRecording ||
+                            isRecording:
+                                _isRecording ||
                                 _engineTaskId != null ||
                                 _desktopCaptureForCurrent() != null,
                             onRecord: _canRecord ? _toggleRecording : null,

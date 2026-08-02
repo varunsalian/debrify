@@ -5770,6 +5770,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** Android 13+ notification permission, asked contextually on the first
+     *  record/schedule — same asked-once pref the phone activity uses, so
+     *  the user is asked at most once app-wide. Non-blocking: recording
+     *  proceeds while the dialog is up (it works without the grant; only
+     *  the notifications go silent). */
+    private fun maybeAskNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) return
+        val prefs = getSharedPreferences("debrify_permissions", MODE_PRIVATE)
+        if (prefs.getBoolean("notification_permission_asked", false)) return
+        prefs.edit().putBoolean("notification_permission_asked", true).apply()
+        androidx.core.app.ActivityCompat.requestPermissions(
+            this,
+            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+            notificationPermissionRequestCode,
+        )
+    }
+
     private fun toggleEngineRecording() {
         engineTaskIdForCurrentChannel()?.let { taskId ->
             // Finalization is async in the service; its "Saved" notification is
@@ -5824,6 +5846,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             ).show()
             return
         }
+        maybeAskNotificationPermission()
         val entry = iptvChannels.getOrNull(currentIptvIndex)
         val fileName = "${sanitizeRecordingName(entry?.name ?: "recording")}_${recordingTimestamp()}.ts"
         try {
@@ -5919,6 +5942,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setTitle(if (conflictNote.isEmpty()) "Record programme" else "Recording conflict")
             .setMessage("${program.title}\n${entry.name} · $range$conflictNote")
             .setPositiveButton("Record") { _, _ ->
+                maybeAskNotificationPermission()
                 RecordingScheduleStore.put(
                     this,
                     RecordingSchedule(
@@ -11788,6 +11812,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private val legacyStoragePermissionRequestCode = 7402
+    private val notificationPermissionRequestCode = 7403
 
     override fun onRequestPermissionsResult(
         requestCode: Int,

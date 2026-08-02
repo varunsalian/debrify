@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
@@ -89,6 +90,14 @@ class RecordingLibraryEntry {
   final int recordedAtMs;
   final int? durationMs;
 
+  /// True when the capture died (process kill, OS reap) and reconcile
+  /// salvaged the partial file — the signal behind the hub's
+  /// battery-optimization nudge. [interruptedAtMs] is WHEN it died
+  /// (finalize time), so dismissing the nudge only silences interruptions
+  /// that had already happened.
+  final bool interrupted;
+  final int? interruptedAtMs;
+
   const RecordingLibraryEntry({
     required this.taskId,
     required this.uri,
@@ -97,6 +106,8 @@ class RecordingLibraryEntry {
     required this.bytes,
     required this.recordedAtMs,
     required this.durationMs,
+    this.interrupted = false,
+    this.interruptedAtMs,
   });
 
   factory RecordingLibraryEntry.fromMap(Map<String, dynamic> map) {
@@ -108,6 +119,8 @@ class RecordingLibraryEntry {
       bytes: (map['bytes'] as num?)?.toInt() ?? 0,
       recordedAtMs: (map['recordedAtMs'] as num?)?.toInt() ?? 0,
       durationMs: (map['durationMs'] as num?)?.toInt(),
+      interrupted: map['interrupted'] == true,
+      interruptedAtMs: (map['interruptedAtMs'] as num?)?.toInt(),
     );
   }
 }
@@ -257,7 +270,9 @@ class LiveRecordingService {
     final recordable = engineRecordableUrl(url);
     if (recordable == null) return false;
     final path = recordable.split('?').first.split('#').first.toLowerCase();
-    if (path.endsWith('.ts') || path.endsWith('.mts') || path.endsWith('.m2ts')) {
+    if (path.endsWith('.ts') ||
+        path.endsWith('.mts') ||
+        path.endsWith('.m2ts')) {
       return true;
     }
     return _xtreamLiveAnyContainer.hasMatch(path);
@@ -308,7 +323,11 @@ class LiveRecordingService {
       );
       if (raw == null) return const [];
       return raw
-          .map((e) => LiveRecordingStatus.fromMap(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) => LiveRecordingStatus.fromMap(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
           .toList(growable: false);
     } on PlatformException {
       return const [];
@@ -368,18 +387,16 @@ class LiveRecordingService {
       return const RecordingCallResult(errorCode: 'not_android');
     }
     try {
-      final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
-        'scheduleRecording',
-        {
-          'url': url,
-          'channelName': channelName,
-          'programmeTitle': programmeTitle,
-          'startMs': startMs,
-          'endMs': endMs,
-          'headers': headers ?? <String, String>{},
-          'force': force,
-        },
-      );
+      final raw = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('scheduleRecording', {
+            'url': url,
+            'channelName': channelName,
+            'programmeTitle': programmeTitle,
+            'startMs': startMs,
+            'endMs': endMs,
+            'headers': headers ?? <String, String>{},
+            'force': force,
+          });
       if (raw == null) return const RecordingCallResult(errorCode: 'no_result');
       final result = RecordingCallResult(
         id: raw['id']?.toString(),
@@ -408,7 +425,10 @@ class LiveRecordingService {
       );
       if (raw == null) return const [];
       return raw
-          .map((e) => ScheduledRecording.fromMap(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) =>
+                ScheduledRecording.fromMap(Map<String, dynamic>.from(e as Map)),
+          )
           .toList(growable: false);
     } on PlatformException {
       return const [];
@@ -440,16 +460,38 @@ class LiveRecordingService {
 
   /// Gate for every engine action: true when recording can proceed NOW —
   /// requesting the pre-Q grant on the spot if that's all that's missing.
+  /// Also the app's one contextual moment to ask for the Android 13+
+  /// notification grant (asked at most once, ever): recording works without
+  /// it, but progress, "Saved" and "schedule skipped" go silent.
   static Future<bool> ensureEngineReady() async {
     switch (await engineSupport()) {
       case 'supported':
+        // Fire-and-forget: the system dialog must never delay the capture —
+        // an unanswered prompt would eat the start of the live stream.
+        unawaited(ensureNotificationPermission());
         return true;
       case 'needs_permission':
-        return requestLegacyStoragePermission();
+        final granted = await requestLegacyStoragePermission();
+        if (granted) unawaited(ensureNotificationPermission());
+        return granted;
       default:
         return false;
     }
   }
+
+  /// Ask for POST_NOTIFICATIONS if never asked before (Android 13+). True =
+  /// notifications will show. Never blocks recording.
+  static Future<bool> ensureNotificationPermission() =>
+      _invokeBool('ensureNotificationPermission');
+
+  /// Whether Debrify is excluded from battery optimization — the difference
+  /// between hours-long recordings surviving OEM app killers or not.
+  static Future<bool> isIgnoringBatteryOptimizations() =>
+      _invokeBool('isIgnoringBatteryOptimizations');
+
+  /// Show the system "let this app ignore battery optimizations?" dialog.
+  static Future<bool> requestIgnoreBatteryOptimizations() =>
+      _invokeBool('requestIgnoreBatteryOptimizationForApp');
 
   /// True when exact alarms are available; false = scheduled starts may slip
   /// by up to ~10 minutes until the user grants the permission.

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/desktop_recording_service.dart';
 import '../../services/desktop_schedule_service.dart';
@@ -62,6 +63,15 @@ class _RecordingsPageState extends State<RecordingsPage>
   /// silently re-start the clocks the lifecycle handler just stopped.
   bool _appVisible = true;
 
+  /// Battery-optimization nudge: shown only on EVIDENCE — an interrupted
+  /// recording newer than the last dismissal, while the app is not excluded
+  /// from optimization. TV boxes have no battery; the nudge never shows
+  /// there.
+  bool _batteryExempt = true;
+  int _batteryNudgeDismissedAtMs = 0;
+  static const String _batteryNudgeDismissedPref =
+      'recording_battery_nudge_dismissed_at';
+
   /// The first library row's main (play) focus. The folder button sits on
   /// the same right edge as the rows' delete icons, so geometric DOWN from
   /// it would land on the first DELETE — this node lets the button send
@@ -87,6 +97,13 @@ class _RecordingsPageState extends State<RecordingsPage>
       DesktopRecordingService.instance.revision.addListener(_onRevision);
     }
     unawaited(_loadAll());
+    unawaited(
+      SharedPreferences.getInstance().then((prefs) {
+        if (!mounted) return;
+        final at = prefs.getInt(_batteryNudgeDismissedPref) ?? 0;
+        if (at != 0) setState(() => _batteryNudgeDismissedAtMs = at);
+      }),
+    );
   }
 
   @override
@@ -126,6 +143,26 @@ class _RecordingsPageState extends State<RecordingsPage>
     if (mounted) unawaited(_loadAll());
   }
 
+  bool get _showBatteryNudge =>
+      _isAndroid &&
+      !PlatformUtil.isAndroidTvCached &&
+      !_batteryExempt &&
+      _library.any(
+        (e) =>
+            e.interrupted &&
+            (e.interruptedAtMs ?? e.recordedAtMs) > _batteryNudgeDismissedAtMs,
+      );
+
+  void _dismissBatteryNudge() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    setState(() => _batteryNudgeDismissedAtMs = now);
+    unawaited(
+      SharedPreferences.getInstance().then(
+        (prefs) => prefs.setInt(_batteryNudgeDismissedPref, now),
+      ),
+    );
+  }
+
   Future<void> _loadAll() async {
     final results = await Future.wait<Object>([
       _isAndroid
@@ -143,7 +180,12 @@ class _RecordingsPageState extends State<RecordingsPage>
       _isAndroid
           ? LiveRecordingService.queryLibrary()
           : DesktopRecordingService.listLibrary(),
-      _isAndroid ? LiveRecordingService.exactAlarmsGranted() : Future.value(true),
+      _isAndroid
+          ? LiveRecordingService.exactAlarmsGranted()
+          : Future.value(true),
+      _isAndroid
+          ? LiveRecordingService.isIgnoringBatteryOptimizations()
+          : Future.value(true),
     ]);
     if (!mounted) return;
     final live = (results[0] as List<LiveRecordingStatus>)
@@ -152,12 +194,16 @@ class _RecordingsPageState extends State<RecordingsPage>
     final schedules = (results[1] as List<ScheduledRecording>).toList()
       ..sort((a, b) => a.startMs.compareTo(b.startMs));
     final library = (results[2] as List<RecordingLibraryEntry>).toList()
-      ..sort((a, b) => _displayFor(b).recordedAt.compareTo(_displayFor(a).recordedAt));
+      ..sort(
+        (a, b) =>
+            _displayFor(b).recordedAt.compareTo(_displayFor(a).recordedAt),
+      );
     setState(() {
       _live = live;
       _schedules = schedules;
       _library = library;
       _exactAlarms = results[3] as bool;
+      _batteryExempt = results[4] as bool;
       _loading = false;
     });
     _syncTimers();
@@ -347,9 +393,9 @@ class _RecordingsPageState extends State<RecordingsPage>
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Recordings folder: ${dir.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Recordings folder: ${dir.path}')));
     }
   }
 
@@ -494,7 +540,9 @@ class _RecordingsPageState extends State<RecordingsPage>
             'bad_time' => 'That time has already passed',
             _ => "Couldn't schedule recording",
           };
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
     await _loadAll();
   }
 
@@ -536,8 +584,8 @@ class _RecordingsPageState extends State<RecordingsPage>
   }
 
   String _clock(int ms) => MaterialLocalizations.of(context).formatTimeOfDay(
-        TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(ms)),
-      );
+    TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(ms)),
+  );
 
   String _dayLabel(DateTime day) {
     final now = DateTime.now();
@@ -550,15 +598,16 @@ class _RecordingsPageState extends State<RecordingsPage>
     return '${weekdays[d.weekday - 1]} ${d.day}/${d.month}';
   }
 
-  static final RegExp _stampSuffix =
-      RegExp(r'_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:_\d+)?$');
+  static final RegExp _stampSuffix = RegExp(
+    r'_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:_\d+)?$',
+  );
 
   /// Presentation facts for a library entry, derived once per build:
   /// title (file name minus stamp/extension, or the channel name), the best
   /// recorded-at moment (embedded stamp beats file mtime — mtime is the END
   /// of a capture), and a duration (store truth, else mtime − stamp).
   ({String title, String? channel, DateTime recordedAt, int? durationMs})
-      _displayFor(RecordingLibraryEntry entry) {
+  _displayFor(RecordingLibraryEntry entry) {
     var base = entry.name;
     final dot = base.lastIndexOf('.');
     if (dot > 0) base = base.substring(0, dot);
@@ -599,10 +648,8 @@ class _RecordingsPageState extends State<RecordingsPage>
     final desktopCaptures = _desktopCaptures;
     final liveCount = _live.length + desktopCaptures.length;
     final totalBytes = _library.fold<int>(0, (sum, e) => sum + e.bytes);
-    final empty = !_loading &&
-        liveCount == 0 &&
-        _schedules.isEmpty &&
-        _library.isEmpty;
+    final empty =
+        !_loading && liveCount == 0 && _schedules.isEmpty && _library.isEmpty;
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -615,7 +662,8 @@ class _RecordingsPageState extends State<RecordingsPage>
               // Redirect DOWN only when the first focusable below would be a
               // library delete icon: no alarm banner, no live Stop, no
               // schedule rows, and no desktop folder button in between.
-              onScheduleDown: (!_desktop &&
+              onScheduleDown:
+                  (!_desktop &&
                       !(_isAndroid && !_exactAlarms) &&
                       liveCount == 0 &&
                       _schedules.isEmpty &&
@@ -629,170 +677,177 @@ class _RecordingsPageState extends State<RecordingsPage>
                       child: CircularProgressIndicator(color: _kAccent),
                     )
                   : empty
-                      ? _EmptyDvr(
-                          onSchedule: () => unawaited(_createManualSchedule()),
-                          showAlarmBanner: _isAndroid && !_exactAlarms,
-                          onOpenAlarmSettings: () => unawaited(
-                            LiveRecordingService.openExactAlarmSettings(),
+                  ? _EmptyDvr(
+                      onSchedule: () => unawaited(_createManualSchedule()),
+                      showAlarmBanner: _isAndroid && !_exactAlarms,
+                      onOpenAlarmSettings: () => unawaited(
+                        LiveRecordingService.openExactAlarmSettings(),
+                      ),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 28),
+                      children: [
+                        if (_isAndroid && !_exactAlarms) ...[
+                          _AlarmBanner(
+                            onTap: () => unawaited(
+                              LiveRecordingService.openExactAlarmSettings(),
+                            ),
                           ),
-                        )
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(20, 6, 20, 28),
-                          children: [
-                            if (_isAndroid && !_exactAlarms) ...[
-                              _AlarmBanner(
-                                onTap: () => unawaited(
-                                  LiveRecordingService.openExactAlarmSettings(),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            if (liveCount > 0) ...[
-                              _SectionHeader(
-                                label: 'RECORDING NOW',
-                                chip: '$liveCount LIVE',
-                                chipColor: _kRec,
-                              ),
-                              for (final (i, capture)
-                                  in desktopCaptures.indexed)
-                                _LiveCard(
-                                  channelName: capture.channelName,
-                                  startedAt: capture.startedAt,
-                                  now: _now,
-                                  bytesOf: () => capture.bytes,
-                                  fmtBytes: _fmtBytes,
-                                  fmtElapsed: _fmtElapsed,
-                                  autofocus: PlatformUtil.isAndroidTvCached &&
-                                      i == 0,
-                                  onStop: () =>
-                                      unawaited(_stopDesktop(capture)),
-                                ),
-                              for (final (i, rec) in _live.indexed)
-                                _LiveCard(
-                                  channelName: rec.channelName.isEmpty
-                                      ? rec.fileName
-                                      : rec.channelName,
-                                  startedAt: DateTime.fromMillisecondsSinceEpoch(
-                                    rec.startedAtMs,
-                                  ),
-                                  now: _now,
-                                  bytesOf: () => rec.bytes,
-                                  fmtBytes: _fmtBytes,
-                                  fmtElapsed: _fmtElapsed,
-                                  autofocus: PlatformUtil.isAndroidTvCached &&
-                                      i == 0 &&
-                                      desktopCaptures.isEmpty,
-                                  onStop: () => unawaited(_stopAndroid(rec)),
-                                ),
-                              const SizedBox(height: 18),
-                            ],
-                            _SectionHeader(
-                              label: 'SCHEDULED',
-                              chip: _schedules.isEmpty
-                                  ? null
-                                  : '${_schedules.length} UPCOMING',
-                              chipColor: _kAccent,
+                          const SizedBox(height: 14),
+                        ],
+                        if (_showBatteryNudge) ...[
+                          _BatteryBanner(
+                            onFix: () => unawaited(
+                              LiveRecordingService.requestIgnoreBatteryOptimizations(),
                             ),
-                            if (_schedules.isEmpty)
-                              const _EmptyHint(
-                                text:
-                                    'Nothing scheduled — pick an upcoming '
-                                    'programme in a channel\'s TV guide, or '
-                                    'press Schedule above.',
-                              )
-                            else
-                              for (final (i, schedule) in _schedules.indexed)
-                                _ScheduleRow(
-                                  schedule: schedule,
-                                  now: _now,
-                                  timeText:
-                                      '${_dayLabel(DateTime.fromMillisecondsSinceEpoch(schedule.startMs))} · '
-                                      '${_clock(schedule.startMs)} – '
-                                      '${_clock(schedule.endMs)}',
-                                  fmtCountdown: _fmtCountdown,
-                                  autofocus: PlatformUtil.isAndroidTvCached &&
-                                      liveCount == 0 &&
-                                      i == 0,
-                                  onCancel: () =>
-                                      unawaited(_cancelSchedule(schedule)),
-                                ),
-                            const SizedBox(height: 18),
-                            _SectionHeader(
-                              label: 'LIBRARY',
-                              chip: _library.isEmpty
-                                  ? null
-                                  : '${_library.length} · ${_fmtBytes(totalBytes)}',
-                              chipColor: Colors.white38,
-                              action: _desktop
-                                  ? _HubIconButton(
-                                      icon: Icons.folder_open_rounded,
-                                      tooltip: 'Show in folder',
-                                      onPressed: () => unawaited(_openFolder()),
-                                      onDown: _library.isEmpty
-                                          ? null
-                                          : () =>
-                                              _firstLibraryFocus.requestFocus(),
-                                    )
-                                  : null,
+                            onDismiss: _dismissBatteryNudge,
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+                        if (liveCount > 0) ...[
+                          _SectionHeader(
+                            label: 'RECORDING NOW',
+                            chip: '$liveCount LIVE',
+                            chipColor: _kRec,
+                          ),
+                          for (final (i, capture) in desktopCaptures.indexed)
+                            _LiveCard(
+                              channelName: capture.channelName,
+                              startedAt: capture.startedAt,
+                              now: _now,
+                              bytesOf: () => capture.bytes,
+                              fmtBytes: _fmtBytes,
+                              fmtElapsed: _fmtElapsed,
+                              autofocus:
+                                  PlatformUtil.isAndroidTvCached && i == 0,
+                              onStop: () => unawaited(_stopDesktop(capture)),
                             ),
-                            if (_library.isEmpty)
-                              const _EmptyHint(
-                                text:
-                                    'No recordings yet. Focus a live channel '
-                                    'and press Record, or schedule one — '
-                                    'finished recordings appear here, ready '
-                                    'to play.',
-                              )
-                            else
-                              for (final (i, entry) in _library.indexed)
-                                Builder(
-                                  builder: (context) {
-                                    final display = _displayFor(entry);
-                                    return _LibraryRow(
-                                      focusNode:
-                                          i == 0 ? _firstLibraryFocus : null,
-                                      title: display.title,
-                                      subtitle: [
-                                        if (display.channel != null &&
-                                            display.channel!.isNotEmpty &&
-                                            display.channel != display.title)
-                                          display.channel!,
-                                        '${_dayLabel(display.recordedAt)} '
-                                            '${_clock(display.recordedAt.millisecondsSinceEpoch)}',
-                                        _fmtBytes(entry.bytes),
-                                        if (display.durationMs != null)
-                                          _fmtDuration(display.durationMs!),
-                                      ].join(' · '),
-                                      monogramName: display.channel?.isNotEmpty ==
-                                              true
-                                          ? display.channel!
-                                          : display.title,
-                                      autofocus:
-                                          PlatformUtil.isAndroidTvCached &&
-                                              liveCount == 0 &&
-                                              _schedules.isEmpty &&
-                                              i == 0,
-                                      onPlay: () => unawaited(_play(entry)),
-                                      onDelete: () => unawaited(_delete(entry)),
-                                    );
-                                  },
-                                ),
-                            const SizedBox(height: 20),
-                            Text(
-                              _desktop
-                                  ? 'Recordings run while Debrify is open and '
-                                        'the computer is awake · saved in '
-                                        'Downloads/Debrify/Recordings'
-                                  : 'Recordings run even with the app closed '
-                                        '· saved in Downloads/Debrify/Recordings',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.white.withValues(alpha: 0.3),
+                          for (final (i, rec) in _live.indexed)
+                            _LiveCard(
+                              channelName: rec.channelName.isEmpty
+                                  ? rec.fileName
+                                  : rec.channelName,
+                              startedAt: DateTime.fromMillisecondsSinceEpoch(
+                                rec.startedAtMs,
                               ),
+                              now: _now,
+                              bytesOf: () => rec.bytes,
+                              fmtBytes: _fmtBytes,
+                              fmtElapsed: _fmtElapsed,
+                              autofocus:
+                                  PlatformUtil.isAndroidTvCached &&
+                                  i == 0 &&
+                                  desktopCaptures.isEmpty,
+                              onStop: () => unawaited(_stopAndroid(rec)),
                             ),
-                          ],
+                          const SizedBox(height: 18),
+                        ],
+                        _SectionHeader(
+                          label: 'SCHEDULED',
+                          chip: _schedules.isEmpty
+                              ? null
+                              : '${_schedules.length} UPCOMING',
+                          chipColor: _kAccent,
                         ),
+                        if (_schedules.isEmpty)
+                          const _EmptyHint(
+                            text:
+                                'Nothing scheduled — pick an upcoming '
+                                'programme in a channel\'s TV guide, or '
+                                'press Schedule above.',
+                          )
+                        else
+                          for (final (i, schedule) in _schedules.indexed)
+                            _ScheduleRow(
+                              schedule: schedule,
+                              now: _now,
+                              timeText:
+                                  '${_dayLabel(DateTime.fromMillisecondsSinceEpoch(schedule.startMs))} · '
+                                  '${_clock(schedule.startMs)} – '
+                                  '${_clock(schedule.endMs)}',
+                              fmtCountdown: _fmtCountdown,
+                              autofocus:
+                                  PlatformUtil.isAndroidTvCached &&
+                                  liveCount == 0 &&
+                                  i == 0,
+                              onCancel: () =>
+                                  unawaited(_cancelSchedule(schedule)),
+                            ),
+                        const SizedBox(height: 18),
+                        _SectionHeader(
+                          label: 'LIBRARY',
+                          chip: _library.isEmpty
+                              ? null
+                              : '${_library.length} · ${_fmtBytes(totalBytes)}',
+                          chipColor: Colors.white38,
+                          action: _desktop
+                              ? _HubIconButton(
+                                  icon: Icons.folder_open_rounded,
+                                  tooltip: 'Show in folder',
+                                  onPressed: () => unawaited(_openFolder()),
+                                  onDown: _library.isEmpty
+                                      ? null
+                                      : () => _firstLibraryFocus.requestFocus(),
+                                )
+                              : null,
+                        ),
+                        if (_library.isEmpty)
+                          const _EmptyHint(
+                            text:
+                                'No recordings yet. Focus a live channel '
+                                'and press Record, or schedule one — '
+                                'finished recordings appear here, ready '
+                                'to play.',
+                          )
+                        else
+                          for (final (i, entry) in _library.indexed)
+                            Builder(
+                              builder: (context) {
+                                final display = _displayFor(entry);
+                                return _LibraryRow(
+                                  focusNode: i == 0 ? _firstLibraryFocus : null,
+                                  title: display.title,
+                                  subtitle: [
+                                    if (display.channel != null &&
+                                        display.channel!.isNotEmpty &&
+                                        display.channel != display.title)
+                                      display.channel!,
+                                    '${_dayLabel(display.recordedAt)} '
+                                        '${_clock(display.recordedAt.millisecondsSinceEpoch)}',
+                                    _fmtBytes(entry.bytes),
+                                    if (display.durationMs != null)
+                                      _fmtDuration(display.durationMs!),
+                                  ].join(' · '),
+                                  monogramName:
+                                      display.channel?.isNotEmpty == true
+                                      ? display.channel!
+                                      : display.title,
+                                  autofocus:
+                                      PlatformUtil.isAndroidTvCached &&
+                                      liveCount == 0 &&
+                                      _schedules.isEmpty &&
+                                      i == 0,
+                                  onPlay: () => unawaited(_play(entry)),
+                                  onDelete: () => unawaited(_delete(entry)),
+                                );
+                              },
+                            ),
+                        const SizedBox(height: 20),
+                        Text(
+                          _desktop
+                              ? 'Recordings run while Debrify is open and '
+                                    'the computer is awake · saved in '
+                                    'Downloads/Debrify/Recordings'
+                              : 'Recordings run even with the app closed '
+                                    '· saved in Downloads/Debrify/Recordings',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.3),
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -1040,8 +1095,7 @@ class _RecDot extends StatefulWidget {
   State<_RecDot> createState() => _RecDotState();
 }
 
-class _RecDotState extends State<_RecDot>
-    with SingleTickerProviderStateMixin {
+class _RecDotState extends State<_RecDot> with SingleTickerProviderStateMixin {
   AnimationController? _controller;
 
   @override
@@ -1116,8 +1170,7 @@ class _ScheduleRowState extends State<_ScheduleRow> {
       autofocus: widget.autofocus,
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            isActivateOrSpaceKey(event.logicalKey)) {
+        if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onCancel();
           return KeyEventResult.handled;
         }
@@ -1193,8 +1246,9 @@ class _ScheduleRowState extends State<_ScheduleRow> {
               ValueListenableBuilder<DateTime>(
                 valueListenable: widget.now,
                 builder: (context, current, _) {
-                  final until = DateTime.fromMillisecondsSinceEpoch(s.startMs)
-                      .difference(current);
+                  final until = DateTime.fromMillisecondsSinceEpoch(
+                    s.startMs,
+                  ).difference(current);
                   final started = until.isNegative;
                   return Container(
                     padding: const EdgeInsets.symmetric(
@@ -1202,8 +1256,9 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: (started ? _kRec : _kAccent)
-                          .withValues(alpha: 0.14),
+                      color: (started ? _kRec : _kAccent).withValues(
+                        alpha: 0.14,
+                      ),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -1482,6 +1537,77 @@ class _EmptyDvr extends StatelessWidget {
   }
 }
 
+/// Evidence-based battery nudge: a recording died early and the app is not
+/// excluded from optimization. Fix opens the system exemption dialog; the X
+/// silences it until a NEWER interruption happens.
+class _BatteryBanner extends StatelessWidget {
+  final VoidCallback onFix;
+  final VoidCallback onDismiss;
+  const _BatteryBanner({required this.onFix, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      decoration: BoxDecoration(
+        color: _kRec.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _kRec.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.battery_alert_rounded,
+            color: Color(0xFFF59E0B),
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GestureDetector(
+              onTap: onFix,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'A recording stopped early',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'The phone likely put Debrify to sleep mid-capture. Tap '
+                    'to exclude Debrify from battery optimization so long '
+                    'recordings run to the end.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 11.5,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Dismiss',
+            icon: Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: Colors.white.withValues(alpha: 0.45),
+            ),
+            onPressed: onDismiss,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AlarmBanner extends StatefulWidget {
   final VoidCallback onTap;
   const _AlarmBanner({required this.onTap});
@@ -1498,8 +1624,7 @@ class _AlarmBannerState extends State<_AlarmBanner> {
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            isActivateOrSpaceKey(event.logicalKey)) {
+        if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onTap();
           return KeyEventResult.handled;
         }
@@ -1611,8 +1736,7 @@ class _HubButtonState extends State<_HubButton> {
       autofocus: widget.autofocus,
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            isActivateOrSpaceKey(event.logicalKey)) {
+        if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }
@@ -1692,8 +1816,7 @@ class _HubIconButtonState extends State<_HubIconButton> {
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            isActivateOrSpaceKey(event.logicalKey)) {
+        if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }
@@ -1761,8 +1884,7 @@ class _RowIconButtonState extends State<_RowIconButton> {
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            isActivateOrSpaceKey(event.logicalKey)) {
+        if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }

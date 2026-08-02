@@ -213,17 +213,31 @@ class MainActivity : FlutterActivity() {
     private var pendingStoragePermissionResult: MethodChannel.Result? = null
     private val legacyStoragePermissionRequestCode = 7401
 
+    /** Android 13+ notification permission, asked CONTEXTUALLY on the first
+     *  record/schedule (recording runs without it — but progress, "Saved",
+     *  and "schedule skipped" notifications go silent). Asked exactly once:
+     *  a decline is remembered and never nagged again. */
+    private var pendingNotificationPermissionResult: MethodChannel.Result? = null
+    private val notificationPermissionRequestCode = 7403
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != legacyStoragePermissionRequestCode) return
         val granted = grantResults.isNotEmpty() &&
             grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
-        pendingStoragePermissionResult?.success(granted)
-        pendingStoragePermissionResult = null
+        when (requestCode) {
+            legacyStoragePermissionRequestCode -> {
+                pendingStoragePermissionResult?.success(granted)
+                pendingStoragePermissionResult = null
+            }
+            notificationPermissionRequestCode -> {
+                pendingNotificationPermissionResult?.success(granted)
+                pendingNotificationPermissionResult = null
+            }
+        }
     }
 
     // ── Pending-recording registry ──────────────────────────────────────────
@@ -359,6 +373,14 @@ class MainActivity : FlutterActivity() {
                     "durationMs" to durationMs.takeIf {
                         it in 1_000L..(12L * 60 * 60 * 1000)
                     },
+                    // Crash-finalized (the OS killed the capture; reconcile
+                    // salvaged the partial) — the hub's battery-optimization
+                    // nudge keys off this. The WHEN is updatedAt (finalize
+                    // time), not the start: a dismissal must only silence
+                    // interruptions that had already happened.
+                    "interrupted" to (entry.errorMessage != null),
+                    "interruptedAtMs" to
+                        if (entry.errorMessage != null) entry.updatedAt else null,
                 ),
             )
         }
@@ -1504,6 +1526,49 @@ class MainActivity : FlutterActivity() {
 						result.error("open_failed", e.message, null)
 					}
 				}
+				"ensureNotificationPermission" -> {
+					// True = notifications will show. Ask at most once ever;
+					// recording proceeds either way, so a decline is final
+					// unless the user flips it in system settings.
+					if (android.os.Build.VERSION.SDK_INT < 33) {
+						result.success(true)
+						return@setMethodCallHandler
+					}
+					val grantedNow = androidx.core.content.ContextCompat.checkSelfPermission(
+						this,
+						android.Manifest.permission.POST_NOTIFICATIONS,
+					) == android.content.pm.PackageManager.PERMISSION_GRANTED
+					if (grantedNow) {
+						result.success(true)
+						return@setMethodCallHandler
+					}
+					val prefs = getSharedPreferences("debrify_permissions", MODE_PRIVATE)
+					if (prefs.getBoolean("notification_permission_asked", false)) {
+						result.success(false)
+						return@setMethodCallHandler
+					}
+					if (pendingNotificationPermissionResult != null) {
+						result.success(false)
+						return@setMethodCallHandler
+					}
+					prefs.edit().putBoolean("notification_permission_asked", true).apply()
+					pendingNotificationPermissionResult = result
+					androidx.core.app.ActivityCompat.requestPermissions(
+						this,
+						arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+						notificationPermissionRequestCode,
+					)
+				}
+				"isIgnoringBatteryOptimizations" -> {
+					// Doze (and this API) arrived in M — below that there is
+					// nothing to be exempt from, so "exempt" is the truth.
+					if (android.os.Build.VERSION.SDK_INT < 23) {
+						result.success(true)
+						return@setMethodCallHandler
+					}
+					val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+					result.success(pm.isIgnoringBatteryOptimizations(packageName))
+				}
 				"openBatteryOptimizationSettings" -> {
 					try {
 						val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
@@ -1515,6 +1580,10 @@ class MainActivity : FlutterActivity() {
 					}
 				}
 				"requestIgnoreBatteryOptimizationForApp" -> {
+					if (android.os.Build.VERSION.SDK_INT < 23) {
+						result.success(false)
+						return@setMethodCallHandler
+					}
 					try {
 						val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
 							data = Uri.parse("package:" + packageName)

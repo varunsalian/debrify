@@ -66,6 +66,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
     this.onOpenScheduledRecordings,
     this.maxConcurrentRecordings = 2,
     this.onPickMaxConcurrent,
+    this.batteryExempt,
+    this.onRequestBatteryExemption,
     this.openAddSource = false,
   });
 
@@ -104,6 +106,11 @@ class IptvSettingsTwoPane extends StatefulWidget {
   /// pane; the host page owns persistence.
   final int maxConcurrentRecordings;
   final VoidCallback? onPickMaxConcurrent;
+
+  /// Null hides the row (non-Android / TV); otherwise current exemption
+  /// state, label-driving.
+  final bool? batteryExempt;
+  final VoidCallback? onRequestBatteryExemption;
 
   /// 0 = from URL, 1 = from file, 2 = Xtream login. Owned by the parent so the
   /// existing TabController (and the phone layout) stay in sync with it.
@@ -986,6 +993,21 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                     'extra provider connection',
                 trailing: _chevron,
                 onTap: () => widget.onPickMaxConcurrent?.call(),
+                onLeft: _returnToRail,
+                isLast: false,
+              ),
+            if ((!widget.showEngineToggle || widget.recordingEngineEnabled) &&
+                widget.batteryExempt != null)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.battery_alert_rounded,
+                title: 'Battery optimization',
+                subtitle: widget.batteryExempt == true
+                    ? 'Excluded — long recordings can run to the end'
+                    : 'Optimized — the phone may kill long recordings; '
+                          'tap to exclude Debrify',
+                trailing: _chevron,
+                onTap: () => widget.onRequestBatteryExemption?.call(),
                 onLeft: _returnToRail,
                 isLast: false,
               ),
