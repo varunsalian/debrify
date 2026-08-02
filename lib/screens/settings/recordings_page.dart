@@ -61,6 +61,14 @@ class _RecordingsPageState extends State<RecordingsPage>
   /// silently re-start the clocks the lifecycle handler just stopped.
   bool _appVisible = true;
 
+  /// The first library row's main (play) focus. The folder button sits on
+  /// the same right edge as the rows' delete icons, so geometric DOWN from
+  /// it would land on the first DELETE — this node lets the button send
+  /// DOWN to the card instead.
+  final FocusNode _firstLibraryFocus = FocusNode(
+    debugLabel: 'recordings_first_library_row',
+  );
+
   bool get _isAndroid => !kIsWeb && Platform.isAndroid;
   bool get _desktop => DesktopScheduleService.instance.isSupported;
 
@@ -90,6 +98,7 @@ class _RecordingsPageState extends State<RecordingsPage>
     _ticker?.cancel();
     _poll?.cancel();
     _now.dispose();
+    _firstLibraryFocus.dispose();
     super.dispose();
   }
 
@@ -589,6 +598,16 @@ class _RecordingsPageState extends State<RecordingsPage>
             _HubBar(
               onBack: () => Navigator.of(context).maybePop(),
               onSchedule: () => unawaited(_createManualSchedule()),
+              // Redirect DOWN only when the first focusable below would be a
+              // library delete icon: no alarm banner, no live Stop, no
+              // schedule rows, and no desktop folder button in between.
+              onScheduleDown: (!_desktop &&
+                      !(_isAndroid && !_exactAlarms) &&
+                      liveCount == 0 &&
+                      _schedules.isEmpty &&
+                      _library.isNotEmpty)
+                  ? () => _firstLibraryFocus.requestFocus()
+                  : null,
             ),
             Expanded(
               child: _loading
@@ -693,6 +712,10 @@ class _RecordingsPageState extends State<RecordingsPage>
                                       icon: Icons.folder_open_rounded,
                                       tooltip: 'Show in folder',
                                       onPressed: () => unawaited(_openFolder()),
+                                      onDown: _library.isEmpty
+                                          ? null
+                                          : () =>
+                                              _firstLibraryFocus.requestFocus(),
                                     )
                                   : null,
                             ),
@@ -710,6 +733,8 @@ class _RecordingsPageState extends State<RecordingsPage>
                                   builder: (context) {
                                     final display = _displayFor(entry);
                                     return _LibraryRow(
+                                      focusNode:
+                                          i == 0 ? _firstLibraryFocus : null,
                                       title: display.title,
                                       subtitle: [
                                         if (display.channel != null &&
@@ -765,7 +790,16 @@ class _RecordingsPageState extends State<RecordingsPage>
 class _HubBar extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onSchedule;
-  const _HubBar({required this.onBack, required this.onSchedule});
+
+  /// Non-null exactly when no focusable row sits between the hub bar and
+  /// the library — the state where geometric DOWN would hit a delete icon.
+  final VoidCallback? onScheduleDown;
+
+  const _HubBar({
+    required this.onBack,
+    required this.onSchedule,
+    this.onScheduleDown,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -796,6 +830,7 @@ class _HubBar extends StatelessWidget {
             label: 'Schedule',
             filled: true,
             onPressed: onSchedule,
+            onDown: onScheduleDown,
           ),
         ],
       ),
@@ -1184,6 +1219,7 @@ class _ScheduleRowState extends State<_ScheduleRow> {
 // ── Library row ─────────────────────────────────────────────────────────────
 
 class _LibraryRow extends StatefulWidget {
+  final FocusNode? focusNode;
   final String title;
   final String subtitle;
   final String monogramName;
@@ -1192,6 +1228,7 @@ class _LibraryRow extends StatefulWidget {
   final VoidCallback onDelete;
 
   const _LibraryRow({
+    this.focusNode,
     required this.title,
     required this.subtitle,
     required this.monogramName,
@@ -1225,6 +1262,7 @@ class _LibraryRowState extends State<_LibraryRow> {
         children: [
           Expanded(
             child: Focus(
+              focusNode: widget.focusNode,
               autofocus: widget.autofocus,
               onFocusChange: (f) => setState(() => _focused = f),
               onKeyEvent: (node, event) {
@@ -1516,6 +1554,12 @@ class _HubButton extends StatefulWidget {
   final bool autofocus;
   final VoidCallback onPressed;
 
+  /// Explicit DOWN target — same right-edge geometry trap as
+  /// [_HubIconButton.onDown]: without it, DOWN from the hub bar's Schedule
+  /// button can land on a library row's DELETE when nothing focusable sits
+  /// between them.
+  final VoidCallback? onDown;
+
   const _HubButton({
     required this.icon,
     required this.label,
@@ -1523,6 +1567,7 @@ class _HubButton extends StatefulWidget {
     this.filled = false,
     this.danger = false,
     this.autofocus = false,
+    this.onDown,
   });
 
   @override
@@ -1553,6 +1598,17 @@ class _HubButtonState extends State<_HubButton> {
         if (event is KeyDownEvent &&
             isActivateOrSpaceKey(event.logicalKey)) {
           widget.onPressed();
+          return KeyEventResult.handled;
+        }
+        if (widget.onDown != null &&
+            event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          widget.onDown!();
+          return KeyEventResult.handled;
+        }
+        // Swallow DOWN repeats while redirecting (see _HubIconButton).
+        if (widget.onDown != null &&
+            event.logicalKey == LogicalKeyboardKey.arrowDown) {
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -1595,10 +1651,17 @@ class _HubIconButton extends StatefulWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onPressed;
+
+  /// Explicit DOWN target. The folder button shares the right edge with the
+  /// library rows' delete icons, so pure geometry would move DOWN onto a
+  /// DELETE — callers pass this to send focus to the row's card instead.
+  final VoidCallback? onDown;
+
   const _HubIconButton({
     required this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.onDown,
   });
 
   @override
@@ -1616,6 +1679,18 @@ class _HubIconButtonState extends State<_HubIconButton> {
         if (event is KeyDownEvent &&
             isActivateOrSpaceKey(event.logicalKey)) {
           widget.onPressed();
+          return KeyEventResult.handled;
+        }
+        if (widget.onDown != null &&
+            event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          widget.onDown!();
+          return KeyEventResult.handled;
+        }
+        // Swallow DOWN repeats while redirecting, so a held key can't slip
+        // one event through geometric traversal mid-move.
+        if (widget.onDown != null &&
+            event.logicalKey == LogicalKeyboardKey.arrowDown) {
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
