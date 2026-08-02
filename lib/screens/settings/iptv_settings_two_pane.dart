@@ -53,6 +53,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onCreateList,
+    this.onManageHidden,
+    this.hiddenCounts = const {},
     required this.onFocusFirstFormField,
     required this.onListActions,
     required this.onToggleStartup,
@@ -132,6 +134,14 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final ValueChanged<IptvPlaylist> onEdit;
   final ValueChanged<IptvPlaylist> onDelete;
   final VoidCallback onCreateList;
+
+  /// Opens a source's hidden-categories manager. Null on sources that store
+  /// no catalog (imported files), which is also what keeps the row off them.
+  final ValueChanged<IptvPlaylist>? onManageHidden;
+
+  /// Hidden-category count per playlist id — the row's subtitle. Owned by the
+  /// host page, which re-reads it when the manager closes.
+  final Map<String, int> hiddenCounts;
 
   /// DOWN off the method chooser lands on the current form's first field.
   /// Hand-wired rather than left to geometric traversal, which is exactly
@@ -695,6 +705,22 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               onTap: () => widget.onEdit(playlist),
               onLeft: _returnToRail,
             ),
+            // Imported files store no catalog, so there is nothing to hide
+            // categories against — the row stays off them entirely.
+            if (widget.onManageHidden != null && !playlist.isLocalFile)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.visibility_off_rounded,
+                title: 'Hidden categories',
+                subtitle: switch (widget.hiddenCounts[playlist.id] ?? 0) {
+                  0 => 'Nothing hidden from this source',
+                  1 => '1 category hidden',
+                  final n => '$n categories hidden',
+                },
+                trailing: _chevron,
+                onTap: () => widget.onManageHidden!(playlist),
+                onLeft: _returnToRail,
+              ),
             _PaneRow(
               focusNode: _paneNode(row++),
               icon: Icons.event_note_rounded,

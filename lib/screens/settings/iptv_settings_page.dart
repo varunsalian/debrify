@@ -21,6 +21,7 @@ import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/live_recording_service.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
+import 'iptv_hidden_categories_page.dart';
 import 'recordings_page.dart';
 import '../../widgets/recording_limit_dialogs.dart';
 import '../../widgets/iptv/iptv_startup_channel_picker.dart';
@@ -99,6 +100,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   final FocusNode _createListFocusNode = FocusNode(
     debugLabel: 'iptv-create-list',
   );
+
+  /// Focus nodes for the Hidden-categories section — one per catalog-backed
+  /// source. Its own array for the same reason [_listFocusNodes] is: the
+  /// arrays above are index arithmetic that a third section would break.
+  final List<FocusNode> _hiddenFocusNodes = [];
+
+  /// Hidden-category counts per playlist id, for the section's row subtitles.
+  /// Read from the catalog DB on load rather than per build — a settings
+  /// rebuild must not query once per source.
+  Map<String, int> _hiddenCounts = const {};
 
   List<IptvListMeta> _lists = [];
 
@@ -232,6 +243,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     for (final node in _listFocusNodes) {
       node.dispose();
     }
+    for (final node in _hiddenFocusNodes) {
+      node.dispose();
+    }
     _createListFocusNode.dispose();
     _startupChannelFocusNode.dispose();
     super.dispose();
@@ -260,6 +274,72 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       final index = _listFocusNodes.length;
       _listFocusNodes.add(FocusNode(debugLabel: 'iptv-list-$index'));
     }
+
+    // One per source that can have hidden categories.
+    final hiddenNeeded = _hideableSources.length;
+    while (_hiddenFocusNodes.length > hiddenNeeded) {
+      _hiddenFocusNodes.removeLast().dispose();
+    }
+    while (_hiddenFocusNodes.length < hiddenNeeded) {
+      final index = _hiddenFocusNodes.length;
+      _hiddenFocusNodes.add(FocusNode(debugLabel: 'iptv-hidden-$index'));
+    }
+  }
+
+  /// Sources whose categories can be hidden: the ones stored as catalogs.
+  /// Imported files and (elsewhere) virtual shelves never become one, so
+  /// there is nothing to hide against.
+  List<IptvPlaylist> get _hideableSources => [
+    for (final p in _playlists)
+      if (!p.isLocalFile) p,
+  ];
+
+  /// Every catalog key a source can store under — an Xtream login has one per
+  /// content type, everything else exactly one.
+  List<String> _catalogKeysFor(IptvPlaylist playlist) {
+    if (playlist.isXtreamCodes) {
+      final keys = <String>[];
+      for (final type in IptvCatalogKey.xtreamContentTypes) {
+        final key = IptvCatalogKey.forPlaylist(playlist, type);
+        if (key != null) keys.add(key);
+      }
+      return keys;
+    }
+    final key = IptvCatalogKey.forPlaylist(playlist, 'live');
+    return key == null ? const [] : [key];
+  }
+
+  /// Open the per-source hidden-categories manager, then re-read the counts
+  /// the section badges rows with — the page is where they change.
+  Future<void> _openHiddenCategories(IptvPlaylist playlist) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => IptvHiddenCategoriesPage(playlist: playlist),
+      ),
+    );
+    if (!mounted) return;
+    setState(_reloadHiddenCounts);
+  }
+
+  /// Re-read how many categories each source hides. One query for every key,
+  /// then summed per source.
+  void _reloadHiddenCounts() {
+    if (!IptvCatalogDb.isOpen) return;
+    final keysBySource = <String, List<String>>{
+      for (final p in _hideableSources) p.id: _catalogKeysFor(p),
+    };
+    final counts = IptvCatalogDb.hiddenGroupCounts(
+      keysBySource.values.expand((keys) => keys),
+    );
+    final out = <String, int>{};
+    for (final entry in keysBySource.entries) {
+      var total = 0;
+      for (final key in entry.value) {
+        total += counts[key] ?? 0;
+      }
+      if (total > 0) out[entry.key] = total;
+    }
+    _hiddenCounts = out;
   }
 
   List<IptvListMeta> get _customLists => [
@@ -368,6 +448,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _loading = false;
     });
     _ensureFocusNodes();
+    _reloadHiddenCounts();
 
     // TV entry focus: land on the first tab (not a TextField, so no keyboard
     // pops) so DPAD users are never stranded on nothing.
@@ -743,6 +824,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         IptvCatalogKey.forUrl(playlist.url),
       ]);
     }
+    // The source's hidden categories go with it. Deliberately here and not
+    // inside the catalog delete: a manual REFRESH also drops and re-ingests
+    // the catalog under the same keys, and hiding rules must survive that.
+    IptvCatalogDb.forgetHiddenGroups(_catalogKeysFor(playlist));
 
     // Remove list memberships and watch history that belonged to this
     // playlist — both replay from stored metadata, so either would otherwise
@@ -1049,6 +1134,45 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
   }
 
+  /// One row per catalog-backed source, each opening its own manager. Per
+  /// source rather than one combined screen: the hidden set is stored per
+  /// catalog, and two providers' identically-named categories are unrelated.
+  List<Widget> _buildHiddenCategoriesSection() {
+    final sources = _hideableSources;
+    return [
+      for (var i = 0; i < sources.length; i++)
+        ListTile(
+          focusNode: i < _hiddenFocusNodes.length
+              ? _hiddenFocusNodes[i]
+              : null,
+          leading: Icon(
+            (_hiddenCounts[sources[i].id] ?? 0) > 0
+                ? Icons.visibility_off_rounded
+                : Icons.visibility_rounded,
+            color: (_hiddenCounts[sources[i].id] ?? 0) > 0
+                ? kSettingsAccent
+                : kSettingsDim2,
+          ),
+          title: Text(
+            sources[i].name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            switch (_hiddenCounts[sources[i].id] ?? 0) {
+              0 => 'Nothing hidden',
+              1 => '1 category hidden',
+              final n => '$n categories hidden',
+            },
+            style: TextStyle(fontSize: 12, color: kSettingsDim),
+          ),
+          trailing: Icon(Icons.chevron_right_rounded, color: kSettingsDim2),
+          onTap: () => unawaited(_openHiddenCategories(sources[i])),
+        ),
+    ];
+  }
+
   List<Widget> _buildListsSection() {
     final lists = _customLists;
     if (lists.isEmpty) {
@@ -1218,6 +1342,19 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         IptvCatalogKey.forUrl(playlist.url),
       ]);
     }
+
+    // Hidden-category rules follow the source's IDENTITY, not its catalogs:
+    // clear only the keys this edit makes unreachable, or they sit orphaned
+    // and silently reattach if that endpoint/account is ever added again.
+    //
+    // Set difference rather than "did anything change": a PASSWORD-only edit
+    // deletes and re-ingests the catalogs above, but the key is
+    // server+username+type, so its keys are unchanged and its rules must
+    // survive. Same for a rename.
+    final unreachableKeys = _catalogKeysFor(
+      playlist,
+    ).toSet().difference(_catalogKeysFor(updated).toSet());
+    IptvCatalogDb.forgetHiddenGroups(unreachableKeys);
 
     final newPlaylists = [
       for (final p in _playlists)
@@ -1537,6 +1674,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       onEdit: _editPlaylist,
       onDelete: _removePlaylist,
       onCreateList: _createList,
+      onManageHidden: (playlist) =>
+          unawaited(_openHiddenCategories(playlist)),
+      hiddenCounts: _hiddenCounts,
       onFocusFirstFormField: () =>
           _focusAndReveal(switch (_tabController.index) {
             1 => _importFileButtonFocusNode,
@@ -1686,6 +1826,19 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             ),
           ),
           const SizedBox(height: 24),
+
+          // Hidden categories — one row per source that stores a catalog.
+          if (_hideableSources.isNotEmpty) ...[
+            const SettingsSectionLabel('Hidden categories'),
+            Text(
+              'Hold OK (or long-press) a category on the IPTV page to hide '
+              'it. Nothing is deleted — bring it back here any time.',
+              style: TextStyle(fontSize: 12, color: kSettingsDim),
+            ),
+            const SizedBox(height: 16),
+            Card(child: Column(children: _buildHiddenCategoriesSection())),
+            const SizedBox(height: 24),
+          ],
 
           // Startup channel
           const SettingsSectionLabel('Startup'),
