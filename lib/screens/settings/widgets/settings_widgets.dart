@@ -126,6 +126,12 @@ abstract final class SettingsRows {
     title: 'Screen Size',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen layout) — passed per call site.
+  static const tvHomeStyle = SettingsRowContent(
+    icon: Icons.view_quilt_rounded,
+    title: 'Home Layout',
+    subtitle: '',
+  );
   // Subtitle is dynamic (current folder) — passed per call site.
   static const downloadLocation = SettingsRowContent(
     icon: Icons.folder_rounded,

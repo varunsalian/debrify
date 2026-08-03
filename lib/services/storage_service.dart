@@ -622,6 +622,26 @@ class StorageService {
     );
   }
 
+  static const String _tvHomeStyleKey = 'tv_home_style';
+
+  /// TV Home layout: 'classic' (hero + scrolling rows, the default) or
+  /// 'canvas' (full-bleed stage + one bottom shelf). Phone/desktop and the
+  /// Search tab never read it. A previously-stored 'shelf' (removed layout)
+  /// coerces to 'classic' on read.
+  static Future<String> getTvHomeStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_tvHomeStyleKey);
+    return raw == 'canvas' ? 'canvas' : 'classic';
+  }
+
+  static Future<void> setTvHomeStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _tvHomeStyleKey,
+      style == 'canvas' ? 'canvas' : 'classic',
+    );
+  }
+
   /// The classic bar's user-chosen middle slots, as REAL tab indices (Home
   /// and More are fixed anchors and never stored). Null = never customized
   /// (defaults apply); an explicit short list is a deliberate choice and the

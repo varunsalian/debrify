@@ -39,6 +39,7 @@ import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
 import 'settings/settings_search.dart';
+import 'settings/tv_home_style_page.dart';
 import 'settings/tv_screen_size_page.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
@@ -130,6 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoUpdateChecksEnabled = true;
   bool _tvKeyboardEnabled = true;
   int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
+  String _tvHomeStyle = 'classic';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
@@ -196,6 +198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getMdblistUsername(),
       StorageService.getTvKeyboardEnabled(),
       StorageService.getTvUiScalePercent(),
+      StorageService.getTvHomeStyle(),
     ]);
 
     if (!mounted) return;
@@ -220,6 +223,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final mdblistUsername = results[17] as String?;
     final tvKeyboardEnabled = results[18] as bool;
     final tvUiScalePercent = results[19] as int;
+    final tvHomeStyle = results[20] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -353,6 +357,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _autoUpdateChecksEnabled = autoCheckEnabled;
     _tvKeyboardEnabled = tvKeyboardEnabled;
     _tvUiScalePercent = tvUiScalePercent;
+    _tvHomeStyle = tvHomeStyle;
 
     setState(() {});
 
@@ -649,6 +654,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onToggleTvKeyboard: _toggleTvKeyboard,
       tvUiScalePercent: _tvUiScalePercent,
       onOpenTvScreenSize: _openTvScreenSize,
+      tvHomeStyleLabel: tvHomeStyleLabel(_tvHomeStyle),
+      onOpenTvHomeStyle: _openTvHomeStyle,
       showSupportDonation: _supportDonation.hasProviders,
       supportDonationLabel: _supportSettingsLabel,
       supportDonationSubtitle: _supportSettingsSubtitle,
@@ -1002,6 +1009,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'resolution',
             'compact',
             'fit more',
+          ],
+        ),
+      // Android TV only — the layout branch only exists on the TV home board.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvHomeStyle,
+          'TV Mode',
+          _openTvHomeStyle,
+          subtitle: tvHomeStyleLabel(_tvHomeStyle),
+          keywords: const [
+            'home',
+            'layout',
+            'home screen',
+            'canvas',
+            'shelf',
+            'classic',
+            'rows',
+            'redesign',
+            'view',
           ],
         ),
 
@@ -2651,6 +2677,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _tvUiScalePercent = percent;
+    });
+  }
+
+  /// The page writes the pref and live-applies via MainPageBridge; re-read it
+  /// on the way back so the rail row's caption matches.
+  Future<void> _openTvHomeStyle() async {
+    await pushSettingsPage(context, const TvHomeStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getTvHomeStyle();
+    if (!mounted) return;
+    setState(() {
+      _tvHomeStyle = style;
     });
   }
 

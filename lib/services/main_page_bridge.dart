@@ -18,6 +18,11 @@ class MainPageBridge {
   /// keyword bar's clearance for the floating button, which the classic bar
   /// doesn't have). 'classic' | 'floating'.
   static String phoneNavStyleCached = 'classic';
+
+  /// Fired by the TV Home Layout picker after writing `tv_home_style`, so the
+  /// live Home board re-reads the pref and rebuilds without a restart. Set by
+  /// the HOME SearchScreen instance only (not the Search tab's).
+  static VoidCallback? tvHomeStyleChanged;
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;

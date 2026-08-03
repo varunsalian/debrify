@@ -64,6 +64,10 @@ class SettingsTvLayout extends StatefulWidget {
   // here only to caption the row; the picker itself is its own page.
   final int tvUiScalePercent;
   final Future<void> Function() onOpenTvScreenSize;
+  // Home layout: which TV home view is active. Held here only to caption the
+  // row; the picker itself is its own page.
+  final String tvHomeStyleLabel;
+  final Future<void> Function() onOpenTvHomeStyle;
   final bool showSupportDonation;
   final String supportDonationLabel;
   final String supportDonationSubtitle;
@@ -100,6 +104,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onToggleTvKeyboard,
     required this.tvUiScalePercent,
     required this.onOpenTvScreenSize,
+    required this.tvHomeStyleLabel,
+    required this.onOpenTvHomeStyle,
     required this.showSupportDonation,
     required this.supportDonationLabel,
     required this.supportDonationSubtitle,
@@ -565,6 +571,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
                 focusNode: _paneNodes[2],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvHomeStyle,
+                subtitle: widget.tvHomeStyleLabel,
+                onTap: widget.onOpenTvHomeStyle,
+                focusNode: _paneNodes[3],
               ),
             ],
           ),
