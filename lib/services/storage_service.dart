@@ -413,6 +413,38 @@ class StorageService {
     tvKeyboardEnabledCached = enabled;
   }
 
+  /// Android TV screen size, as a percentage of the panel's native density.
+  ///
+  /// A 1080p TV at density 320 gives Flutter a 960x540 logical canvas, so
+  /// every screen is drawn 2x and reads as "zoomed in" across a big panel.
+  /// A value below 100 makes MainActivity report a proportionally smaller
+  /// devicePixelRatio to the engine, which widens the logical canvas (80% ->
+  /// 1200x675) so the same layouts fit more and draw smaller — no per-screen
+  /// changes involved.
+  ///
+  /// Read natively from `flutter.tv_ui_scale_percent` BEFORE the Flutter
+  /// engine is built, so a change only takes effect on the next cold start.
+  /// Android TV only; ignored everywhere else.
+  ///
+  /// [kTvUiScaleDefault] is 80: at 100 the app reads noticeably larger than
+  /// the TV apps people compare it to (Stremio's web-rendered UI lays out
+  /// against a canvas far closer to 1920 than to 960), so Compact is the
+  /// out-of-the-box size and 100 is there to put the old one back. MUST stay
+  /// in step with MainActivity's `computeUiScale` fallback.
+  static const List<int> kTvUiScaleOptions = [100, 90, 80];
+  static const int kTvUiScaleDefault = 80;
+
+  static Future<int> getTvUiScalePercent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getInt('tv_ui_scale_percent');
+    return kTvUiScaleOptions.contains(stored) ? stored! : kTvUiScaleDefault;
+  }
+
+  static Future<void> setTvUiScalePercent(int percent) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('tv_ui_scale_percent', percent);
+  }
+
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,
   /// purple Discover theme, 1-click marketplace) instead of the classic two-tab
   /// Addons screen. On by default; can be turned off per-device via
@@ -606,10 +638,9 @@ class StorageService {
 
   static Future<void> setPhoneNavBarIndices(List<int> indices) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _phoneNavBarIndicesKey,
-      [for (final i in indices) '$i'],
-    );
+    await prefs.setStringList(_phoneNavBarIndicesKey, [
+      for (final i in indices) '$i',
+    ]);
   }
 
   static Future<bool> getRealDebridHiddenFromNav() async {

@@ -100,7 +100,8 @@ class MediaKitTrailerEngine implements TrailerEngine {
   @override
   Stream<void> get errorStream => const Stream<void>.empty();
   @override
-  Future<void> get firstFrameRendered => _controller.waitUntilFirstFrameRendered;
+  Future<void> get firstFrameRendered =>
+      _controller.waitUntilFirstFrameRendered;
 
   @override
   Future<void> open({
@@ -309,8 +310,10 @@ class ExoTrailerEngine implements TrailerEngine {
   Future<void> setVolume(double volume) async {
     final id = _textureId;
     if (_disposed || id == null) return;
-    await _TvTrailerChannel.instance
-        .setVolume(id, (volume / 100).clamp(0.0, 1.0));
+    await _TvTrailerChannel.instance.setVolume(
+      id,
+      (volume / 100).clamp(0.0, 1.0),
+    );
   }
 
   @override
@@ -456,8 +459,10 @@ class _UnderlayHoleState extends State<_UnderlayHole> {
     // density. Deliberately NOT this view's devicePixelRatio: under low-res
     // rendering (weak-GPU TVs) Flutter's dpr is scaled down (e.g. 1.333)
     // while the native window stays in real display space (density 2.0) —
-    // multiplying here would land the video at 2/3 size and offset. Flutter
-    // logical == Android dp on every device, so this is mode-independent.
+    // multiplying here would land the video at 2/3 size and offset. The
+    // native side owns the whole conversion (density × the TV screen-size
+    // factor, which is the only thing that breaks logical == dp), so this
+    // wire format stays mode-independent.
     _TvTrailerChannel.instance.setBounds(
       id,
       rect.left,
@@ -498,8 +503,9 @@ class _TvTrailerChannel {
   }
 
   static final _TvTrailerChannel instance = _TvTrailerChannel._();
-  static const MethodChannel _channel =
-      MethodChannel('com.debrify.app/tv_trailer');
+  static const MethodChannel _channel = MethodChannel(
+    'com.debrify.app/tv_trailer',
+  );
 
   final Map<int, ExoTrailerEngine> _engines = {};
   // Events that arrive before their engine registers (race guard) are buffered.
@@ -521,8 +527,7 @@ class _TvTrailerChannel {
       'volume': volume,
       'loop': loop,
       'underlay': underlay,
-      if (httpHeaders != null && httpHeaders.isNotEmpty)
-        'headers': httpHeaders,
+      if (httpHeaders != null && httpHeaders.isNotEmpty) 'headers': httpHeaders,
     });
     return (res?['textureId'] as num).toInt();
   }
@@ -558,6 +563,7 @@ class _TvTrailerChannel {
 
   Future<void> setVolume(int id, double v) =>
       _safeInvoke('setVolume', {'id': id, 'volume': v});
+
   /// Bounds are LOGICAL px (Flutter logical == Android dp); the native side
   /// converts to window px with its own display density. See _UnderlayHole.
   Future<void> setBounds(
@@ -579,8 +585,9 @@ class _TvTrailerChannel {
   Future<void> pause(int id) => _safeInvoke('pause', {'id': id});
   Future<Map<String, dynamic>?> getPosition(int id) async {
     try {
-      return await _channel
-          .invokeMapMethod<String, dynamic>('getPosition', {'id': id});
+      return await _channel.invokeMapMethod<String, dynamic>('getPosition', {
+        'id': id,
+      });
     } on MissingPluginException {
       return null;
     } on PlatformException {

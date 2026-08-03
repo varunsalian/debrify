@@ -505,6 +505,46 @@ class MainActivity : FlutterActivity() {
     /** <1.0 when low-res rendering is active (e.g. 720/1080 = 0.667). */
     private var renderScale = 1.0f
 
+    // ── TV screen size (UI zoom-out) ────────────────────────────────────────
+    // A 1080p panel at density 320 hands Flutter a 960x540 logical canvas, so
+    // every screen — all written in logical px — is drawn 2x and reads as
+    // "zoomed in" across a big TV. Dividing ONLY the reported devicePixelRatio
+    // grows that canvas (0.8 -> 1200x675) while the window, the surface buffer
+    // and the physical metrics stay exactly as they were: the same layouts get
+    // more room and draw proportionally smaller, with no widget changes. It
+    // composes with [renderScale] (which scales the physical side instead) and,
+    // unlike that one, keeps pointer mapping consistent — Flutter divides
+    // pointer physical px by this same dpr.
+
+    /** The TV UI size factor ("Screen Size" in TV Mode settings): <1.0 on
+     *  Android TV by DEFAULT — see [DEFAULT_UI_SCALE_PERCENT] — and always
+     *  exactly 1.0 on every non-TV device. */
+    private var uiScale = 1.0f
+
+    private fun computeUiScale() {
+        uiScale = 1.0f
+        if (!isTelevision()) return
+        // Dart writes this with SharedPreferences.setInt, which lands as a
+        // Long. Any other type (or none) means "never set" → the default.
+        val percent = try {
+            getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                .getLong("flutter.tv_ui_scale_percent", DEFAULT_UI_SCALE_PERCENT)
+                .toInt()
+        } catch (e: Exception) {
+            DEFAULT_UI_SCALE_PERCENT.toInt()
+        }
+        // Anything outside 70..100 falls back to the default rather than being
+        // clamped: a stray 0 (or a value from a future build) must never be
+        // able to silently shrink the UI to the smallest thing allowed. 70 is
+        // the floor because TV text stops being legible from a couch below it.
+        val effective = if (percent in 70..100) {
+            percent
+        } else {
+            DEFAULT_UI_SCALE_PERCENT.toInt()
+        }
+        uiScale = effective / 100f
+    }
+
     private fun computeRenderScale(gpuCapable: Boolean) {
         renderScale = 1.0f
         val auto = isTelevision() && !gpuCapable
@@ -523,15 +563,28 @@ class MainActivity : FlutterActivity() {
 
     /** Rewrites the viewport metrics Flutter receives so the engine lays out
      *  and rasters at the scaled size while logical geometry is unchanged:
-     *  physical w/h/insets × scale, devicePixelRatio × scale. MUST round
-     *  exactly like [applyFixedSurfaceSize] — the engine discards frames
+     *  physical w/h/insets × [scale], devicePixelRatio × [dprScale]. MUST
+     *  round exactly like [applyFixedSurfaceSize] — the engine discards frames
      *  whose size doesn't match the surface buffer.
      *
+     *  The two factors are separate on purpose:
+     *   - low-res rendering passes the SAME value for both (physical and dpr
+     *     move together → identical logical layout, fewer rastered pixels);
+     *   - the TV screen-size setting folds an extra `uiScale` into [dprScale]
+     *     only (dpr shrinks, physical doesn't → a LARGER logical canvas, so
+     *     the UI draws smaller). Both compose in one engine.
+     *
      *  Known limitations (accepted; TV is DPAD-driven): pointer coordinates
-     *  and accessibility-node bounds are NOT rescaled, so an air-mouse remote
-     *  or TalkBack on a scaled device would see ~2/3-offset hit targets. The
-     *  `flutter.tv_low_res_render=false` pref is the escape hatch. */
-    private class ScaledFlutterJNI(private val scale: Float) : FlutterJNI() {
+     *  and accessibility-node bounds are NOT rescaled by the physical [scale],
+     *  so an air-mouse remote or TalkBack under low-res rendering would see
+     *  ~2/3-offset hit targets. The `flutter.tv_low_res_render=false` pref is
+     *  the escape hatch. (The screen-size factor is exempt: it never touches
+     *  the physical side, and Flutter converts pointers with the same dpr it
+     *  is given here.) */
+    private class ScaledFlutterJNI(
+        private val scale: Float,
+        private val dprScale: Float,
+    ) : FlutterJNI() {
         private fun s(v: Int): Int = Math.round(v * scale)
 
         override fun setViewportMetrics(
@@ -556,7 +609,7 @@ class MainActivity : FlutterActivity() {
             displayFeaturesState: IntArray,
         ) {
             super.setViewportMetrics(
-                devicePixelRatio * scale,
+                devicePixelRatio * dprScale,
                 s(physicalWidth),
                 s(physicalHeight),
                 s(physicalPaddingTop),
@@ -579,14 +632,15 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Low-res mode builds the engine around [ScaledFlutterJNI]; default path
-     *  (null) lets FlutterActivity create its own stock engine. */
+    /** Low-res rendering and/or a non-default TV screen size build the engine
+     *  around [ScaledFlutterJNI]; default path (null) lets FlutterActivity
+     *  create its own stock engine. */
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
-        if (renderScale >= 0.999f) return null
+        if (renderScale >= 0.999f && uiScale >= 0.999f) return null
         return FlutterEngine(
             context,
             FlutterInjector.instance().flutterLoader(),
-            ScaledFlutterJNI(renderScale),
+            ScaledFlutterJNI(renderScale, renderScale * uiScale),
             /* dartVmArgs = */ null,
             /* automaticallyRegisterPlugins = */ true,
         )
@@ -656,6 +710,13 @@ class MainActivity : FlutterActivity() {
     }
 
     companion object {
+        /** TV screen size applied when the user has never picked one. 80 (not
+         *  100) because at native density the app lays out on a 960x540 canvas
+         *  and reads visibly larger than the TV apps it sits next to; 100 is
+         *  the opt-in "put it back" choice. MUST stay in step with
+         *  StorageService.kTvUiScaleDefault, which drives the Settings row. */
+        private const val DEFAULT_UI_SCALE_PERCENT = 80L
+
         /** Once per PROCESS, not per activity: recreation must not re-run the
          *  pending-recording retry sweep alongside a live one. */
         @JvmStatic
@@ -686,6 +747,11 @@ class MainActivity : FlutterActivity() {
         // within it, reads renderScale) AND before the underlay decision
         // below, which depends on the outcome.
         computeRenderScale(gpuCapable)
+        // Same timing requirement: provideFlutterEngine (called from within
+        // super.onCreate) reads uiScale, so the pref must be resolved first.
+        // Nothing downstream depends on it, so a change only lands on the next
+        // cold start — the Settings row says so.
+        computeUiScale()
         // Underlay trailers are back ON for weak GPUs too: with low-res
         // rendering the Flutter raster cost sits well under the pre-redesign
         // level that co-existed happily with the underlay's full-screen blend
@@ -1709,6 +1775,7 @@ class MainActivity : FlutterActivity() {
                 flutterEngine.renderer,
                 flutterEngine.dartExecutor.binaryMessenger,
                 { trailerUnderlayContainer() },
+                uiScale,
             )
         }
 

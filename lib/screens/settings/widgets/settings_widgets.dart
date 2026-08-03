@@ -120,6 +120,12 @@ abstract final class SettingsRows {
     title: 'Debrify Keyboard',
     subtitle: 'Remote-friendly on-screen keyboard for text fields',
   );
+  // Subtitle is dynamic (the chosen size) — passed per call site.
+  static const tvScreenSize = SettingsRowContent(
+    icon: Icons.fit_screen_rounded,
+    title: 'Screen Size',
+    subtitle: '',
+  );
   // Subtitle is dynamic (current folder) — passed per call site.
   static const downloadLocation = SettingsRowContent(
     icon: Icons.folder_rounded,
@@ -1605,6 +1611,39 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
       ),
     );
   }
+}
+
+/// One Android TV "Screen Size" choice. [percent] is the share of the panel's
+/// native density the UI is laid out at — smaller means a wider logical canvas,
+/// so the same layouts draw smaller and more fits on screen. Values must stay in
+/// step with `StorageService.kTvUiScaleOptions`; the shipped default is
+/// `StorageService.kTvUiScaleDefault`.
+///
+/// Lives here (not in the TV settings shell) because two surfaces render it:
+/// the TV Mode rail row's caption and the Screen Size page itself.
+class TvUiScaleChoice {
+  final int percent;
+  final String title;
+  final String subtitle;
+  const TvUiScaleChoice(this.percent, this.title, this.subtitle);
+
+  /// "Compact (80%)" — the row caption and the page's selected label.
+  String get label => '$title ($percent%)';
+}
+
+const List<TvUiScaleChoice> kTvUiScaleChoices = [
+  TvUiScaleChoice(100, 'Large', 'The original size — everything bigger'),
+  TvUiScaleChoice(90, 'Medium', 'About 10% more fits on screen'),
+  TvUiScaleChoice(80, 'Compact', 'Default — about 25% more fits on screen'),
+];
+
+/// Caption for [percent], falling back to the raw value if a stored size is
+/// ever outside the offered set.
+String tvUiScaleLabel(int percent) {
+  for (final c in kTvUiScaleChoices) {
+    if (c.percent == percent) return c.label;
+  }
+  return '$percent%';
 }
 
 /// One choice inside a [SettingsSelectDropdown].

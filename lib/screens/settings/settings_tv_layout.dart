@@ -59,6 +59,11 @@ class SettingsTvLayout extends StatefulWidget {
   final ValueChanged<bool> onToggleAutoUpdateChecks;
   final bool tvKeyboardEnabled;
   final ValueChanged<bool> onToggleTvKeyboard;
+  // Screen size: percentage of the panel's native density the UI is laid out
+  // at — 100 is the panel's own size, and smaller fits more on screen. Held
+  // here only to caption the row; the picker itself is its own page.
+  final int tvUiScalePercent;
+  final Future<void> Function() onOpenTvScreenSize;
   final bool showSupportDonation;
   final String supportDonationLabel;
   final String supportDonationSubtitle;
@@ -93,6 +98,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onToggleAutoUpdateChecks,
     required this.tvKeyboardEnabled,
     required this.onToggleTvKeyboard,
+    required this.tvUiScalePercent,
+    required this.onOpenTvScreenSize,
     required this.showSupportDonation,
     required this.supportDonationLabel,
     required this.supportDonationSubtitle,
@@ -118,7 +125,11 @@ const List<_Category> _kCategories = [
   _Category(Icons.sync_rounded, 'Trackers', 'Trakt & Simkl watch history'),
   _Category(Icons.tune_rounded, 'General', 'Home, player & remote'),
   _Category(Icons.search_rounded, 'Search', 'Engines, filters & providers'),
-  _Category(Icons.live_tv_rounded, 'TV Mode', 'Debrify TV & keyboard'),
+  _Category(
+    Icons.live_tv_rounded,
+    'TV Mode',
+    'Debrify TV, keyboard & screen size',
+  ),
   _Category(
     Icons.storage_rounded,
     'Data & Backup',
@@ -548,6 +559,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 value: widget.tvKeyboardEnabled,
                 onChanged: widget.onToggleTvKeyboard,
                 focusNode: _paneNodes[1],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvScreenSize,
+                subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
+                onTap: widget.onOpenTvScreenSize,
+                focusNode: _paneNodes[2],
               ),
             ],
           ),

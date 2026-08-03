@@ -39,6 +39,7 @@ import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
 import 'settings/settings_search.dart';
+import 'settings/tv_screen_size_page.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
@@ -128,6 +129,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _updateDownloadTaskId;
   bool _autoUpdateChecksEnabled = true;
   bool _tvKeyboardEnabled = true;
+  int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
@@ -193,6 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getMdblistApiKey(),
       StorageService.getMdblistUsername(),
       StorageService.getTvKeyboardEnabled(),
+      StorageService.getTvUiScalePercent(),
     ]);
 
     if (!mounted) return;
@@ -216,6 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final mdblistKey = results[16] as String?;
     final mdblistUsername = results[17] as String?;
     final tvKeyboardEnabled = results[18] as bool;
+    final tvUiScalePercent = results[19] as int;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -348,6 +352,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loading = false;
     _autoUpdateChecksEnabled = autoCheckEnabled;
     _tvKeyboardEnabled = tvKeyboardEnabled;
+    _tvUiScalePercent = tvUiScalePercent;
 
     setState(() {});
 
@@ -642,6 +647,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
       tvKeyboardEnabled: _tvKeyboardEnabled,
       onToggleTvKeyboard: _toggleTvKeyboard,
+      tvUiScalePercent: _tvUiScalePercent,
+      onOpenTvScreenSize: _openTvScreenSize,
       showSupportDonation: _supportDonation.hasProviders,
       supportDonationLabel: _supportSettingsLabel,
       supportDonationSubtitle: _supportSettingsSubtitle,
@@ -973,6 +980,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         toggleValue: () => _tvKeyboardEnabled,
         onToggle: _toggleTvKeyboard,
       ),
+      // Android TV only — the size factor is applied natively in MainActivity,
+      // so the row would be inert anywhere else.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvScreenSize,
+          'TV Mode',
+          _openTvScreenSize,
+          subtitle: tvUiScaleLabel(_tvUiScalePercent),
+          keywords: const [
+            'zoom',
+            'zoomed in',
+            'scale',
+            'ui size',
+            'text size',
+            'font size',
+            'bigger',
+            'smaller',
+            'density',
+            'dpi',
+            'resolution',
+            'compact',
+            'fit more',
+          ],
+        ),
 
       // Downloads
       if (_downloadLocationSupported)
@@ -2608,6 +2639,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _tvKeyboardEnabled = enabled;
     });
     await StorageService.setTvKeyboardEnabled(enabled);
+  }
+
+  /// The page writes the pref itself (and says a restart is needed — the
+  /// engine is built with the factor in MainActivity.onCreate); re-read it on
+  /// the way back so the rail row's caption matches.
+  Future<void> _openTvScreenSize() async {
+    await pushSettingsPage(context, const TvScreenSizePage());
+    if (!mounted) return;
+    final percent = await StorageService.getTvUiScalePercent();
+    if (!mounted) return;
+    setState(() {
+      _tvUiScalePercent = percent;
+    });
   }
 
   Future<void> _startAndroidUpdateDownload(AppRelease release) async {
