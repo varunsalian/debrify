@@ -132,6 +132,12 @@ abstract final class SettingsRows {
     title: 'Home Layout',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen style) — passed per call site.
+  static const tvSidebarStyle = SettingsRowContent(
+    icon: Icons.view_sidebar_rounded,
+    title: 'Sidebar Style',
+    subtitle: '',
+  );
   // Subtitle is dynamic (current folder) — passed per call site.
   static const downloadLocation = SettingsRowContent(
     icon: Icons.folder_rounded,

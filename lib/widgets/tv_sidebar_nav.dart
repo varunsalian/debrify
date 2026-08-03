@@ -31,6 +31,14 @@ class TvSidebarNav extends StatefulWidget {
   /// the content behind the expanded overlay for depth.
   final ValueChanged<bool>? onExpandedChanged;
 
+  /// Visual style: 'ghost' (no chrome, white coin — the default) | 'classic'
+  /// (the original liquid glass) | 'island' (floating glass capsule) |
+  /// 'marquee' (ghost at rest, big-type overlay when open) | 'badge'
+  /// (labelled icons, white squircle active). ONLY the chrome changes —
+  /// focus model, LEFT-only entry, key handling and expand mechanics are
+  /// identical in every style.
+  final String navStyle;
+
   const TvSidebarNav({
     super.key,
     required this.currentIndex,
@@ -38,10 +46,12 @@ class TvSidebarNav extends StatefulWidget {
     required this.onTap,
     this.onFocusContent,
     this.onExpandedChanged,
+    this.navStyle = 'ghost',
   });
 
   /// The width the collapsed rail occupies. The content should be inset by this
-  /// so nothing hides behind the rail while it's collapsed.
+  /// so nothing hides behind the rail while it's collapsed. Shared by every
+  /// style so switching styles never re-flows the content.
   static const double collapsedWidth = 64.0;
   static const double expandedWidth = 232.0;
 
@@ -190,6 +200,12 @@ class TvSidebarNavState extends State<TvSidebarNav>
     if (oldWidget.currentIndex != widget.currentIndex && !_hasSidebarFocus) {
       _scrollToCurrent();
     }
+    // A live style change swaps the shell branch, which recreates the scroll
+    // view at offset 0 — on a short panel that scrolls the SELECTED item
+    // (Settings, where the picker lives) clean off-screen. Re-centre it.
+    if (oldWidget.navStyle != widget.navStyle) {
+      _scrollToCurrent();
+    }
   }
 
   @override
@@ -246,6 +262,25 @@ class TvSidebarNavState extends State<TvSidebarNav>
     }
   }
 
+  String get _style => widget.navStyle;
+
+  /// Open width per style — marquee is a typographic overlay, island a
+  /// compact capsule; the collapsed width never varies (content inset).
+  double get _expandedW {
+    switch (_style) {
+      case 'ghost':
+        return 250;
+      case 'island':
+        return 216;
+      case 'marquee':
+        return 320;
+      case 'badge':
+        return 240;
+      default:
+        return TvSidebarNav.expandedWidth;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Only the width-bearing shell rebuilds each animation frame; the item list
@@ -255,7 +290,57 @@ class TvSidebarNavState extends State<TvSidebarNav>
       builder: (context, child) {
         final t = _expand.value;
         final width = TvSidebarNav.collapsedWidth +
-            (TvSidebarNav.expandedWidth - TvSidebarNav.collapsedWidth) * t;
+            (_expandedW - TvSidebarNav.collapsedWidth) * t;
+        // Non-classic styles skip the liquid-glass pane entirely: their shell
+        // is either a plain scrim gradient (ghost/badge: quiet; marquee:
+        // heavy, for the big type) or fully transparent (island — the capsule
+        // around the item group is the chrome). Same width/expand mechanics.
+        if (_style != 'classic') {
+          final bool marquee = _style == 'marquee';
+          final bool island = _style == 'island';
+          return Container(
+            width: width,
+            decoration: island
+                ? null
+                : BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: marquee
+                          ? [
+                              Color.lerp(
+                                const Color(0x8C05040A),
+                                const Color(0xF705040A),
+                                t,
+                              )!,
+                              Color.lerp(
+                                const Color(0x0005040A),
+                                const Color(0xE005040A),
+                                t,
+                              )!,
+                              const Color(0x0005040A),
+                            ]
+                          : [
+                              Color.lerp(
+                                const Color(0x8C05040A),
+                                const Color(0xF005040A),
+                                t,
+                              )!,
+                              Color.lerp(
+                                const Color(0x0005040A),
+                                const Color(0xB805040A),
+                                t,
+                              )!,
+                              const Color(0x0005040A),
+                            ],
+                      stops: marquee
+                          ? const [0.0, 0.62, 1.0]
+                          : const [0.0, 0.55, 1.0],
+                    ),
+                  ),
+            child: child,
+          );
+        }
         // While the Home hero's trailer plays, the shell publishes the focused
         // title's colour (MainPageBridge.tvHeroTint); the rail takes it on in
         // lock-step with the hero's left colour stage and the rows, so the whole
@@ -420,8 +505,12 @@ class TvSidebarNavState extends State<TvSidebarNav>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildBranding(),
-              const SizedBox(height: 8),
+              // Island hides the branding row — the floating capsule is the
+              // whole chrome, and a lone logo above it read as clutter.
+              if (_style != 'island') ...[
+                _buildBranding(),
+                const SizedBox(height: 8),
+              ],
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -432,14 +521,31 @@ class TvSidebarNavState extends State<TvSidebarNav>
                         constraints:
                             BoxConstraints(minHeight: constraints.maxHeight),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
+                          // Island runs tighter: the capsule's own padding +
+                          // border eat into the 64px rail, and the row's 44px
+                          // leading slot must still fit inside (10px outer
+                          // padding would overflow every collapsed row).
+                          padding: EdgeInsets.symmetric(
+                            horizontal: _style == 'island' ? 6 : 10,
                             vertical: 8,
                           ),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: _buildNavItems(),
+                            children: [
+                              if (_style == 'island')
+                                _IslandCapsule(
+                                  expand: _expand,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: _buildNavItems(),
+                                  ),
+                                )
+                              else
+                                ..._buildNavItems(),
+                            ],
                           ),
                         ),
                       ),
@@ -481,6 +587,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
             focusNode: _focusNodes[index],
             onTap: () => _selectMenuItem(index),
             onKeyEvent: (e) => _handleKeyEvent(index, e),
+            style: _style,
           ),
         ),
       );
@@ -554,6 +661,10 @@ class _TvNavItemWidget extends StatelessWidget {
   final VoidCallback onTap;
   final KeyEventResult Function(KeyEvent) onKeyEvent;
 
+  /// Visual style (see [TvSidebarNav.navStyle]) — visuals only; the Focus /
+  /// key wrapper is shared by every style.
+  final String style;
+
   const _TvNavItemWidget({
     required this.item,
     required this.index,
@@ -565,10 +676,360 @@ class _TvNavItemWidget extends StatelessWidget {
     required this.focusNode,
     required this.onTap,
     required this.onKeyEvent,
+    this.style = 'classic',
   });
+
+  static const _ink = Color(0xFF0A0910);
+
+  double get _rowH {
+    switch (style) {
+      case 'marquee':
+        return 50;
+      case 'badge':
+        return 52;
+      default:
+        return 42;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final Widget body;
+    switch (style) {
+      case 'ghost':
+        body = _ghostBody(marquee: false);
+        break;
+      case 'marquee':
+        body = _ghostBody(marquee: true);
+        break;
+      case 'island':
+        body = _islandBody();
+        break;
+      case 'badge':
+        body = _badgeBody();
+        break;
+      default:
+        body = _classicBody();
+    }
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (node, event) => onKeyEvent(event),
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(height: _rowH, child: body),
+      ),
+    );
+  }
+
+  /// GHOST (and MARQUEE, which is ghost-at-rest with big type when open):
+  /// no chrome — the selected tab is a solid white coin, a focused row gets a
+  /// white ring; open, labels ride the shared stagger (marquee: oversized).
+  Widget _ghostBody({required bool marquee}) {
+    return AnimatedBuilder(
+      animation: expand,
+      builder: (context, _) {
+        final iconColor = isSelected
+            ? _ink
+            : isFocused
+            ? Colors.white
+            : Colors.white.withValues(alpha: 0.45);
+        return Row(
+          children: [
+            SizedBox(
+              width: TvSidebarNav.collapsedWidth - 20,
+              child: Center(
+                // Ring = FOCUS, coin = CURRENT TAB — independent, so the
+                // common entry case (focus lands on the current tab) still
+                // shows where focus is: a ring around the coin.
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: isFocused
+                      ? BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            width: 2,
+                          ),
+                        )
+                      : null,
+                  child: Center(
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: isSelected
+                          ? BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withValues(alpha: 0.30),
+                                  blurRadius: 18,
+                                ),
+                              ],
+                            )
+                          : null,
+                      child: Center(
+                        child: Icon(item.icon, size: 19, color: iconColor),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ClipRect(
+                child: _StaggeredLabel(
+                  expand: expand,
+                  index: index,
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.clip,
+                    style: TextStyle(
+                      color: isFocused
+                          ? Colors.white
+                          : isSelected
+                          ? Colors.white.withValues(alpha: 0.95)
+                          : Colors.white.withValues(alpha: marquee ? 0.4 : 0.55),
+                      fontSize: marquee ? (isFocused ? 23 : 18) : 14,
+                      fontWeight: (isFocused || isSelected)
+                          ? FontWeight.w800
+                          : FontWeight.w600,
+                      letterSpacing: marquee ? -0.3 : 0.1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// ISLAND: inside the floating capsule. Collapsed, the selected tab is a
+  /// white coin; open, the focused row becomes a white pill (ink icon/text)
+  /// and the selected row faint glass.
+  Widget _islandBody() {
+    return AnimatedBuilder(
+      animation: expand,
+      builder: (context, _) {
+        final t = expand.value;
+        final open = t > 0.5;
+        final iconColor = open
+            ? (isFocused
+                  ? _ink
+                  : isSelected
+                  ? Colors.white.withValues(alpha: 0.95)
+                  : Colors.white.withValues(alpha: 0.5))
+            : (isSelected ? _ink : Colors.white.withValues(alpha: 0.5));
+        return Stack(
+          children: [
+            // Collapsed coin (dissolves as the capsule opens).
+            Positioned(
+              left: 4,
+              top: 3,
+              child: Builder(
+                builder: (_) {
+                  final k = 1.0 - t;
+                  if (k < 0.01 || !isSelected) {
+                    return const SizedBox(width: 36, height: 36);
+                  }
+                  return Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: k),
+                    ),
+                  );
+                },
+              ),
+            ),
+            // Open pill.
+            if (t > 0.01 && (isFocused || isSelected))
+              Positioned.fill(
+                child: Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: isFocused
+                        ? Colors.white.withValues(alpha: t)
+                        : Colors.white.withValues(alpha: 0.10 * t),
+                  ),
+                ),
+              ),
+            Row(
+              children: [
+                SizedBox(
+                  width: TvSidebarNav.collapsedWidth - 20,
+                  child: Center(
+                    child: Icon(item.icon, size: 19, color: iconColor),
+                  ),
+                ),
+                Expanded(
+                  child: ClipRect(
+                    child: _StaggeredLabel(
+                      expand: expand,
+                      index: index,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
+                        style: TextStyle(
+                          color: isFocused
+                              ? _ink
+                              : isSelected
+                              ? Colors.white.withValues(alpha: 0.95)
+                              : Colors.white.withValues(alpha: 0.55),
+                          fontSize: 13,
+                          fontWeight: (isFocused || isSelected)
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// BADGE: Google-TV grammar — every icon carries a tiny label beneath it at
+  /// rest, the selected tab in a white squircle. Open, rows become pills: the
+  /// selected one solid white (it "wears its name"), a focused row ringed.
+  Widget _badgeBody() {
+    return AnimatedBuilder(
+      animation: expand,
+      builder: (context, _) {
+        final t = expand.value;
+        final k = 1.0 - t;
+        final open = t > 0.5;
+        final iconColor = open
+            ? (isSelected
+                  ? _ink
+                  : isFocused
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.5))
+            : (isSelected ? _ink : Colors.white.withValues(alpha: 0.48));
+        return Stack(
+          children: [
+            // Collapsed: white squircle behind the selected icon.
+            if (k > 0.01 && isSelected)
+              Positioned(
+                left: 3,
+                top: 0,
+                child: Container(
+                  width: 38,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withValues(alpha: k),
+                  ),
+                ),
+              ),
+            // Collapsed: tiny label under EVERY icon.
+            if (k > 0.01)
+              Positioned(
+                left: 0,
+                bottom: 2,
+                width: TvSidebarNav.collapsedWidth - 20,
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(
+                      alpha: (isSelected ? 0.95 : 0.5) * k,
+                    ),
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            // Open: the row pill.
+            if (t > 0.01 && (isFocused || isSelected))
+              Positioned.fill(
+                child: Container(
+                  margin: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: isSelected
+                        ? Colors.white.withValues(alpha: t)
+                        : null,
+                    border: isFocused
+                        ? Border.all(
+                            color: Colors.white.withValues(alpha: 0.9 * t),
+                            width: 1.6,
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+            // Icon zone glides from the top 38px (label beneath, collapsed)
+            // to the full row height (label beside, open) — no end-snap.
+            Positioned(
+              left: 0,
+              top: 0,
+              height: 38 + (_rowH - 38) * t,
+              child: SizedBox(
+                width: TvSidebarNav.collapsedWidth - 20,
+                child: Center(
+                  child: Icon(item.icon, size: 19, color: iconColor),
+                ),
+              ),
+            ),
+            Positioned(
+              left: TvSidebarNav.collapsedWidth - 20,
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: ClipRect(
+                child: _StaggeredLabel(
+                  expand: expand,
+                  index: index,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.clip,
+                      style: TextStyle(
+                        color: isSelected
+                            ? _ink
+                            : isFocused
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.55),
+                        fontSize: 13,
+                        fontWeight: (isFocused || isSelected)
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// CLASSIC — the liquid-glass original, unchanged.
+  Widget _classicBody() {
     final bool active = isFocused || isSelected;
     final Color iconColor = isFocused
         ? Colors.white
@@ -583,20 +1044,12 @@ class _TvNavItemWidget extends StatelessWidget {
         ? Colors.white.withValues(alpha: 0.94)
         : Colors.white.withValues(alpha: 0.5);
 
-    return Focus(
-      focusNode: focusNode,
-      onKeyEvent: (node, event) => onKeyEvent(event),
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        // Highlights snap instantly as focus moves between items (no per-move
-        // animation — animated blur is what made item-to-item navigation
-        // sluggish on the weak TV GPU); glows are static, painted when focus
-        // lands. Only the puck↔pill cross-dissolve animates, riding the shared
-        // 200ms expand with alphas baked into the colors.
-        child: SizedBox(
-          height: 42,
-          child: Stack(
+    // Highlights snap instantly as focus moves between items (no per-move
+    // animation — animated blur is what made item-to-item navigation
+    // sluggish on the weak TV GPU); glows are static, painted when focus
+    // lands. Only the puck↔pill cross-dissolve animates, riding the shared
+    // 200ms expand with alphas baked into the colors.
+    return Stack(
             children: [
               // COLLAPSED visual: the glass puck behind the icon. Alphas are
               // premultiplied by (1 - t) so it dissolves as the pane pours in.
@@ -804,9 +1257,51 @@ class _TvNavItemWidget extends StatelessWidget {
                   ),
                 ),
             ],
+    );
+  }
+}
+
+/// ISLAND's floating glass capsule around the item group: detached from the
+/// edge, vertically centred (the host Column centres it), glass fill + faint
+/// rim + drop shadow. Alphas ride the expand so the open pane reads slightly
+/// denser. No BackdropFilter (banned on TV) — the ambient art behind the rail
+/// already makes translucency read as glass.
+class _IslandCapsule extends StatelessWidget {
+  final Animation<double> expand;
+  final Widget child;
+  const _IslandCapsule({required this.expand, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: expand,
+      child: child,
+      builder: (context, kid) {
+        final t = expand.value;
+        return Container(
+          clipBehavior: Clip.antiAlias,
+          // 64 rail − 6×2 outer padding − 2×2 this padding − 1×2 border
+          // = 46px inner: the 44px leading slot fits with a hair to spare.
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24 - 6 * t),
+            color: Color.lerp(
+              const Color(0xA30D0B1A),
+              const Color(0xC90D0B1A),
+              t,
+            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x8C000000),
+                blurRadius: 22,
+                offset: Offset(6, 8),
+              ),
+            ],
           ),
-        ),
-      ),
+          child: kid,
+        );
+      },
     );
   }
 }

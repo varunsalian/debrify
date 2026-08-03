@@ -690,6 +690,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   String _phoneNavStyle = 'classic';
   bool _phoneNavLoaded = false;
 
+  /// TV sidebar chrome style (see TvSidebarNav.navStyle). Loaded with the
+  /// nav prefs; live-reloaded when the Settings picker fires the bridge.
+  /// Ghost is the product default — matching it here avoids a one-frame
+  /// classic flash before the pref read lands.
+  String _tvSidebarStyle = 'ghost';
+
   /// The classic bar's stored middle-slot picks (real indices; may contain
   /// currently-hidden tabs — validated against visibility at build). Null =
   /// never customized.
@@ -879,6 +885,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       });
     }
     unawaited(_loadPhoneNavPrefs());
+    MainPageBridge.tvSidebarStyleChanged = () {
+      if (mounted) unawaited(_loadPhoneNavPrefs());
+    };
     MainPageBridge.navPrefsChanged = () {
       if (mounted) unawaited(_loadPhoneNavPrefs());
     };
@@ -1103,6 +1112,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.switchTab = null;
     MainPageBridge.navPrefsChanged = null;
+    MainPageBridge.tvSidebarStyleChanged = null;
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
@@ -1902,11 +1912,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   Future<void> _loadPhoneNavPrefs() async {
     final style = await StorageService.getPhoneNavStyle();
     final picks = await StorageService.getPhoneNavBarIndices();
+    final tvSidebar = await StorageService.getTvSidebarStyle();
     if (!mounted) return;
     MainPageBridge.phoneNavStyleCached = style;
     setState(() {
       _phoneNavStyle = style;
       _phoneNavBarPicks = picks;
+      _tvSidebarStyle = tvSidebar;
       _phoneNavLoaded = true;
     });
   }
@@ -2742,6 +2754,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                 ),
                             child: TvSidebarNav(
                               key: _tvSidebarKey,
+                              navStyle: _tvSidebarStyle,
                               currentIndex: tvSelected == -1 ? 0 : tvSelected,
                               items: [
                                 for (final index in tvIndices)

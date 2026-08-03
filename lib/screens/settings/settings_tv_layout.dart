@@ -68,6 +68,9 @@ class SettingsTvLayout extends StatefulWidget {
   // row; the picker itself is its own page.
   final String tvHomeStyleLabel;
   final Future<void> Function() onOpenTvHomeStyle;
+  // Sidebar chrome style — same contract as the home layout row.
+  final String tvSidebarStyleLabel;
+  final Future<void> Function() onOpenTvSidebarStyle;
   final bool showSupportDonation;
   final String supportDonationLabel;
   final String supportDonationSubtitle;
@@ -106,6 +109,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenTvScreenSize,
     required this.tvHomeStyleLabel,
     required this.onOpenTvHomeStyle,
+    required this.tvSidebarStyleLabel,
+    required this.onOpenTvSidebarStyle,
     required this.showSupportDonation,
     required this.supportDonationLabel,
     required this.supportDonationSubtitle,
@@ -577,6 +582,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 subtitle: widget.tvHomeStyleLabel,
                 onTap: widget.onOpenTvHomeStyle,
                 focusNode: _paneNodes[3],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvSidebarStyle,
+                subtitle: widget.tvSidebarStyleLabel,
+                onTap: widget.onOpenTvSidebarStyle,
+                focusNode: _paneNodes[4],
               ),
             ],
           ),

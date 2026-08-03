@@ -41,6 +41,7 @@ import 'settings/settings_tv_layout.dart';
 import 'settings/settings_search.dart';
 import 'settings/tv_home_style_page.dart';
 import 'settings/tv_screen_size_page.dart';
+import 'settings/tv_sidebar_style_page.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
@@ -132,6 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _tvKeyboardEnabled = true;
   int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
   String _tvHomeStyle = 'classic';
+  String _tvSidebarStyle = 'ghost';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
@@ -199,6 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTvKeyboardEnabled(),
       StorageService.getTvUiScalePercent(),
       StorageService.getTvHomeStyle(),
+      StorageService.getTvSidebarStyle(),
     ]);
 
     if (!mounted) return;
@@ -224,6 +227,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvKeyboardEnabled = results[18] as bool;
     final tvUiScalePercent = results[19] as int;
     final tvHomeStyle = results[20] as String;
+    final tvSidebarStyle = results[21] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -358,6 +362,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _tvKeyboardEnabled = tvKeyboardEnabled;
     _tvUiScalePercent = tvUiScalePercent;
     _tvHomeStyle = tvHomeStyle;
+    _tvSidebarStyle = tvSidebarStyle;
 
     setState(() {});
 
@@ -656,6 +661,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTvScreenSize: _openTvScreenSize,
       tvHomeStyleLabel: tvHomeStyleLabel(_tvHomeStyle),
       onOpenTvHomeStyle: _openTvHomeStyle,
+      tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
+      onOpenTvSidebarStyle: _openTvSidebarStyle,
       showSupportDonation: _supportDonation.hasProviders,
       supportDonationLabel: _supportSettingsLabel,
       supportDonationSubtitle: _supportSettingsSubtitle,
@@ -1028,6 +1035,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'rows',
             'redesign',
             'view',
+          ],
+        ),
+      // Android TV only — the rail is TV chrome.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvSidebarStyle,
+          'TV Mode',
+          _openTvSidebarStyle,
+          subtitle: tvSidebarStyleLabel(_tvSidebarStyle),
+          keywords: const [
+            'sidebar',
+            'nav',
+            'navigation',
+            'rail',
+            'menu',
+            'ghost',
+            'island',
+            'marquee',
+            'badge',
+            'dock',
           ],
         ),
 
@@ -2689,6 +2716,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _tvHomeStyle = style;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the sidebar chrome picker.
+  Future<void> _openTvSidebarStyle() async {
+    await pushSettingsPage(context, const TvSidebarStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getTvSidebarStyle();
+    if (!mounted) return;
+    setState(() {
+      _tvSidebarStyle = style;
     });
   }
 

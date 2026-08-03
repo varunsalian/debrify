@@ -642,6 +642,33 @@ class StorageService {
     );
   }
 
+  static const String _tvSidebarStyleKey = 'tv_sidebar_style';
+  static const Set<String> _tvSidebarStyles = {
+    'classic',
+    'ghost',
+    'island',
+    'marquee',
+    'badge',
+  };
+
+  /// TV sidebar chrome: 'ghost' (chromeless, the default), 'classic' (the
+  /// original liquid glass), 'island', 'marquee' or 'badge'. Visuals only —
+  /// the LEFT-only focus model is shared by every style. Phone/desktop never
+  /// read it.
+  static Future<String> getTvSidebarStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_tvSidebarStyleKey);
+    return (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
+  }
+
+  static Future<void> setTvSidebarStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _tvSidebarStyleKey,
+      _tvSidebarStyles.contains(style) ? style : 'ghost',
+    );
+  }
+
   /// The classic bar's user-chosen middle slots, as REAL tab indices (Home
   /// and More are fixed anchors and never stored). Null = never customized
   /// (defaults apply); an explicit short list is a deliberate choice and the

@@ -23,6 +23,11 @@ class MainPageBridge {
   /// live Home board re-reads the pref and rebuilds without a restart. Set by
   /// the HOME SearchScreen instance only (not the Search tab's).
   static VoidCallback? tvHomeStyleChanged;
+
+  /// Fired by the TV Sidebar Style picker after writing `tv_sidebar_style`,
+  /// so the app shell re-reads the pref and reskins the rail live. Set by
+  /// main.dart.
+  static VoidCallback? tvSidebarStyleChanged;
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;
