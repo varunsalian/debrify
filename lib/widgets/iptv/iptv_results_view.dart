@@ -4164,7 +4164,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     ];
     // Compare names too, not just ids — a rename has to reach the picker.
     String signature(List<IptvPlaylist> entries) =>
-        entries.map((p) => '${p.id} ${p.name}').join('');
+        entries.map((p) => '${p.id}\x00${p.name}').join('\x01');
     if (signature(desired) == signature(current)) return;
 
     // Rebuild in canonical order: Favorites, Continue, lists, real providers.
