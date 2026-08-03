@@ -3874,24 +3874,33 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // focusless shimmer) separate it from the favourites/catalog row below.
     // requestFocus on a detached node would only latch a focus grab for
     // whenever that cell happens to build (a later yank, not a move — the old
-    // "blocked DOWN"), so instead nudge the board forward and retry next
-    // frame until the row builds. Down-only on purpose: an unmounted target
-    // ABOVE can't happen from row-by-row DPAD moves (the row above was just
-    // on screen, still inside the cache). Bounded so the total travel stays
-    // within the cache above the origin cell — it can't unmount mid-journey —
-    // and a settled miss just leaves focus where it was.
+    // "blocked DOWN"), so instead nudge the board forward and retry until the
+    // row builds. Down-only on purpose: an unmounted target ABOVE can't
+    // happen from row-by-row DPAD moves (the row above was just on screen,
+    // still inside the cache). Bounded so the total travel stays within the
+    // cache above the origin cell — it can't unmount mid-journey — and a
+    // settled miss just leaves focus where it was.
+    //
+    // Glides (was jumpTo — a visible 45%-viewport teleport). The retry MUST
+    // wait for the glide to land, not the next frame: per-frame retries would
+    // spend all 3 hops inside one animation before the row could ever build.
     if (hops >= 3 || !_boardScroll.hasClients) return;
     final pos = _boardScroll.position;
     if (pos.pixels >= pos.maxScrollExtent) return;
-    _boardScroll.jumpTo(
-      (pos.pixels + pos.viewportDimension * 0.45).clamp(
-        0.0,
-        pos.maxScrollExtent,
-      ),
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _requestRowFocus(nodes, desired, hops: hops + 1);
-    });
+    _boardScroll
+        .animateTo(
+          (pos.pixels + pos.viewportDimension * 0.45).clamp(
+            0.0,
+            pos.maxScrollExtent,
+          ),
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+        )
+        .whenComplete(() {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _requestRowFocus(nodes, desired, hops: hops + 1);
+          });
+        });
   }
 
   // ── Hero ─────────────────────────────────────────────────────────────────
@@ -11013,59 +11022,88 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     value: 1.0, // first build shows settled text; cascades start on change
   );
 
-  bool _motionOk = true;
+  // Motion gates, split so TV keeps the cheap effect without the dear one:
+  //  • _textOk — the text cascade: transform + opacity over a small text
+  //    block, fine everywhere INCLUDING TV (it was disabled there wholesale,
+  //    which left the hero dead on the platform it was designed for).
+  //  • _kenOk — the Ken Burns drift: re-rasterises the backdrop layer every
+  //    frame while it runs, so on TV it's allowed only in boxed mode, where
+  //    the target is a region-sized layer with NO ShaderMask saveLayer. The
+  //    full-bleed masked path (Search-tab hero) stays still on TV.
+  // Reduced-motion turns both off.
+  bool _kenOk = true;
+  bool _textOk = true;
+
+  /// Whether video currently occupies the art's rect — a catalog trailer OR
+  /// an IPTV live takeover. Both must freeze the Ken Burns drift: the live
+  /// path in particular flips [trailerShowing] false (it *replaces* the
+  /// trailer), so keying off the trailer alone would RESUME the drift under
+  /// live video and re-raster the covered art layer every frame for nothing.
+  bool get _artCovered =>
+      widget.trailerShowing?.value == true ||
+      widget.liveTakeover?.value == true;
 
   @override
   void initState() {
     super.initState();
-    widget.trailerShowing?.addListener(_onTrailerShowingChanged);
+    widget.trailerShowing?.addListener(_onHeroCoverChanged);
+    widget.liveTakeover?.addListener(_onHeroCoverChanged);
   }
 
-  /// Freeze the Ken Burns drift while the trailer video covers the image —
-  /// its masked layer would otherwise keep re-rasterising every frame for
-  /// nothing — and resume it when the image comes back.
-  void _onTrailerShowingChanged() {
-    if (!mounted || !_motionOk) return;
-    if (widget.trailerShowing?.value == true) {
+  /// Freeze the Ken Burns drift while video covers the image — its layer
+  /// would otherwise keep re-rasterising every frame for nothing — and
+  /// resume it (from where it left off) when the image comes back.
+  void _onHeroCoverChanged() {
+    if (!mounted || !_kenOk) return;
+    if (_artCovered) {
       _ken.stop();
     } else if (!_ken.isAnimating) {
       _ken.repeat(reverse: true);
     }
   }
 
+  void _syncMotionGates() {
+    final reduced = MediaQuery.of(context).disableAnimations;
+    _textOk = !reduced;
+    _kenOk = !reduced && (!widget.isTelevision || widget.boxedTrailer);
+    if (!_kenOk) {
+      _ken.stop();
+      // Land flat, not frozen mid-zoom (matters when reduced-motion flips
+      // on while the drift is running).
+      _ken.value = 0.0;
+    } else if (!_ken.isAnimating && !_artCovered) {
+      _ken.repeat(reverse: true);
+    }
+    if (!_textOk) _textFx.value = 1.0;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Respect reduced-motion: hold the backdrop still, skip text cascades.
-    // TV gets the same treatment always: the Ken Burns drift re-rasterises
-    // the masked backdrop layer every frame, and the text cascade repaints on
-    // every DPAD step (each row-card focus swaps the hero). A still hero
-    // reads native on TV and costs nothing.
-    _motionOk =
-        !MediaQuery.of(context).disableAnimations && !widget.isTelevision;
-    if (!_motionOk) {
-      _ken.stop();
-      _textFx.value = 1.0;
-    } else if (!_ken.isAnimating && widget.trailerShowing?.value != true) {
-      _ken.repeat(reverse: true);
-    }
+    _syncMotionGates();
   }
 
   @override
   void didUpdateWidget(_HeroSpotlight old) {
     super.didUpdateWidget(old);
     if (!identical(old.trailerShowing, widget.trailerShowing)) {
-      old.trailerShowing?.removeListener(_onTrailerShowingChanged);
-      widget.trailerShowing?.addListener(_onTrailerShowingChanged);
+      old.trailerShowing?.removeListener(_onHeroCoverChanged);
+      widget.trailerShowing?.addListener(_onHeroCoverChanged);
     }
-    if (old.item.id != widget.item.id && _motionOk) {
+    if (!identical(old.liveTakeover, widget.liveTakeover)) {
+      old.liveTakeover?.removeListener(_onHeroCoverChanged);
+      widget.liveTakeover?.addListener(_onHeroCoverChanged);
+    }
+    if (old.boxedTrailer != widget.boxedTrailer) _syncMotionGates();
+    if (old.item.id != widget.item.id && _textOk) {
       _textFx.forward(from: 0);
     }
   }
 
   @override
   void dispose() {
-    widget.trailerShowing?.removeListener(_onTrailerShowingChanged);
+    widget.trailerShowing?.removeListener(_onHeroCoverChanged);
+    widget.liveTakeover?.removeListener(_onHeroCoverChanged);
     _ken.dispose();
     _textFx.dispose();
     super.dispose();
@@ -11166,18 +11204,25 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     const base = Color(0xFF0D0B1A); // the board's own bg
     return IgnorePointer(
       // RepaintBoundary so this layer's repaint never bubbles up and
-      // re-rasters the whole hero band (region art included). And the colour
-      // SNAPS — no tween: every tween frame re-rastered this two-fill band
-      // (~60% of the screen) and made DPAD navigation feel heavy. The tint
-      // only ever changes on its 350ms settle debounce, and a one-frame
-      // shift between two dark washes is imperceptible from the couch —
-      // one repaint per settle, zero frames of animation.
+      // re-rasters the whole hero band (region art included). The colour used
+      // to SNAP between settles — a one-frame hue jump across ~60% of the
+      // screen. It now TWEENS, but only per settle: the tint changes on its
+      // 350ms debounce (never per DPAD step), so this costs ~24 frames of
+      // two-gradient repaint inside this boundary per rest — not a per-key
+      // cost — and the room's lighting follows the art instead of jumping.
       child: RepaintBoundary(
         child: ValueListenableBuilder<Color?>(
           valueListenable:
               widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
           builder: (context, tint, __) {
-              final t = tint ?? scheme.surface;
+            // Retargets from the CURRENT colour when the settle lands a new
+            // one, so back-to-back settles blend instead of restarting.
+            return TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: tint ?? scheme.surface),
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              builder: (context, animTint, __) {
+              final t = animTint ?? scheme.surface;
               return DecoratedBox(
                 decoration: BoxDecoration(
                   // Diagonal tint field: brighter top-left, deeper foot.
@@ -11212,6 +11257,8 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                   ),
                 ),
               );
+              },
+            );
           },
         ),
       ),
@@ -11307,18 +11354,43 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        CachedNetworkImage(
-                          imageUrl: bg,
-                          fit: BoxFit.cover,
-                          alignment: Alignment.topCenter,
-                          memCacheWidth: isTelevision
-                              ? HomeTheme.heroBackdropCacheWidthTv
-                              : HomeTheme.heroBackdropCacheWidth,
-                          fadeInDuration: HomeTheme.imageFadeIn(isTelevision),
-                          fadeOutDuration: HomeTheme.imageFadeOut(
-                            isTelevision,
+                        // Ken Burns on the region art too — TV's boxed stage
+                        // included (the drift was full-bleed-only before, so
+                        // the TV hero was completely static). Same controller
+                        // and grammar as the full-bleed path: a pure bottom-
+                        // anchored slow zoom on the unchanging image child,
+                        // linear sampling so it glides instead of jittering.
+                        // The enclosing ClipRect catches the paint-time
+                        // overflow; the feathers above stay static so the
+                        // region's edges never move; and the drift stops
+                        // whenever video covers this exact rect — trailer OR
+                        // IPTV live takeover (_onHeroCoverChanged) — so it
+                        // never burns frames under video.
+                        AnimatedBuilder(
+                          animation: _ken,
+                          builder: (context, child) {
+                            final t = Curves.easeInOut.transform(_ken.value);
+                            return Transform.scale(
+                              scale: 1.0 + 0.06 * t,
+                              alignment: Alignment.bottomCenter,
+                              filterQuality: FilterQuality.low,
+                              child: child,
+                            );
+                          },
+                          child: CachedNetworkImage(
+                            imageUrl: bg,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.topCenter,
+                            memCacheWidth: isTelevision
+                                ? HomeTheme.heroBackdropCacheWidthTv
+                                : HomeTheme.heroBackdropCacheWidth,
+                            fadeInDuration: HomeTheme.imageFadeIn(isTelevision),
+                            fadeOutDuration: HomeTheme.imageFadeOut(
+                              isTelevision,
+                            ),
+                            errorWidget: (_, __, ___) =>
+                                const SizedBox.shrink(),
                           ),
-                          errorWidget: (_, __, ___) => const SizedBox.shrink(),
                         ),
                         _regionArtFeathers(scheme),
                       ],
@@ -13104,6 +13176,106 @@ Widget _posterFlightShuttle(
   return Material(type: MaterialType.transparency, child: posterHero.child);
 }
 
+/// Shared focus "rise" chrome for the board's 2:3 poster cards
+/// ([_StremioCard], [_ArtPoster]): scale, shadow and selection ring animate
+/// together on ONE duration + curve — mismatched timing (scale tweening while
+/// ring/shadow snapped) is what read as cheap. Everything animated is
+/// GPU-cheap: the scale is a transform; the shadow is TWO fixed-blur layers
+/// whose colors crossfade (blurRadius/offset are identical on both ends of
+/// the lerp, so the tween never re-derives a blur — it only fades a
+/// pre-shaped one, and the transparent lift layer is skipped at rest); the
+/// ring fades via opacity (skipped at 0). 120ms on TV: two cards animate on
+/// every DPAD move (loser + gainer), so the shorter the tween, the shorter
+/// the double-repaint window.
+///
+/// Extracted so focus-feel tuning lands ONCE — the cards were carrying
+/// copy-pasted, drift-prone clones of this block.
+class _CardFocusRise extends StatelessWidget {
+  final bool active;
+  final bool isTelevision;
+
+  /// The card's content layers, stacked (StackFit.expand) inside the rounded
+  /// clip; the selection ring draws above all of them.
+  final List<Widget> children;
+
+  const _CardFocusRise({
+    required this.active,
+    required this.isTelevision,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final focusFx = isTelevision
+        ? const Duration(milliseconds: 120)
+        : const Duration(milliseconds: 160);
+    return AnimatedScale(
+      duration: focusFx,
+      curve: Curves.easeOutCubic,
+      // TV pop calmed from 1.09 to the Nuvio-class 1.045: with the lighter
+      // ring the smaller lift reads premium, and neighbours shift less.
+      scale: active ? (isTelevision ? 1.045 : 1.05) : 1.0,
+      child: AspectRatio(
+        aspectRatio: 2 / 3,
+        child: AnimatedContainer(
+          duration: focusFx,
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              // Resting shadow — constant, keeps the card grounded.
+              const BoxShadow(
+                color: Color(0x59000000),
+                blurRadius: 12,
+                offset: Offset(0, 10),
+              ),
+              // Lift shadow — same geometry always, only its alpha animates
+              // (transparent at rest, so Skia skips the draw entirely).
+              BoxShadow(
+                color: Colors.black.withValues(alpha: active ? 0.6 : 0.0),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ...children,
+                // Selection ring — accent on TV focus, subtle white on hover.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: active ? 1.0 : 0.0,
+                      duration: focusFx,
+                      curve: Curves.easeOutCubic,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            // Violet-300 on TV: the "light ring + small scale"
+                            // focus grammar (deep accent stays for chrome).
+                            color: isTelevision
+                                ? kStremioFocusRing
+                                : Colors.white.withValues(alpha: 0.6),
+                            width: isTelevision ? 2.5 : 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Stremio-style poster card: clean rounded poster with a soft shadow that
 /// lifts on hover/focus. Deliberately minimal — no title band, no MOVIE/rating
 /// chips — so the artwork carries the rail exactly like Stremio's board.
@@ -13199,169 +13371,110 @@ class _StremioCardState extends State<_StremioCard>
   Widget build(BuildContext context) {
     final item = widget.item;
     final poster = item.poster;
-    // Smooth focus "pop" on TV too (was instant for perf). Animate the SCALE
-    // only — a transform, which is cheap on the GPU — so the card eases up
-    // toward the viewer. The shadow SNAPS on TV (animating a large blur radius
-    // every frame is what janks a weak TV GPU). Phones keep their 160ms feel.
-    final scaleFx = widget.isTelevision
-        ? const Duration(milliseconds: 140)
-        : const Duration(milliseconds: 160);
-    final shadowFx = widget.isTelevision ? Duration.zero : scaleFx;
-
-    final posterCard = AnimatedScale(
-      duration: scaleFx,
-      curve: Curves.easeOutCubic,
-      // TV pop calmed from 1.09 to the Nuvio-class 1.045: with the lighter
-      // ring the smaller lift reads premium, and neighbours shift less.
-      scale: _active ? (widget.isTelevision ? 1.045 : 1.05) : 1.0,
-      child: AspectRatio(
-        aspectRatio: 2 / 3,
-        child: AnimatedContainer(
-          duration: shadowFx,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: _active ? 0.6 : 0.35),
-                blurRadius: _active ? 28 : 12,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (poster != null && poster.isNotEmpty)
-                  CachedNetworkImage(
-                    imageUrl: poster,
-                    fit: BoxFit.cover,
-                    // Decode board posters at a capped width — tiles are small,
-                    // full-res posters are the main memory churn while scrolling.
-                    memCacheWidth: widget.isTelevision ? 320 : 480,
-                    // On TV, skip the per-image fade: when the board swaps in from
-                    // the skeleton, dozens of posters would run a 500ms opacity
-                    // crossfade at once — a saveLayer each — which janks the weak
-                    // GPU. Snapping them in reads as a clean, smooth reveal.
-                    fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
-                    fadeOutDuration: HomeTheme.imageFadeOut(
-                      widget.isTelevision,
-                    ),
-                    placeholder: (_, __) => _placeholder(item.name),
-                    errorWidget: (_, __, ___) => _placeholder(item.name),
-                  )
-                else
-                  _placeholder(item.name),
-                if (widget.hasBoundSource)
-                  const Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Icon(
-                      Icons.bookmark_rounded,
-                      size: 18,
-                      color: Colors.white,
-                      shadows: [Shadow(color: Colors.black, blurRadius: 6)],
-                    ),
-                  ),
-                // Subtle season/episode badge for a Continue Watching series
-                // card — sits just above the progress bar, bottom-left.
-                if (widget.episodeLabel != null)
-                  Positioned(
-                    left: 6,
-                    bottom: widget.progress != null ? 11 : 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.66),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        widget.episodeLabel!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                // Continue Watching progress — a red bar pinned to the bottom of
-                // the poster (Stremio-style, clipped to the rounded corners). A
-                // faint dark track keeps it readable on bright posters.
-                if (widget.progress != null)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      height: 5,
-                      color: Colors.black.withValues(alpha: 0.45),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: widget.progress!.clamp(0.0, 1.0),
-                        heightFactor: 1,
-                        child: const ColoredBox(color: _kCwProgressRed),
-                      ),
-                    ),
-                  ),
-                // Hold-OK feedback: a dim scrim with a filling ring, shown only
-                // while OK is actually held down (so it costs nothing at rest).
-                if (_holding)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: ColoredBox(
-                        color: Colors.black.withValues(alpha: 0.42),
-                        child: Center(
-                          child: SizedBox(
-                            width: 34,
-                            height: 34,
-                            child: AnimatedBuilder(
-                              animation: _holdController,
-                              builder: (_, __) => CircularProgressIndicator(
-                                value: _holdController.value,
-                                strokeWidth: 3,
-                                backgroundColor: Colors.white.withValues(
-                                  alpha: 0.22,
-                                ),
-                                valueColor: const AlwaysStoppedAnimation(
-                                  kStremioFocusRing,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                // Selection ring — accent on TV focus, subtle white on hover.
-                if (_active)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            // Violet-300 on TV: the "light ring + small scale"
-                            // focus grammar (deep accent stays for chrome).
-                            color: widget.isTelevision
-                                ? kStremioFocusRing
-                                : Colors.white.withValues(alpha: 0.6),
-                            width: widget.isTelevision ? 2.5 : 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+    // Focus visuals (scale + shadow + ring on one curve) live in the shared
+    // [_CardFocusRise] so tuning lands once for every board card.
+    final posterCard = _CardFocusRise(
+      active: _active,
+      isTelevision: widget.isTelevision,
+      children: [
+        if (poster != null && poster.isNotEmpty)
+          CachedNetworkImage(
+            imageUrl: poster,
+            fit: BoxFit.cover,
+            // Decode board posters at a capped width — tiles are small,
+            // full-res posters are the main memory churn while scrolling.
+            memCacheWidth: widget.isTelevision ? 320 : 480,
+            // Short fade on TV (see HomeTheme.imageFadeIn): posters arriving
+            // as hard-snapping rectangles was the last cheap tell at the card
+            // level; memory-cached loads still land settled with no fade.
+            fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
+            fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
+            placeholder: (_, __) => _placeholder(item.name),
+            errorWidget: (_, __, ___) => _placeholder(item.name),
+          )
+        else
+          _placeholder(item.name),
+        if (widget.hasBoundSource)
+          const Positioned(
+            top: 8,
+            right: 8,
+            child: Icon(
+              Icons.bookmark_rounded,
+              size: 18,
+              color: Colors.white,
+              shadows: [Shadow(color: Colors.black, blurRadius: 6)],
             ),
           ),
-        ),
-      ),
+        // Subtle season/episode badge for a Continue Watching series
+        // card — sits just above the progress bar, bottom-left.
+        if (widget.episodeLabel != null)
+          Positioned(
+            left: 6,
+            bottom: widget.progress != null ? 11 : 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.66),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                widget.episodeLabel!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ),
+        // Continue Watching progress — a red bar pinned to the bottom of
+        // the poster (Stremio-style, clipped to the rounded corners). A
+        // faint dark track keeps it readable on bright posters.
+        if (widget.progress != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              height: 5,
+              color: Colors.black.withValues(alpha: 0.45),
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: widget.progress!.clamp(0.0, 1.0),
+                heightFactor: 1,
+                child: const ColoredBox(color: _kCwProgressRed),
+              ),
+            ),
+          ),
+        // Hold-OK feedback: a dim scrim with a filling ring, shown only
+        // while OK is actually held down (so it costs nothing at rest).
+        if (_holding)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.42),
+                child: Center(
+                  child: SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: AnimatedBuilder(
+                      animation: _holdController,
+                      builder: (_, __) => CircularProgressIndicator(
+                        value: _holdController.value,
+                        strokeWidth: 3,
+                        backgroundColor: Colors.white.withValues(alpha: 0.22),
+                        valueColor: const AlwaysStoppedAnimation(
+                          kStremioFocusRing,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
 
     return Focus(
@@ -13382,8 +13495,14 @@ class _StremioCardState extends State<_StremioCard>
               context,
               alignment: 0.5,
               alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              // TV glides too (was a hard Duration.zero jump — the single
+              // biggest "not native" tell). Kept SHORT (140ms): each held-DPAD
+              // repeat retargets the in-flight scroll from the CURRENT offset,
+              // and a short glide converges on the focused card fast enough
+              // that motion never reads as trailing the keypress (200ms felt
+              // laggy on-device).
               duration: widget.isTelevision
-                  ? Duration.zero
+                  ? const Duration(milliseconds: 140)
                   : const Duration(milliseconds: 260),
               curve: Curves.easeOutCubic,
             );
@@ -13471,7 +13590,17 @@ class _StremioCardState extends State<_StremioCard>
 
   Widget _placeholder(String title) {
     return Container(
-      color: const Color(0xFF15151F),
+      // Subtle vertical gradient instead of a flat fill: while art loads the
+      // tile reads as a designed surface, not a dead rectangle. Static —
+      // no shimmer, so a board full of placeholders costs nothing per frame.
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF1D1B2E), Color(0xFF15141F), Color(0xFF100E18)],
+          stops: [0.0, 0.55, 1.0],
+        ),
+      ),
       alignment: Alignment.center,
       child: Padding(
         padding: const EdgeInsets.all(8),
@@ -13686,179 +13815,119 @@ class _ArtPosterState extends State<_ArtPoster> {
 
   @override
   Widget build(BuildContext context) {
-    // Smooth focus "pop" on TV too (was instant for perf) — animate the SCALE
-    // only (a cheap transform) and snap the shadow, so a weak TV GPU doesn't
-    // re-rasterise a large blur every frame. Phones keep their 160ms feel.
-    final scaleFx = widget.isTelevision
-        ? const Duration(milliseconds: 140)
-        : const Duration(milliseconds: 160);
-    final shadowFx = widget.isTelevision ? Duration.zero : scaleFx;
     final url = widget.imageUrl;
     final hasImage = url != null && url.isNotEmpty;
 
-    final posterCard = AnimatedScale(
-      duration: scaleFx,
-      curve: Curves.easeOutCubic,
-      // TV pop calmed from 1.09 to the Nuvio-class 1.045: with the lighter
-      // ring the smaller lift reads premium, and neighbours shift less.
-      scale: _active ? (widget.isTelevision ? 1.045 : 1.05) : 1.0,
-      child: AspectRatio(
-        aspectRatio: 2 / 3,
-        child: AnimatedContainer(
-          duration: shadowFx,
+    // Focus visuals (scale + shadow + ring on one curve) live in the shared
+    // [_CardFocusRise] so tuning lands once for every board card.
+    final posterCard = _CardFocusRise(
+      active: _active,
+      isTelevision: widget.isTelevision,
+      children: [
+        // Base gradient — the fallback backdrop and the ground behind
+        // any letterboxed (contain-fit) logo.
+        const DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: _active ? 0.6 : 0.35),
-                blurRadius: _active ? 28 : 12,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Base gradient — the fallback backdrop and the ground behind
-                // any letterboxed (contain-fit) logo.
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF2A1D5C),
-                        Color(0xFF1A1440),
-                        Color(0xFF0D0B1A),
-                      ],
-                      stops: [0.0, 0.55, 1.0],
-                    ),
-                  ),
-                ),
-                if (hasImage)
-                  Padding(
-                    padding: widget.imageFit == BoxFit.contain
-                        ? const EdgeInsets.all(12)
-                        : EdgeInsets.zero,
-                    child: CachedNetworkImage(
-                      imageUrl: url,
-                      fit: widget.imageFit,
-                      memCacheWidth: widget.isTelevision ? 320 : 480,
-                      // TV: no per-image crossfade (saveLayer per poster janks
-                      // the weak GPU when a grid fills in at once).
-                      fadeInDuration: HomeTheme.imageFadeIn(
-                        widget.isTelevision,
-                      ),
-                      fadeOutDuration: HomeTheme.imageFadeOut(
-                        widget.isTelevision,
-                      ),
-                      placeholder: (_, __) => _glyph(),
-                      errorWidget: (_, __, ___) => _glyph(),
-                    ),
-                  )
-                else
-                  _glyph(),
-                // Optional channel-number badge, top-left.
-                if (widget.badge != null)
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Text(
-                      widget.badge!,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ),
-                // "LIVE" pill, top-right — marks this as a channel currently
-                // playing the shown artwork.
-                if (widget.live)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: _kCwProgressRed,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            'LIVE',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                // Resume-progress bar along the bottom edge (Playlist row).
-                if (widget.progress != null && widget.progress! > 0)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: SizedBox(
-                      height: 4,
-                      child: Stack(
-                        children: [
-                          Container(color: Colors.black.withValues(alpha: 0.4)),
-                          FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: widget.progress!,
-                            child: Container(color: _kCwProgressRed),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                // Selection ring — accent on TV focus, subtle white on hover.
-                if (_active)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            // Violet-300 on TV: the "light ring + small scale"
-                            // focus grammar (deep accent stays for chrome).
-                            color: widget.isTelevision
-                                ? kStremioFocusRing
-                                : Colors.white.withValues(alpha: 0.6),
-                            width: widget.isTelevision ? 2.5 : 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2A1D5C), Color(0xFF1A1440), Color(0xFF0D0B1A)],
+              stops: [0.0, 0.55, 1.0],
             ),
           ),
         ),
-      ),
+        if (hasImage)
+          Padding(
+            padding: widget.imageFit == BoxFit.contain
+                ? const EdgeInsets.all(12)
+                : EdgeInsets.zero,
+            child: CachedNetworkImage(
+              imageUrl: url,
+              fit: widget.imageFit,
+              memCacheWidth: widget.isTelevision ? 320 : 480,
+              // Short fade on TV (see HomeTheme.imageFadeIn) — cached loads
+              // land settled with no fade.
+              fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
+              fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
+              placeholder: (_, __) => _glyph(),
+              errorWidget: (_, __, ___) => _glyph(),
+            ),
+          )
+        else
+          _glyph(),
+        // Optional channel-number badge, top-left.
+        if (widget.badge != null)
+          Positioned(
+            top: 10,
+            left: 10,
+            child: Text(
+              widget.badge!,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        // "LIVE" pill, top-right — marks this as a channel currently
+        // playing the shown artwork.
+        if (widget.live)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: _kCwProgressRed,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'LIVE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        // Resume-progress bar along the bottom edge (Playlist row).
+        if (widget.progress != null && widget.progress! > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SizedBox(
+              height: 4,
+              child: Stack(
+                children: [
+                  Container(color: Colors.black.withValues(alpha: 0.4)),
+                  FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: widget.progress!,
+                    child: Container(color: _kCwProgressRed),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
 
     return Focus(
@@ -13874,8 +13943,12 @@ class _ArtPosterState extends State<_ArtPoster> {
               context,
               alignment: 0.5,
               alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              // TV glides too (was a hard jump) — see _StremioCard: repeated
+              // DPAD moves retarget the in-flight scroll, so held browsing
+              // stays one continuous motion. Short on purpose; 200ms trailed
+              // the keypress on-device.
               duration: widget.isTelevision
-                  ? Duration.zero
+                  ? const Duration(milliseconds: 140)
                   : const Duration(milliseconds: 260),
               curve: Curves.easeOutCubic,
             );

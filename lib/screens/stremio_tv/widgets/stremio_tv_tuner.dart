@@ -1213,12 +1213,21 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                       : (widget.isTelevision
                           ? HomeTheme.heroBackdropCacheWidthTv
                           : HomeTheme.heroBackdropCacheWidth),
-                  // On TV, snap the swap instead of the default 500ms opacity
-                  // crossfade — that fade is a near-full-screen saveLayer per
-                  // frame on every surf step. The text cascade still provides
-                  // the transition polish.
-                  fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
-                  fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
+                  // On TV, snap the swap instead of a fade — deliberately NOT
+                  // the shared HomeTheme token (which now fades 150ms on TV
+                  // for the small board posters): the Stage swaps to a FRESH
+                  // URL on every surf settle, so the memory-cache no-fade
+                  // shortcut never applies here, and even a short fade is a
+                  // near-full-screen saveLayer per frame on every surf step —
+                  // with no placeholder, the old art would also dip to the
+                  // page colour mid-fade. The text cascade provides the
+                  // transition polish.
+                  fadeInDuration: widget.isTelevision
+                      ? Duration.zero
+                      : const Duration(milliseconds: 500),
+                  fadeOutDuration: widget.isTelevision
+                      ? Duration.zero
+                      : const Duration(milliseconds: 1000),
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 );
                 if (blurArt && !widget.isTelevision) {
