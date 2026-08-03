@@ -1645,8 +1645,8 @@ class TvUiScaleChoice {
 
 const List<TvUiScaleChoice> kTvUiScaleChoices = [
   TvUiScaleChoice(100, 'Large', 'The original size — everything bigger'),
-  TvUiScaleChoice(90, 'Medium', 'About 10% more fits on screen'),
-  TvUiScaleChoice(80, 'Compact', 'Default — about 25% more fits on screen'),
+  TvUiScaleChoice(90, 'Medium', 'Default — about 10% more fits on screen'),
+  TvUiScaleChoice(80, 'Compact', 'About 25% more fits on screen'),
 ];
 
 /// Caption for [percent], falling back to the raw value if a stored size is

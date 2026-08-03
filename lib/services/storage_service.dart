@@ -426,13 +426,14 @@ class StorageService {
   /// engine is built, so a change only takes effect on the next cold start.
   /// Android TV only; ignored everywhere else.
   ///
-  /// [kTvUiScaleDefault] is 80: at 100 the app reads noticeably larger than
+  /// [kTvUiScaleDefault] is 90: at 100 the app reads noticeably larger than
   /// the TV apps people compare it to (Stremio's web-rendered UI lays out
-  /// against a canvas far closer to 1920 than to 960), so Compact is the
-  /// out-of-the-box size and 100 is there to put the old one back. MUST stay
-  /// in step with MainActivity's `computeUiScale` fallback.
+  /// against a canvas far closer to 1920 than to 960), while 80 ran a touch
+  /// small for the Canvas-era layouts — Medium is the out-of-the-box balance
+  /// and both neighbours are one tap away. MUST stay in step with
+  /// MainActivity's `computeUiScale` fallback.
   static const List<int> kTvUiScaleOptions = [100, 90, 80];
-  static const int kTvUiScaleDefault = 80;
+  static const int kTvUiScaleDefault = 90;
 
   static Future<int> getTvUiScalePercent() async {
     final prefs = await SharedPreferences.getInstance();

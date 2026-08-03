@@ -715,7 +715,8 @@ class MainActivity : FlutterActivity() {
          *  and reads visibly larger than the TV apps it sits next to; 100 is
          *  the opt-in "put it back" choice. MUST stay in step with
          *  StorageService.kTvUiScaleDefault, which drives the Settings row. */
-        private const val DEFAULT_UI_SCALE_PERCENT = 80L
+        // MUST stay in step with StorageService.kTvUiScaleDefault.
+        private const val DEFAULT_UI_SCALE_PERCENT = 90L
 
         /** Once per PROCESS, not per activity: recreation must not re-run the
          *  pending-recording retry sweep alongside a live one. */
