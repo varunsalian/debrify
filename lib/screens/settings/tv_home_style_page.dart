@@ -16,14 +16,14 @@ class TvHomeStyleChoice {
 
 const List<TvHomeStyleChoice> kTvHomeStyleChoices = [
   TvHomeStyleChoice(
-    'classic',
-    'Classic',
-    'Hero spotlight with scrolling rows — the default',
-  ),
-  TvHomeStyleChoice(
     'canvas',
     'Canvas',
-    'Full-screen art and trailers with a single bottom shelf',
+    'Full-screen art and trailers, one bottom shelf — the default',
+  ),
+  TvHomeStyleChoice(
+    'classic',
+    'Classic',
+    'Hero spotlight with scrolling rows',
   ),
 ];
 
@@ -32,7 +32,7 @@ String tvHomeStyleLabel(String style) {
   for (final c in kTvHomeStyleChoices) {
     if (c.value == style) return c.label;
   }
-  return 'Classic';
+  return 'Canvas';
 }
 
 /// Android TV "Home Layout" picker.
@@ -50,7 +50,7 @@ class TvHomeStylePage extends StatefulWidget {
 
 class _TvHomeStylePageState extends State<TvHomeStylePage> {
   bool _loading = true;
-  String _style = 'classic';
+  String _style = 'canvas';
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).

@@ -3937,8 +3937,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // ── TV Home layout (classic / canvas) ────────────────────────────────────
 
   /// Active TV home layout, from `tv_home_style`. Only the HOME board renders
-  /// non-classic — Search tab, phone and desktop always render classic.
-  String _tvHomeStyle = 'classic';
+  /// non-classic — Search tab, phone and desktop always render classic (via
+  /// [_homeStyleEffective], regardless of this field). Canvas is the product
+  /// default; matching it here avoids a one-frame classic flash at boot.
+  String _tvHomeStyle = 'canvas';
 
   bool get _homeBoardMode =>
       widget.isTelevision && !widget.searchMode && !widget.discoverMode;

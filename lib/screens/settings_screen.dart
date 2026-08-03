@@ -132,7 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoUpdateChecksEnabled = true;
   bool _tvKeyboardEnabled = true;
   int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
-  String _tvHomeStyle = 'classic';
+  String _tvHomeStyle = 'canvas';
   String _tvSidebarStyle = 'ghost';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;

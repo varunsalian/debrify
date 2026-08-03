@@ -624,21 +624,21 @@ class StorageService {
 
   static const String _tvHomeStyleKey = 'tv_home_style';
 
-  /// TV Home layout: 'classic' (hero + scrolling rows, the default) or
-  /// 'canvas' (full-bleed stage + one bottom shelf). Phone/desktop and the
-  /// Search tab never read it. A previously-stored 'shelf' (removed layout)
-  /// coerces to 'classic' on read.
+  /// TV Home layout: 'canvas' (full-bleed stage + one bottom shelf, the
+  /// default) or 'classic' (hero + scrolling rows). Phone/desktop and the
+  /// Search tab never read it. Unset — and any stale value like the removed
+  /// 'shelf' — coerces to 'canvas'; only an explicit 'classic' keeps classic.
   static Future<String> getTvHomeStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tvHomeStyleKey);
-    return raw == 'canvas' ? 'canvas' : 'classic';
+    return raw == 'classic' ? 'classic' : 'canvas';
   }
 
   static Future<void> setTvHomeStyle(String style) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _tvHomeStyleKey,
-      style == 'canvas' ? 'canvas' : 'classic',
+      style == 'classic' ? 'classic' : 'canvas',
     );
   }
 
