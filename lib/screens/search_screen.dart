@@ -1375,6 +1375,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       HardwareKeyboard.instance.removeHandler(_onCanvasTheaterKey);
     }
     _canvasTheaterTimer?.cancel();
+    _canvasFavFocus.dispose();
     MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     if (_heroTrailerActive) {
       _heroTrailerTakeover.removeListener(_relayChromeDim);
@@ -3414,8 +3415,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Billboard effect: the seeded spotlight starts its trailer too, so
         // opening Home settles into a living hero without any DPAD input.
         // A board reload is a fresh visit — lift any after-the-feature
-        // suppression.
+        // suppression, and drop any Canvas favourites override + live feed
+        // (a reload landing while a favourite held focus would otherwise
+        // keep its stale art/title on the stage — or resume its stream —
+        // with no cell focused, and let the seeded trailer start beneath).
         _heroTrailerSuppressed = false;
+        _canvasFavFocus.value = null;
+        _clearHeroLiveIptv();
         _scheduleHeroTrailer(first);
       } else {
         _clearHeroTrailer();
@@ -3657,10 +3663,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // usually unmounted there (and requestFocus on a detached node only
     // latches a stray later grab), so sidebar hand-off / tab re-entry /
     // auto-focus all aim at the displayed rail's nearest mounted cell.
-    // Gated on _canvasActive, NOT the pref alone: when Canvas falls back to
-    // the classic board (favourites/lists-only home), the classic targets
-    // below are the ones actually on screen — an unconditional canvas null
-    // here made that fallback unreachable by remote.
+    // Canvas renders exactly ONE rail, so aim at its nearest mounted cell;
+    // null (rails still loading) falls through to the classic targets.
     if (_canvasActive) return _canvasFocusTarget();
     if (_cwVisible) {
       final rows = _cwRows;
@@ -3948,13 +3952,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// The layout the CURRENT surface should render (guards non-home surfaces).
   String get _homeStyleEffective => _homeBoardMode ? _tvHomeStyle : 'classic';
 
-  /// Whether the CANVAS board is what's actually on screen — the pref alone
-  /// isn't enough, because a favourites/lists-only home falls back to the
-  /// classic board (canvas v1 carries no favourites rails). The board branch
-  /// and the focus router MUST share this so they can never disagree.
-  bool get _canvasActive =>
-      _homeStyleEffective == 'canvas' &&
-      (_canvasRails.isNotEmpty || !(_anyFavVisible || _listsRailVisible));
+  /// Whether the CANVAS board is what's actually on screen. Favourites are
+  /// now first-class Canvas rails, so the old favourites-only fallback to
+  /// classic is gone — the pref alone decides. (While everything is still
+  /// loading, Canvas shows the brand stage; the shared empty-state guards
+  /// above the branch handle the truly-nothing case.)
+  bool get _canvasActive => _homeStyleEffective == 'canvas';
 
   Future<void> _loadTvHomeStyle() async {
     final style = await StorageService.getTvHomeStyle();
@@ -3972,6 +3975,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _canvasFocusSeeded = false;
     _canvasTheaterTimer?.cancel();
     _canvasTheater = false;
+    _canvasFavFocus.value = null;
     unawaited(_loadTvHomeStyle());
   }
 
@@ -3988,6 +3992,167 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// One-shot: hand entry focus to the shelf the first time Canvas builds.
   bool _canvasFocusSeeded = false;
+
+  /// Stage override while a favourites cell has focus (see
+  /// [_CanvasFavFocus]). A ValueNotifier — NOT setState — so scrubbing along
+  /// a favourites rail repaints only the stage layers that listen (art +
+  /// identity), never the whole board (the hero pipeline's own pattern).
+  final ValueNotifier<_CanvasFavFocus?> _canvasFavFocus =
+      ValueNotifier<_CanvasFavFocus?>(null);
+
+  /// A Canvas favourites cell took focus: remember the column, stop any
+  /// catalog trailer machinery (a PENDING hero swap firing later would start
+  /// a full-bleed trailer of an unrelated title under favourites browsing),
+  /// drive the live preview for IPTV, and hand the stage the favourite's own
+  /// art + name.
+  void _canvasFavFocused(
+    String railKey,
+    int col,
+    _CanvasFavFocus focus, {
+    IptvChannel? liveChannel,
+  }) {
+    _canvasCols[railKey] = col;
+    _heroSwapTimer?.cancel();
+    _clearHeroTrailer();
+    if (liveChannel != null) {
+      _setHeroLiveIptv(liveChannel);
+    } else {
+      _clearHeroLiveIptv();
+    }
+    _canvasFavFocus.value = focus;
+  }
+
+  /// One favourites cell on the Canvas shelf — the SAME [_FavArtCell] +
+  /// [_ArtPoster] stack the classic rows use (identical art, badges, hold
+  /// behaviour and open actions), with UP/DOWN rewired to rail switching and
+  /// focus driving the Canvas stage override (and the full-bleed live
+  /// preview, for IPTV).
+  Widget _canvasFavCell(_FavKind kind, String railKey, int col) {
+    final nodes = _favNodesFor(kind);
+    switch (kind) {
+      case _FavKind.iptv:
+        final channel = _iptvFavChannels[col];
+        return _FavArtCell(
+          isTelevision: true,
+          column: col,
+          rowNodes: nodes,
+          onUp: () => _canvasSwitchRail(-1),
+          onDown: () => _canvasSwitchRail(1),
+          child: _ArtPoster(
+            imageUrl: channel.logoUrl,
+            title: channel.name,
+            imageFit: BoxFit.contain,
+            isTelevision: true,
+            ringColor: Colors.white,
+            focusNode: nodes[col],
+            onOpen: () => _playIptvChannel(channel),
+            // Focus lights the whole stage with this channel's live feed —
+            // the classic boxed preview, promoted to full-bleed.
+            onFocused: () => _canvasFavFocused(
+              railKey,
+              col,
+              _CanvasFavFocus(
+                art: channel.logoUrl,
+                fit: BoxFit.contain,
+                title: channel.name,
+                subtitle: 'IPTV · FAVORITES',
+              ),
+              liveChannel: channel,
+            ),
+          ),
+        );
+      case _FavKind.debrify:
+        final channel = _tvFavChannels[col];
+        final number = channel.channelNumber > 0
+            ? channel.channelNumber
+            : col + 1;
+        return _FavArtCell(
+          isTelevision: true,
+          column: col,
+          rowNodes: nodes,
+          onUp: () => _canvasSwitchRail(-1),
+          onDown: () => _canvasSwitchRail(1),
+          child: _ArtPoster(
+            imageUrl: null,
+            title: channel.name,
+            badge: '$number',
+            isTelevision: true,
+            ringColor: Colors.white,
+            focusNode: nodes[col],
+            onOpen: () => _playChannel(channel),
+            onFocused: () => _canvasFavFocused(
+              railKey,
+              col,
+              _CanvasFavFocus(
+                art: null,
+                title: channel.name,
+                subtitle: 'DEBRIFY TV · CHANNEL $number',
+              ),
+            ),
+          ),
+        );
+      case _FavKind.stremio:
+        final channel = _stvFavChannels[col];
+        final item = _stvNowPlaying(channel)?.item;
+        return _FavArtCell(
+          isTelevision: true,
+          column: col,
+          rowNodes: nodes,
+          onUp: () => _canvasSwitchRail(-1),
+          onDown: () => _canvasSwitchRail(1),
+          child: _ArtPoster(
+            imageUrl: _firstNonEmpty(item?.poster, item?.background),
+            title: channel.displayName,
+            live: true,
+            isTelevision: true,
+            ringColor: Colors.white,
+            focusNode: nodes[col],
+            onOpen: () => _playStremioTvChannel(channel),
+            onFocused: () => _canvasFavFocused(
+              railKey,
+              col,
+              _CanvasFavFocus(
+                // The stage prefers the WIDE art; the card keeps the poster.
+                art: _firstNonEmpty(item?.background, item?.poster),
+                title: channel.displayName,
+                subtitle: item != null
+                    ? 'STREMIO TV · NOW: ${item.name}'
+                    : 'STREMIO TV · CHANNEL',
+              ),
+            ),
+          ),
+        );
+      case _FavKind.playlist:
+        final item = _playlistItems[col];
+        final posterUrl = item['posterUrl'] as String?;
+        final title = (item['title'] as String?) ?? 'Unknown';
+        return _FavArtCell(
+          isTelevision: true,
+          column: col,
+          rowNodes: nodes,
+          onUp: () => _canvasSwitchRail(-1),
+          onDown: () => _canvasSwitchRail(1),
+          child: _ArtPoster(
+            imageUrl: posterUrl,
+            title: title,
+            progress: _playlistProgressFor(item),
+            isTelevision: true,
+            ringColor: Colors.white,
+            focusNode: nodes[col],
+            onOpen: () => _onPlaylistItemTap(item),
+            onFocused: () => _canvasFavFocused(
+              railKey,
+              col,
+              _CanvasFavFocus(
+                art: posterUrl,
+                title: title,
+                subtitle: 'PLAYLIST · SAVED',
+              ),
+            ),
+          ),
+        );
+    }
+  }
 
   /// Theater mode: after the ambient trailer has been SHOWING frames for a
   /// dwell, the shelf/tabs (and their bottom scrim) recede so the video owns
@@ -4037,9 +4202,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return false;
   }
 
-  String _canvasRailKeyOf(_CanvasRail rail) => rail.cw != null
-      ? 'cw:${rail.cw!.title}:${rail.cw!.tag ?? ''}'
-      : 'sec:${rail.sectionIndex}';
+  String _canvasRailKeyOf(_CanvasRail rail) {
+    if (rail.cw != null) return 'cw:${rail.cw!.title}:${rail.cw!.tag ?? ''}';
+    if (rail.favKind != null) return 'fav:${rail.favKind!.name}';
+    return 'sec:${rail.sectionIndex}';
+  }
 
   /// Where the active rail currently sits in [rails] — re-resolved every
   /// build so insertions above it never change WHICH rail is shown.
@@ -4083,11 +4250,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  /// The Canvas rails: every non-empty CW row, then every non-empty catalog
-  /// section. Favourites/lists rails are deliberately OUT of Canvas v1 (the
-  /// IPTV live-preview machinery stays unmounted). FocusNode lists are reused
-  /// from the classic board's per-row lists — only one view is ever mounted,
-  /// and reuse keeps node counts synced through paging for free.
+  /// The Canvas rails: every non-empty CW row, then every visible FAVOURITES
+  /// rail (same kinds and order as the classic board), then every non-empty
+  /// catalog section. The MDBList lists rail is NOT here by design — it's a
+  /// catalog-SEARCH results rail (`_listsRailVisible` requires a query) and
+  /// the TV home board is chrome-free, so it can never appear on this
+  /// surface. FocusNode lists are reused from the classic board's per-row
+  /// lists — only one view is ever mounted, and reuse keeps node counts
+  /// synced through paging for free.
   List<_CanvasRail> get _canvasRails {
     final rails = <_CanvasRail>[];
     if (_cwVisible) {
@@ -4097,6 +4267,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         rails.add(_CanvasRail(cw: cwRows[i], cwIndex: i));
       }
     }
+    for (final kind in _favRowKinds) {
+      if (_canvasFavItemCount(kind) == 0) continue;
+      rails.add(_CanvasRail(favKind: kind));
+    }
     for (var i = 0; i < _sections.length; i++) {
       if (_sections[i].items.isEmpty || i >= _rowNodes.length) continue;
       rails.add(_CanvasRail(sectionIndex: i));
@@ -4104,14 +4278,46 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return rails;
   }
 
-  String _canvasRailTitle(_CanvasRail rail) =>
-      rail.cw?.title ?? _sections[rail.sectionIndex!].title;
+  int _canvasFavItemCount(_FavKind kind) {
+    switch (kind) {
+      case _FavKind.iptv:
+        return _iptvFavChannels.length;
+      case _FavKind.debrify:
+        return _tvFavChannels.length;
+      case _FavKind.stremio:
+        return _stvFavChannels.length;
+      case _FavKind.playlist:
+        return _playlistItems.length;
+    }
+  }
+
+  String _canvasFavTitle(_FavKind kind) {
+    switch (kind) {
+      case _FavKind.iptv:
+        return 'IPTV Favorites';
+      case _FavKind.debrify:
+        return 'Debrify TV';
+      case _FavKind.stremio:
+        return 'Stremio TV';
+      case _FavKind.playlist:
+        return 'Playlist';
+    }
+  }
+
+  String _canvasRailTitle(_CanvasRail rail) {
+    if (rail.cw != null) return rail.cw!.title;
+    if (rail.favKind != null) return _canvasFavTitle(rail.favKind!);
+    return _sections[rail.sectionIndex!].title;
+  }
 
   List<StremioMeta> _canvasRailItems(_CanvasRail rail) =>
       rail.cw?.items ?? _sections[rail.sectionIndex!].items;
 
-  List<FocusNode> _canvasRailNodes(_CanvasRail rail) =>
-      rail.cw?.nodes ?? _rowNodes[rail.sectionIndex!];
+  List<FocusNode> _canvasRailNodes(_CanvasRail rail) {
+    if (rail.cw != null) return rail.cw!.nodes;
+    if (rail.favKind != null) return _favNodesFor(rail.favKind!);
+    return _rowNodes[rail.sectionIndex!];
+  }
 
   /// UP/DOWN on the shelf: swap which rail the shelf shows — the screen never
   /// scrolls. DOWN past the last loaded rail pulls the next catalog batch;
@@ -4156,7 +4362,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // index 0 — in both cases an unpersisted identity would let a CW rail
     // prepending seconds later silently swap the shelf under the user.
     _canvasRailKey = railKey;
-    final items = _canvasRailItems(rail);
+    final bool favRail = rail.favKind != null;
+    final items = favRail ? const <StremioMeta>[] : _canvasRailItems(rail);
     final nodes = _canvasRailNodes(rail);
 
     if (!_canvasFocusSeeded) {
@@ -4180,7 +4387,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           children: [
             // Stage floor + full-bleed key art. Sits BELOW the punch hole,
             // so the video replaces it in place when the trailer starts.
-            _CanvasArtLayer(item: _heroItem, enriched: _heroEnriched),
+            // While a favourites cell has focus, the favourite's own art
+            // overrides the hero pipeline's.
+            _CanvasArtLayer(
+              item: _heroItem,
+              enriched: _heroEnriched,
+              fav: _canvasFavFocus,
+            ),
             // Full-bleed ambient trailer: same engine, whole-canvas region.
             if (_heroTrailerActive)
               _HeroTrailerLayer(
@@ -4191,6 +4404,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 loading: _heroTrailerLoading,
                 onPlayingChanged: _onHeroTrailerPlaying,
                 takeover: _heroTrailerTakeover,
+              ),
+            // A focused IPTV favourite's live feed, full-bleed in the SAME
+            // region — above the catalog trailer layer so it simply wins
+            // whenever a channel has focus (shrinks to nothing otherwise),
+            // exactly like the classic board's boxed version.
+            if (_heroTrailerActive)
+              _HeroLiveLayer(
+                channel: _heroLiveChannel,
+                streamUrl: _heroLiveUrl,
+                heroHeight: boardH,
+                fullBleed: true,
+                volume: _heroTrailerVolume,
+                onPlayingChanged: _onHeroTrailerPlaying,
+                onPlaybackFailed: _onHeroLivePlaybackFailed,
               ),
             // ONE scrim set painted above art AND video — identical in both
             // states so trailer start never swaps the lighting. Plain
@@ -4231,10 +4458,54 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           ? const Duration(milliseconds: 900)
                           : const Duration(milliseconds: 250),
                       curve: Curves.easeInOutCubic,
-                      child: _CanvasIdentity(
-                        item: _heroItem,
-                        enriched: _heroEnriched,
-                        trailerShowing: _heroTrailerShowing,
+                      // Favourites focus: the favourite's own name replaces
+                      // the hero identity (favourites aren't StremioMeta, so
+                      // the logo/meta pipeline has nothing true to say).
+                      // Notifier-driven, so a fav scrub repaints only this.
+                      child: ValueListenableBuilder<_CanvasFavFocus?>(
+                        valueListenable: _canvasFavFocus,
+                        builder: (context, fav, _) => fav != null
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    fav.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: -0.4,
+                                      height: 1.1,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black54,
+                                          blurRadius: 14,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    fav.subtitle,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : _CanvasIdentity(
+                                item: _heroItem,
+                                enriched: _heroEnriched,
+                                trailerShowing: _heroTrailerShowing,
+                              ),
                       ),
                     ),
                   ),
@@ -4274,12 +4545,47 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     child: _canvasTabs(rails, railIndex),
                   ),
                   SizedBox(
-                    height: cardH + 10,
+                    // ONE height for every rail (favourites cells carry a
+                    // caption band; meta cells centre in the extra slack):
+                    // a per-rail height made the tabs row jump ~45px on
+                    // every fav↔meta switch and squeezed the outgoing fav
+                    // list into a RenderFlex overflow mid-crossfade.
+                    height: cardH + _artPosterCaptionBand(context) + 10,
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 200),
                       switchInCurve: Curves.easeOutCubic,
                       switchOutCurve: Curves.easeOutCubic,
-                      child: ListView.builder(
+                      child: favRail
+                          ? ListView.builder(
+                              // Keyed by rail IDENTITY, like the meta shelf.
+                              key: ValueKey('canvas-rail-$railKey'),
+                              scrollDirection: Axis.horizontal,
+                              clipBehavior: Clip.hardEdge,
+                              cacheExtent: 400,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 48,
+                              ),
+                              itemCount: _canvasFavItemCount(rail.favKind!),
+                              itemBuilder: (context, col) => Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                ),
+                                // Centred like the meta cells: splits the
+                                // vertical slack so the focus scale's lift
+                                // isn't clipped at the viewport's top edge.
+                                child: Center(
+                                  child: SizedBox(
+                                    width: cardW,
+                                    child: _canvasFavCell(
+                                      rail.favKind!,
+                                      railKey,
+                                      col,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
                         // Keyed by rail IDENTITY: insertions above the active
                         // rail must never read as a content swap.
                         key: ValueKey('canvas-rail-$railKey'),
@@ -4495,6 +4801,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Off-TV / blank search prompt the hero isn't rendered, so don't track focus
     // or fire the per-item backdrop-enrichment /meta fetch behind it.
     if (!_heroActive) return;
+    // A catalog/CW card owns the stage again — drop any Canvas favourites
+    // override so its art/identity yield to the hero pipeline.
+    _canvasFavFocus.value = null;
     // A catalog/CW card just took focus (possibly straight from the IPTV
     // favourites row, which has no row in between) — drop any live IPTV feed
     // so the boxed video region falls back to this item's own trailer.
@@ -4592,6 +4901,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// cached in their services, so re-resting on a recent card starts fast.
   void _scheduleHeroTrailer(StremioMeta item) {
     if (!_heroTrailerActive || !_heroTrailerEnabled || _heroTrailerSuppressed) {
+      return;
+    }
+    // A Canvas favourite owns the stage (or its live feed does): a catalog
+    // trailer must never start beneath it. The next catalog/CW focus goes
+    // through _setHero, which clears both and reschedules. Safe to skip the
+    // reset lines below: every fav-focus path already ran _clearHeroTrailer.
+    if (_canvasFavFocus.value != null || _heroLiveChannel.value != null) {
       return;
     }
     _heroTrailerTimer?.cancel();
@@ -4714,6 +5030,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_heroLiveTakeover.value) _heroLiveTakeover.value = false;
     _heroLiveCandidates = null;
     if (_heroLiveUrl.value != null) _heroLiveUrl.value = null;
+    // The unmounting live backdrop can never report playing:false (its
+    // dispose doesn't notify), and when the trailer path declines to re-arm
+    // (trailers off / suppressed) nothing else resets these — a stuck
+    // showing=true kept canvas theater re-firing over a static stage and
+    // held the shell's lights off.
+    if (wasLive) {
+      if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
+      if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
+    }
     // Restore the shell's glass-stage backdrop/tint for whatever catalog
     // title the hero already holds. Needed even when DPAD focus returns to
     // the SAME card it was on before IPTV took over: _setHero's "back on the
@@ -10082,10 +10407,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
 
     // CANVAS: the whole screen is the stage — its own build path (loading /
-    // error / empty guards above are shared with classic). Canvas v1 carries
-    // no favourites/lists rails, so when those are ALL the board has,
-    // _canvasActive is false and we fall through to classic instead of
-    // stranding the user on an empty stage.
+    // error / empty guards above are shared with classic).
     if (_canvasActive) return _buildCanvasBoard();
 
     final tv = widget.isTelevision;
@@ -12753,6 +13075,11 @@ class _HeroLiveLayer extends StatefulWidget {
   final ValueChanged<bool>? onPlayingChanged;
   final VoidCallback? onPlaybackFailed;
 
+  /// CANVAS mode — same contract as [_HeroTrailerLayer.fullBleed]: the region
+  /// (and the underlay hole with it) becomes the whole board and the boxed
+  /// edge feathers are skipped; the Canvas scrims above carry the lighting.
+  final bool fullBleed;
+
   const _HeroLiveLayer({
     required this.channel,
     required this.streamUrl,
@@ -12760,6 +13087,7 @@ class _HeroLiveLayer extends StatefulWidget {
     required this.volume,
     this.onPlayingChanged,
     this.onPlaybackFailed,
+    this.fullBleed = false,
   });
 
   @override
@@ -12847,7 +13175,9 @@ class _HeroLiveLayerState extends State<_HeroLiveLayer> {
             return const SizedBox.shrink();
           }
           final heroH = widget.heroHeight.clamp(0.0, boardH);
-          final region = _heroTrailerRegionRect(boardW, heroH);
+          final region = widget.fullBleed
+              ? (Offset.zero & Size(boardW, boardH))
+              : _heroTrailerRegionRect(boardW, heroH);
           if (region == null) return const SizedBox.shrink();
           return Stack(
             fit: StackFit.expand,
@@ -12915,24 +13245,28 @@ class _HeroLiveLayerState extends State<_HeroLiveLayer> {
               fit: StackFit.expand,
               children: [
                 const ColoredBox(color: _heroTrailerBrightnessLift),
-                _heroEdgeFeather(
-                  Alignment.centerLeft,
-                  Alignment.centerRight,
-                  const Color(0xFF0D0B1A),
-                  _heroTrailerVideoFeatherFrac,
-                ),
-                _heroEdgeFeather(
-                  Alignment.topCenter,
-                  Alignment.bottomCenter,
-                  const Color(0xFF0D0B1A),
-                  0.10,
-                ),
-                _heroEdgeFeather(
-                  Alignment.bottomCenter,
-                  Alignment.topCenter,
-                  const Color(0xFF0D0B1A),
-                  0.20,
-                ),
+                // Boxed-mode edge melts only — Canvas paints its own constant
+                // scrims above this whole layer instead.
+                if (!widget.fullBleed) ...[
+                  _heroEdgeFeather(
+                    Alignment.centerLeft,
+                    Alignment.centerRight,
+                    const Color(0xFF0D0B1A),
+                    _heroTrailerVideoFeatherFrac,
+                  ),
+                  _heroEdgeFeather(
+                    Alignment.topCenter,
+                    Alignment.bottomCenter,
+                    const Color(0xFF0D0B1A),
+                    0.10,
+                  ),
+                  _heroEdgeFeather(
+                    Alignment.bottomCenter,
+                    Alignment.topCenter,
+                    const Color(0xFF0D0B1A),
+                    0.20,
+                  ),
+                ],
               ],
             ),
           ),
@@ -13806,14 +14140,38 @@ String? _firstNonEmpty(String? a, String? b) => (a != null && a.isNotEmpty)
     ? a
     : ((b != null && b.isNotEmpty) ? b : null);
 
-/// One Canvas rail — either a Continue Watching row ([cw] non-null, with its
-/// position among the CW rows in [cwIndex]) or a catalog section
-/// ([sectionIndex] into `_sections`/`_rowNodes`).
+/// One Canvas rail — a Continue Watching row ([cw] non-null, with its
+/// position among the CW rows in [cwIndex]), a favourites rail
+/// ([favKind] non-null: IPTV / Debrify TV / Stremio TV / Playlist), or a
+/// catalog section ([sectionIndex] into `_sections`/`_rowNodes`).
 class _CanvasRail {
   final _CwRow? cw;
   final int cwIndex;
+  final _FavKind? favKind;
   final int? sectionIndex;
-  const _CanvasRail({this.cw, this.cwIndex = -1, this.sectionIndex});
+  const _CanvasRail({
+    this.cw,
+    this.cwIndex = -1,
+    this.favKind,
+    this.sectionIndex,
+  });
+}
+
+/// What the Canvas stage should show while a FAVOURITES cell has focus —
+/// favourites aren't StremioMeta, so the hero pipeline can't describe them;
+/// this lightweight override carries the focused item's own art + name
+/// instead (null = a catalog/CW item owns the stage as usual).
+class _CanvasFavFocus {
+  final String? art;
+  final BoxFit fit;
+  final String title;
+  final String subtitle;
+  const _CanvasFavFocus({
+    required this.art,
+    this.fit = BoxFit.cover,
+    required this.title,
+    required this.subtitle,
+  });
 }
 
 /// Canvas stage floor + full-bleed key art for the settled hero item. Sits
@@ -13822,7 +14180,17 @@ class _CanvasRail {
 class _CanvasArtLayer extends StatelessWidget {
   final ValueListenable<StremioMeta?> item;
   final ValueListenable<StremioMeta?> enriched;
-  const _CanvasArtLayer({required this.item, required this.enriched});
+
+  /// Non-null while a favourites cell has focus: its art overrides the hero
+  /// pipeline's (contain-fit logos render centred over the floor instead of
+  /// being cover-stretched across the canvas).
+  final ValueListenable<_CanvasFavFocus?> fav;
+
+  const _CanvasArtLayer({
+    required this.item,
+    required this.enriched,
+    required this.fav,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -13830,7 +14198,9 @@ class _CanvasArtLayer extends StatelessWidget {
       valueListenable: item,
       builder: (context, it, _) => ValueListenableBuilder<StremioMeta?>(
         valueListenable: enriched,
-        builder: (context, en, _) {
+        builder: (context, en, _) => ValueListenableBuilder<_CanvasFavFocus?>(
+          valueListenable: fav,
+          builder: (context, fav, _) {
           // Enrichment merged over the catalog item: matched by canonical
           // IMDb identity (ids can differ in form), and a sparse /meta
           // record can't erase a backdrop the catalog already carried.
@@ -13843,6 +14213,53 @@ class _CanvasArtLayer extends StatelessWidget {
                 _firstNonEmpty(it?.background, it?.poster),
               ) ??
               '';
+          final Widget art;
+          final favArt = fav?.art;
+          if (fav != null) {
+            if (favArt == null || favArt.isEmpty) {
+              art = const SizedBox.shrink(key: ValueKey('canvas-art-none'));
+            } else if (fav.fit == BoxFit.contain) {
+              art = Center(
+                key: ValueKey('canvas-fav-logo-$favArt'),
+                child: FractionallySizedBox(
+                  widthFactor: 0.38,
+                  heightFactor: 0.38,
+                  child: CachedNetworkImage(
+                    imageUrl: favArt,
+                    fit: BoxFit.contain,
+                    memCacheWidth: 480,
+                    fadeInDuration: Duration.zero,
+                    fadeOutDuration: Duration.zero,
+                    errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              );
+            } else {
+              art = CachedNetworkImage(
+                key: ValueKey('canvas-fav-art-$favArt'),
+                imageUrl: favArt,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
+                errorWidget: (_, __, ___) => const SizedBox.shrink(),
+              );
+            }
+          } else if (bg.isEmpty) {
+            art = const SizedBox.shrink(key: ValueKey('canvas-art-none'));
+          } else {
+            art = CachedNetworkImage(
+              key: ValueKey(bg),
+              imageUrl: bg,
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+              memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
+              fadeInDuration: Duration.zero,
+              fadeOutDuration: Duration.zero,
+              errorWidget: (_, __, ___) => const SizedBox.shrink(),
+            );
+          }
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -13851,22 +14268,12 @@ class _CanvasArtLayer extends StatelessWidget {
               const ColoredBox(color: kStremioBg),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 240),
-                child: bg.isEmpty
-                    ? const SizedBox.shrink(key: ValueKey('canvas-art-none'))
-                    : CachedNetworkImage(
-                        key: ValueKey(bg),
-                        imageUrl: bg,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.topCenter,
-                        memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
-                        fadeInDuration: Duration.zero,
-                        fadeOutDuration: Duration.zero,
-                        errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                      ),
+                child: art,
               ),
             ],
           );
-        },
+          },
+        ),
       ),
     );
   }
@@ -14775,15 +15182,19 @@ class _ArtPoster extends StatefulWidget {
   /// drawn along the bottom edge of the poster (used by the Playlist row).
   final double? progress;
   final bool isTelevision;
+
+  /// Focus ring override (Canvas favourites cells pass white); null keeps
+  /// the classic violet-on-TV grammar.
+  final Color? ringColor;
   final FocusNode focusNode;
   final VoidCallback onOpen;
 
   /// Fired when this card gains DPAD focus (TV only — see [_ArtPosterState]'s
-  /// `onFocusChange`). Only the IPTV favourites row uses this today, to retune
-  /// the Home hero's boxed video region to the focused channel's live stream;
-  /// the other favourites rows pass a clearing callback so that live feed
-  /// doesn't linger when focus moves off IPTV without passing through a
-  /// catalog/CW card first.
+  /// `onFocusChange`). The IPTV favourites rows use it to retune the hero's
+  /// video region (boxed on classic, full-bleed on Canvas) to the focused
+  /// channel's live stream; other favourites rows pass a clearing/stage
+  /// callback so a live feed never lingers when focus moves off IPTV without
+  /// passing through a catalog/CW card first.
   final VoidCallback? onFocused;
 
   const _ArtPoster({
@@ -14796,6 +15207,7 @@ class _ArtPoster extends StatefulWidget {
     this.badge,
     this.live = false,
     this.progress,
+    this.ringColor,
     this.onFocused,
   });
 
@@ -14829,6 +15241,7 @@ class _ArtPosterState extends State<_ArtPoster> {
     final posterCard = _CardFocusRise(
       active: _active,
       isTelevision: widget.isTelevision,
+      ringColor: widget.ringColor,
       children: [
         // Base gradient — the fallback backdrop and the ground behind
         // any letterboxed (contain-fit) logo.
