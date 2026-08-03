@@ -2243,22 +2243,12 @@ class _ExternalPlayerSettingsPageState
                                   );
                                   return Text(
                                     'Sample Subtitle',
-                                    style: TextStyle(
-                                      fontSize: previewSize,
-                                      color: data.color.color,
-                                      fontWeight: _subtitleBold
-                                          ? FontWeight.w700
-                                          : FontWeight.w400,
-                                      shadows: _subtitleBold
-                                          ? [
-                                              ...?data.style.shadows,
-                                              ...data.fauxBoldShadows(
-                                                previewSize,
-                                              ),
-                                            ]
-                                          : data.style.shadows,
-                                      backgroundColor: data.background.color,
-                                      fontFamily: data.fontFamily,
+                                    // Built by the same code the player uses,
+                                    // at the preview's size — a preview that
+                                    // styles text its own way is a preview
+                                    // that can lie about bold.
+                                    style: data.buildTextStyle(
+                                      fontSizePx: previewSize,
                                     ),
                                   );
                                 },

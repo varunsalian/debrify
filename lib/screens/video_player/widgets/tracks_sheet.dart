@@ -1093,19 +1093,14 @@ class _StyleTab extends StatelessWidget {
                 ),
                 child: Text(
                   'Sample Subtitle Text',
-                  style: TextStyle(
-                    color: subtitleStyle.color.color,
-                    fontSize: subtitleStyle.size.sizePx * 0.5,
-                    fontFamily: subtitleStyle.fontFamily,
-                    fontWeight:
-                        subtitleStyle.bold ? FontWeight.w700 : FontWeight.w400,
-                    shadows: subtitleStyle.bold
-                        ? [
-                            ...?subtitleStyle.resolvedShadows,
-                            ...subtitleStyle
-                                .fauxBoldShadows(subtitleStyle.size.sizePx * 0.5),
-                          ]
-                        : subtitleStyle.resolvedShadows,
+                  // Same builder as the player, at half size — see the note in
+                  // the settings preview.
+                  style: subtitleStyle.buildTextStyle(
+                    fontSizePx: subtitleStyle.size.sizePx * 0.5,
+                    // The chip above already paints background.color, and the
+                    // alphas are translucent — painting it again here would
+                    // darken the strip behind the glyphs.
+                    includeBackground: false,
                   ),
                 ),
               ),
