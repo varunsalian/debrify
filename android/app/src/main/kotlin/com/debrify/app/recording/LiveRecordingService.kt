@@ -138,6 +138,100 @@ class LiveRecordingService : Service() {
 		private const val STALL_CHECK_INTERVAL_MS = 10_000L
 		private const val MAX_CONSECUTIVE_RECONNECTS = 3
 		private const val RECONNECT_BACKOFF_MS = 2_000L
+
+		/** Redirect hops followed per connect attempt. Panels chain at most a
+		 *  couple (portal -> node -> edge); more than this is a loop. */
+		private const val MAX_REDIRECTS = 5
+
+		/** The only channel headers that survive a hop to another origin.
+		 *
+		 *  An ALLOWLIST, not a list of known-secret names: playlists declare
+		 *  headers freely — `#EXTHTTP:` passes arbitrary JSON keys through
+		 *  verbatim, and the `url|Key=Value` parser deliberately forwards
+		 *  unknown keys — so a channel can carry `X-Api-Key`, `X-Auth-Token`
+		 *  or any other bespoke credential a panel invented. Enumerating the
+		 *  secrets is therefore unwinnable; enumerating the harmless ones is
+		 *  not. These describe the request rather than authenticate it, and
+		 *  panels reject requests that arrive without them.
+		 *
+		 *  Membership means "may cross", never "crosses unchanged": a name is
+		 *  no guarantee about a VALUE, and a panel is free to hide a token in
+		 *  any of these. So no provider-supplied byte crosses the boundary —
+		 *  `User-Agent` is replaced with [DEFAULT_USER_AGENT], `Referer` is
+		 *  rebuilt from its parsed origin ([crossOriginReferer]), and `Origin`
+		 *  is forwarded only when it parses as a bare origin
+		 *  ([crossOriginOrigin]). Anything that can't be validated
+		 *  structurally — free-form fields like `Accept` — simply isn't here.
+		 *
+		 *  `Location` is server-controlled, so anything outside this set stops
+		 *  at the origin boundary — a hostile or misconfigured redirect can't
+		 *  harvest a subscriber's credentials, and an https -> http downgrade
+		 *  can't put them on the wire in the clear. */
+		private val CROSS_ORIGIN_SAFE_HEADERS = setOf(
+			"user-agent",
+			"referer",
+			"origin",
+		)
+
+		/** scheme://host:port, with the scheme's default port made explicit so
+		 *  `https://h` and `https://h:443` compare equal. */
+		private fun originOf(url: URL): String {
+			val port = if (url.port == -1) url.defaultPort else url.port
+			return "${url.protocol.lowercase()}://${url.host.lowercase()}:$port"
+		}
+
+		/** The Referer an off-origin hop is allowed to see, or null to send
+		 *  none — the browsers' default referrer policy
+		 *  (strict-origin-when-cross-origin), for the same reason they adopted
+		 *  it: a playlist's Referer is a full URL, and panels do put
+		 *  `?username=…&password=…` in one. Cross-origin destinations get the
+		 *  bare origin, which is all a hotlink check ever inspects, and an
+		 *  https Referer is withheld outright from an http destination rather
+		 *  than travelling in the clear. */
+		private fun crossOriginReferer(value: String, target: URL): String? {
+			val ref = try {
+				URL(value)
+			} catch (e: Exception) {
+				return null // Not a URL we can safely trim — send nothing.
+			}
+			if (ref.protocol.equals("https", ignoreCase = true) &&
+				!target.protocol.equals("https", ignoreCase = true)
+			) {
+				return null
+			}
+			val scheme = ref.protocol.lowercase()
+			val host = ref.host.lowercase()
+			return if (ref.port == -1 || ref.port == ref.defaultPort) {
+				"$scheme://$host/"
+			} else {
+				"$scheme://$host:${ref.port}/"
+			}
+		}
+
+		/** An `Origin` is scheme://host[:port] BY DEFINITION, so it can be
+		 *  checked structurally: anything carrying a path, query, fragment or
+		 *  userinfo isn't an origin, it's a value wearing the name — and off
+		 *  origin it goes nowhere. Valid ones are rebuilt rather than echoed,
+		 *  so only bytes this function produced ever leave. */
+		private fun crossOriginOrigin(value: String): String? {
+			val url = try {
+				URL(value.trim())
+			} catch (e: Exception) {
+				return null
+			}
+			if (url.protocol != "http" && url.protocol != "https") return null
+			if (url.host.isNullOrBlank()) return null
+			if (!url.path.isNullOrEmpty() && url.path != "/") return null
+			if (!url.query.isNullOrEmpty()) return null
+			if (!url.ref.isNullOrEmpty()) return null
+			if (!url.userInfo.isNullOrEmpty()) return null
+			val host = url.host.lowercase()
+			return if (url.port == -1 || url.port == url.defaultPort) {
+				"${url.protocol}://$host"
+			} else {
+				"${url.protocol}://$host:${url.port}"
+			}
+		}
 		private const val NOTIFY_THROTTLE_MS = 2_000L
 
 		/** Q+ always (MediaStore destination); pre-Q with the legacy storage
@@ -473,6 +567,11 @@ class LiveRecordingService : Service() {
 			val buffer = ByteArray(256 * 1024)
 			var consecutiveDeadConnects = 0
 			var bytesAtLastDrop = 0L
+			// Why the LAST attempt died, when the server actually answered. A
+			// capture that never gets a byte otherwise reports the generic
+			// "stream ended", which is indistinguishable from a channel that
+			// simply stopped — and leaves a user with nothing to act on.
+			var lastFailureNote: String? = null
 			notifyTask(state, "Recording", completed = false)
 
 			capture@ while (!state.stopRequested && !state.timeUp) {
@@ -484,24 +583,114 @@ class LiveRecordingService : Service() {
 					// connect phase without killing the reconnect for the
 					// previous attempt's silence.
 					state.lastByteAt = System.currentTimeMillis()
-					connection = (URL(state.url).openConnection() as HttpURLConnection).apply {
-						instanceFollowRedirects = true
-						connectTimeout = 30_000
-						readTimeout = 0 // stall watchdog owns dead-stream detection
-						doInput = true
-						state.headers.forEach { (k, v) -> setRequestProperty(k, v) }
-						if (state.headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-							setRequestProperty("User-Agent", DEFAULT_USER_AGENT)
+					// Redirects are followed BY HAND. HttpURLConnection's own
+					// follower refuses to cross protocols (http -> https and
+					// back), and IPTV panels routinely bounce a live URL onto
+					// an https edge node — that lands here as a bare 302 that
+					// the old strict-200 check turned into a dead attempt.
+					// Re-resolved on every attempt, never cached: the hop
+					// usually points at a load-balanced node with a short life.
+					var target = state.url
+					var hops = 0
+					val startOrigin = try {
+						originOf(URL(state.url))
+					} catch (e: Exception) {
+						null
+					}
+					// Sticky: once a hop has left the origin the channel was
+					// configured for, the channel's headers are filtered down
+					// to [CROSS_ORIGIN_SAFE_HEADERS] for the rest of the chain
+					// — a bounce back to the original host doesn't restore
+					// them. If the target genuinely needed one, the attempt
+					// fails with a status the user can now read.
+					var offOrigin = false
+					while (true) {
+						val restrictHeaders = offOrigin
+						val targetUrl = URL(target)
+						connection = (targetUrl.openConnection() as HttpURLConnection).apply {
+							instanceFollowRedirects = false
+							connectTimeout = 30_000
+							readTimeout = 0 // stall watchdog owns dead-stream detection
+							doInput = true
+							state.headers.forEach { (k, v) ->
+								val name = k.lowercase()
+								if (!restrictHeaders) {
+									setRequestProperty(k, v)
+									return@forEach
+								}
+								if (!CROSS_ORIGIN_SAFE_HEADERS.contains(name)) {
+									return@forEach
+								}
+								// Safe-listed by NAME; the value still has to
+								// earn its way across (see the set's doc).
+								when (name) {
+									// Rewritten below, unconditionally.
+									"user-agent" -> return@forEach
+									"referer" -> crossOriginReferer(v, targetUrl)
+										?.let { setRequestProperty(k, it) }
+									"origin" -> crossOriginOrigin(v)
+										?.let { setRequestProperty(k, it) }
+									else -> setRequestProperty(k, v)
+								}
+							}
+							// Off origin the channel's own UA is replaced, not
+							// forwarded: a UA is free-form, so it can carry a
+							// token that no validation could recognise. The
+							// generic one still satisfies panels that merely
+							// require a browser-shaped UA.
+							if (restrictHeaders ||
+								state.headers.keys.none { it.equals("User-Agent", ignoreCase = true) }
+							) {
+								setRequestProperty("User-Agent", DEFAULT_USER_AGENT)
+							}
 						}
+						state.connection = connection
+						if (state.stopRequested) break@capture
+						connection.connect()
+						val resp = connection.responseCode
+						if (resp in 300..399) {
+							val location = connection.getHeaderField("Location")
+							if (location.isNullOrBlank() || hops >= MAX_REDIRECTS) {
+								lastFailureNote = "server redirected (HTTP $resp) with nowhere to go"
+								throw IOException("HTTP $resp without a usable Location")
+							}
+							// Resolves relative Locations against the current
+							// URL; absolute ones replace it outright.
+							val next = URL(URL(target), location)
+							if (next.protocol != "http" && next.protocol != "https") {
+								lastFailureNote = "server redirected to an unsupported address"
+								throw IOException("redirect to ${next.protocol}")
+							}
+							// Leaving the configured origin — including an
+							// https -> http downgrade on the same host, which
+							// changes the origin string too — restricts the
+							// headers for the rest of the chain.
+							if (startOrigin == null || originOf(next) != startOrigin) {
+								offOrigin = true
+							}
+							try { connection.disconnect() } catch (_: Exception) {}
+							connection = null
+							state.connection = null
+							target = next.toString()
+							hops++
+							continue
+						}
+						// 206 is legal here: some panels answer a plain live
+						// request with Partial Content, which the old
+						// equality check rejected outright.
+						if (resp !in 200..299) {
+							lastFailureNote = "server said HTTP $resp"
+							throw IOException("HTTP $resp for live stream")
+						}
+						// Accepted — an earlier attempt's status is now history.
+						// Clearing only once bytes arrive would let a first
+						// attempt's 404 outlive several clean 2xx opens that
+						// merely EOF'd, and that stale status is what the user
+						// would be told to act on.
+						lastFailureNote = null
+						break
 					}
-					state.connection = connection
-					if (state.stopRequested) break@capture
-					connection.connect()
-					val resp = connection.responseCode
-					if (resp != HttpURLConnection.HTTP_OK) {
-						throw IOException("HTTP $resp for live stream")
-					}
-					input = BufferedInputStream(connection.inputStream)
+					input = BufferedInputStream(connection!!.inputStream)
 					state.input = input
 
 					while (!state.stopRequested && !state.timeUp) {
@@ -556,7 +745,7 @@ class LiveRecordingService : Service() {
 				} else {
 					consecutiveDeadConnects++
 					if (consecutiveDeadConnects >= MAX_CONSECUTIVE_RECONNECTS) {
-						endedNote = "stream ended"
+						endedNote = lastFailureNote ?: "stream ended"
 						break@capture
 					}
 				}
