@@ -27,6 +27,16 @@
          plain file into public Download/ — which needs this, legacy-only. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     
+    <!-- Package visibility for the TV keyboard's voice key: without this,
+         resolveActivity() for the speech recognizer returns null on API 30+
+         (QUERY_ALL_PACKAGES above covers it today, but this keeps voice
+         working if that broad permission is ever dropped). -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <!-- TV compatibility flags (do not restrict phone installs) -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

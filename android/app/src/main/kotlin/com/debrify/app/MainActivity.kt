@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.UiModeManager
@@ -40,7 +41,26 @@ class MainActivity : FlutterActivity() {
 	private val REQUEST_PICK_DOWNLOAD_DIR = 51423
 	private var pendingDirPickResult: MethodChannel.Result? = null
 
+	// ── TV voice dictation (system speech recognizer) ───────────────────────
+	private val VOICE_CHANNEL = "debrify/tv_voice"
+	private val REQUEST_VOICE_INPUT = 51424
+	private var pendingVoiceResult: MethodChannel.Result? = null
+
 	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+		if (requestCode == REQUEST_VOICE_INPUT) {
+			val pending = pendingVoiceResult
+			pendingVoiceResult = null
+			// A cancel (BACK on the overlay) and a no-match both resolve to
+			// null — the keyboard just stays open with the text untouched.
+			val spoken = if (resultCode == RESULT_OK) {
+				data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+					?.firstOrNull()
+			} else {
+				null
+			}
+			pending?.success(spoken)
+			return
+		}
 		if (requestCode == REQUEST_PICK_DOWNLOAD_DIR) {
 			val pending = pendingDirPickResult
 			pendingDirPickResult = null
@@ -1861,6 +1881,52 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // TV voice dictation — the in-app keyboard's mic key hands off to the
+        // SYSTEM recognizer (it owns the remote's microphone; an app doing its
+        // own capture can't reach it on most TV hardware).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VOICE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    // Real resolve, not a try/catch on launch: plenty of cheap
+                    // AOSP boxes (and Fire TV) ship no recognizer, and the
+                    // keyboard hides its mic key when this is false. NB the
+                    // manifest needs a <queries> entry for this action or
+                    // resolveActivity returns null on API 30+ even when a
+                    // recognizer is installed.
+                    "isAvailable" -> {
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        result.success(intent.resolveActivity(packageManager) != null)
+                    }
+                    "listen" -> {
+                        if (pendingVoiceResult != null) {
+                            result.error("busy", "voice input already open", null)
+                            return@setMethodCallHandler
+                        }
+                        val prompt = call.argument<String>("prompt") ?: "Speak"
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(
+                                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                            )
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
+                            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                        }
+                        try {
+                            pendingVoiceResult = result
+                            startActivityForResult(intent, REQUEST_VOICE_INPUT)
+                        } catch (e: ActivityNotFoundException) {
+                            pendingVoiceResult = null
+                            result.success(null)
+                        } catch (e: Exception) {
+                            pendingVoiceResult = null
+                            result.error("voice_failed", e.message, null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
 
         // Picture-in-Picture channel — driven by the phone media_kit player.
         val pipCh = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PIP_CHANNEL)

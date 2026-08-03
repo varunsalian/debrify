@@ -22,7 +22,17 @@ import '../utils/tv_keys.dart';
 /// [systemIme] hands the session over to the real system keyboard — the only
 /// path that wakes the Google TV phone-remote keyboard and voice input, both
 /// of which only engage while the TV is showing a system IME session.
-enum TvKeyAction { insert, space, backspace, clear, shift, page, submit, systemIme }
+enum TvKeyAction {
+  insert,
+  space,
+  backspace,
+  clear,
+  shift,
+  page,
+  submit,
+  systemIme,
+  voice,
+}
 
 class TvKey {
   const TvKey.insert(this.insert)
@@ -77,11 +87,15 @@ final List<List<TvKey>> _symbolPage = [
 ];
 
 /// Bottom action row, shared by both pages. The smartphone key switches this
-/// edit session to the system IME (phone-remote typing / voice).
-List<TvKey> _actionRow(int page, String submitLabel) => [
+/// edit session to the system IME (phone-remote typing); the mic key dictates
+/// via the system recognizer and is present ONLY when the device actually has
+/// one (a dead mic button is worse than no button).
+List<TvKey> _actionRow(int page, String submitLabel, bool voice) => [
   TvKey.action(TvKeyAction.page, label: page == 0 ? '?123' : 'ABC', flex: 3),
   TvKey.action(TvKeyAction.systemIme, icon: Icons.smartphone_rounded, flex: 3),
-  TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: 6),
+  if (voice)
+    TvKey.action(TvKeyAction.voice, icon: Icons.mic_rounded, flex: 3),
+  TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: voice ? 5 : 6),
   TvKey.action(TvKeyAction.clear, label: 'Clear', flex: 3),
   TvKey.action(TvKeyAction.submit, label: submitLabel, flex: 4),
 ];
@@ -95,16 +109,37 @@ class TvKeyboardController extends ChangeNotifier {
     required this.onClear,
     required this.onSubmit,
     required this.onSystemIme,
+    required this.onVoice,
     this.submitLabel = 'Search',
     bool startShifted = false,
-  }) : shift = startShifted;
+    bool voiceAvailable = false,
+  }) : shift = startShifted,
+       _voice = voiceAvailable;
 
   final ValueChanged<String> onInsert;
   final VoidCallback onBackspace;
   final VoidCallback onClear;
   final VoidCallback onSubmit;
   final VoidCallback onSystemIme;
+  final VoidCallback onVoice;
   final String submitLabel;
+
+  /// Whether the mic key is in the action row. Set once the availability
+  /// probe lands (see [setVoiceAvailable]) — the row is rebuilt from this on
+  /// every render, so the key simply appears.
+  bool _voice;
+
+  /// Called when the device probe resolves. Clamps the highlight: the action
+  /// row grows by one key, and a highlight sitting past the old end would
+  /// otherwise point at nothing.
+  void setVoiceAvailable(bool value) {
+    if (_voice == value) return;
+    _voice = value;
+    final grid = rows;
+    row = row.clamp(0, grid.length - 1);
+    col = col.clamp(0, grid[row].length - 1);
+    notifyListeners();
+  }
 
   int page = 0;
   bool shift;
@@ -113,7 +148,7 @@ class TvKeyboardController extends ChangeNotifier {
 
   List<List<TvKey>> get rows => [
     ...(page == 0 ? _letterPage(shift) : _symbolPage),
-    _actionRow(page, submitLabel),
+    _actionRow(page, submitLabel, _voice),
   ];
 
   /// Routes one key event from the owning field. Returns true when consumed
@@ -177,6 +212,11 @@ class TvKeyboardController extends ChangeNotifier {
       case TvKeyAction.systemIme:
         onSystemIme();
         return; // the field takes the panel down; nothing left to repaint
+      case TvKeyAction.voice:
+        onVoice();
+        // The system recognizer takes over the screen; the field restores
+        // focus and inserts whatever comes back.
+        return;
     }
     notifyListeners();
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/storage_service.dart';
+import '../services/tv_voice_input.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'tv_keyboard.dart';
@@ -249,6 +250,10 @@ class TvTextFieldState extends State<TvTextField> {
   /// field, so the next DPAD visit starts on the Debrify keyboard again.
   bool _useSystemIme = false;
 
+  /// Guards the mic key against a second launch while the recognizer owns the
+  /// screen (its overlay can still deliver key events to us on some devices).
+  bool _voiceListening = false;
+
   /// Guards the deliberate unfocus/refocus cycle [_showSystemIme] performs so
   /// the focus-loss listener doesn't read it as "editing was abandoned".
   bool _imeSwitch = false;
@@ -294,7 +299,11 @@ class TvTextFieldState extends State<TvTextField> {
     // (or a route push) moves focus elsewhere, take the keyboard down instead
     // of leaving a zombie overlay. hasFocus on the shell includes the editor
     // (it's a descendant), so the ring stays lit while editing.
-    if (_editing && !_imeSwitch && !_editNode.hasFocus && !_shellNode.hasFocus) {
+    if (_editing &&
+        !_imeSwitch &&
+        !_voiceListening &&
+        !_editNode.hasFocus &&
+        !_shellNode.hasFocus) {
       _endEdit(refocusShell: false);
     }
     // System-IME hand-off ends itself when focus leaves the field — shell mode
@@ -321,6 +330,8 @@ class TvTextFieldState extends State<TvTextField> {
       onClear: _clearText,
       onSubmit: _submitFromKeyboard,
       onSystemIme: _switchToSystemIme,
+      onVoice: _startVoiceInput,
+      voiceAvailable: TvVoiceInput.availableCached ?? false,
       submitLabel: switch (widget.textInputAction) {
         TextInputAction.search => 'Search',
         TextInputAction.go => 'Go',
@@ -351,6 +362,13 @@ class TvTextFieldState extends State<TvTextField> {
     }
     setState(() => _editing = true);
     _editNode.requestFocus();
+    // Probe voice support the first time a keyboard opens; the mic key
+    // appears if this device has a recognizer (cached process-wide after).
+    if (TvVoiceInput.availableCached == null) {
+      TvVoiceInput.isAvailable().then((ok) {
+        if (mounted && ok) _kb?.setVoiceAvailable(true);
+      });
+    }
     // Bottom-anchored panel can cover fields in the lower third of a scrollable
     // page (settings rows) — nudge the field into the visible band. No-op when
     // there's no enclosing scrollable.
@@ -394,6 +412,44 @@ class TvTextFieldState extends State<TvTextField> {
       _imeSwitch = false;
       if (mounted && _useSystemIme) _editNode.requestFocus();
     });
+  }
+
+  /// Mic key: hand off to the system recognizer. This PAUSES our activity
+  /// (the app's lifecycle handlers fire — an ambient trailer pauses, playback
+  /// pauses), so on the way back the editor's focus has to be restored
+  /// explicitly or the remote is left talking to nothing. The keyboard stays
+  /// open throughout: a cancel leaves the typed text exactly as it was.
+  Future<void> _startVoiceInput() async {
+    if (!_editing || _voiceListening) return;
+    _voiceListening = true;
+    final spoken = await TvVoiceInput.listen(
+      prompt: widget.hintText?.isNotEmpty == true
+          ? widget.hintText!
+          : 'Speak to search',
+    );
+    _voiceListening = false;
+    if (!mounted) return;
+    // Focus first, then edit: focus went to the system overlay's activity.
+    // If the session survived (the usual path) the editor takes it back;
+    // if something ended editing meanwhile, the shell does — either way the
+    // remote is never left talking to nothing.
+    if (_editing) {
+      _editNode.requestFocus();
+    } else {
+      _shellNode.requestFocus();
+    }
+    // Apply regardless of _editing: a dictation that came back must never be
+    // silently discarded because the session closed behind the overlay.
+    if (spoken == null || spoken.isEmpty) return;
+    // Dictation REPLACES the field, matching every TV voice search: people
+    // speak the whole query, they don't dictate a suffix onto a typo.
+    _applyEdit(
+      widget.controller.value,
+      TextEditingValue(
+        text: spoken,
+        selection: TextSelection.collapsed(offset: spoken.length),
+      ),
+    );
   }
 
   void _removeOverlay() {
