@@ -231,7 +231,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const SettingsPageScaffold(
-        title: 'Filter Settings',
+        title: 'Filters',
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -243,7 +243,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         _selectedSizes.isNotEmpty;
 
     return SettingsPageScaffold(
-      title: 'Filter Settings',
+      title: 'Filters',
       actions: [
         if (hasFilters)
           Focus(

@@ -38,7 +38,7 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return SettingsPageScaffold(
-      title: 'Torrent Settings',
+      title: 'Engines',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Center(

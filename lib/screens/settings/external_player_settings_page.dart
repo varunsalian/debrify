@@ -1786,7 +1786,7 @@ class _ExternalPlayerSettingsPageState
 
     if (!isSupportedPlatform) {
       return SettingsPageScaffold(
-        title: 'Player Settings',
+        title: 'Playback',
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -1811,7 +1811,7 @@ class _ExternalPlayerSettingsPageState
 
     if (_loading) {
       return const SettingsPageScaffold(
-        title: 'Player Settings',
+        title: 'Playback',
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -1819,7 +1819,7 @@ class _ExternalPlayerSettingsPageState
     final theme = Theme.of(context);
 
     return SettingsPageScaffold(
-      title: 'Player Settings',
+      title: 'Playback',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Center(
@@ -1831,7 +1831,7 @@ class _ExternalPlayerSettingsPageState
                 // Header
                 const SettingsPageHeader(
                   icon: Icons.open_in_new_rounded,
-                  title: 'Player Settings',
+                  title: 'Playback',
                   subtitle: 'Choose which player to use for video playback',
                 ),
 

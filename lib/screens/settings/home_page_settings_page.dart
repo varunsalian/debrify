@@ -6,6 +6,7 @@ import '../../services/stremio_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import 'home_sections_filter_page.dart';
+import 'tv_home_style_page.dart';
 import 'widgets/settings_widgets.dart';
 
 class HomePageSettingsPage extends StatefulWidget {
@@ -29,7 +30,20 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   bool _ambientTrailerAudioEnabled = true;
   int _ambientTrailerVolume = 70;
   bool _tvTrailerUnderlayEnabled = true;
+  String _tvHomeStyle = 'canvas';
   List<StremioAddon> _addons = [];
+
+  /// TV home layout row (this page owns it now): open the picker, then
+  /// re-read so the row caption matches what was chosen.
+  Future<void> _openTvHomeStyle() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const TvHomeStylePage()),
+    );
+    if (!mounted) return;
+    final style = await StorageService.getTvHomeStyle();
+    if (!mounted) return;
+    setState(() => _tvHomeStyle = style);
+  }
 
   /// Is this platform's one ambient-trailer surface on? Decides whether the
   /// shared sound + volume rows have anything to govern. Only ever one of the
@@ -73,6 +87,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           await StorageService.getAmbientTrailerVolume();
       final tvTrailerUnderlayEnabled =
           await StorageService.getTvTrailerUnderlayEnabled();
+      final tvHomeStyle = await StorageService.getTvHomeStyle();
 
       // Only the two views that the current Home screen can render are valid.
       // Migrate the former All, Addon, Trakt, and other retired choices to
@@ -101,6 +116,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         // (see _volumeOptions), so nothing silently changes on load.
         _ambientTrailerVolume = ambientTrailerVolume;
         _tvTrailerUnderlayEnabled = tvTrailerUnderlayEnabled;
+        _tvHomeStyle = tvHomeStyle;
         _loading = false;
       });
       // TV: land DPAD focus on the first row so users aren't stranded.
@@ -201,22 +217,33 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
               children: [
                 const SettingsPageHeader(
                   icon: Icons.home_rounded,
-                  title: 'Home Page Defaults',
-                  subtitle: 'Choose what shows first when the app opens',
+                  title: 'Home Screen',
+                  subtitle: 'Layout, rows, and what shows when the app opens',
                 ),
                 const SizedBox(height: 24),
 
-                // Home Rows manager entry — hide/show individual Home rows.
-                // SettingsTile (not bare ListTile) so DPAD focus is visible.
+                // Everything about the home screen lives HERE — including the
+                // TV layout picker, so "how does my home look" is one page.
                 SettingsSection(
                   title: '',
                   children: [
+                    if (PlatformUtil.isAndroidTvCached)
+                      SettingsTile.spec(
+                        SettingsRows.tvHomeStyle,
+                        subtitle: tvHomeStyleLabel(_tvHomeStyle),
+                        onTap: _openTvHomeStyle,
+                        focusNode: _firstTileFocusNode,
+                      ),
+                    // Home Rows manager entry — hide/show individual rows.
+                    // SettingsTile (not bare ListTile) so DPAD focus shows.
                     SettingsTile(
                       icon: Icons.dashboard_customize_rounded,
                       title: 'Home Rows',
                       subtitle: 'Choose which rows appear on Home',
                       onTap: _openHomeRowsManager,
-                      focusNode: _firstTileFocusNode,
+                      focusNode: PlatformUtil.isAndroidTvCached
+                          ? null
+                          : _firstTileFocusNode,
                     ),
                   ],
                 ),

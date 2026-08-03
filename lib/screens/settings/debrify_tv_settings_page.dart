@@ -73,7 +73,7 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return SettingsPageScaffold(
-      title: 'Debrify TV Settings',
+      title: 'Debrify TV',
       body: FocusScope(
         node: _bodyScope,
         child: FocusTraversalGroup(
