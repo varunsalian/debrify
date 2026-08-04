@@ -5025,114 +5025,123 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// (IptvStagePanel). One RepaintBoundary so the preview's frames never
   /// re-rasterize the panel and vice versa.
   Widget _buildCockpitStage() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 14, 16),
-      child: ValueListenableBuilder<int>(
-        valueListenable: _previewEpoch,
-        builder: (context, epoch, _) => ValueListenableBuilder<IptvChannel?>(
-          valueListenable: _previewShown,
-          builder: (context, ch, _) {
-            return RepaintBoundary(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: ColoredBox(
-                  color: const Color(0xFF0B0914),
-                  child: ch == null
-                      ? const SizedBox.expand()
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildPreviewStage(ch, epoch),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: _cockpitIdentity(ch),
-                            ),
-                            Expanded(
-                              // Rebuilds when an XMLTV guide finishes loading
-                              // (contextVersion), so a channel that probed
-                              // "no EPG" a moment ago gets its schedule.
-                              child: ValueListenableBuilder<int>(
-                                valueListenable:
-                                    IptvEpgService.instance.contextVersion,
-                                builder: (context, epgVersion, _) {
-                                  final desktopCapture =
-                                      _desktopCaptureFor(ch);
-                                  final androidTask =
-                                      (!kIsWeb && Platform.isAndroid)
-                                      ? _androidEngineTaskFor(ch)
-                                      : null;
-                                  return IptvStagePanel(
-                                    key: ValueKey('stage-${ch.url}'),
-                                    channel: ch,
-                                    isTelevision: widget.isTelevision,
-                                    isFavorited:
-                                        _favoriteUrls.contains(ch.url),
-                                    canRecord: _pageCanRecord,
-                                    isRecordingThis: desktopCapture != null ||
-                                        androidTask != null,
-                                    epgContextVersion: epgVersion,
-                                    onWatch: () =>
-                                        unawaited(_playChannel(ch)),
-                                    onExitLeft: _returnFocusFromStage,
-                                    onRecordNow: desktopCapture != null
-                                        ? () => unawaited(
-                                            _stageStopDesktopRecording(
-                                              desktopCapture,
-                                            ),
-                                          )
-                                        : androidTask != null
-                                        ? () => unawaited(
-                                            _stageStopAndroidRecording(
-                                              ch,
-                                              androidTask,
-                                            ),
-                                          )
-                                        : _channelEngineRecordable(ch)
-                                        ? () =>
-                                              unawaited(_stageRecordNow(ch))
-                                        : null,
-                                    // _toggleFavorite takes the DESIRED state
-                                    // (the row passes !isFavorited too) —
-                                    // passing the current one would write a
-                                    // no-op.
-                                    onToggleFavorite:
-                                        ch.contentType == 'series'
-                                        ? null
-                                        : () => unawaited(
-                                            _toggleFavorite(
-                                              ch,
-                                              !_favoriteUrls.contains(ch.url),
-                                            ),
-                                          ),
-                                    // Only when a guide can exist — otherwise
-                                    // the pane could only say "No guide data".
-                                    onOpenFullSchedule:
-                                        IptvEpgService.isEpgCapable(ch)
-                                        ? () => _openSchedulePane(ch)
-                                        : null,
-                                    // Stricter than Record-now: scheduling has
-                                    // no player probe at alarm time, so REC
-                                    // rows only appear on affirmatively-TS/
-                                    // Xtream channels — never a tag that gets
-                                    // refused on press.
-                                    onScheduleProgramme:
-                                        LiveRecordingService.isSchedulableUrl(
-                                          ch.url,
-                                        )
-                                        ? _scheduleProgrammeFromStage
-                                        : null,
-                                    onPlayProgramme: (c, p) =>
-                                        unawaited(_playCatchup(c, p)),
-                                  );
-                                },
+    return _stageHoverGuard(
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 16, 14, 16),
+        child: ValueListenableBuilder<int>(
+          valueListenable: _previewEpoch,
+          builder: (context, epoch, _) => ValueListenableBuilder<IptvChannel?>(
+            valueListenable: _previewShown,
+            builder: (context, ch, _) {
+              return RepaintBoundary(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: ColoredBox(
+                    color: const Color(0xFF0B0914),
+                    child: ch == null
+                        ? const SizedBox.expand()
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildPreviewStage(ch, epoch),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  12,
+                                  16,
+                                  0,
+                                ),
+                                child: _cockpitIdentity(ch),
                               ),
-                            ),
-                          ],
-                        ),
+                              Expanded(
+                                // Rebuilds when an XMLTV guide finishes loading
+                                // (contextVersion), so a channel that probed
+                                // "no EPG" a moment ago gets its schedule.
+                                child: ValueListenableBuilder<int>(
+                                  valueListenable:
+                                      IptvEpgService.instance.contextVersion,
+                                  builder: (context, epgVersion, _) {
+                                    final desktopCapture = _desktopCaptureFor(
+                                      ch,
+                                    );
+                                    final androidTask =
+                                        (!kIsWeb && Platform.isAndroid)
+                                        ? _androidEngineTaskFor(ch)
+                                        : null;
+                                    return IptvStagePanel(
+                                      key: ValueKey('stage-${ch.url}'),
+                                      channel: ch,
+                                      isTelevision: widget.isTelevision,
+                                      isFavorited: _favoriteUrls.contains(
+                                        ch.url,
+                                      ),
+                                      canRecord: _pageCanRecord,
+                                      isRecordingThis:
+                                          desktopCapture != null ||
+                                          androidTask != null,
+                                      epgContextVersion: epgVersion,
+                                      onWatch: () =>
+                                          unawaited(_playChannel(ch)),
+                                      onExitLeft: _returnFocusFromStage,
+                                      onRecordNow: desktopCapture != null
+                                          ? () => unawaited(
+                                              _stageStopDesktopRecording(
+                                                desktopCapture,
+                                              ),
+                                            )
+                                          : androidTask != null
+                                          ? () => unawaited(
+                                              _stageStopAndroidRecording(
+                                                ch,
+                                                androidTask,
+                                              ),
+                                            )
+                                          : _channelEngineRecordable(ch)
+                                          ? () => unawaited(_stageRecordNow(ch))
+                                          : null,
+                                      // _toggleFavorite takes the DESIRED state
+                                      // (the row passes !isFavorited too) —
+                                      // passing the current one would write a
+                                      // no-op.
+                                      onToggleFavorite:
+                                          ch.contentType == 'series'
+                                          ? null
+                                          : () => unawaited(
+                                              _toggleFavorite(
+                                                ch,
+                                                !_favoriteUrls.contains(ch.url),
+                                              ),
+                                            ),
+                                      // Only when a guide can exist — otherwise
+                                      // the pane could only say "No guide data".
+                                      onOpenFullSchedule:
+                                          IptvEpgService.isEpgCapable(ch)
+                                          ? () => _openSchedulePane(ch)
+                                          : null,
+                                      // Stricter than Record-now: scheduling has
+                                      // no player probe at alarm time, so REC
+                                      // rows only appear on affirmatively-TS/
+                                      // Xtream channels — never a tag that gets
+                                      // refused on press.
+                                      onScheduleProgramme:
+                                          LiveRecordingService.isSchedulableUrl(
+                                            ch.url,
+                                          )
+                                          ? _scheduleProgrammeFromStage
+                                          : null,
+                                      onPlayProgramme: (c, p) =>
+                                          unawaited(_playCatchup(c, p)),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -5165,9 +5174,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               height: 34,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                 color: Color.alphaBlend(
                   brand.withValues(alpha: 0.18),
                   const Color(0xFF171B19),
@@ -5176,8 +5183,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               clipBehavior: Clip.antiAlias,
               child: Padding(
                 padding: const EdgeInsets.all(5),
-                child: (channel.logoUrl != null &&
-                        channel.logoUrl!.isNotEmpty)
+                child: (channel.logoUrl != null && channel.logoUrl!.isNotEmpty)
                     ? CachedNetworkImage(
                         imageUrl: channel.logoUrl!,
                         cacheManager: DebrifyImageCache.iptvLogos,
@@ -5418,8 +5424,32 @@ class IptvResultsViewState extends State<IptvResultsView>
     _focusFirstChannel();
   }
 
-  /// Called by a channel row gaining DPAD focus — retunes the preview stage.
-  void _onChannelFocused(IptvChannel channel) {
+  /// True while the pointer sits inside the preview stage. See
+  /// [_stageHoverGuard].
+  bool _pointerInStage = false;
+
+  /// Lets a preview stage claim the pointer, so nothing repoints it while the
+  /// cursor is inside on its way to Watch or Record. A row the pointer RESTS on
+  /// is exempt (see [_onChannelFocused]) — the cursor cannot be on a row and in
+  /// the stage at once, so that exemption also means a flag left stuck true by
+  /// a missed onExit can never strand the hover preview.
+  Widget _stageHoverGuard(Widget child) {
+    if (widget.isTelevision) return child;
+    return MouseRegion(
+      onEnter: (_) => _pointerInStage = true,
+      onExit: (_) => _pointerInStage = false,
+      child: child,
+    );
+  }
+
+  /// Called by a channel row gaining DPAD focus, or by a pointer resting on it
+  /// ([fromPointer]) — retunes the preview stage.
+  void _onChannelFocused(IptvChannel channel, {bool fromPointer = false}) {
+    // Focus-driven retargets (a reload refocusing the first channel, a restore
+    // after a route pops) must not swap the panel out from under a cursor
+    // already inside it. Only once something IS shown: the very first
+    // population has to land even if the pointer happens to be parked there.
+    if (!fromPointer && _pointerInStage && _previewShown.value != null) return;
     // The in-app player fallback never pauses the app, so a parked re-arm
     // wouldn't flush via the lifecycle observer — the focus restore after its
     // route pops (or the user's next move) lands here instead.
@@ -5516,92 +5546,94 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Widget _buildPreviewRail({required bool touchSelector}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 16, 12, 16),
-      child: ValueListenableBuilder<int>(
-        valueListenable: _previewEpoch,
-        builder: (context, epoch, _) => ValueListenableBuilder<IptvChannel?>(
-          valueListenable: _previewShown,
-          builder: (context, ch, _) {
-            if (widget.isTelevision) {
-              return _buildTvFocusStage(ch, epoch);
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildPreviewStage(ch, epoch),
-                const SizedBox(height: 16),
-                Expanded(child: _IptvRailInfo(channel: ch)),
-                if (touchSelector) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      key: const ValueKey('iptv-tablet-watch-fullscreen'),
-                      onPressed: ch == null
-                          ? null
-                          : () => unawaited(_playChannel(ch)),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kSeeAllAccent,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: kSeeAllPanel2.withValues(
-                          alpha: 0.72,
+    return _stageHoverGuard(
+      Padding(
+        padding: const EdgeInsets.fromLTRB(14, 16, 12, 16),
+        child: ValueListenableBuilder<int>(
+          valueListenable: _previewEpoch,
+          builder: (context, epoch, _) => ValueListenableBuilder<IptvChannel?>(
+            valueListenable: _previewShown,
+            builder: (context, ch, _) {
+              if (widget.isTelevision) {
+                return _buildTvFocusStage(ch, epoch);
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildPreviewStage(ch, epoch),
+                  const SizedBox(height: 16),
+                  Expanded(child: _IptvRailInfo(channel: ch)),
+                  if (touchSelector) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const ValueKey('iptv-tablet-watch-fullscreen'),
+                        onPressed: ch == null
+                            ? null
+                            : () => unawaited(_playChannel(ch)),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kSeeAllAccent,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: kSeeAllPanel2.withValues(
+                            alpha: 0.72,
+                          ),
+                          disabledForegroundColor: Colors.white.withValues(
+                            alpha: 0.30,
+                          ),
+                          overlayColor: kSeeAllAccent2.withValues(alpha: 0.18),
+                          shadowColor: kSeeAllAccent.withValues(alpha: 0.34),
+                          elevation: 0,
+                          side: BorderSide(
+                            color: kSeeAllAccent2.withValues(alpha: 0.46),
+                          ),
+                          minimumSize: const Size.fromHeight(46),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13),
+                          ),
                         ),
-                        disabledForegroundColor: Colors.white.withValues(
-                          alpha: 0.30,
+                        icon: Icon(
+                          ch?.contentType == 'series'
+                              ? Icons.video_library_rounded
+                              : Icons.fullscreen_rounded,
+                          size: 21,
                         ),
-                        overlayColor: kSeeAllAccent2.withValues(alpha: 0.18),
-                        shadowColor: kSeeAllAccent.withValues(alpha: 0.34),
-                        elevation: 0,
-                        side: BorderSide(
-                          color: kSeeAllAccent2.withValues(alpha: 0.46),
+                        label: Text(
+                          ch?.contentType == 'series'
+                              ? 'Open series'
+                              : 'Watch fullscreen',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
-                        minimumSize: const Size.fromHeight(46),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(13),
-                        ),
-                      ),
-                      icon: Icon(
-                        ch?.contentType == 'series'
-                            ? Icons.video_library_rounded
-                            : Icons.fullscreen_rounded,
-                        size: 21,
-                      ),
-                      label: Text(
-                        ch?.contentType == 'series'
-                            ? 'Open series'
-                            : 'Watch fullscreen',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 9),
-                    child: Text(
-                      'Scroll channels through the arrow to preview',
-                      style: TextStyle(
-                        color: kSeeAllAccent2.withValues(alpha: 0.66),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.1,
+                    Padding(
+                      padding: const EdgeInsets.only(top: 9),
+                      child: Text(
+                        'Scroll channels through the arrow to preview',
+                        style: TextStyle(
+                          color: kSeeAllAccent2.withValues(alpha: 0.66),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.1,
+                        ),
                       ),
                     ),
-                  ),
-                ] else
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      'Hover a channel to preview  ·  Click to watch',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.2,
+                  ] else
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Hover a channel to preview  ·  Click to watch',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -5972,6 +6004,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                       hasCustomLists: _customLists.isNotEmpty,
                       onFocused: tvPane
                           ? () => _onChannelFocused(channel)
+                          : null,
+                      onPointerRest: tvPane
+                          ? () => _onChannelFocused(channel, fromPointer: true)
                           : null,
                       onDetached: () => _onRowDetached(channel),
                       onSchedule: _scheduleActionFor(

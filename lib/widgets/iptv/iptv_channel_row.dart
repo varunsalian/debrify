@@ -70,6 +70,12 @@ class IptvChannelRow extends StatefulWidget {
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
 
+  /// Fired when a POINTER has rested on this row long enough to read as
+  /// intent — the desktop counterpart of [onFocused], and deliberately a
+  /// separate signal: the stage suppresses focus-driven retargets while the
+  /// cursor is inside it, and must never suppress this one.
+  final VoidCallback? onPointerRest;
+
   /// Fired from dispose — tells the list this row no longer holds its cached
   /// focus node. This is the ONLY reliable detachment signal: FocusNode.context
   /// is assigned on attach and never reverts to null on detach, so the list
@@ -126,6 +132,7 @@ class IptvChannelRow extends StatefulWidget {
     this.onOpenListPicker,
     this.hasCustomLists = false,
     this.onFocused,
+    this.onPointerRest,
     this.onDetached,
     this.onSchedule,
     this.scheduleOnRightKey = false,
@@ -162,6 +169,20 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   // driven by a controller so the focused row can show a filling heart,
   // making the otherwise-invisible gesture discoverable.
   static const _favHoldDuration = Duration(milliseconds: 500);
+
+  /// How long a pointer must REST on a row before it retargets the preview
+  /// stage. A sweep crosses a row in ~30-80ms, so anything past ~150ms already
+  /// stops the stage being stolen in transit; the rest of this budget covers
+  /// HESITATION — pausing mid-journey without meaning to select. Raising it
+  /// further buys diminishing margin against a slower pause and charges every
+  /// deliberate hover for it, so if this still isn't enough the answer is a
+  /// direction guard (ignore rows while the pointer travels toward the stage),
+  /// not a bigger number.
+  static const _hoverIntentDelay = Duration(milliseconds: 400);
+
+  /// Armed on hover, cancelled the moment the pointer leaves — see the comment
+  /// at its arming site for why hovering can't retarget the stage on contact.
+  Timer? _hoverIntent;
   late final AnimationController _holdController = AnimationController(
     vsync: this,
     duration: _favHoldDuration,
@@ -194,6 +215,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
 
   @override
   void dispose() {
+    _hoverIntent?.cancel();
     _holdController.dispose();
     widget.onDetached?.call();
     super.dispose();
@@ -443,12 +465,34 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       child: MouseRegion(
         onEnter: (_) {
           setState(() => _hovered = true);
-          // Pointer platforms: hovering IS the "focus" that drives the
-          // two-pane preview stage (the stage's own dwell debounces
-          // fly-overs). TV never mouses, so the guard is just clarity.
-          if (!widget.isTelevision) widget.onFocused?.call();
+          // Pointer platforms: hovering IS the "focus" that drives the two-pane
+          // preview stage — but only once the pointer RESTS. Retargeting on
+          // contact made the stage's own buttons unreachable: every row crossed
+          // on the way to Watch/Record repointed it, so by the time the cursor
+          // arrived the panel belonged to some channel swept past en route.
+          // A sweep leaves each row well inside this window.
+          //
+          // The stage's 900ms dwell does NOT cover this — it only delays
+          // OPENING the stream; the panel's identity, and with it the buttons,
+          // always changed on the first pixel.
+          if (widget.isTelevision) return;
+          final armedFor = widget.channel;
+          _hoverIntent?.cancel();
+          _hoverIntent = Timer(_hoverIntentDelay, () {
+            // Recycled under a stationary pointer (wheel-scrolling the grid):
+            // the row aimed at is gone, and pointing the stage at whatever slid
+            // underneath is not what the user asked for. Scrolling has never
+            // retargeted the stage — onEnter doesn't re-fire on recycle — and
+            // this keeps it that way.
+            if (!mounted || !identical(widget.channel, armedFor)) return;
+            widget.onPointerRest?.call();
+          });
         },
-        onExit: (_) => setState(() => _hovered = false),
+        onExit: (_) {
+          _hoverIntent?.cancel();
+          _hoverIntent = null;
+          setState(() => _hovered = false);
+        },
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onTap,
