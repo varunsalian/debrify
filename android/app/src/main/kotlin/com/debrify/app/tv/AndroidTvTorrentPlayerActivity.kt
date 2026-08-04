@@ -50,6 +50,7 @@ import androidx.media3.common.text.Cue
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
@@ -723,6 +724,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // behavior (no handler existed; playback simply stops).
             if (isLiveIptvError && tryNextIptvStremioCandidate()) return
             android.util.Log.e("AndroidTvPlayer", "Player error: ${error.errorCodeName}")
+            reportDecoderFailure(error)
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -9354,6 +9356,39 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * content-sniffs, which is why the same channels play on phone — this
      * closes that gap for ExoPlayer.
      */
+    /// A playback error the user can act on: this box has no decoder for the
+    /// track we handed it. Until now every non-IPTV error only reached logcat,
+    /// so the screen just sat there — which is exactly what an MPEG-2 file
+    /// looks like on a box without an MPEG-2 decoder.
+    ///
+    /// Worth naming specifically because MPEG program streams (.mpg/.vob) are
+    /// the common case: their container and audio are covered here, but their
+    /// video has no software fallback — ExoPlayer ships none, and the bundled
+    /// ffmpeg extension's video renderer is a stub that reports every format
+    /// unsupported. Most TV boxes carry an MPEG-2 decoder from their
+    /// broadcast heritage; the ones that don't deserve an explanation rather
+    /// than a dead screen. The phone/desktop player has no such limit — it
+    /// decodes these in software through libmpv.
+    private fun reportDecoderFailure(error: PlaybackException) {
+        if (isFinishing || isDestroyed) return
+        val decoderProblem = when (error.errorCode) {
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED -> true
+            else -> false
+        }
+        if (!decoderProblem) return
+
+        val mime = (error as? ExoPlaybackException)?.rendererFormat?.sampleMimeType
+        val message = when (mime) {
+            MimeTypes.VIDEO_MPEG2, MimeTypes.VIDEO_MPEG ->
+                "This device has no MPEG-2 video decoder, so this file can't play here. It will play on the phone app."
+            null -> "This device can't decode this file."
+            else -> "This device can't decode ${'$'}mime."
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
     private fun retryIptvAsHlsIfUnrecognized(error: PlaybackException): Boolean {
         val url = currentIptvStreamUrl ?: return false
         if (iptvHlsForcedUrls.contains(url)) return false // already tried

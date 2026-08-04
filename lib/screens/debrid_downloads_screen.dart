@@ -754,8 +754,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _handlePlayDownload(DebridDownload download) async {
     if (_apiKey == null) return;
 
-    // Check if it's a video file
-    if (FileUtils.isVideoMimeType(download.mimeType)) {
+    // Video by MIME **or** by name: the provider's MIME is often generic
+    // (application/octet-stream) or absent for the less common containers, and
+    // refusing on that alone left files the player handles perfectly with
+    // "not a video" and no way to watch them.
+    if (FileUtils.isVideoMimeType(download.mimeType) ||
+        FileUtils.isVideoFile(download.filename)) {
       if (mounted) {
         await VideoPlayerLauncher.push(
           context,
@@ -3697,8 +3701,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     // Same action set the old Play/Download buttons + ⋮ menu offered; the
     // row's tap now carries Play for streamable downloads.
+    // Play is offered for anything WE can stream, not only what the provider
+    // flags. `streamable` describes the provider's own transcoding service;
+    // we hand the direct link to our player instead, which reads plenty the
+    // provider won't transcode (MPEG program streams, for one). Non-video
+    // files are unaffected — they still offer download only.
     final actions = <CloudRowAction>[
-      if (canStream)
+      if (canStream || isVideo)
         CloudRowAction(
           icon: Icons.play_arrow_rounded,
           label: 'Play',
@@ -3729,7 +3738,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       title: download.filename,
       meta:
           '${Formatters.formatFileSize(download.filesize)} · ${download.host}',
-      onTap: canStream ? () => _handlePlayDownload(download) : null,
+      onTap: (canStream || isVideo)
+          ? () => _handlePlayDownload(download)
+          : null,
       actions: actions,
       selectionMode: _isSelectionMode,
       selected: _selectedDownloadIds.contains(download.id),
