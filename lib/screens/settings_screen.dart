@@ -21,6 +21,7 @@ import '../utils/platform_util.dart';
 import '../services/analytics_service.dart';
 import '../services/account_service.dart';
 import '../services/backup_restore_service.dart';
+import '../services/iptv_transfer_payload.dart';
 import '../services/download_service.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../services/simkl/simkl_service.dart';
@@ -2403,6 +2404,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    // File-imported IPTV playlists are left out of the payload on purpose —
+    // say so rather than let the user discover it after a restore.
+    final iptvProviders = await IptvTransferPayload.countPlaylists();
+
     if (!mounted) return;
     final confirmed = await showSettingsDialog<bool>(
       context: context,
@@ -2415,6 +2420,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Text('The backup will include:'),
             const SizedBox(height: 8),
             ..._backupSummaryLines(summary).map((line) => Text('• $line')),
+            if (iptvProviders.fileImported > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${iptvProviders.fileImported} IPTV playlist'
+                  '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
+                  'a file won\'t be included — re-import the file on the other '
+                  'device. Starred channels from them still travel.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white60,
+                  ),
+                ),
+              ),
             const SizedBox(height: 12),
             const Text(
               'Credentials are stored in plain text. Keep this file private '
@@ -2600,8 +2619,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             const Text(
               'Saved credentials (Real-Debrid, Torbox, Premiumize, AllDebrid, PikPak, Trakt, Simkl) will '
-              'be overwritten. Addons, search engines, WebDAV servers, and '
-              'indexer managers you already have are kept as-is.',
+              'be overwritten. Addons, search engines, WebDAV servers, '
+              'indexer managers, and IPTV providers you already have are kept '
+              'as-is. IPTV favorites and lists merge into what\'s here — '
+              'nothing is removed.',
               style: TextStyle(fontSize: 12),
             ),
             if (summary.addonCount > 0 || summary.searchEngineCount > 0)
@@ -2725,6 +2746,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (s.indexerManagerCount > 0) {
       lines.add('Jackett/Prowlarr (${s.indexerManagerCount})');
     }
+    if (s.iptvPlaylistCount > 0) {
+      lines.add('IPTV providers (${s.iptvPlaylistCount})');
+    }
+    if (s.iptvFavoriteCount > 0) {
+      lines.add('IPTV favorites (${s.iptvFavoriteCount} channels)');
+    }
+    if (s.iptvListCount > 0) {
+      lines.add(
+        'IPTV lists (${s.iptvListCount}, '
+        '${s.iptvListChannelCount} channels)',
+      );
+    }
     return lines;
   }
 
@@ -2748,6 +2781,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     if (r.indexerManagersImported > 0) {
       parts.add('${r.indexerManagersImported} indexer manager(s)');
+    }
+    if (r.iptvPlaylistsImported > 0) {
+      parts.add('${r.iptvPlaylistsImported} IPTV provider(s)');
+    }
+    if (r.iptvFavoritesImported > 0) {
+      parts.add('${r.iptvFavoritesImported} favorite channel(s)');
+    }
+    if (r.iptvListsCreated > 0) {
+      parts.add('${r.iptvListsCreated} IPTV list(s)');
+    }
+    if (r.iptvListChannelsImported > 0) {
+      parts.add('${r.iptvListChannelsImported} list channel(s)');
     }
 
     if (parts.isEmpty && !r.hasAnyFailure) {
@@ -2773,6 +2818,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         '${r.indexerManagersAlreadyPresent} indexer manager(s) already present',
       );
     }
+    if (r.iptvPlaylistsAlreadyPresent > 0) {
+      notes.add(
+        '${r.iptvPlaylistsAlreadyPresent} IPTV provider(s) already present',
+      );
+    }
+    if (r.iptvFavoritesAlreadyPresent > 0) {
+      notes.add(
+        '${r.iptvFavoritesAlreadyPresent} favorite(s) already present',
+      );
+    }
+    if (r.iptvListsMerged > 0) {
+      notes.add('${r.iptvListsMerged} existing list(s) topped up');
+    }
     final withNotes = notes.isEmpty ? base : '$base (${notes.join(', ')})';
 
     if (!r.hasAnyFailure) return withNotes;
@@ -2791,6 +2849,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     if (r.indexerManagersFailed > 0) {
       failed.add('${r.indexerManagersFailed} indexer manager(s)');
+    }
+    if (r.iptvPlaylistsFailed > 0) {
+      failed.add('${r.iptvPlaylistsFailed} IPTV provider(s)');
+    }
+    if (r.iptvFavoritesFailed > 0) {
+      failed.add('${r.iptvFavoritesFailed} favorite(s)');
+    }
+    if (r.iptvListsFailed > 0) {
+      failed.add('${r.iptvListsFailed} IPTV list entr(ies)');
     }
     failed.addAll(r.errors);
     return '$withNotes — failed: ${failed.join(', ')}';

@@ -81,7 +81,17 @@ class ConfigCommand {
   static const String searchEngines = 'search_engines';
   static const String webDav = 'webdav';
   static const String indexerManagers = 'indexer_managers';
+  // IPTV travels as three commands rather than one blob so each can be
+  // selected on its own. Order matters on the wire: memberships name the
+  // provider they came from, so playlists must be sent (and applied) first.
+  static const String iptvPlaylists = 'iptv_playlists';
+  static const String iptvFavorites = 'iptv_favorites';
+  static const String iptvLists = 'iptv_lists';
   static const String debrifyChannel = 'debrify_channel';
+  // The chunked-transfer envelope. Named for Debrify TV channels because that
+  // was the first thing big enough to need it, but the start packet carries a
+  // `kind` naming the command its reassembled payload belongs to, so any
+  // config command can travel this way.
   static const String debrifyChannelStart = 'debrify_channel_start';
   static const String debrifyChannelChunk = 'debrify_channel_chunk';
   static const String complete =

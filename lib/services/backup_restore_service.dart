@@ -8,6 +8,7 @@ import 'engine/config_loader.dart';
 import 'engine/engine_registry.dart';
 import 'engine/local_engine_storage.dart';
 import 'engine/remote_engine_manager.dart';
+import 'iptv_transfer_payload.dart';
 import 'pikpak_api_service.dart';
 import 'storage_service.dart';
 import 'stremio_service.dart';
@@ -28,6 +29,12 @@ import 'stremio_service.dart';
 ///   - Stremio addon manifest URLs (restore re-fetches manifests)
 ///   - WebDAV servers (URL + credentials, may be LAN-only)
 ///   - Indexer managers (Jackett / Prowlarr — URL + API key, may be LAN-only)
+///   - IPTV providers (M3U URLs and Xtream server + credentials). Playlists
+///     imported from a file are NOT included — their definition is the raw
+///     M3U text, which would bloat the file past the size restore will read;
+///     re-import the file on the other device.
+///   - IPTV Favorites (starred channels)
+///   - IPTV custom lists (each list with its channels)
 ///
 /// Restore intentionally skips remote validation (network) for credentials —
 /// the user trusts their own backup, so we write the stored values directly.
@@ -79,6 +86,17 @@ class BackupRestoreService {
       );
     }
 
+    List<Map<String, dynamic>> iptvPlaylists = const [];
+    List<Map<String, dynamic>> iptvFavorites = const [];
+    List<Map<String, dynamic>> iptvLists = const [];
+    try {
+      iptvPlaylists = await IptvTransferPayload.buildPlaylists();
+      iptvFavorites = await IptvTransferPayload.buildFavorites();
+      iptvLists = await IptvTransferPayload.buildCustomLists();
+    } catch (e) {
+      debugPrint('BackupRestoreService: Failed to read IPTV setup: $e');
+    }
+
     return <String, dynamic>{
       'version': currentVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
@@ -116,6 +134,9 @@ class BackupRestoreService {
       if (addonUrls.isNotEmpty) 'addonManifestUrls': addonUrls,
       if (webDavServers.isNotEmpty) 'webDavServers': webDavServers,
       if (indexerManagers.isNotEmpty) 'indexerManagers': indexerManagers,
+      if (iptvPlaylists.isNotEmpty) 'iptvPlaylists': iptvPlaylists,
+      if (iptvFavorites.isNotEmpty) 'iptvFavorites': iptvFavorites,
+      if (iptvLists.isNotEmpty) 'iptvLists': iptvLists,
     };
   }
 
@@ -142,6 +163,12 @@ class BackupRestoreService {
       addonCount: (map['addonManifestUrls'] as List?)?.length ?? 0,
       webDavServerCount: (map['webDavServers'] as List?)?.length ?? 0,
       indexerManagerCount: (map['indexerManagers'] as List?)?.length ?? 0,
+      iptvPlaylistCount: (map['iptvPlaylists'] as List?)?.length ?? 0,
+      iptvFavoriteCount: (map['iptvFavorites'] as List?)?.length ?? 0,
+      iptvListCount: (map['iptvLists'] as List?)?.length ?? 0,
+      iptvListChannelCount: IptvTransferPayload.countListChannels(
+        (map['iptvLists'] as List?) ?? const [],
+      ),
     );
   }
 
@@ -353,6 +380,49 @@ class BackupRestoreService {
       }
     }
 
+    // Providers first: Favorites and list memberships name the playlist they
+    // came from, so restoring them before their provider exists would leave
+    // channels pointing at nothing.
+    if (selection.iptvPlaylists) {
+      final list = map['iptvPlaylists'];
+      if (list is List && list.isNotEmpty) {
+        final counts = await IptvTransferPayload.applyPlaylists(list);
+        report.iptvPlaylistsImported = counts.imported;
+        report.iptvPlaylistsAlreadyPresent = counts.alreadyPresent;
+        report.iptvPlaylistsFailed = counts.failed;
+        if (counts.error != null) {
+          report.errors.add('IPTV providers: ${counts.error}');
+        }
+      }
+    }
+
+    if (selection.iptvFavorites) {
+      final list = map['iptvFavorites'];
+      if (list is List && list.isNotEmpty) {
+        final counts = await IptvTransferPayload.applyFavorites(list);
+        report.iptvFavoritesImported = counts.channelsImported;
+        report.iptvFavoritesAlreadyPresent = counts.channelsAlreadyPresent;
+        report.iptvFavoritesFailed = counts.failed;
+        if (counts.error != null) {
+          report.errors.add('IPTV favorites: ${counts.error}');
+        }
+      }
+    }
+
+    if (selection.iptvLists) {
+      final list = map['iptvLists'];
+      if (list is List && list.isNotEmpty) {
+        final counts = await IptvTransferPayload.applyCustomLists(list);
+        report.iptvListsCreated = counts.imported;
+        report.iptvListsMerged = counts.alreadyPresent;
+        report.iptvListChannelsImported = counts.channelsImported;
+        report.iptvListsFailed = counts.failed;
+        if (counts.error != null) {
+          report.errors.add('IPTV lists: ${counts.error}');
+        }
+      }
+    }
+
     return report;
   }
 
@@ -552,6 +622,10 @@ class BackupSummary {
   final int addonCount;
   final int webDavServerCount;
   final int indexerManagerCount;
+  final int iptvPlaylistCount;
+  final int iptvFavoriteCount;
+  final int iptvListCount;
+  final int iptvListChannelCount;
 
   BackupSummary({
     required this.version,
@@ -567,6 +641,10 @@ class BackupSummary {
     required this.addonCount,
     required this.webDavServerCount,
     required this.indexerManagerCount,
+    this.iptvPlaylistCount = 0,
+    this.iptvFavoriteCount = 0,
+    this.iptvListCount = 0,
+    this.iptvListChannelCount = 0,
   });
 
   bool get isEmpty =>
@@ -580,7 +658,10 @@ class BackupSummary {
       searchEngineCount == 0 &&
       addonCount == 0 &&
       webDavServerCount == 0 &&
-      indexerManagerCount == 0;
+      indexerManagerCount == 0 &&
+      iptvPlaylistCount == 0 &&
+      iptvFavoriteCount == 0 &&
+      iptvListCount == 0;
 }
 
 /// Which categories to include when restoring.
@@ -596,6 +677,9 @@ class BackupSelection {
   final bool addons;
   final bool webDav;
   final bool indexerManagers;
+  final bool iptvPlaylists;
+  final bool iptvFavorites;
+  final bool iptvLists;
 
   const BackupSelection({
     required this.realDebrid,
@@ -609,6 +693,9 @@ class BackupSelection {
     required this.addons,
     required this.webDav,
     required this.indexerManagers,
+    this.iptvPlaylists = true,
+    this.iptvFavorites = true,
+    this.iptvLists = true,
   });
 
   const BackupSelection.all()
@@ -622,7 +709,10 @@ class BackupSelection {
         searchEngines = true,
         addons = true,
         webDav = true,
-        indexerManagers = true;
+        indexerManagers = true,
+        iptvPlaylists = true,
+        iptvFavorites = true,
+        iptvLists = true;
 
   BackupSelection copyWith({
     bool? realDebrid,
@@ -636,6 +726,9 @@ class BackupSelection {
     bool? addons,
     bool? webDav,
     bool? indexerManagers,
+    bool? iptvPlaylists,
+    bool? iptvFavorites,
+    bool? iptvLists,
   }) {
     return BackupSelection(
       realDebrid: realDebrid ?? this.realDebrid,
@@ -649,6 +742,9 @@ class BackupSelection {
       addons: addons ?? this.addons,
       webDav: webDav ?? this.webDav,
       indexerManagers: indexerManagers ?? this.indexerManagers,
+      iptvPlaylists: iptvPlaylists ?? this.iptvPlaylists,
+      iptvFavorites: iptvFavorites ?? this.iptvFavorites,
+      iptvLists: iptvLists ?? this.iptvLists,
     );
   }
 }
@@ -677,6 +773,17 @@ class RestoreReport {
   int indexerManagersImported = 0;
   int indexerManagersAlreadyPresent = 0;
   int indexerManagersFailed = 0;
+  int iptvPlaylistsImported = 0;
+  int iptvPlaylistsAlreadyPresent = 0;
+  int iptvPlaylistsFailed = 0;
+  int iptvFavoritesImported = 0;
+  int iptvFavoritesAlreadyPresent = 0;
+  int iptvFavoritesFailed = 0;
+  int iptvListsCreated = 0;
+  // Lists that already existed by name and were topped up rather than added.
+  int iptvListsMerged = 0;
+  int iptvListChannelsImported = 0;
+  int iptvListsFailed = 0;
   final List<String> errors = [];
 
   int get totalSuccess =>
@@ -690,13 +797,20 @@ class RestoreReport {
       searchEnginesImported +
       addonsImported +
       webDavServersImported +
-      indexerManagersImported;
+      indexerManagersImported +
+      iptvPlaylistsImported +
+      iptvFavoritesImported +
+      iptvListsCreated +
+      iptvListChannelsImported;
 
   int get totalFailed =>
       searchEnginesFailed +
       addonsFailed +
       webDavServersFailed +
       indexerManagersFailed +
+      iptvPlaylistsFailed +
+      iptvFavoritesFailed +
+      iptvListsFailed +
       errors.length +
       (pikpakLoginFailed ? 1 : 0);
 

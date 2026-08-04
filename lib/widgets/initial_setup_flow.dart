@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -1052,7 +1053,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
         setState(() => _transferComplete = true);
         return;
       }
-      label = _labelForConfigCommand(command);
+      label = _labelForConfigCommand(command, data);
     }
     if (label == null) return;
     setState(() {
@@ -1061,7 +1062,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
     });
   }
 
-  String? _labelForConfigCommand(String command) {
+  String? _labelForConfigCommand(String command, String? data) {
     switch (command) {
       case ConfigCommand.realDebrid:
         return 'Real-Debrid';
@@ -1083,13 +1084,37 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
         return 'WebDAV servers';
       case ConfigCommand.indexerManagers:
         return 'Indexer managers';
-      // A chunked channel announces itself once via `start`; a small channel
-      // arrives as a single `debrifyChannel`. Chunks themselves stay silent.
+      case ConfigCommand.iptvPlaylists:
+        return 'IPTV providers';
+      case ConfigCommand.iptvFavorites:
+        return 'IPTV favorites';
+      case ConfigCommand.iptvLists:
+        return 'IPTV lists';
       case ConfigCommand.debrifyChannel:
-      case ConfigCommand.debrifyChannelStart:
         return 'TV channel';
+      // A payload too big for one packet announces itself once via `start`,
+      // and the reassembled command is replayed inside the router without
+      // passing back through here — so this is the only chance to count it.
+      // The start packet names which command it carries; older senders don't,
+      // and those only ever chunked TV channels.
+      case ConfigCommand.debrifyChannelStart:
+        return _labelForChunkKind(data);
       default:
         return null;
+    }
+  }
+
+  String? _labelForChunkKind(String? data) {
+    if (data == null) return 'TV channel';
+    try {
+      final decoded = jsonDecode(data);
+      final kind = decoded is Map ? decoded['kind'] as String? : null;
+      if (kind == null || kind == ConfigCommand.debrifyChannel) {
+        return 'TV channel';
+      }
+      return _labelForConfigCommand(kind, null);
+    } catch (_) {
+      return 'TV channel';
     }
   }
 

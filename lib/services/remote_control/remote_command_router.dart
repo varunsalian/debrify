@@ -20,6 +20,7 @@ import '../../services/engine/remote_engine_manager.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/community/magnet_yaml_service.dart';
 import '../../services/debrify_tv_zip_importer.dart';
+import '../../services/iptv_transfer_payload.dart';
 import '../../services/debrify_tv_repository.dart';
 import '../../services/debrify_tv_cache_service.dart';
 import '../../models/debrify_tv_cache.dart';
@@ -229,6 +230,10 @@ class RemoteCommandRouter {
 
     // Handle complete signal (doesn't need data)
     if (command == ConfigCommand.complete) {
+      // Imports run as their packets arrive, and this signal restarts the app
+      // moments later. A large IPTV list is hundreds of SQLite writes, so
+      // restarting without waiting would leave it half-imported.
+      await _awaitInFlightConfigWork();
       await _handleConfigComplete();
       return;
     }
@@ -238,6 +243,53 @@ class RemoteCommandRouter {
       return;
     }
 
+    await _trackConfigWork(_dispatchConfigCommand(command, data));
+  }
+
+  /// Imports still writing. Tracked so the `complete` signal can wait for them
+  /// rather than restarting into a partial setup.
+  final Set<Future<void>> _inFlightConfigWork = {};
+
+  Future<void> _trackConfigWork(Future<void> work) {
+    late Future<void> tracked;
+    tracked = work.whenComplete(() => _inFlightConfigWork.remove(tracked));
+    _inFlightConfigWork.add(tracked);
+    return tracked;
+  }
+
+  Future<void> _awaitInFlightConfigWork() async {
+    // A chunked transfer that hasn't finished arriving is NOT in-flight work
+    // yet — each chunk's handler completes the moment it files the piece, and
+    // the real import only starts on the last one. Restarting now would throw
+    // the buffer away mid-transfer and lose the payload with no error shown,
+    // so wait for the buffers to resolve first. They always do: either the
+    // final chunk lands, or the stall deadline fires and reports it.
+    final deadline = DateTime.now().add(
+      kChunkTransferTimeout + const Duration(seconds: 5),
+    );
+    while (_chunkBuffers.isNotEmpty && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    if (_chunkBuffers.isNotEmpty) {
+      debugPrint(
+        'RemoteCommandRouter: Giving up on ${_chunkBuffers.length} unfinished '
+        'transfer(s) before restart',
+      );
+    }
+
+    // Drain rather than waiting on one snapshot: the final packet's import can
+    // still be running, and it can start further work as it finishes.
+    while (_inFlightConfigWork.isNotEmpty) {
+      try {
+        await Future.wait(_inFlightConfigWork.toList());
+      } catch (e) {
+        // Handlers report their own failures; this only gates the restart.
+        debugPrint('RemoteCommandRouter: In-flight config work failed: $e');
+      }
+    }
+  }
+
+  Future<void> _dispatchConfigCommand(String command, String data) async {
     switch (command) {
       case ConfigCommand.realDebrid:
         await _handleRealDebridConfig(data);
@@ -268,6 +320,15 @@ class RemoteCommandRouter {
         break;
       case ConfigCommand.indexerManagers:
         await _handleIndexerManagersConfig(data);
+        break;
+      case ConfigCommand.iptvPlaylists:
+        await _handleIptvPlaylistsConfig(data);
+        break;
+      case ConfigCommand.iptvFavorites:
+        await _handleIptvFavoritesConfig(data);
+        break;
+      case ConfigCommand.iptvLists:
+        await _handleIptvListsConfig(data);
         break;
       case ConfigCommand.debrifyChannel:
         await _handleDebrifyChannelConfig(data);
@@ -759,6 +820,102 @@ class RemoteCommandRouter {
     }
   }
 
+  /// Handle IPTV providers — merged, never replacing what's already here.
+  ///
+  /// Senders put this before favorites and lists: those name the provider
+  /// they came from, and the memberships have to land on a device that
+  /// already knows it.
+  Future<void> _handleIptvPlaylistsConfig(String jsonData) async {
+    await _applyIptvPayload(jsonData, 'IPTV providers', (entries) async {
+      final counts = await IptvTransferPayload.applyPlaylists(entries);
+      final n = counts.imported;
+      return (
+        added: n,
+        skipped: counts.alreadyPresent,
+        failed: counts.failed,
+        error: counts.error,
+        summary: '$n IPTV provider${n == 1 ? '' : 's'} added',
+      );
+    });
+  }
+
+  /// Handle starred IPTV channels.
+  Future<void> _handleIptvFavoritesConfig(String jsonData) async {
+    await _applyIptvPayload(jsonData, 'IPTV favorites', (entries) async {
+      final counts = await IptvTransferPayload.applyFavorites(entries);
+      final n = counts.channelsImported;
+      return (
+        added: n,
+        skipped: counts.channelsAlreadyPresent,
+        failed: counts.failed,
+        error: counts.error,
+        summary: '$n favorite channel${n == 1 ? '' : 's'} added',
+      );
+    });
+  }
+
+  /// Handle user-created IPTV lists and their channels. A list whose name
+  /// already exists here is topped up rather than duplicated, so both the
+  /// lists created and the channels placed are worth reporting.
+  Future<void> _handleIptvListsConfig(String jsonData) async {
+    await _applyIptvPayload(jsonData, 'IPTV lists', (entries) async {
+      final counts = await IptvTransferPayload.applyCustomLists(entries);
+      final lists = counts.imported;
+      final channels = counts.channelsImported;
+      return (
+        added: lists + channels,
+        skipped: counts.channelsAlreadyPresent,
+        failed: counts.failed,
+        error: counts.error,
+        summary: '$lists list${lists == 1 ? '' : 's'}, '
+            '$channels channel${channels == 1 ? '' : 's'} added',
+      );
+    });
+  }
+
+  /// Shared decode + report for the three IPTV payloads: they all arrive as a
+  /// JSON array and all report the same added / already-there / failed shape.
+  Future<void> _applyIptvPayload(
+    String jsonData,
+    String label,
+    Future<({int added, int skipped, int failed, String? error, String summary})>
+        Function(List<dynamic>) apply,
+  ) async {
+    try {
+      debugPrint('RemoteCommandRouter: Configuring $label...');
+
+      final decoded = jsonDecode(jsonData);
+      if (decoded is! List) {
+        _showSnackBar('$label: Invalid payload', isError: true);
+        return;
+      }
+      if (decoded.isEmpty) {
+        _showSnackBar('$label: empty payload', isError: true);
+        return;
+      }
+
+      final result = await apply(decoded);
+      if (result.error != null) {
+        debugPrint('RemoteCommandRouter: $label failed: ${result.error}');
+        _showSnackBar('$label: Configuration failed', isError: true);
+        return;
+      }
+
+      if (result.added > 0 && result.failed == 0) {
+        _showSnackBar(result.summary);
+      } else if (result.added > 0) {
+        _showSnackBar('${result.summary}, ${result.failed} failed');
+      } else if (result.skipped > 0) {
+        _showSnackBar('$label: already up to date');
+      } else {
+        _showSnackBar('$label: nothing imported', isError: true);
+      }
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure $label: $e');
+      _showSnackBar('$label: Configuration failed', isError: true);
+    }
+  }
+
   /// Handle Debrify TV channel import from remote
   Future<void> _handleDebrifyChannelConfig(String debrifyUri) async {
     try {
@@ -820,41 +977,58 @@ class RemoteCommandRouter {
     }
   }
 
-  /// Handle start of a chunked channel transfer
+  /// Handle start of a chunked transfer. The payload can belong to any config
+  /// command — the start packet names it via `kind`.
   void _handleDebrifyChannelStart(String jsonData) {
     try {
       final data = jsonDecode(jsonData) as Map<String, dynamic>;
       final transferId = data['transferId'] as String;
-      final channelName = data['channelName'] as String;
+      final label = data['channelName'] as String;
       final totalChunks = data['totalChunks'] as int;
+      final kind = (data['kind'] as String?) ?? ConfigCommand.debrifyChannel;
+
+      // A transfer that reassembled into another envelope would re-enter this
+      // path forever. Nothing legitimate names one, so refuse outright.
+      if (kind == ConfigCommand.debrifyChannelStart ||
+          kind == ConfigCommand.debrifyChannelChunk ||
+          kind == ConfigCommand.complete) {
+        debugPrint('RemoteCommandRouter: Refusing chunk transfer kind $kind');
+        return;
+      }
 
       debugPrint(
         'RemoteCommandRouter: Chunked transfer started: '
-        '$channelName ($totalChunks chunks)',
+        '$label ($kind, $totalChunks chunks)',
       );
 
       // Clean up any stale buffer with the same ID
       _chunkBuffers[transferId]?.timeout?.cancel();
 
-      _chunkBuffers[transferId] = _ChunkBuffer(
-        channelName: channelName,
+      final buffer = _ChunkBuffer(
+        label: label,
+        kind: kind,
         totalChunks: totalChunks,
         chunks: List<String?>.filled(totalChunks, null),
-        timeout: Timer(kChunkTransferTimeout, () {
-          debugPrint(
-            'RemoteCommandRouter: Chunk transfer timed out: $transferId',
-          );
-          _chunkBuffers.remove(transferId);
-          _showSnackBar(
-            'Channel transfer timed out: $channelName',
-            isError: true,
-          );
-        }),
+        timeout: null,
       );
+      _chunkBuffers[transferId] = buffer;
+      _armChunkTimeout(transferId, buffer);
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to parse chunk start: $e');
-      _showSnackBar('Failed to receive channel transfer', isError: true);
+      _showSnackBar('Failed to receive transfer', isError: true);
     }
+  }
+
+  /// (Re)start a transfer's stall deadline.
+  void _armChunkTimeout(String transferId, _ChunkBuffer buffer) {
+    buffer.timeout?.cancel();
+    buffer.timeout = Timer(kChunkTransferTimeout, () {
+      debugPrint('RemoteCommandRouter: Chunk transfer stalled: $transferId');
+      _chunkBuffers.remove(transferId);
+      // A silent drop reads as success from the sender's side, so the
+      // receiving end has to be the one that says the data never landed.
+      _showSnackBar('Transfer timed out: ${buffer.label}', isError: true);
+    });
   }
 
   /// Handle a single chunk of a chunked channel transfer
@@ -874,11 +1048,22 @@ class RemoteCommandRouter {
         return;
       }
 
+      // A corrupt or hostile packet must not blow up the receiver.
+      if (index < 0 || index >= buffer.totalChunks) {
+        debugPrint(
+          'RemoteCommandRouter: Chunk index $index out of range for '
+          '$transferId (${buffer.totalChunks} chunks)',
+        );
+        return;
+      }
+
       // Only count if this slot was not already filled (guards against duplicate UDP packets)
       if (buffer.chunks[index] == null) {
         buffer.receivedCount++;
       }
       buffer.chunks[index] = chunkData;
+      // Progress means the transfer is alive — push the stall deadline out.
+      _armChunkTimeout(transferId, buffer);
 
       // Check if all chunks have arrived
       if (buffer.receivedCount >= buffer.totalChunks) {
@@ -891,15 +1076,16 @@ class RemoteCommandRouter {
           byteChunks.add(base64.decode(chunk!));
         }
         final allBytes = byteChunks.expand((b) => b).toList();
-        final fullUri = utf8.decode(allBytes);
+        final full = utf8.decode(allBytes);
 
         debugPrint(
-          'RemoteCommandRouter: All chunks received for ${buffer.channelName}, '
-          'reassembled ${fullUri.length} chars',
+          'RemoteCommandRouter: All chunks received for ${buffer.label}, '
+          'reassembled ${full.length} chars',
         );
 
-        // Process through the normal handler
-        await _handleDebrifyChannelConfig(fullUri);
+        // Replay through the normal switch, exactly as if the payload had
+        // arrived in a single packet.
+        await _handleConfigCommand(buffer.kind, full);
       }
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to handle chunk: $e');
@@ -1118,14 +1304,27 @@ class RemoteCommandRouter {
 
 /// Buffer for reassembling chunked channel transfers
 class _ChunkBuffer {
-  final String channelName;
+  /// Human label for messages while the transfer is in flight.
+  final String label;
+
+  /// The config command the reassembled payload belongs to. Senders that
+  /// predate the generalized envelope don't name one, so it defaults to the
+  /// Debrify TV channel it was originally built for.
+  final String kind;
+
   final int totalChunks;
   final List<String?> chunks;
-  final Timer? timeout;
+
+  /// Restarted on every chunk that arrives: the deadline is for a *stalled*
+  /// transfer, not a slow one. A large payload is paced at 50ms per chunk, so
+  /// a fixed deadline would kill transfers that were arriving perfectly.
+  Timer? timeout;
+
   int receivedCount = 0;
 
   _ChunkBuffer({
-    required this.channelName,
+    required this.label,
+    required this.kind,
     required this.totalChunks,
     required this.chunks,
     required this.timeout,
