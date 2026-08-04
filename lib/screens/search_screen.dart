@@ -220,6 +220,41 @@ double _artPosterCaptionBand(BuildContext context) =>
         _kArtTitleHeight *
         _kArtTitleMaxLines;
 
+// Metrics for the Canvas bottom column (rail tabs + shelf). Same contract as
+// the caption band above: the widgets and the identity block that has to stay
+// CLEAR of them read the same numbers, so neither can drift into the other.
+// (It drifted once: growing the shelf box by the caption band silently ate the
+// identity's whole clearance and the tabs landed on the synopsis.)
+const double _kCanvasTabFontSize = 12.5;
+const double _kCanvasTabUnderlineGap = 6;
+const double _kCanvasTabUnderline = 2.5;
+
+/// Floor for the tab row: the stacked chevron pair beside the labels — two
+/// 13px icons (the second is only translated, so it still occupies its line)
+/// plus 1px of bottom padding.
+const double _kCanvasTabChevronColumn = 27;
+
+/// Gap between the tab row and the shelf below it.
+const double _kCanvasTabsGap = 12;
+
+/// Trailing spacer under the shelf, holding it off the screen edge.
+const double _kCanvasShelfTail = 22;
+
+/// Slack inside the shelf box, on top of the cell height — the cells centre
+/// in it, so a focused card's scale-up isn't clipped at the box edges.
+const double _kCanvasShelfSlack = 10;
+
+/// Breathing room between the identity block's bottom and the tab row's top.
+const double _kCanvasIdentityGap = 25;
+
+/// Height of the Canvas rail-tab row at the current text scale.
+double _canvasTabsHeight(BuildContext context) => max(
+  _kCanvasTabChevronColumn,
+  MediaQuery.textScalerOf(context).scale(_kCanvasTabFontSize) * 1.35 +
+      _kCanvasTabUnderlineGap +
+      _kCanvasTabUnderline,
+);
+
 /// Intent for a left-arrow on the search field, remapped (via a [Shortcuts]
 /// override closer than the default text-editing shortcuts) so an empty field
 /// escapes to the sidebar instead of the EditableText silently eating the key.
@@ -4382,6 +4417,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         final boardH = cons.maxHeight;
         final double cardH = (boardH * 0.30).clamp(150.0, 220.0);
         final cardW = cardH * 2 / 3;
+        // ONE height for the whole bottom column, measured bottom-up, so the
+        // identity block above can reserve exactly what the tabs and shelf
+        // actually occupy — at any text scale, and whatever the shelf box
+        // grows to next.
+        final shelfBoxH =
+            cardH + _artPosterCaptionBand(context) + _kCanvasShelfSlack;
+        final shelfColumnH =
+            _kCanvasShelfTail +
+            shelfBoxH +
+            _kCanvasTabsGap +
+            _canvasTabsHeight(context);
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -4437,7 +4483,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     left: 48,
                     right: 48,
                     top: _canvasTheater ? 36 : 0,
-                    bottom: _canvasTheater ? 0 : cardH + 96,
+                    bottom: _canvasTheater
+                        ? 0
+                        : shelfColumnH + _kCanvasIdentityGap,
                   ),
                   duration: _canvasTheater
                       ? const Duration(milliseconds: 900)
@@ -4540,7 +4588,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     padding: const EdgeInsets.only(
                       left: 48,
                       right: 48,
-                      bottom: 12,
+                      bottom: _kCanvasTabsGap,
                     ),
                     child: _canvasTabs(rails, railIndex),
                   ),
@@ -4550,7 +4598,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     // a per-rail height made the tabs row jump ~45px on
                     // every fav↔meta switch and squeezed the outgoing fav
                     // list into a RenderFlex overflow mid-crossfade.
-                    height: cardH + _artPosterCaptionBand(context) + 10,
+                    // Whatever this becomes, [shelfColumnH] measures it — the
+                    // identity block's clearance is derived, never guessed.
+                    height: shelfBoxH,
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 200),
                       switchInCurve: Curves.easeOutCubic,
@@ -4656,7 +4706,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       ),
                     ),
                   ),
-                      const SizedBox(height: 22),
+                      const SizedBox(height: _kCanvasShelfTail),
                     ],
                   ),
                 ),
@@ -4746,7 +4796,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: _kCanvasTabFontSize,
                       fontWeight: i == active
                           ? FontWeight.w800
                           : FontWeight.w600,
@@ -4757,9 +4807,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     ),
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: _kCanvasTabUnderlineGap),
                 Container(
-                  height: 2.5,
+                  height: _kCanvasTabUnderline,
                   width: 26,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
