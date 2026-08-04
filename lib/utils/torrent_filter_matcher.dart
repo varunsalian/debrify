@@ -1,6 +1,7 @@
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../widgets/torrent_result_row.dart' show TorrentQualityExtension;
+import 'format_tag_detector.dart';
 
 /// Pure, name-based torrent filter matching — a faithful copy of Home's
 /// `_buildTorrentMetadataMap` / `_detectQualityTier` / `_detectRipSource` /
@@ -36,7 +37,34 @@ class TorrentFilterMatcher {
       final bucket = sizeBucketForBytes(t.sizeBytes);
       if (bucket == null || !f.sizes.contains(bucket)) return false;
     }
+    if (f.dynamicRanges.isNotEmpty &&
+        !f.dynamicRanges.contains(detectDynamicRange(t.name))) {
+      return false;
+    }
     return true;
+  }
+
+  /// HDR when the name carries any HDR-family tag, SDR otherwise.
+  ///
+  /// Reads [FormatTagDetector], the same classifier behind the row's badges,
+  /// rather than a private token list — so "exclude HDR" can never hide a row
+  /// that shows no HDR badge, nor keep one that does. That also means it
+  /// inherits the detector's word-boundary rule, which is what stops the very
+  /// common `HDRip` from being read as `HDR`.
+  static DynamicRange detectDynamicRange(String rawName) {
+    for (final tag in FormatTagDetector.detect(rawName)) {
+      switch (tag) {
+        case FormatTag.dolbyVision:
+        case FormatTag.hdr10Plus:
+        case FormatTag.hdr10:
+        case FormatTag.hlg:
+        case FormatTag.hdr:
+          return DynamicRange.hdr;
+        default:
+          continue;
+      }
+    }
+    return DynamicRange.sdr;
   }
 
   /// Bare "WEB" as its own word — catches dotted scene names like

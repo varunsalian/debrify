@@ -1,4 +1,9 @@
 class FileUtils {
+  /// What counts as a playable video anywhere in the app. This ONE list is
+  /// what every cloud browser (Real-Debrid, TorBox, PikPak, Premiumize,
+  /// AllDebrid, playlists, Debrify TV) asks before offering Play instead of
+  /// download-only — so a format missing here isn't "unsupported", it's
+  /// invisible.
   static const List<String> _videoExtensions = [
     '.mp4',
     '.avi',
@@ -12,6 +17,17 @@ class FileUtils {
     '.ts',
     '.mts',
     '.m2ts',
+    // MPEG program stream — one container under four names (.vob is a DVD
+    // rip's). Both players read it: the phone/desktop player decodes it in
+    // software through libmpv, and the TV player's default extractor set
+    // includes PsExtractor with the MP1/MP2/AC3 audio covered by the bundled
+    // ffmpeg decoders. The one gap is MPEG-2 *video* on Android TV, which
+    // needs the device's own decoder (the bundled ffmpeg video renderer is a
+    // stub) — the TV player says so plainly when a box hasn't got one.
+    '.mpg',
+    '.mpeg',
+    '.m2p',
+    '.vob',
   ];
 
   // Well-supported formats that work reliably

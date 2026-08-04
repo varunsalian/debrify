@@ -78,13 +78,18 @@ class HomeTheme {
   static const int heroBackdropCacheWidth = 1280;
 
   /// CachedNetworkImage fade durations for TV-visible surfaces: package
-  /// defaults off-TV, snap on TV — per-image opacity crossfades are a
-  /// saveLayer each and jank weak TV GPUs. One helper so every site stays in
-  /// lockstep (catalog_item_tile keeps its own intentionally snappier fade).
+  /// defaults off-TV, a SHORT fade on TV — posters snapping in as hard
+  /// rectangles was the last "cheap" tell at the card level. 150ms keeps the
+  /// overlap window tiny when a board fills (memory-cached images skip the
+  /// fade entirely — OctoImage lands synchronous loads settled — so the
+  /// many-saveLayers-at-once case is only ever fresh disk/network arrivals,
+  /// which IO already staggers). One helper so every site stays in lockstep —
+  /// including catalog_item_tile's board-chrome path, which opts into this
+  /// fade; its classic path keeps its own intentionally snappier one.
   static Duration imageFadeIn(bool isTelevision) =>
-      isTelevision ? Duration.zero : const Duration(milliseconds: 500);
+      isTelevision ? const Duration(milliseconds: 150) : const Duration(milliseconds: 500);
   static Duration imageFadeOut(bool isTelevision) =>
-      isTelevision ? Duration.zero : const Duration(milliseconds: 1000);
+      isTelevision ? const Duration(milliseconds: 150) : const Duration(milliseconds: 1000);
 
   // ── Responsive ────────────────────────────────────────────────────────────
   /// Returns sizing tokens scaled to the current screen width.

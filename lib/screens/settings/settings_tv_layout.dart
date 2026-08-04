@@ -59,6 +59,20 @@ class SettingsTvLayout extends StatefulWidget {
   final ValueChanged<bool> onToggleAutoUpdateChecks;
   final bool tvKeyboardEnabled;
   final ValueChanged<bool> onToggleTvKeyboard;
+  // Screen size: percentage of the panel's native density the UI is laid out
+  // at — 100 is the panel's own size, and smaller fits more on screen. Held
+  // here only to caption the row; the picker itself is its own page.
+  final int tvUiScalePercent;
+  final Future<void> Function() onOpenTvScreenSize;
+  // Sidebar chrome style. (The HOME layout picker moved inside the Home
+  // Screen settings page — everything about the home screen in one place.)
+  final String tvSidebarStyleLabel;
+  final Future<void> Function() onOpenTvSidebarStyle;
+  final String discoverLayoutLabel;
+  final Future<void> Function() onOpenDiscoverLayout;
+  // Live TV & DVR.
+  final Future<void> Function() onOpenRecordings;
+  final Future<void> Function() onOpenIptvSettings;
   final bool showSupportDonation;
   final String supportDonationLabel;
   final String supportDonationSubtitle;
@@ -93,6 +107,14 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onToggleAutoUpdateChecks,
     required this.tvKeyboardEnabled,
     required this.onToggleTvKeyboard,
+    required this.tvUiScalePercent,
+    required this.onOpenTvScreenSize,
+    required this.tvSidebarStyleLabel,
+    required this.onOpenTvSidebarStyle,
+    required this.discoverLayoutLabel,
+    required this.onOpenDiscoverLayout,
+    required this.onOpenRecordings,
+    required this.onOpenIptvSettings,
     required this.showSupportDonation,
     required this.supportDonationLabel,
     required this.supportDonationSubtitle,
@@ -113,28 +135,54 @@ class _Category {
   const _Category(this.icon, this.label, this.subtitle);
 }
 
+// ONE information architecture, shared verbatim with the phone layout and the
+// search index — organized by what the user is changing, never by platform.
+// Section names here MUST match _SettingsLayout's section titles and the
+// search registrations in settings_screen.dart.
 const List<_Category> _kCategories = [
   _Category(Icons.link_rounded, 'Connections', 'Debrid, cloud, IPTV & more'),
   _Category(Icons.sync_rounded, 'Trackers', 'Trakt & Simkl watch history'),
-  _Category(Icons.tune_rounded, 'General', 'Home, player & remote'),
+  _Category(
+    Icons.home_rounded,
+    'Home & Display',
+    'Home, Discover, sidebar & screen size',
+  ),
+  _Category(
+    Icons.play_circle_outline_rounded,
+    'Playback',
+    'Player, subtitles & audio',
+  ),
   _Category(Icons.search_rounded, 'Search', 'Engines, filters & providers'),
-  _Category(Icons.live_tv_rounded, 'TV Mode', 'Debrify TV & keyboard'),
+  _Category(
+    Icons.fiber_dvr_rounded,
+    'Live TV & DVR',
+    'Debrify TV, recordings & IPTV',
+  ),
+  _Category(
+    Icons.devices_rounded,
+    'Devices',
+    'Remote control & setup transfer',
+  ),
   _Category(
     Icons.storage_rounded,
     'Data & Backup',
     'Downloads, backup & restore',
   ),
-  _Category(Icons.system_update_rounded, 'Updates', 'Version & auto-update'),
-  _Category(Icons.favorite_rounded, 'Support', 'Donate & community links'),
+  _Category(
+    Icons.info_outline_rounded,
+    'About',
+    'Updates, version & community',
+  ),
   _Category(Icons.warning_amber_rounded, 'Danger Zone', 'Reset Debrify'),
 ];
 
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
-  /// written out here rather than driven by a provider list (Data & Backup has
-  /// up to 5 with the download-location row). Connections and Trackers are
-  /// sized from their own lists; see the pool computation in [initState].
-  static const int _kMaxCategoryRows = 5;
+  /// written out here rather than driven by a provider list (About has up to
+  /// 6 with the conditional donation row; Data & Backup up to 5). Connections
+  /// and Trackers are sized from their own lists; see the pool computation in
+  /// [initState].
+  static const int _kMaxCategoryRows = 6;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -482,7 +530,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ],
         ];
-      case 2: // General
+      case 2: // Home & Display
         return [
           SettingsSection(
             title: '',
@@ -493,19 +541,46 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 focusNode: _paneNodes[0],
               ),
               SettingsTile.spec(
-                SettingsRows.player,
-                onTap: widget.onOpenExternalPlayerSettings,
+                SettingsRows.tvSidebarStyle,
+                subtitle: widget.tvSidebarStyleLabel,
+                onTap: widget.onOpenTvSidebarStyle,
                 focusNode: _paneNodes[1],
               ),
               SettingsTile.spec(
-                SettingsRows.remote,
-                onTap: () async => widget.onOpenRemoteControl(),
+                SettingsRows.discoverLayout,
+                subtitle: widget.discoverLayoutLabel,
+                onTap: widget.onOpenDiscoverLayout,
                 focusNode: _paneNodes[2],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvScreenSize,
+                subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
+                onTap: widget.onOpenTvScreenSize,
+                focusNode: _paneNodes[3],
+              ),
+              SettingsToggleTile.spec(
+                SettingsRows.tvKeyboard,
+                value: widget.tvKeyboardEnabled,
+                onChanged: widget.onToggleTvKeyboard,
+                focusNode: _paneNodes[4],
               ),
             ],
           ),
         ];
-      case 3: // Search
+      case 3: // Playback
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.player,
+                onTap: widget.onOpenExternalPlayerSettings,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 4: // Search
         return [
           SettingsSection(
             title: '',
@@ -533,7 +608,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 4: // TV Mode
+      case 5: // Live TV & DVR
         return [
           SettingsSection(
             title: '',
@@ -543,16 +618,33 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenDebrifyTvSettings,
                 focusNode: _paneNodes[0],
               ),
-              SettingsToggleTile.spec(
-                SettingsRows.tvKeyboard,
-                value: widget.tvKeyboardEnabled,
-                onChanged: widget.onToggleTvKeyboard,
+              SettingsTile.spec(
+                SettingsRows.recordings,
+                onTap: widget.onOpenRecordings,
                 focusNode: _paneNodes[1],
+              ),
+              SettingsTile.spec(
+                SettingsRows.iptvPlaylists,
+                onTap: widget.onOpenIptvSettings,
+                focusNode: _paneNodes[2],
               ),
             ],
           ),
         ];
-      case 5: // Data & Backup
+      case 6: // Devices
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.remote,
+                onTap: () async => widget.onOpenRemoteControl(),
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 7: // Data & Backup
         {
           // Focus nodes are claimed sequentially so the optional
           // download-location row doesn't shift hardcoded indices.
@@ -609,73 +701,75 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 6: // Updates
-        return [
-          SettingsSection(
-            title: '',
-            children: [
-              SettingsToggleTile.spec(
-                SettingsRows.autoUpdate,
-                value: widget.autoUpdateChecksEnabled,
-                onChanged: widget.onToggleAutoUpdateChecks,
-                focusNode: _paneNodes[0],
-              ),
-              SettingsTile.spec(
-                SettingsRows.checkUpdates,
-                subtitle: widget.updateSubtitle,
-                onTap: widget.onCheckForUpdates,
-                tag: 'New',
-                focusNode: _paneNodes[1],
-                trailing: widget.checkingUpdates
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.5),
-                      )
-                    : null,
-              ),
-              SettingsInfoTile.spec(
-                SettingsRows.version,
-                value: widget.appVersion,
-              ),
-            ],
-          ),
-        ];
-      case 7: // Support
-        // The donation row is conditional, so index the pane nodes off a
-        // running counter to keep Up/Down wiring contiguous.
-        int p = 0;
-        return [
-          SettingsSection(
-            title: '',
-            children: [
-              if (widget.showSupportDonation)
-                SettingsTile(
-                  icon: SettingsRows.supportDebrify.icon,
-                  title: widget.supportDonationLabel,
-                  subtitle: widget.supportDonationSubtitle,
-                  onTap: widget.onOpenSupportDonation,
+      case 8: // About (Updates + Support merged — matches the phone layout)
+        {
+          // The donation row is conditional, so index the pane nodes off a
+          // running counter to keep Up/Down wiring contiguous.
+          int p = 0;
+          return [
+            const SettingsSectionLabel('Updates'),
+            SettingsSection(
+              title: '',
+              children: [
+                SettingsToggleTile.spec(
+                  SettingsRows.autoUpdate,
+                  value: widget.autoUpdateChecksEnabled,
+                  onChanged: widget.onToggleAutoUpdateChecks,
                   focusNode: _paneNodes[p++],
                 ),
-              SettingsTile.spec(
-                SettingsRows.reddit,
-                onTap: () => launchSettingsUrl(SettingsRows.reddit.url!),
-                focusNode: _paneNodes[p++],
-              ),
-              SettingsTile.spec(
-                SettingsRows.discord,
-                onTap: () => launchSettingsUrl(SettingsRows.discord.url!),
-                focusNode: _paneNodes[p++],
-              ),
-              SettingsTile.spec(
-                SettingsRows.github,
-                onTap: () => launchSettingsUrl(SettingsRows.github.url!),
-                focusNode: _paneNodes[p++],
-              ),
-            ],
-          ),
-        ];
-      case 8: // Danger Zone
+                SettingsTile.spec(
+                  SettingsRows.checkUpdates,
+                  subtitle: widget.updateSubtitle,
+                  onTap: widget.onCheckForUpdates,
+                  tag: 'New',
+                  focusNode: _paneNodes[p++],
+                  trailing: widget.checkingUpdates
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        )
+                      : null,
+                ),
+                SettingsInfoTile.spec(
+                  SettingsRows.version,
+                  value: widget.appVersion,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            const SettingsSectionLabel('Community & Support'),
+            SettingsSection(
+              title: '',
+              children: [
+                if (widget.showSupportDonation)
+                  SettingsTile(
+                    icon: SettingsRows.supportDebrify.icon,
+                    title: widget.supportDonationLabel,
+                    subtitle: widget.supportDonationSubtitle,
+                    onTap: widget.onOpenSupportDonation,
+                    focusNode: _paneNodes[p++],
+                  ),
+                SettingsTile.spec(
+                  SettingsRows.reddit,
+                  onTap: () => launchSettingsUrl(SettingsRows.reddit.url!),
+                  focusNode: _paneNodes[p++],
+                ),
+                SettingsTile.spec(
+                  SettingsRows.discord,
+                  onTap: () => launchSettingsUrl(SettingsRows.discord.url!),
+                  focusNode: _paneNodes[p++],
+                ),
+                SettingsTile.spec(
+                  SettingsRows.github,
+                  onTap: () => launchSettingsUrl(SettingsRows.github.url!),
+                  focusNode: _paneNodes[p++],
+                ),
+              ],
+            ),
+          ];
+        }
+      case 9: // Danger Zone
         return [
           SettingsSection(
             title: '',

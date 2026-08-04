@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 /// Utility class for platform-specific detection and helpers
@@ -13,6 +14,18 @@ class PlatformUtil {
   /// [isAndroidTV] has run once (it's called early in app startup, so this is
   /// reliably warm by the time playback starts). For UI that can't await.
   static bool get isAndroidTvCached => _isAndroidTVCached ?? false;
+
+  /// A hand-held phone or tablet — not a TV, a desktop or the web.
+  ///
+  /// The predicate for anything that only makes sense in the hand: forcing
+  /// device rotation, portrait layouts, touch-only affordances. Reads
+  /// [isAndroidTvCached], so it inherits that flag's "false until the startup
+  /// probe lands" caveat — fine for UI, not for anything that must be right on
+  /// the very first frame of a cold start.
+  static bool get isPhone =>
+      !kIsWeb &&
+      (Platform.isAndroid || Platform.isIOS) &&
+      !isAndroidTvCached;
 
   /// Whether the most recent [isAndroidTV] probe threw instead of answering.
   /// Callers that gate MEMORY safety on TV detection (the image-cache cap)

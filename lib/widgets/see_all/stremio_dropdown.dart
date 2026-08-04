@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,10 +17,24 @@ class StremioDropdownOption<T> {
   final T value;
   final String label;
   final bool isHeader;
-  const StremioDropdownOption(this.value, this.label, {this.isHeader = false});
+
+  /// Whether HOLDING OK (TV) or long-pressing this row runs the dropdown's
+  /// [StremioDropdown.onOptionHold] instead of selecting it. Opt-in per
+  /// option so a list can offer the gesture on its real entries without
+  /// offering it on an "All"/sentinel row.
+  final bool holdable;
+
+  const StremioDropdownOption(
+    this.value,
+    this.label, {
+    this.isHeader = false,
+    this.holdable = false,
+  });
 
   /// Section header. Give it a sentinel [value] no real option uses.
-  const StremioDropdownOption.header(this.value, this.label) : isHeader = true;
+  const StremioDropdownOption.header(this.value, this.label)
+    : isHeader = true,
+      holdable = false;
 }
 
 /// Section label inside a dropdown list: an accent tick and an upper-case
@@ -98,6 +114,16 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
   /// Source segment as the row's identity, per the Discover design.
   final bool quietAccent;
 
+  /// Secondary action for options marked [StremioDropdownOption.holdable]:
+  /// fired when such a row is HELD (TV) or long-pressed (touch/desktop)
+  /// instead of picked. The picker closes first, so a confirmation the
+  /// callback opens lands over the page rather than over the option list.
+  final ValueChanged<T>? onOptionHold;
+
+  /// One-line hint drawn on a focused holdable row, e.g. "HOLD OK to hide" —
+  /// the gesture is invisible otherwise.
+  final String? holdHint;
+
   const StremioDropdown({
     super.key,
     required this.value,
@@ -110,6 +136,8 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
     this.onDownArrowPressed,
     this.quiet = false,
     this.quietAccent = false,
+    this.onOptionHold,
+    this.holdHint,
   });
 
   @override
@@ -141,9 +169,16 @@ class _StremioDropdownState<T extends Object>
   /// opens scrolled to the current value, and (off-TV) adds a filter field.
   static const int _lazyPickerThreshold = 30;
 
+  /// A hold gesture forces the lazy picker regardless of length: the showMenu
+  /// path's items own their own tap and key handling, so there is nowhere to
+  /// hang a hold on them, and an option that offers the gesture in a long list
+  /// but silently drops it in a short one is worse than not offering it.
+  bool get _offersHold =>
+      widget.onOptionHold != null && widget.options.any((o) => o.holdable);
+
   Future<void> _open() async {
-    if (widget.options.length > _lazyPickerThreshold) {
-      final result = await showDialog<T>(
+    if (widget.options.length > _lazyPickerThreshold || _offersHold) {
+      final result = await showDialog<_PickerChoice<T>>(
         context: context,
         barrierColor: Colors.black.withValues(alpha: 0.62),
         builder: (_) => _LazyPickerDialog<T>(
@@ -151,9 +186,16 @@ class _StremioDropdownState<T extends Object>
           options: widget.options,
           value: widget.value,
           isTelevision: widget.isTelevision,
+          offersHold: _offersHold,
+          holdHint: widget.holdHint,
         ),
       );
-      if (result != null) widget.onSelected(result);
+      if (result == null) return;
+      if (result.held) {
+        widget.onOptionHold?.call(result.value);
+      } else {
+        widget.onSelected(result.value);
+      }
       return;
     }
     final btn = _btnKey.currentContext?.findRenderObject() as RenderBox?;
@@ -461,17 +503,32 @@ class _StremioDropdownState<T extends Object>
 /// current value. DPAD rides stock vertical traversal between the lazily-built
 /// rows (each keeps itself in view on focus); off-TV a filter field narrows
 /// the list. Pops with the chosen value, or null on dismiss.
+/// What the picker closed with: the option, and whether it was HELD (the
+/// secondary action) rather than picked.
+class _PickerChoice<T> {
+  const _PickerChoice(this.value, {this.held = false});
+  final T value;
+  final bool held;
+}
+
 class _LazyPickerDialog<T extends Object> extends StatefulWidget {
   final String title;
   final List<StremioDropdownOption<T>> options;
   final T value;
   final bool isTelevision;
 
+  /// Whether the host dropdown has a hold action to offer at all — rows still
+  /// opt in individually via [StremioDropdownOption.holdable].
+  final bool offersHold;
+  final String? holdHint;
+
   const _LazyPickerDialog({
     required this.title,
     required this.options,
     required this.value,
     required this.isTelevision,
+    this.offersHold = false,
+    this.holdHint,
   });
 
   @override
@@ -662,7 +719,16 @@ class _LazyPickerDialogState<T extends Object>
                         widget.isTelevision &&
                         _filter.isEmpty &&
                         i == _initialIndex,
-                    onPick: () => Navigator.of(context).pop(o.value),
+                    onPick: () =>
+                        Navigator.of(context).pop(_PickerChoice<T>(o.value)),
+                    holdHint: widget.offersHold && o.holdable
+                        ? widget.holdHint
+                        : null,
+                    onHold: widget.offersHold && o.holdable
+                        ? () => Navigator.of(
+                            context,
+                          ).pop(_PickerChoice<T>(o.value, held: true))
+                        : null,
                   );
                 },
               ),
@@ -683,12 +749,20 @@ class _LazyPickerRow extends StatefulWidget {
   final bool indented;
   final VoidCallback onPick;
 
+  /// Secondary action: hold OK (TV) or long-press. Null = plain row.
+  final VoidCallback? onHold;
+
+  /// Caption revealed on the focused row when [onHold] is wired.
+  final String? holdHint;
+
   const _LazyPickerRow({
     required this.label,
     required this.selected,
     required this.autofocus,
     required this.onPick,
     this.indented = false,
+    this.onHold,
+    this.holdHint,
   });
 
   @override
@@ -699,12 +773,81 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
   bool _focused = false;
   bool _hovered = false;
 
+  /// The house hold length — the same 500ms the channel rows use for
+  /// hold-OK, so one gesture is learned once.
+  static const _holdDuration = Duration(milliseconds: 500);
+
+  /// A Timer rather than an AnimationController: these rows are built lazily
+  /// by the hundred on weak TV boxes, and a per-row ticker to drive a fill
+  /// animation is not worth what it costs there.
+  Timer? _holdTimer;
+
+  /// Whether the key-up being handled belongs to a key-down THIS row saw.
+  /// Holdable rows pick on key-UP (that is what tells a press from a hold),
+  /// so a stray key-up arriving after focus moved must not select.
+  bool _sawSelectDown = false;
+  bool _holdFired = false;
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startHold() {
+    _holdFired = false;
+    _holdTimer?.cancel();
+    _holdTimer = Timer(_holdDuration, () {
+      _holdFired = true;
+      _sawSelectDown = false;
+      widget.onHold?.call();
+    });
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+  }
+
+  KeyEventResult _handleSelectKey(KeyEvent event) {
+    // No hold action → the original behaviour: pick on key-down.
+    if (widget.onHold == null) {
+      if (event is KeyDownEvent) {
+        widget.onPick();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent) {
+      _sawSelectDown = true;
+      _startHold();
+      return KeyEventResult.handled;
+    }
+    if (event is KeyUpEvent) {
+      _cancelHold();
+      final wasPress = _sawSelectDown && !_holdFired;
+      _sawSelectDown = false;
+      _holdFired = false;
+      if (wasPress) widget.onPick();
+      return KeyEventResult.handled;
+    }
+    // Swallow auto-repeat while the key is held down.
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Focus(
       autofocus: widget.autofocus,
       onFocusChange: (f) {
         setState(() => _focused = f);
+        // Focus leaving mid-press abandons the hold: the key-up will land
+        // somewhere else, and a timer that fires afterwards would act on a
+        // row the user is no longer on.
+        if (!f) {
+          _cancelHold();
+          _sawSelectDown = false;
+        }
         if (f) {
           // Keep the focused row centered as DPAD walks the lazy viewport
           // (same recenter-on-focus grammar as the channel rows).
@@ -716,11 +859,9 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
         }
       },
       onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (isActivateKey(event.logicalKey) ||
             event.logicalKey == LogicalKeyboardKey.space) {
-          widget.onPick();
-          return KeyEventResult.handled;
+          return _handleSelectKey(event);
         }
         return KeyEventResult.ignored;
       },
@@ -730,6 +871,10 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onPick,
+          // Touch/desktop counterpart of TV's hold-OK. The row had no
+          // long-press before, so this adds a gesture rather than
+          // reinterpreting one.
+          onLongPress: widget.onHold,
           behavior: HitTestBehavior.opaque,
           child: Container(
             padding: EdgeInsets.only(
@@ -760,6 +905,24 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
                     ),
                   ),
                 ),
+                // The hold gesture is invisible without a caption, so the
+                // focused (or hovered) row spells it out. Only there: on
+                // every row at once it would read as part of every label.
+                if (widget.onHold != null &&
+                    widget.holdHint != null &&
+                    (_focused || _hovered))
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      widget.holdHint!,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                  ),
                 if (widget.selected)
                   const Icon(
                     Icons.check_rounded,

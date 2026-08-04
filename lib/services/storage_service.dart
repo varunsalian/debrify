@@ -168,6 +168,7 @@ class StorageService {
   static const String _playerNightModeIndexKey = 'player_night_mode_index';
   static const String _playerSystemAudioEffectsKey =
       'player_system_audio_effects';
+  static const String _playerStartPortraitKey = 'player_start_portrait';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
   static const String _playerDefaultAudioLanguageKey =
@@ -259,6 +260,8 @@ class StorageService {
   static const String _defaultFilterLanguagesKey =
       'default_filter_languages_v1';
   static const String _defaultFilterSizesKey = 'default_filter_sizes_v1';
+  static const String _defaultFilterDynamicRangesKey =
+      'default_filter_dynamic_ranges_v1';
   static const String _quickPlayHonorsFiltersKey =
       'quick_play_honors_filters_v1';
 
@@ -411,6 +414,39 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('tv_keyboard_enabled', enabled);
     tvKeyboardEnabledCached = enabled;
+  }
+
+  /// Android TV screen size, as a percentage of the panel's native density.
+  ///
+  /// A 1080p TV at density 320 gives Flutter a 960x540 logical canvas, so
+  /// every screen is drawn 2x and reads as "zoomed in" across a big panel.
+  /// A value below 100 makes MainActivity report a proportionally smaller
+  /// devicePixelRatio to the engine, which widens the logical canvas (80% ->
+  /// 1200x675) so the same layouts fit more and draw smaller — no per-screen
+  /// changes involved.
+  ///
+  /// Read natively from `flutter.tv_ui_scale_percent` BEFORE the Flutter
+  /// engine is built, so a change only takes effect on the next cold start.
+  /// Android TV only; ignored everywhere else.
+  ///
+  /// [kTvUiScaleDefault] is 90: at 100 the app reads noticeably larger than
+  /// the TV apps people compare it to (Stremio's web-rendered UI lays out
+  /// against a canvas far closer to 1920 than to 960), while 80 ran a touch
+  /// small for the Canvas-era layouts — Medium is the out-of-the-box balance
+  /// and both neighbours are one tap away. MUST stay in step with
+  /// MainActivity's `computeUiScale` fallback.
+  static const List<int> kTvUiScaleOptions = [100, 90, 80];
+  static const int kTvUiScaleDefault = 90;
+
+  static Future<int> getTvUiScalePercent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getInt('tv_ui_scale_percent');
+    return kTvUiScaleOptions.contains(stored) ? stored! : kTvUiScaleDefault;
+  }
+
+  static Future<void> setTvUiScalePercent(int percent) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('tv_ui_scale_percent', percent);
   }
 
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,
@@ -590,6 +626,82 @@ class StorageService {
     );
   }
 
+  static const String _tvHomeStyleKey = 'tv_home_style';
+
+  /// TV Home layout: 'canvas' (full-bleed stage + one bottom shelf, the
+  /// default) or 'classic' (hero + scrolling rows). Phone/desktop and the
+  /// Search tab never read it. Unset — and any stale value like the removed
+  /// 'shelf' — coerces to 'canvas'; only an explicit 'classic' keeps classic.
+  static Future<String> getTvHomeStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_tvHomeStyleKey);
+    return raw == 'classic' ? 'classic' : 'canvas';
+  }
+
+  static Future<void> setTvHomeStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _tvHomeStyleKey,
+      style == 'classic' ? 'classic' : 'canvas',
+    );
+  }
+
+  static const String _discoverLayoutKey = 'discover_layout';
+
+  /// TV Discover layout: 'stage' (the focused title full-bleed with one bottom
+  /// shelf, the default) or 'grid' (the detail rail beside a poster wall). Its
+  /// own key, deliberately NOT shared with [getTvHomeStyle]: Home's Canvas
+  /// switches rails with UP/DOWN and Discover's Stage owns a filter line —
+  /// neither layout has the other's axis, so one pref governing both would
+  /// promise a symmetry they can't keep. Phone/desktop never read it.
+  ///
+  /// Unset reads as 'stage', so users who never opened the picker move to it.
+  /// Everything else that holds a pre-load placeholder for this pref must
+  /// agree, or the UI paints one layout and then swaps: SearchScreen's
+  /// `_discLayoutCached`, DiscoverLayoutPage, SettingsScreen.
+  static Future<String> getDiscoverLayout() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_discoverLayoutKey) == 'grid' ? 'grid' : 'stage';
+  }
+
+  /// Normalizes toward 'stage' on the same terms [getDiscoverLayout] does —
+  /// an unrecognized value has to mean the default on BOTH sides, or writing
+  /// one would silently pin the layout the reader treats as the exception.
+  static Future<void> setDiscoverLayout(String layout) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _discoverLayoutKey,
+      layout == 'grid' ? 'grid' : 'stage',
+    );
+  }
+
+  static const String _tvSidebarStyleKey = 'tv_sidebar_style';
+  static const Set<String> _tvSidebarStyles = {
+    'classic',
+    'ghost',
+    'island',
+    'marquee',
+    'badge',
+  };
+
+  /// TV sidebar chrome: 'ghost' (chromeless, the default), 'classic' (the
+  /// original liquid glass), 'island', 'marquee' or 'badge'. Visuals only —
+  /// the LEFT-only focus model is shared by every style. Phone/desktop never
+  /// read it.
+  static Future<String> getTvSidebarStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_tvSidebarStyleKey);
+    return (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
+  }
+
+  static Future<void> setTvSidebarStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _tvSidebarStyleKey,
+      _tvSidebarStyles.contains(style) ? style : 'ghost',
+    );
+  }
+
   /// The classic bar's user-chosen middle slots, as REAL tab indices (Home
   /// and More are fixed anchors and never stored). Null = never customized
   /// (defaults apply); an explicit short list is a deliberate choice and the
@@ -606,10 +718,9 @@ class StorageService {
 
   static Future<void> setPhoneNavBarIndices(List<int> indices) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _phoneNavBarIndicesKey,
-      [for (final i in indices) '$i'],
-    );
+    await prefs.setStringList(_phoneNavBarIndicesKey, [
+      for (final i in indices) '$i',
+    ]);
   }
 
   static Future<bool> getRealDebridHiddenFromNav() async {
@@ -2568,6 +2679,7 @@ class StorageService {
     await prefs.remove(_defaultFilterRipSourcesKey);
     await prefs.remove(_defaultFilterLanguagesKey);
     await prefs.remove(_defaultFilterSizesKey);
+    await prefs.remove(_defaultFilterDynamicRangesKey);
     await prefs.remove(_defaultTorrentProviderKey);
   }
 
@@ -3221,6 +3333,29 @@ class StorageService {
   static const double _iptvWatchStartedFraction = 0.02;
   static const double iptvWatchFinishedFraction = 0.95;
 
+  /// Whether on-demand IPTV playback feeds the Continue Watching shelves at
+  /// all. Off is enforced at BOTH ends — nothing new is recorded, and whatever
+  /// is already stored is filtered out of [getIptvContinueWatching] — so the
+  /// shelves empty out immediately without deleting anything: turning it back
+  /// on restores the rows that were there.
+  ///
+  /// Deliberately does NOT touch playback positions. Those live in the
+  /// separate video-resume store, which the players write directly and which
+  /// backs both resuming a movie where you left off and the progress bars on
+  /// VOD/episode cards — all of that keeps working with tracking off.
+  static const String _iptvTrackContinueWatchingKey =
+      'iptv_track_continue_watching';
+
+  static Future<bool> getIptvTrackContinueWatching() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_iptvTrackContinueWatchingKey) ?? true;
+  }
+
+  static Future<void> setIptvTrackContinueWatching(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_iptvTrackContinueWatchingKey, value);
+  }
+
   /// Remember that an on-demand IPTV item was played, capturing enough
   /// metadata to rebuild its row without re-fetching the panel — the same
   /// trick [setIptvChannelFavorited] uses, and necessary for the same reason:
@@ -3231,6 +3366,12 @@ class StorageService {
   /// already write it to the shared video-resume store keyed by stream URL,
   /// and copying it would hand the shelf a second, staler truth to disagree
   /// with; [getIptvContinueWatching] joins the two at read time instead.
+  ///
+  /// A no-op when [getIptvTrackContinueWatching] is off. Gating here rather
+  /// than at each caller is deliberate: this is the single funnel every
+  /// on-demand play goes through — both players, the IPTV page, the series
+  /// page, the Home shelf, and the native TV player's bridge hop — and live
+  /// channels never reach it.
   static Future<void> recordIptvWatch(
     String channelUrl, {
     String? channelName,
@@ -3247,7 +3388,8 @@ class StorageService {
     int? season,
     int? episode,
     bool? hasNextEpisode,
-  }) {
+  }) async {
+    if (!await getIptvTrackContinueWatching()) return;
     return IptvMediaStore.recordWatch(
       channelUrl,
       channelName: channelName,
@@ -3284,6 +3426,10 @@ class StorageService {
   /// Each entry is the stored metadata plus `url`, `positionMs`, `durationMs`
   /// and `progress` (0-1).
   static Future<List<Map<String, dynamic>>> getIptvContinueWatching() async {
+    // Tracking off hides the shelf everywhere at once: Home's two IPTV rows,
+    // the IPTV page's virtual `continue://` playlist (which already drops
+    // itself when this comes back empty), and the command rail's count.
+    if (!await getIptvTrackContinueWatching()) return [];
     final history = await getIptvWatchHistory();
     if (history.isEmpty) return [];
 
@@ -4804,6 +4950,21 @@ class StorageService {
     await prefs.setString(_defaultFilterSizesKey, jsonEncode(sizes));
   }
 
+  static Future<List<String>> getDefaultFilterDynamicRanges() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_defaultFilterDynamicRangesKey);
+    if (json == null) return [];
+    return List<String>.from(jsonDecode(json));
+  }
+
+  static Future<void> setDefaultFilterDynamicRanges(List<String> ranges) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _defaultFilterDynamicRangesKey,
+      jsonEncode(ranges),
+    );
+  }
+
   // Debrify TV Filter Settings — scoped to Debrify TV only, deliberately
   // separate from the Search tab's default filters above so tuning a channel
   // feed never changes search behaviour (and vice versa).
@@ -5299,6 +5460,33 @@ class StorageService {
   static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
+  }
+
+  /// Whether the phone player OPENS upright instead of turning the handset
+  /// landscape for you. Off by default — a video wants the long edge, and that
+  /// is what the player has always done. On, it opens portrait and the
+  /// player's own Portrait/Landscape button is how the user turns it.
+  /// Phone-only: a TV has no portrait and a desktop window ignores this
+  /// entirely.
+  ///
+  /// [playerStartPortraitCached] mirrors it for SYNCHRONOUS reads. The player
+  /// commits its orientation while building, so an async read there would set
+  /// landscape and correct it a frame later — performing the exact flip this
+  /// setting exists to prevent. Warmed in main() before runApp (the IPTV
+  /// startup channel can open a player on the first frame) and kept in sync by
+  /// the setter.
+  static bool playerStartPortraitCached = false;
+
+  static Future<bool> getPlayerStartPortrait() async {
+    final prefs = await SharedPreferences.getInstance();
+    playerStartPortraitCached = prefs.getBool(_playerStartPortraitKey) ?? false;
+    return playerStartPortraitCached;
+  }
+
+  static Future<void> setPlayerStartPortrait(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_playerStartPortraitKey, enabled);
+    playerStartPortraitCached = enabled;
   }
 
   /// Get default subtitle language code

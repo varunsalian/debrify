@@ -659,6 +659,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
   int _minTorrentsPerKeyword = 10;
   int _maxKeywords = 5;
   bool _avoidNsfw = true;
+  bool _backgroundPrefetchEnabled = true;
 
   // Per-engine TV settings
   final Map<String, bool> _engineTvEnabled = {};
@@ -701,6 +702,8 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
       );
       _maxKeywords = await _settings.getGlobalMaxKeywords(5);
       _avoidNsfw = await _settings.getGlobalAvoidNsfw(true);
+      _backgroundPrefetchEnabled = await _settings
+          .getGlobalBackgroundPrefetchEnabled();
 
       // Load per-engine TV settings
       for (final config in _tvEnabledEngines) {
@@ -917,6 +920,24 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                 await _settings.setGlobalAvoidNsfw(value);
                 setState(() {
                   _avoidNsfw = value;
+                });
+                widget.onSettingsChanged?.call();
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            // Background torrent prefetch
+            _buildGlobalToggleSetting(
+              label: 'Prepare Torrents in Background',
+              subtitle:
+                  'Add upcoming Real-Debrid and AllDebrid torrents for faster playback',
+              value: _backgroundPrefetchEnabled,
+              icon: Icons.cloud_sync_rounded,
+              onChanged: (value) async {
+                await _settings.setGlobalBackgroundPrefetchEnabled(value);
+                setState(() {
+                  _backgroundPrefetchEnabled = value;
                 });
                 widget.onSettingsChanged?.call();
               },

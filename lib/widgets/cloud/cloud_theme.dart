@@ -72,7 +72,15 @@ class CloudScaffold extends StatelessWidget {
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: appBar,
-          body: body,
+          // With an [appBar] the Scaffold already pushes the body clear of the
+          // status bar; without one it does NOT, and these pages put their own
+          // floating toolbar at the very top of the body — so on a pushed
+          // provider route it landed under the status bar (dead to touch on
+          // iOS, which reserves that strip). Inside the bottom-nav tab the
+          // outer SafeArea has already consumed the inset, so this is a no-op
+          // there. Top only: the bottom inset is managed by the nav-bar layout
+          // in main.dart and must not be applied a second time here.
+          body: appBar == null ? SafeArea(bottom: false, child: body) : body,
         ),
       ),
     );

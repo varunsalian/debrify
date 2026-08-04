@@ -4,6 +4,18 @@ import 'package:flutter/foundation.dart';
 
 enum QualityTier { ultraHd, fullHd, hd, sd }
 
+/// A release's dynamic range, as read off its name.
+///
+/// Two values, not one per HDR flavour: the question this answers is "can my
+/// display show this properly", and Dolby Vision, HDR10, HDR10+ and HLG all
+/// answer it the same way. Picking [sdr] alone is the "exclude HDR" the
+/// feature request asked for; picking both (or neither) filters nothing.
+///
+/// [sdr] is the ABSENCE of an HDR tag, so it is a guess in a way the other
+/// facets aren't: a release that is HDR but doesn't say so reads as SDR. Same
+/// name-based limitation the language facet already carries.
+enum DynamicRange { sdr, hdr }
+
 enum RipSourceCategory { web, bluRay, hdrip, dvdrip, cam, other }
 
 enum AudioLanguage {
@@ -67,40 +79,47 @@ class TorrentFilterState {
   final Set<RipSourceCategory> ripSources;
   final Set<AudioLanguage> languages;
   final Set<SizeBucket> sizes;
+  final Set<DynamicRange> dynamicRanges;
 
   TorrentFilterState({
     Set<QualityTier> qualities = const <QualityTier>{},
     Set<RipSourceCategory> ripSources = const <RipSourceCategory>{},
     Set<AudioLanguage> languages = const <AudioLanguage>{},
     Set<SizeBucket> sizes = const <SizeBucket>{},
+    Set<DynamicRange> dynamicRanges = const <DynamicRange>{},
   })  : qualities = _freeze(qualities),
         ripSources = _freeze(ripSources),
         languages = _freeze(languages),
-        sizes = _freeze(sizes);
+        sizes = _freeze(sizes),
+        dynamicRanges = _freeze(dynamicRanges);
 
   const TorrentFilterState.empty()
       : qualities = const <QualityTier>{},
         ripSources = const <RipSourceCategory>{},
         languages = const <AudioLanguage>{},
-        sizes = const <SizeBucket>{};
+        sizes = const <SizeBucket>{},
+        dynamicRanges = const <DynamicRange>{};
 
   bool get isEmpty =>
       qualities.isEmpty &&
       ripSources.isEmpty &&
       languages.isEmpty &&
-      sizes.isEmpty;
+      sizes.isEmpty &&
+      dynamicRanges.isEmpty;
 
   TorrentFilterState copyWith({
     Set<QualityTier>? qualities,
     Set<RipSourceCategory>? ripSources,
     Set<AudioLanguage>? languages,
     Set<SizeBucket>? sizes,
+    Set<DynamicRange>? dynamicRanges,
   }) {
     return TorrentFilterState(
       qualities: qualities ?? this.qualities,
       ripSources: ripSources ?? this.ripSources,
       languages: languages ?? this.languages,
       sizes: sizes ?? this.sizes,
+      dynamicRanges: dynamicRanges ?? this.dynamicRanges,
     );
   }
 
@@ -111,7 +130,8 @@ class TorrentFilterState {
         setEquals(other.qualities, qualities) &&
         setEquals(other.ripSources, ripSources) &&
         setEquals(other.languages, languages) &&
-        setEquals(other.sizes, sizes);
+        setEquals(other.sizes, sizes) &&
+        setEquals(other.dynamicRanges, dynamicRanges);
   }
 
   @override
@@ -120,6 +140,9 @@ class TorrentFilterState {
     Object.hashAll(ripSources.toList()..sort((a, b) => a.index - b.index)),
     Object.hashAll(languages.toList()..sort((a, b) => a.index - b.index)),
     Object.hashAll(sizes.toList()..sort((a, b) => a.index - b.index)),
+    Object.hashAll(
+      dynamicRanges.toList()..sort((a, b) => a.index - b.index),
+    ),
   );
 }
 

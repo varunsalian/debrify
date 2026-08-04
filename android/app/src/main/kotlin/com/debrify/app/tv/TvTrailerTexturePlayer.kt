@@ -43,8 +43,8 @@ import io.flutter.view.TextureRegistry
  *    `getTransparencyMode` / `trailerUnderlayContainer`). The video becomes its
  *    own hardware overlay plane — Flutter never touches the frames — and shows
  *    through wherever the Dart side punches a transparent hole in its UI.
- *    `setBounds` positions the view (LOGICAL px on the wire — Flutter logical
- *    == Android dp — converted here with this side's display density).
+ *    `setBounds` positions the view (LOGICAL px on the wire, converted here
+ *    with this side's display density and the TV screen-size factor).
  *
  * Both modes reuse the fullscreen [AndroidTvTorrentPlayerActivity]'s proven
  * video-only + audio [MergingMediaSource] merge for high-res YouTube — that
@@ -66,6 +66,11 @@ class TvTrailerTexturePlayer(
      *  underlay SurfaceViews; null when the host can't offer one (underlay
      *  create then fails and the Dart side stays on its poster). */
     private val underlayHost: () -> FrameLayout?,
+    /** MainActivity's TV screen-size factor (<1.0 shrinks the UI by handing
+     *  Flutter a larger logical canvas). Logical px are then no longer 1:1
+     *  with dp, so [setBounds] must fold it into the conversion or the video
+     *  lands oversized and offset. 1.0 = default size / every other device. */
+    private val uiScale: Float = 1f,
 ) : MethodChannel.MethodCallHandler {
 
     private val channel = MethodChannel(messenger, CHANNEL)
@@ -365,15 +370,17 @@ class TvTrailerTexturePlayer(
         }
     }
 
-    /** Position an underlay SurfaceView. Bounds arrive in LOGICAL px
-     *  (Flutter logical == Android dp) and are converted to window px with
-     *  THIS side's display density — deliberately not Flutter's
-     *  devicePixelRatio, which is scaled down under low-res rendering on
-     *  weak-GPU TVs while the window stays in real display space.
+    /** Position an underlay SurfaceView. Bounds arrive in LOGICAL px and are
+     *  converted to window px with THIS side's display density — deliberately
+     *  not Flutter's devicePixelRatio, which is scaled down under low-res
+     *  rendering on weak-GPU TVs while the window stays in real display space.
+     *  [uiScale] restores the logical→dp identity when the TV screen-size
+     *  setting has widened Flutter's logical canvas (window px = logical ×
+     *  density × uiScale; at the default 1.0 this is the plain density).
      *  No-op for texture players and for unchanged rects. */
     private fun setBounds(call: MethodCall) {
         val sv = handle(call)?.surfaceView ?: return
-        val d = sv.resources.displayMetrics.density
+        val d = sv.resources.displayMetrics.density * uiScale
         val left = call.argument<Number>("left")?.let { Math.round(it.toFloat() * d) } ?: return
         val top = call.argument<Number>("top")?.let { Math.round(it.toFloat() * d) } ?: return
         val width = call.argument<Number>("width")?.let { Math.round(it.toFloat() * d) } ?: return

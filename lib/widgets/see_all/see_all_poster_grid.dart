@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../catalog_item_tile.dart';
+import 'discover_shelf_scope.dart';
 import 'see_all_theme.dart';
 
 /// The single source of truth for a See-All poster grid's layout maths: column
@@ -83,6 +84,12 @@ class SeeAllGridMetrics {
 /// controller, walks the grid with the DPAD on TV, and asks for the next page
 /// as the user nears the bottom.
 ///
+/// Under a [DiscoverShelfScope] (the Discover STAGE layout) the very same
+/// widget lays its items out as ONE bottom shelf instead of a wall: same
+/// items, same focus-node pool, same paging — a different arrangement of them.
+/// Everything a host configures (exit-top, exit-left, load-more) means the
+/// same thing in both, so no caller has to care which is on screen.
+///
 /// The grid stays presentational — paging state ([loadingMore] / [exhausted])
 /// and the item list are owned by the host screen, which calls back through
 /// [onLoadMore] and rebuilds with more [items].
@@ -151,8 +158,22 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
   final ScrollController _scroll = ScrollController();
   final List<FocusNode> _nodes = [];
 
-  // Distance from the bottom (px) at which we prefetch the next page.
+  /// Shelf layout (Discover stage) when non-null; the poster wall otherwise.
+  /// Read in [didChangeDependencies] so the key handlers — which run outside
+  /// build — can branch on it without another context lookup.
+  DiscoverShelfMetrics? _shelf;
+
+  /// Which item the DPAD is on, for the shelf's position line. A notifier, not
+  /// setState: on TV this changes on every arrow press, and rebuilding the
+  /// whole shelf to re-letter one caption is exactly the per-keystroke work
+  /// the board layouts avoid.
+  final ValueNotifier<int> _focusIndex = ValueNotifier(-1);
+
+  // Distance from the end (px) at which we prefetch the next page. The shelf
+  // scrolls sideways through a single row, so its runway is much shorter than
+  // the wall's — the same 900px there would prefetch from the first card.
   static const double _loadMoreThreshold = 900;
+  static const double _shelfLoadMoreThreshold = 600;
 
   @override
   void initState() {
@@ -163,9 +184,22 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _shelf = DiscoverShelfScope.of(context);
+  }
+
+  @override
   void didUpdateWidget(covariant SeeAllPosterGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.items.length != _nodes.length) _syncNodes();
+    // A reload (filter change) can leave the shelf's remembered position past
+    // the end of the new list; follow _syncNodes and fall back to the last
+    // surviving card, so re-entry from the filter bar still lands on content.
+    if (widget.items.length < oldWidget.items.length &&
+        _focusIndex.value >= widget.items.length) {
+      _focusIndex.value = widget.items.isEmpty ? -1 : widget.items.length - 1;
+    }
     // A short first page (e.g. a niche genre) may not fill the viewport, so no
     // scroll events fire and pagination would stall on non-TV. Keep pulling
     // pages until the content overflows or the catalog is exhausted — the grid's
@@ -187,6 +221,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
   void dispose() {
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
+    _focusIndex.dispose();
     for (final n in _nodes) {
       n.dispose();
     }
@@ -215,16 +250,89 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
+    final threshold =
+        _shelf == null ? _loadMoreThreshold : _shelfLoadMoreThreshold;
     if (_scroll.position.pixels >=
-        _scroll.position.maxScrollExtent - _loadMoreThreshold) {
+        _scroll.position.maxScrollExtent - threshold) {
       widget.onLoadMore();
     }
   }
 
-  /// Move DPAD focus onto the first tile (used when entering from the filter
-  /// bar). No-op if the grid is empty.
+  /// Move DPAD focus back into the results (used when entering from the filter
+  /// bar). No-op if there's nothing to focus.
+  ///
+  /// The SHELF re-enters on the card the user left, not on item 0. Its UP is a
+  /// one-press exit from ANY position and doesn't rewind the row, so after a
+  /// dozen steps item 0 is far outside the built range — and requestFocus on
+  /// an unbuilt tile's detached node is a silent no-op that ALSO latches a
+  /// stray focus grab for whenever that tile next mounts (a later reload then
+  /// yanks the ring out of the filter bar with no keypress). The filter bar
+  /// swallows the key either way, so the visible result is a dead DOWN. The
+  /// wall can't hit this: its UP walks row by row, scrolling item 0 back into
+  /// view on the way.
   void focusFirst() {
-    if (_nodes.isNotEmpty) _nodes.first.requestFocus();
+    if (_nodes.isEmpty) return;
+    if (_shelf != null) {
+      final i = _focusIndex.value;
+      if (i >= 0 && i < _nodes.length && _isBuilt(_nodes[i])) {
+        _nodes[i].requestFocus();
+        return;
+      }
+      // Nothing remembered, or it went with a reload: rewind so the head is
+      // built, then take it on the next frame.
+      if (_scroll.hasClients && _scroll.offset > 0) {
+        _scroll.jumpTo(0);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _nodes.isNotEmpty) _nodes.first.requestFocus();
+        });
+        return;
+      }
+    }
+    _nodes.first.requestFocus();
+  }
+
+  /// Whether [node]'s tile is actually mounted — the only state in which
+  /// requestFocus does anything.
+  bool _isBuilt(FocusNode node) => node.context?.mounted ?? false;
+
+  /// Shelf DPAD: LEFT/RIGHT walk the results, UP leaves for the filter line,
+  /// DOWN is swallowed (there is nothing under the shelf, and letting it bubble
+  /// hands focus to whatever the app shell has down there). RIGHT at the tail
+  /// pulls the next page rather than dead-ending — the shelf's equivalent of
+  /// scrolling into the wall's last rows.
+  KeyEventResult _handleShelfArrows(int index, KeyEvent event) {
+    if (!widget.isTelevision || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    final last = widget.items.length - 1;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (index > 0) {
+        _nodes[index - 1].requestFocus();
+      } else {
+        widget.onExitLeft?.call();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (index < last) {
+        _nodes[index + 1].requestFocus();
+        // Prefetch while there's still runway, so the next batch lands before
+        // the user arrives rather than after they've stalled at the end.
+        if (index + 1 >= last - 2) widget.onLoadMore();
+      } else {
+        widget.onLoadMore();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      widget.onExitTop?.call();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   KeyEventResult _handleArrows(int index, int cols, KeyEvent event) {
@@ -267,8 +375,138 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
     return KeyEventResult.ignored;
   }
 
+  /// The STAGE shelf: one row of posters pinned to the bottom of the box the
+  /// host gave us, with a position line above it. No per-poster title band —
+  /// the identity block on the stage names the focused title at full size, and
+  /// a caption under every card would just repeat it smaller.
+  Widget _buildShelf(DiscoverShelfMetrics m) {
+    final items = widget.items;
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: m.hPad),
+            child: SizedBox(
+              height: DiscoverShelfMetrics.headHeight,
+              child: Row(
+                children: [
+                  if (widget.loadingMore)
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.6,
+                        valueColor: AlwaysStoppedAnimation<Color>(kSeeAllAccent),
+                      ),
+                    ),
+                  const Spacer(),
+                  // Where you are in the list — the sense of place the wall's
+                  // second row used to give for free. The total is what's
+                  // LOADED, so it wears a "+" until the catalog is exhausted
+                  // rather than implying a count nobody knows.
+                  ValueListenableBuilder<int>(
+                    valueListenable: _focusIndex,
+                    builder: (_, i, __) {
+                      if (i < 0 || items.isEmpty) return const SizedBox.shrink();
+                      final at = (i + 1).clamp(1, items.length);
+                      return Text(
+                        '$at / ${items.length}${widget.exhausted ? '' : '+'}',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          // This line sits at the far RIGHT of the stage,
+                          // where the left column's ink has fully dissolved
+                          // and only the bottom ramp's tail is under it —
+                          // the one place on this layout where text meets
+                          // near-bare artwork. Same tight shadow the plot
+                          // uses, for the same reason.
+                          shadows: const [
+                            Shadow(
+                              color: Color(0xBF000000),
+                              blurRadius: 3,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: DiscoverShelfMetrics.headGap),
+          SizedBox(
+            height: m.boxHeight,
+            child: ListView.builder(
+              controller: _scroll,
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.hardEdge,
+              // ~1.5 cards of lookahead, matching the wall's reasoning: a
+              // DPAD target must already be built, since requestFocus on an
+              // unbuilt tile's detached node is a silent no-op (dead DPAD).
+              cacheExtent: 400,
+              padding: EdgeInsets.symmetric(horizontal: m.hPad),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 7),
+                  // Centred in the slack so the board rise's lift isn't
+                  // clipped at the viewport's top edge.
+                  child: Center(
+                    child: SizedBox(
+                      width: m.cardWidth,
+                      height: m.cardHeight,
+                      child: Focus(
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        onKeyEvent: (_, e) => _handleShelfArrows(index, e),
+                        child: CatalogItemTile(
+                          item: item,
+                          isTelevision: widget.isTelevision,
+                          focusNode:
+                              index < _nodes.length ? _nodes[index] : null,
+                          hasBoundSource: widget.isBound?.call(item) ?? false,
+                          onOpen: () => widget.onOpen(item),
+                          onLongPress: widget.onQuickPlay == null
+                              ? null
+                              : () => widget.onQuickPlay!(item),
+                          onFocused: () {
+                            _focusIndex.value = index;
+                            widget.onItemFocused?.call(item);
+                          },
+                          progress: widget.progressOf?.call(item),
+                          showInlineTitle: false,
+                          showTypeBadge: widget.showTypeBadge,
+                          showRatingBadge: widget.showRatingBadge,
+                          // The stage sits beside the Home board and has to
+                          // move like it: the board's rise, the board's poster
+                          // fade, and a glide instead of a jump.
+                          boardChrome: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: DiscoverShelfMetrics.tail),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final shelf = _shelf;
+    if (shelf != null) return _buildShelf(shelf);
     final m = SeeAllGridMetrics.resolve(context, isTelevision: widget.isTelevision);
     final cols = m.columns;
     final titleH = m.titleHeight;

@@ -158,7 +158,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const SettingsPageScaffold(
-        title: 'Provider Settings',
+        title: 'Default Provider',
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -171,7 +171,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
         _pikpakAvailable;
 
     return SettingsPageScaffold(
-      title: 'Provider Settings',
+      title: 'Default Provider',
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: SingleChildScrollView(
@@ -184,7 +184,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
                 children: [
                   const SettingsPageHeader(
                     icon: Icons.cloud_sync_rounded,
-                    title: 'Provider Settings',
+                    title: 'Default Provider',
                     subtitle: 'Configure default provider for adding torrents',
                   ),
                   const SizedBox(height: 24),

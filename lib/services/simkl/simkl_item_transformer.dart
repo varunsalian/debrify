@@ -107,7 +107,32 @@ class SimklItemTransformer {
       year: year,
       imdbRating: rating,
       genres: genres,
+      addedAtMs: rowDateMs(raw),
     );
+  }
+
+  /// Epoch-ms of the date the WRAPPER row carries, or null for the flat shapes
+  /// (best/premieres/trending/genre) that are catalogue rows rather than the
+  /// user's own.
+  ///
+  /// `added_to_watchlist_at` is the one the user means by "date added" — it is
+  /// set when the title enters the list and does not move when they watch or
+  /// rate it. The other two are fallbacks for rows that predate it or come
+  /// from `/sync/ratings`.
+  static int? rowDateMs(Map<String, dynamic> row) {
+    const fields = [
+      'added_to_watchlist_at',
+      'user_rated_at',
+      'last_watched_at',
+    ];
+    for (final f in fields) {
+      final v = row[f];
+      if (v is String) {
+        final t = DateTime.tryParse(v);
+        if (t != null) return t.millisecondsSinceEpoch;
+      }
+    }
+    return null;
   }
 
   /// Simkl's poster/fanart fields are a bare CDN path/hash (e.g.

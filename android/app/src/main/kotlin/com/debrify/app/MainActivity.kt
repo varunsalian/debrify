@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.UiModeManager
@@ -39,6 +40,19 @@ class MainActivity : FlutterActivity() {
 	// ── SAF download-folder picker ──────────────────────────────────────────
 	private val REQUEST_PICK_DOWNLOAD_DIR = 51423
 	private var pendingDirPickResult: MethodChannel.Result? = null
+
+	// ── TV voice dictation (in-app SpeechRecognizer) ────────────────────────
+	// Deliberately NOT the ACTION_RECOGNIZE_SPEECH activity: that hands the
+	// screen to a system voice UI, which pauses us (trailer/playback lifecycle)
+	// and drops a foreign text box over the Debrify keyboard. We bind the
+	// recognition SERVICE instead and stream its events to Dart, so the whole
+	// listening state is drawn inside our own keyboard panel.
+	private val VOICE_CHANNEL = "debrify/tv_voice"
+	private val VOICE_EVENTS = "debrify/tv_voice_events"
+	private val recordAudioPermissionRequestCode = 7404
+	private var pendingVoicePermissionResult: MethodChannel.Result? = null
+	private var speechRecognizer: android.speech.SpeechRecognizer? = null
+	private var voiceEvents: EventChannel.EventSink? = null
 
 	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
 		if (requestCode == REQUEST_PICK_DOWNLOAD_DIR) {
@@ -237,6 +251,127 @@ class MainActivity : FlutterActivity() {
                 pendingNotificationPermissionResult?.success(granted)
                 pendingNotificationPermissionResult = null
             }
+            recordAudioPermissionRequestCode -> {
+                // (see below for the capture engine these two feed)
+                // Unlike notifications, this one is asked EVERY time the mic
+                // key is pressed without the grant: it's a deliberate,
+                // user-initiated action and the feature simply cannot run
+                // without it. Android itself stops showing the dialog once the
+                // user has permanently declined, and the deny path just leaves
+                // the keyboard as it was.
+                pendingVoicePermissionResult?.success(granted)
+                pendingVoicePermissionResult = null
+            }
+        }
+    }
+
+    // ── Voice capture engine ────────────────────────────────────────────────
+
+    /** Last level frame sent to Dart. [android.speech.RecognitionListener.onRmsChanged]
+     *  fires far faster than a TV can usefully animate, and every frame is a
+     *  platform-channel hop plus a Flutter rebuild — throttled to ~10/s. */
+    private var lastVoiceLevelAt = 0L
+
+    /** Emits one voice event to Dart. Main thread only — every recognition
+     *  callback already arrives there. */
+    private fun emitVoice(type: String, data: Map<String, Any?> = emptyMap()) {
+        val sink = voiceEvents ?: return
+        val payload = HashMap<String, Any?>(data)
+        payload["type"] = type
+        runCatching { sink.success(payload) }
+    }
+
+    /** Tears the session down. Safe to call at any time, including when
+     *  nothing is listening. */
+    private fun destroyVoiceCapture() {
+        val recognizer = speechRecognizer
+        speechRecognizer = null
+        if (recognizer != null) {
+            runCatching { recognizer.cancel() }
+            runCatching { recognizer.destroy() }
+        }
+    }
+
+    /** Destroy AFTER the current callback returns — destroying a recognizer
+     *  from inside its own listener is how you get a half-torn-down service. */
+    private fun destroyVoiceCaptureDeferred() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post { destroyVoiceCapture() }
+    }
+
+    /** One recognizer per dictation, destroyed when it ends. Holding a single
+     *  instance across sessions is the classic route to a permanently
+     *  ERROR_RECOGNIZER_BUSY mic on Google's implementation. */
+    private fun startVoiceCapture(locale: String?) {
+        destroyVoiceCapture()
+        lastVoiceLevelAt = 0L
+        val recognizer = runCatching {
+            android.speech.SpeechRecognizer.createSpeechRecognizer(this)
+        }.getOrNull()
+        if (recognizer == null) {
+            emitVoice("error", mapOf("code" to -1, "message" to "no recognizer"))
+            return
+        }
+        speechRecognizer = recognizer
+        recognizer.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) = emitVoice("ready")
+            override fun onBeginningOfSpeech() = emitVoice("speech")
+
+            override fun onRmsChanged(rmsdB: Float) {
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - lastVoiceLevelAt < 100) return
+                lastVoiceLevelAt = now
+                emitVoice("level", mapOf("db" to rmsdB.toDouble()))
+            }
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() = emitVoice("processing")
+
+            override fun onError(error: Int) {
+                emitVoice("error", mapOf("code" to error))
+                destroyVoiceCaptureDeferred()
+            }
+
+            override fun onResults(results: Bundle?) {
+                val text = results
+                    ?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                emitVoice("result", mapOf("text" to text))
+                destroyVoiceCaptureDeferred()
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val text = partialResults
+                    ?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                if (!text.isNullOrBlank()) emitVoice("partial", mapOf("text" to text))
+            }
+
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+            // Some OEM recognition services reject a session without it.
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            if (!locale.isNullOrBlank()) {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
+            }
+            // People pause mid-title ("the… mandalorian"), so give them a beat
+            // more than the default before the engine calls it done. Advisory:
+            // several engines ignore these outright.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                1500L,
+            )
+        }
+        runCatching { recognizer.startListening(intent) }.onFailure {
+            emitVoice("error", mapOf("code" to -1, "message" to it.message))
+            destroyVoiceCapture()
         }
     }
 
@@ -505,6 +640,46 @@ class MainActivity : FlutterActivity() {
     /** <1.0 when low-res rendering is active (e.g. 720/1080 = 0.667). */
     private var renderScale = 1.0f
 
+    // ── TV screen size (UI zoom-out) ────────────────────────────────────────
+    // A 1080p panel at density 320 hands Flutter a 960x540 logical canvas, so
+    // every screen — all written in logical px — is drawn 2x and reads as
+    // "zoomed in" across a big TV. Dividing ONLY the reported devicePixelRatio
+    // grows that canvas (0.8 -> 1200x675) while the window, the surface buffer
+    // and the physical metrics stay exactly as they were: the same layouts get
+    // more room and draw proportionally smaller, with no widget changes. It
+    // composes with [renderScale] (which scales the physical side instead) and,
+    // unlike that one, keeps pointer mapping consistent — Flutter divides
+    // pointer physical px by this same dpr.
+
+    /** The TV UI size factor ("Screen Size" in TV Mode settings): <1.0 on
+     *  Android TV by DEFAULT — see [DEFAULT_UI_SCALE_PERCENT] — and always
+     *  exactly 1.0 on every non-TV device. */
+    private var uiScale = 1.0f
+
+    private fun computeUiScale() {
+        uiScale = 1.0f
+        if (!isTelevision()) return
+        // Dart writes this with SharedPreferences.setInt, which lands as a
+        // Long. Any other type (or none) means "never set" → the default.
+        val percent = try {
+            getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                .getLong("flutter.tv_ui_scale_percent", DEFAULT_UI_SCALE_PERCENT)
+                .toInt()
+        } catch (e: Exception) {
+            DEFAULT_UI_SCALE_PERCENT.toInt()
+        }
+        // Anything outside 70..100 falls back to the default rather than being
+        // clamped: a stray 0 (or a value from a future build) must never be
+        // able to silently shrink the UI to the smallest thing allowed. 70 is
+        // the floor because TV text stops being legible from a couch below it.
+        val effective = if (percent in 70..100) {
+            percent
+        } else {
+            DEFAULT_UI_SCALE_PERCENT.toInt()
+        }
+        uiScale = effective / 100f
+    }
+
     private fun computeRenderScale(gpuCapable: Boolean) {
         renderScale = 1.0f
         val auto = isTelevision() && !gpuCapable
@@ -523,15 +698,28 @@ class MainActivity : FlutterActivity() {
 
     /** Rewrites the viewport metrics Flutter receives so the engine lays out
      *  and rasters at the scaled size while logical geometry is unchanged:
-     *  physical w/h/insets × scale, devicePixelRatio × scale. MUST round
-     *  exactly like [applyFixedSurfaceSize] — the engine discards frames
+     *  physical w/h/insets × [scale], devicePixelRatio × [dprScale]. MUST
+     *  round exactly like [applyFixedSurfaceSize] — the engine discards frames
      *  whose size doesn't match the surface buffer.
      *
+     *  The two factors are separate on purpose:
+     *   - low-res rendering passes the SAME value for both (physical and dpr
+     *     move together → identical logical layout, fewer rastered pixels);
+     *   - the TV screen-size setting folds an extra `uiScale` into [dprScale]
+     *     only (dpr shrinks, physical doesn't → a LARGER logical canvas, so
+     *     the UI draws smaller). Both compose in one engine.
+     *
      *  Known limitations (accepted; TV is DPAD-driven): pointer coordinates
-     *  and accessibility-node bounds are NOT rescaled, so an air-mouse remote
-     *  or TalkBack on a scaled device would see ~2/3-offset hit targets. The
-     *  `flutter.tv_low_res_render=false` pref is the escape hatch. */
-    private class ScaledFlutterJNI(private val scale: Float) : FlutterJNI() {
+     *  and accessibility-node bounds are NOT rescaled by the physical [scale],
+     *  so an air-mouse remote or TalkBack under low-res rendering would see
+     *  ~2/3-offset hit targets. The `flutter.tv_low_res_render=false` pref is
+     *  the escape hatch. (The screen-size factor is exempt: it never touches
+     *  the physical side, and Flutter converts pointers with the same dpr it
+     *  is given here.) */
+    private class ScaledFlutterJNI(
+        private val scale: Float,
+        private val dprScale: Float,
+    ) : FlutterJNI() {
         private fun s(v: Int): Int = Math.round(v * scale)
 
         override fun setViewportMetrics(
@@ -556,7 +744,7 @@ class MainActivity : FlutterActivity() {
             displayFeaturesState: IntArray,
         ) {
             super.setViewportMetrics(
-                devicePixelRatio * scale,
+                devicePixelRatio * dprScale,
                 s(physicalWidth),
                 s(physicalHeight),
                 s(physicalPaddingTop),
@@ -579,14 +767,15 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Low-res mode builds the engine around [ScaledFlutterJNI]; default path
-     *  (null) lets FlutterActivity create its own stock engine. */
+    /** Low-res rendering and/or a non-default TV screen size build the engine
+     *  around [ScaledFlutterJNI]; default path (null) lets FlutterActivity
+     *  create its own stock engine. */
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
-        if (renderScale >= 0.999f) return null
+        if (renderScale >= 0.999f && uiScale >= 0.999f) return null
         return FlutterEngine(
             context,
             FlutterInjector.instance().flutterLoader(),
-            ScaledFlutterJNI(renderScale),
+            ScaledFlutterJNI(renderScale, renderScale * uiScale),
             /* dartVmArgs = */ null,
             /* automaticallyRegisterPlugins = */ true,
         )
@@ -656,6 +845,14 @@ class MainActivity : FlutterActivity() {
     }
 
     companion object {
+        /** TV screen size applied when the user has never picked one. 80 (not
+         *  100) because at native density the app lays out on a 960x540 canvas
+         *  and reads visibly larger than the TV apps it sits next to; 100 is
+         *  the opt-in "put it back" choice. MUST stay in step with
+         *  StorageService.kTvUiScaleDefault, which drives the Settings row. */
+        // MUST stay in step with StorageService.kTvUiScaleDefault.
+        private const val DEFAULT_UI_SCALE_PERCENT = 90L
+
         /** Once per PROCESS, not per activity: recreation must not re-run the
          *  pending-recording retry sweep alongside a live one. */
         @JvmStatic
@@ -686,6 +883,11 @@ class MainActivity : FlutterActivity() {
         // within it, reads renderScale) AND before the underlay decision
         // below, which depends on the outcome.
         computeRenderScale(gpuCapable)
+        // Same timing requirement: provideFlutterEngine (called from within
+        // super.onCreate) reads uiScale, so the pref must be resolved first.
+        // Nothing downstream depends on it, so a change only lands on the next
+        // cold start — the Settings row says so.
+        computeUiScale()
         // Underlay trailers are back ON for weak GPUs too: with low-res
         // rendering the Flutter raster cost sits well under the pre-redesign
         // level that co-existed happily with the underlay's full-screen blend
@@ -749,6 +951,9 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         tvTrailerPlayer?.releaseAll()
         tvTrailerPlayer = null
+        // A live recognizer holds the microphone; never let one outlive the
+        // activity that opened it.
+        destroyVoiceCapture()
         // Safety net for the phone player: the Dart screen closes its own
         // session in dispose(), but an activity torn down without that (task
         // swipe, recreation) would otherwise leave effect apps attached to a
@@ -769,6 +974,13 @@ class MainActivity : FlutterActivity() {
         super.onPause()
         if (ActivityTracker.currentActivity == this) {
             ActivityTracker.currentActivity = null
+        }
+        // Backgrounded mid-dictation: Android cuts a background app off the
+        // microphone anyway, so end the session cleanly and tell Dart, rather
+        // than leaving the keyboard listening to a mic it no longer has.
+        if (speechRecognizer != null) {
+            destroyVoiceCapture()
+            emitVoice("aborted")
         }
     }
 
@@ -1709,6 +1921,7 @@ class MainActivity : FlutterActivity() {
                 flutterEngine.renderer,
                 flutterEngine.dartExecutor.binaryMessenger,
                 { trailerUnderlayContainer() },
+                uiScale,
             )
         }
 
@@ -1793,6 +2006,75 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // TV voice dictation — in-app capture. Events (partials, levels, the
+        // final transcript, errors) go up the companion EventChannel; this
+        // channel only carries commands.
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, VOICE_EVENTS)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    voiceEvents = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    voiceEvents = null
+                }
+            })
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VOICE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    // Ask the platform, don't try/catch a start: plenty of
+                    // cheap AOSP boxes (and Fire TV) ship no recognition
+                    // service at all, and the keyboard hides its mic key when
+                    // this is false. NB the manifest needs a <queries> entry
+                    // for android.speech.RecognitionService or this lies on
+                    // API 30+ even when a recognizer is installed.
+                    "isAvailable" -> {
+                        result.success(
+                            runCatching {
+                                android.speech.SpeechRecognizer.isRecognitionAvailable(this)
+                            }.getOrDefault(false)
+                        )
+                    }
+                    // True once the mic is ours to use. Asked contextually, on
+                    // the press — never at app start.
+                    "ensurePermission" -> {
+                        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                            this,
+                            android.Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (granted) {
+                            result.success(true)
+                        } else if (pendingVoicePermissionResult != null) {
+                            result.success(false)
+                        } else {
+                            pendingVoicePermissionResult = result
+                            androidx.core.app.ActivityCompat.requestPermissions(
+                                this,
+                                arrayOf(android.Manifest.permission.RECORD_AUDIO),
+                                recordAudioPermissionRequestCode,
+                            )
+                        }
+                    }
+                    "start" -> {
+                        startVoiceCapture(call.argument<String>("locale"))
+                        result.success(true)
+                    }
+                    // Stop = "I'm done talking, transcribe what you have"; the
+                    // final result still arrives on the event channel.
+                    "stop" -> {
+                        runCatching { speechRecognizer?.stopListening() }
+                        result.success(true)
+                    }
+                    // Cancel = throw it away, no result event follows.
+                    "cancel" -> {
+                        destroyVoiceCapture()
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
 
         // Picture-in-Picture channel — driven by the phone media_kit player.
         val pipCh = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PIP_CHANNEL)

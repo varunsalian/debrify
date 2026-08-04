@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/storage_service.dart';
+import '../services/tv_voice_input.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'tv_keyboard.dart';
@@ -130,6 +131,10 @@ class _KbNavAction extends Action<_KbNavIntent> {
 
   @override
   Object? invoke(_KbNavIntent intent) {
+    // Nothing to navigate while the mic is open — the grid isn't on screen.
+    // Consumed rather than passed on so a stray press can't move a highlight
+    // the user can't see (or worse, escape the field mid-sentence).
+    if (state._kb!.listening) return null;
     state._kb!.nav(intent.dx, intent.dy);
     return null;
   }
@@ -145,6 +150,12 @@ class _KbActivateAction extends Action<_KbActivateIntent> {
 
   @override
   Object? invoke(_KbActivateIntent intent) {
+    // OK means "done talking" while listening — NOT "press the key under the
+    // hidden highlight", which would type a stray letter mid-dictation.
+    if (state._kb!.listening) {
+      state._stopVoiceInput();
+      return null;
+    }
     state._kb!.activateHighlighted();
     return null;
   }
@@ -249,6 +260,23 @@ class TvTextFieldState extends State<TvTextField> {
   /// field, so the next DPAD visit starts on the Debrify keyboard again.
   bool _useSystemIme = false;
 
+  /// A dictation is in flight — from the permission dialog (a system window
+  /// that takes our focus) through to the transcript landing. Guards the mic
+  /// key against a second session, and the focus-loss teardown against
+  /// mistaking the dialog for an abandoned edit.
+  bool _voiceListening = false;
+
+  /// Set between "done talking" and the transcript landing — see
+  /// [_stopVoiceInput], which must reach native exactly once.
+  bool _voiceStopping = false;
+  StreamSubscription<TvVoiceEvent>? _voiceSub;
+
+  /// Backstop for a recognition service that binds and then says nothing at
+  /// all (seen on some OEM builds): without it the panel would sit on
+  /// "Listening…" forever with no way out but Back.
+  Timer? _voiceWatchdog;
+  Timer? _noticeTimer;
+
   /// Guards the deliberate unfocus/refocus cycle [_showSystemIme] performs so
   /// the focus-loss listener doesn't read it as "editing was abandoned".
   bool _imeSwitch = false;
@@ -279,6 +307,8 @@ class TvTextFieldState extends State<TvTextField> {
   @override
   void dispose() {
     _popGuardTimer?.cancel();
+    _noticeTimer?.cancel();
+    _cancelVoiceSession();
     _removeOverlay();
     _kb?.dispose();
     (widget.focusNode ?? _internalShellNode)?.removeListener(
@@ -294,7 +324,11 @@ class TvTextFieldState extends State<TvTextField> {
     // (or a route push) moves focus elsewhere, take the keyboard down instead
     // of leaving a zombie overlay. hasFocus on the shell includes the editor
     // (it's a descendant), so the ring stays lit while editing.
-    if (_editing && !_imeSwitch && !_editNode.hasFocus && !_shellNode.hasFocus) {
+    if (_editing &&
+        !_imeSwitch &&
+        !_voiceListening &&
+        !_editNode.hasFocus &&
+        !_shellNode.hasFocus) {
       _endEdit(refocusShell: false);
     }
     // System-IME hand-off ends itself when focus leaves the field — shell mode
@@ -321,6 +355,9 @@ class TvTextFieldState extends State<TvTextField> {
       onClear: _clearText,
       onSubmit: _submitFromKeyboard,
       onSystemIme: _switchToSystemIme,
+      onVoice: _startVoiceInput,
+      onVoiceStop: _stopVoiceInput,
+      voiceAvailable: TvVoiceInput.availableCached ?? false,
       submitLabel: switch (widget.textInputAction) {
         TextInputAction.search => 'Search',
         TextInputAction.go => 'Go',
@@ -351,6 +388,13 @@ class TvTextFieldState extends State<TvTextField> {
     }
     setState(() => _editing = true);
     _editNode.requestFocus();
+    // Probe voice support the first time a keyboard opens; the mic key
+    // appears if this device has a recognizer (cached process-wide after).
+    if (TvVoiceInput.availableCached == null) {
+      TvVoiceInput.isAvailable().then((ok) {
+        if (mounted && ok) _kb?.setVoiceAvailable(true);
+      });
+    }
     // Bottom-anchored panel can cover fields in the lower third of a scrollable
     // page (settings rows) — nudge the field into the visible band. No-op when
     // there's no enclosing scrollable.
@@ -366,6 +410,9 @@ class TvTextFieldState extends State<TvTextField> {
 
   void _endEdit({bool refocusShell = true}) {
     if (!_editing) return;
+    // The mic must never outlive the session that opened it.
+    _cancelVoiceSession();
+    _noticeTimer?.cancel();
     _editing = false;
     _useSystemIme = false;
     _removeOverlay();
@@ -394,6 +441,164 @@ class TvTextFieldState extends State<TvTextField> {
       _imeSwitch = false;
       if (mounted && _useSystemIme) _editNode.requestFocus();
     });
+  }
+
+  // ------------------------------------------------------------------ voice
+
+  /// Mic key: open the microphone IN-APP and let the keyboard panel become the
+  /// listening surface. Nothing else appears on screen — no system voice
+  /// activity, no second text box — so our activity is never paused, no
+  /// lifecycle handler fires (the ambient trailer keeps playing), and focus
+  /// never leaves the editor. The only trip out is the one-off permission
+  /// dialog, which [_voiceListening] covers.
+  Future<void> _startVoiceInput() async {
+    if (!_editing || _voiceListening) return;
+    _noticeTimer?.cancel();
+    _kb?.clearNotice();
+    // Set before the await: the permission dialog steals focus, and without
+    // the guard the focus-loss listener would tear the whole session down.
+    _voiceListening = true;
+    final granted = await TvVoiceInput.ensurePermission();
+    if (!mounted || !_editing) {
+      _voiceListening = false;
+      return;
+    }
+    // The dialog (granted or not) may have taken focus from the editor.
+    _editNode.requestFocus();
+    if (!granted) {
+      _finishVoice(notice: 'Microphone permission needed for voice input');
+      return;
+    }
+    _kb?.beginListening();
+    _voiceSub?.cancel();
+    _voiceSub = TvVoiceInput.events.listen(_onVoiceEvent);
+    _armVoiceWatchdog();
+    if (!await TvVoiceInput.start()) {
+      _finishVoice(notice: "Voice input isn't working on this device");
+    }
+  }
+
+  /// OK while listening — stop recording but keep the session: the engine
+  /// still transcribes what it heard and a result event follows.
+  ///
+  /// Strictly once per session. A held OK repeats (SingleActivator counts
+  /// repeats by default), and a second `stopListening()` on an already-stopped
+  /// engine makes some services answer ERROR_CLIENT — throwing away the very
+  /// transcript this press was waiting for.
+  void _stopVoiceInput() {
+    if (!_voiceListening || _voiceStopping) return;
+    _voiceStopping = true;
+    _kb?.updateListening(level: 0, status: 'Getting that…');
+    TvVoiceInput.stop();
+  }
+
+  /// Back while listening — throw the dictation away and return to the keys
+  /// with whatever was typed before still intact.
+  void _cancelVoiceInput() {
+    if (!_voiceListening) return;
+    _finishVoice();
+  }
+
+  void _onVoiceEvent(TvVoiceEvent event) {
+    if (!_voiceListening || !mounted) return;
+    _armVoiceWatchdog(); // any sign of life resets the deadline
+    switch (event.type) {
+      case 'ready':
+      case 'speech':
+        _kb?.updateListening(status: 'Listening…');
+      case 'level':
+        // The platform reports roughly -2 dB (silence) to 10 dB (loud);
+        // the meter wants 0..1.
+        _kb?.updateListening(level: ((event.level ?? 0) + 2) / 12);
+      case 'partial':
+        _kb?.updateListening(partial: event.text ?? '', status: 'Listening…');
+      case 'processing':
+        _kb?.updateListening(level: 0, status: 'Getting that…');
+      case 'result':
+        final spoken = event.text?.trim() ?? '';
+        _finishVoice();
+        if (spoken.isNotEmpty) _applySpokenText(spoken);
+      case 'error':
+        // Timeout/no-match AFTER words already appeared isn't a failure worth
+        // reporting — keep what was heard rather than throwing it away.
+        if (event.code == 6 || event.code == 7) {
+          _finishVoiceKeepingWhatWasHeard(
+            TvVoiceInput.describeError(event.code),
+          );
+        } else {
+          _finishVoice(notice: TvVoiceInput.describeError(event.code));
+        }
+      case 'aborted':
+        // App went to the background mid-sentence; the mic is gone.
+        _finishVoice();
+    }
+  }
+
+  /// Dictation REPLACES the field, matching every TV voice search: people
+  /// speak the whole query, they don't dictate a suffix onto a typo.
+  void _applySpokenText(String spoken) {
+    _applyEdit(
+      widget.controller.value,
+      TextEditingValue(
+        text: spoken,
+        selection: TextSelection.collapsed(offset: spoken.length),
+      ),
+    );
+  }
+
+  /// Ends a session that died AFTER words had already appeared on the panel,
+  /// keeping them: the user watched the recognizer get it right, and a service
+  /// that then falls over doesn't make that transcript any less theirs.
+  /// [notice] is only used when nothing was heard at all.
+  void _finishVoiceKeepingWhatWasHeard(String notice) {
+    final heard = _kb?.partial.trim() ?? '';
+    if (heard.isEmpty) {
+      _finishVoice(notice: notice);
+      return;
+    }
+    _finishVoice();
+    _applySpokenText(heard);
+  }
+
+  void _armVoiceWatchdog() {
+    _voiceWatchdog?.cancel();
+    // Levels stream continuously while a healthy session is open, so silence
+    // this long means the service is gone, not that the user is quiet.
+    _voiceWatchdog = Timer(const Duration(seconds: 12), () {
+      if (!_voiceListening) return;
+      // A stalled OEM service is the likeliest way to reach this — and the
+      // likeliest to have emitted partials first. Same salvage as a timeout.
+      _finishVoiceKeepingWhatWasHeard("Voice input isn't responding");
+    });
+  }
+
+  /// Ends the session and puts the keys back. [notice] is shown above them
+  /// briefly; a clean finish passes none.
+  void _finishVoice({String? notice}) {
+    _cancelVoiceSession();
+    if (!mounted) return;
+    _kb?.endListening(notice: notice);
+    if (notice != null) {
+      _noticeTimer?.cancel();
+      _noticeTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted) _kb?.clearNotice();
+      });
+    }
+    if (_editing) _editNode.requestFocus();
+  }
+
+  /// Tears down the native session and every timer/subscription behind it,
+  /// with no UI side effects — safe from dispose and from [_endEdit].
+  void _cancelVoiceSession() {
+    _voiceWatchdog?.cancel();
+    _voiceWatchdog = null;
+    _voiceSub?.cancel();
+    _voiceSub = null;
+    _voiceStopping = false;
+    if (_voiceListening) {
+      _voiceListening = false;
+      TvVoiceInput.cancel();
+    }
   }
 
   void _removeOverlay() {
@@ -513,6 +718,16 @@ class TvTextFieldState extends State<TvTextField> {
     if (_useSystemIme) return KeyEventResult.ignored;
 
     if (_editing) {
+      // Back during dictation cancels the DICTATION, not the edit — the
+      // keyboard comes back with whatever was already typed.
+      if (isBackKey && _voiceListening) {
+        if (!repeat) {
+          _swallowBackUp = true;
+          _armPopGuard(); // the up of this press must not pop the route
+          _cancelVoiceInput();
+        }
+        return KeyEventResult.handled;
+      }
       if (isBackKey) {
         // Repeats included: a held Back must not leak DOWN events either
         // (only the first press acts; the rest are just consumed).

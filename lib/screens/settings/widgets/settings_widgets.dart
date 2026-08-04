@@ -72,18 +72,18 @@ class SettingsRowContent {
 abstract final class SettingsRows {
   static const homePage = SettingsRowContent(
     icon: Icons.home_rounded,
-    title: 'Home Page',
-    subtitle: 'Default view when app opens',
+    title: 'Home Screen',
+    subtitle: 'Layout, rows, trailer & continue watching',
   );
   static const player = SettingsRowContent(
-    icon: Icons.open_in_new_rounded,
-    title: 'Player Settings',
-    subtitle: 'Configure preferred video player',
+    icon: Icons.play_circle_outline_rounded,
+    title: 'Playback',
+    subtitle: 'Player, subtitles, audio & VR',
   );
   static const remote = SettingsRowContent(
     icon: Icons.phonelink_rounded,
     title: 'Remote',
-    subtitle: 'Send setup or receive from another device',
+    subtitle: 'Control another device, send or receive setup',
   );
   static const navigationStyle = SettingsRowContent(
     icon: Icons.call_to_action_rounded,
@@ -92,33 +92,67 @@ abstract final class SettingsRows {
   );
   static const searchSettings = SettingsRowContent(
     icon: Icons.search_rounded,
-    title: 'Search Settings',
-    subtitle: 'Engines, filters, and sorting',
+    title: 'Engines',
+    subtitle: 'Search engine defaults and indexers',
   );
   static const filterSettings = SettingsRowContent(
     icon: Icons.filter_list_rounded,
-    title: 'Filter Settings',
+    title: 'Filters',
     subtitle: 'Default quality, source, and language filters',
   );
   static const providerSettings = SettingsRowContent(
     icon: Icons.cloud_sync_rounded,
-    title: 'Provider Settings',
-    subtitle: 'Default provider for adding torrents',
+    title: 'Default Provider',
+    subtitle: 'Where added torrents go',
   );
   static const quickPlay = SettingsRowContent(
     icon: Icons.bolt_rounded,
-    title: 'Quick Play Settings',
-    subtitle: 'Configure quick play for torrent search',
+    title: 'Quick Play',
+    subtitle: 'Timeouts, series packs, and cache fallback',
   );
   static const debrifyTv = SettingsRowContent(
     icon: Icons.live_tv_rounded,
-    title: 'Debrify TV Settings',
+    title: 'Debrify TV',
     subtitle: 'Limits, channels, and playback configuration',
+  );
+  static const recordings = SettingsRowContent(
+    icon: Icons.fiber_dvr_rounded,
+    title: 'Recordings',
+    subtitle: 'Live recordings, schedules, and library',
+  );
+  static const iptvPlaylists = SettingsRowContent(
+    icon: Icons.playlist_play_rounded,
+    title: 'IPTV Playlists',
+    subtitle: 'Playlists, lists, and startup channel',
   );
   static const tvKeyboard = SettingsRowContent(
     icon: Icons.keyboard_rounded,
     title: 'Debrify Keyboard',
     subtitle: 'Remote-friendly on-screen keyboard for text fields',
+  );
+  // Subtitle is dynamic (the chosen size) — passed per call site.
+  static const tvScreenSize = SettingsRowContent(
+    icon: Icons.fit_screen_rounded,
+    title: 'Screen Size',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen layout) — passed per call site.
+  static const tvHomeStyle = SettingsRowContent(
+    icon: Icons.view_quilt_rounded,
+    title: 'Home Layout',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen layout) — passed per call site.
+  static const discoverLayout = SettingsRowContent(
+    icon: Icons.explore_rounded,
+    title: 'Discover Layout',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen style) — passed per call site.
+  static const tvSidebarStyle = SettingsRowContent(
+    icon: Icons.view_sidebar_rounded,
+    title: 'Sidebar Style',
+    subtitle: '',
   );
   // Subtitle is dynamic (current folder) — passed per call site.
   static const downloadLocation = SettingsRowContent(
@@ -750,7 +784,6 @@ class ConnectionsSummary extends StatefulWidget {
   final ConnectionInfo pikpak;
   final ConnectionInfo webDav;
   final ConnectionInfo indexerManagers;
-  final ConnectionInfo reddit;
   final ConnectionInfo iptv;
   final ConnectionInfo trakt;
   final ConnectionInfo simkl;
@@ -767,7 +800,6 @@ class ConnectionsSummary extends StatefulWidget {
     required this.pikpak,
     required this.webDav,
     required this.indexerManagers,
-    required this.reddit,
     required this.iptv,
     required this.trakt,
     required this.simkl,
@@ -795,7 +827,6 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   late final FocusNode _pikpakFocusNode;
   late final FocusNode _webDavFocusNode;
   late final FocusNode _indexerManagersFocusNode;
-  late final FocusNode _redditFocusNode;
   late final FocusNode _iptvFocusNode;
   late final FocusNode _traktFocusNode;
   late final FocusNode _simklFocusNode;
@@ -812,7 +843,6 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
     _indexerManagersFocusNode = FocusNode(
       debugLabel: 'settings-indexer-managers',
     );
-    _redditFocusNode = FocusNode(debugLabel: 'settings-reddit');
     _iptvFocusNode = FocusNode(debugLabel: 'settings-iptv');
     _traktFocusNode = FocusNode(debugLabel: 'settings-trakt');
     _simklFocusNode = FocusNode(debugLabel: 'settings-simkl');
@@ -827,7 +857,6 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
     _pikpakFocusNode.dispose();
     _webDavFocusNode.dispose();
     _indexerManagersFocusNode.dispose();
-    _redditFocusNode.dispose();
     _iptvFocusNode.dispose();
     _traktFocusNode.dispose();
     _simklFocusNode.dispose();
@@ -956,9 +985,8 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                       ),
                     ),
                     // Row 4: Indexer managers (left), IPTV (right).
-                    // The Reddit card that used to sit here is hidden — the
-                    // source is retired but widget.reddit/_redditFocusNode are
-                    // kept so the API and settings code stay untouched.
+                    // (The retired Reddit source's card, params and focus
+                    // node were removed with its orphaned settings page.)
                     SizedBox(
                       width: itemWidth,
                       child: ConnectionCard(
@@ -1605,6 +1633,39 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
       ),
     );
   }
+}
+
+/// One Android TV "Screen Size" choice. [percent] is the share of the panel's
+/// native density the UI is laid out at — smaller means a wider logical canvas,
+/// so the same layouts draw smaller and more fits on screen. Values must stay in
+/// step with `StorageService.kTvUiScaleOptions`; the shipped default is
+/// `StorageService.kTvUiScaleDefault`.
+///
+/// Lives here (not in the TV settings shell) because two surfaces render it:
+/// the TV Mode rail row's caption and the Screen Size page itself.
+class TvUiScaleChoice {
+  final int percent;
+  final String title;
+  final String subtitle;
+  const TvUiScaleChoice(this.percent, this.title, this.subtitle);
+
+  /// "Compact (80%)" — the row caption and the page's selected label.
+  String get label => '$title ($percent%)';
+}
+
+const List<TvUiScaleChoice> kTvUiScaleChoices = [
+  TvUiScaleChoice(100, 'Large', 'The original size — everything bigger'),
+  TvUiScaleChoice(90, 'Medium', 'Default — about 10% more fits on screen'),
+  TvUiScaleChoice(80, 'Compact', 'About 25% more fits on screen'),
+];
+
+/// Caption for [percent], falling back to the raw value if a stored size is
+/// ever outside the offered set.
+String tvUiScaleLabel(int percent) {
+  for (final c in kTvUiScaleChoices) {
+    if (c.percent == percent) return c.label;
+  }
+  return '$percent%';
 }
 
 /// One choice inside a [SettingsSelectDropdown].

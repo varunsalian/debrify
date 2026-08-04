@@ -22,7 +22,17 @@ import '../utils/tv_keys.dart';
 /// [systemIme] hands the session over to the real system keyboard — the only
 /// path that wakes the Google TV phone-remote keyboard and voice input, both
 /// of which only engage while the TV is showing a system IME session.
-enum TvKeyAction { insert, space, backspace, clear, shift, page, submit, systemIme }
+enum TvKeyAction {
+  insert,
+  space,
+  backspace,
+  clear,
+  shift,
+  page,
+  submit,
+  systemIme,
+  voice,
+}
 
 class TvKey {
   const TvKey.insert(this.insert)
@@ -77,11 +87,15 @@ final List<List<TvKey>> _symbolPage = [
 ];
 
 /// Bottom action row, shared by both pages. The smartphone key switches this
-/// edit session to the system IME (phone-remote typing / voice).
-List<TvKey> _actionRow(int page, String submitLabel) => [
+/// edit session to the system IME (phone-remote typing); the mic key dictates
+/// in-app and is present ONLY when the device actually has a recognizer (a
+/// dead mic button is worse than no button).
+List<TvKey> _actionRow(int page, String submitLabel, bool voice) => [
   TvKey.action(TvKeyAction.page, label: page == 0 ? '?123' : 'ABC', flex: 3),
   TvKey.action(TvKeyAction.systemIme, icon: Icons.smartphone_rounded, flex: 3),
-  TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: 6),
+  if (voice)
+    TvKey.action(TvKeyAction.voice, icon: Icons.mic_rounded, flex: 3),
+  TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: voice ? 5 : 6),
   TvKey.action(TvKeyAction.clear, label: 'Clear', flex: 3),
   TvKey.action(TvKeyAction.submit, label: submitLabel, flex: 4),
 ];
@@ -95,16 +109,100 @@ class TvKeyboardController extends ChangeNotifier {
     required this.onClear,
     required this.onSubmit,
     required this.onSystemIme,
+    required this.onVoice,
+    required this.onVoiceStop,
     this.submitLabel = 'Search',
     bool startShifted = false,
-  }) : shift = startShifted;
+    bool voiceAvailable = false,
+  }) : shift = startShifted,
+       _voice = voiceAvailable;
 
   final ValueChanged<String> onInsert;
   final VoidCallback onBackspace;
   final VoidCallback onClear;
   final VoidCallback onSubmit;
   final VoidCallback onSystemIme;
+  final VoidCallback onVoice;
+
+  /// OK pressed while listening — "I'm done talking", transcribe it.
+  final VoidCallback onVoiceStop;
   final String submitLabel;
+
+  // ───────────────────────────────────────────────────────── dictation state
+  // The panel swaps the key grid for a listening card while this is set, so
+  // voice never puts a second surface (or a second text box) on screen.
+
+  bool _listening = false;
+  String _partial = '';
+  double _level = 0;
+  String? _status;
+  String? _notice;
+
+  bool get listening => _listening;
+
+  /// Best transcript so far — empty until the engine emits its first partial.
+  String get partial => _partial;
+
+  /// Mic loudness, already normalised to 0..1 for the meter.
+  double get level => _level;
+
+  /// The line under the mic: what the recognizer is doing right now.
+  String get status => _status ?? 'Listening…';
+
+  /// Transient message shown above the keys (a declined permission, a failed
+  /// session). Cleared by the owning field.
+  String? get notice => _notice;
+
+  void beginListening() {
+    _listening = true;
+    _partial = '';
+    _level = 0;
+    _status = 'Starting…';
+    _notice = null;
+    notifyListeners();
+  }
+
+  void updateListening({String? partial, double? level, String? status}) {
+    if (!_listening) return;
+    if (partial != null) _partial = partial;
+    if (level != null) _level = level.clamp(0.0, 1.0);
+    if (status != null) _status = status;
+    notifyListeners();
+  }
+
+  /// Back to the keys. [notice] explains a failure; a clean finish passes none.
+  void endListening({String? notice}) {
+    if (!_listening && _notice == notice) return;
+    _listening = false;
+    _partial = '';
+    _level = 0;
+    _status = null;
+    _notice = notice;
+    notifyListeners();
+  }
+
+  void clearNotice() {
+    if (_notice == null) return;
+    _notice = null;
+    notifyListeners();
+  }
+
+  /// Whether the mic key is in the action row. Set once the availability
+  /// probe lands (see [setVoiceAvailable]) — the row is rebuilt from this on
+  /// every render, so the key simply appears.
+  bool _voice;
+
+  /// Called when the device probe resolves. Clamps the highlight: the action
+  /// row grows by one key, and a highlight sitting past the old end would
+  /// otherwise point at nothing.
+  void setVoiceAvailable(bool value) {
+    if (_voice == value) return;
+    _voice = value;
+    final grid = rows;
+    row = row.clamp(0, grid.length - 1);
+    col = col.clamp(0, grid[row].length - 1);
+    notifyListeners();
+  }
 
   int page = 0;
   bool shift;
@@ -113,7 +211,7 @@ class TvKeyboardController extends ChangeNotifier {
 
   List<List<TvKey>> get rows => [
     ...(page == 0 ? _letterPage(shift) : _symbolPage),
-    _actionRow(page, submitLabel),
+    _actionRow(page, submitLabel, _voice),
   ];
 
   /// Routes one key event from the owning field. Returns true when consumed
@@ -121,6 +219,19 @@ class TvKeyboardController extends ChangeNotifier {
   bool handleKey(KeyEvent event) {
     if (event is KeyUpEvent) return false;
     final key = event.logicalKey;
+    // While the mic is open there is no grid to navigate: OK finishes the
+    // dictation early, and arrows are swallowed so a stray press can't move a
+    // highlight the user can't even see. (Back is the field's — it cancels.)
+    if (_listening) {
+      if (isActivateKey(key)) {
+        onVoiceStop();
+        return true;
+      }
+      return key == LogicalKeyboardKey.arrowLeft ||
+          key == LogicalKeyboardKey.arrowRight ||
+          key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowDown;
+    }
     if (key == LogicalKeyboardKey.arrowLeft) return nav(-1, 0);
     if (key == LogicalKeyboardKey.arrowRight) return nav(1, 0);
     if (key == LogicalKeyboardKey.arrowUp) return nav(0, -1);
@@ -177,6 +288,11 @@ class TvKeyboardController extends ChangeNotifier {
       case TvKeyAction.systemIme:
         onSystemIme();
         return; // the field takes the panel down; nothing left to repaint
+      case TvKeyAction.voice:
+        onVoice();
+        // The field flips this controller into its listening state once the
+        // mic is actually open (permission first); nothing to repaint yet.
+        return;
     }
     notifyListeners();
   }
@@ -208,10 +324,16 @@ class TvKeyboardPanel extends StatelessWidget {
         child: ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
+            // Dictation takes over the panel's own body — no second surface,
+            // no system text box, same box in the same place.
+            if (controller.listening) {
+              return _ListeningView(controller: controller);
+            }
             final grid = controller.rows;
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (controller.notice != null) _NoticeBar(text: controller.notice!),
                 for (var r = 0; r < grid.length; r++)
                   Row(
                     children: [
@@ -234,6 +356,141 @@ class TvKeyboardPanel extends StatelessWidget {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// The panel while the microphone is open. Sized to the key grid it replaces
+/// (5 rows of 44) so the panel doesn't jump when dictation starts or ends.
+class _ListeningView extends StatelessWidget {
+  const _ListeningView({required this.controller});
+
+  final TvKeyboardController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final heard = controller.partial;
+    return SizedBox(
+      height: 220,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              // Halo scales with mic loudness — the only thing on this panel
+              // that animates, and it moves at most ~10 times a second
+              // (native throttles the level frames) so weak TV GPUs cope.
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                width: 56 + 44 * controller.level,
+                height: 56 + 44 * controller.level,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: TvKeyboardPanel._accent.withValues(alpha: 0.22),
+                ),
+              ),
+              Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: TvKeyboardPanel._accent,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.mic_rounded,
+                  size: 28,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Fixed box: the transcript growing from one line to two must not
+          // shove the mic around mid-sentence.
+          SizedBox(
+            height: 52,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  heard.isEmpty ? 'Speak now' : heard,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: heard.isEmpty ? 16 : 20,
+                    fontWeight: heard.isEmpty ? FontWeight.w500 : FontWeight.w600,
+                    color: heard.isEmpty
+                        ? Colors.white.withValues(alpha: 0.55)
+                        : Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            controller.status,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.55),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'OK to finish  ·  BACK to cancel',
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 0.4,
+              color: Colors.white.withValues(alpha: 0.38),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One-line explanation above the keys after a dictation that couldn't run
+/// (permission declined, recognizer error). The field clears it on a timer.
+class _NoticeBar extends StatelessWidget {
+  const _NoticeBar({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6, left: 2, right: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: TvKeyboardPanel._accent.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.mic_off_rounded,
+            size: 15,
+            color: Colors.white.withValues(alpha: 0.75),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

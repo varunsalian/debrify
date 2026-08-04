@@ -80,6 +80,7 @@ class _ExternalPlayerSettingsPageState
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
   int _nightModeIndex = 0; // Off
   bool _systemAudioEffects = false; // Android only, opt-in
+  bool _startPortrait = false; // Phone only, opt-in
   String?
   _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
   String?
@@ -102,6 +103,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _defaultAudioLangFocusNode = FocusNode();
   final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
   final FocusNode _systemAudioEffectsFocusNode = FocusNode();
+  final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleSizeFocusNode = FocusNode();
   final FocusNode _subtitleStyleFocusNode = FocusNode();
   final FocusNode _subtitleColorFocusNode = FocusNode();
@@ -112,6 +114,7 @@ class _ExternalPlayerSettingsPageState
   bool _defaultAudioLangFocused = false;
   bool _defaultSubtitleLangFocused = false;
   bool _systemAudioEffectsFocused = false;
+  bool _startPortraitFocused = false;
   bool _subtitleSizeFocused = false;
   bool _subtitleStyleFocused = false;
   bool _subtitleColorFocused = false;
@@ -207,6 +210,12 @@ class _ExternalPlayerSettingsPageState
         _systemAudioEffectsFocused = _systemAudioEffectsFocusNode.hasFocus;
       });
     });
+    _startPortraitFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _startPortraitFocused = _startPortraitFocusNode.hasFocus;
+      });
+    });
     _subtitleSizeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -265,6 +274,7 @@ class _ExternalPlayerSettingsPageState
     _defaultAudioLangFocusNode.dispose();
     _defaultSubtitleLangFocusNode.dispose();
     _systemAudioEffectsFocusNode.dispose();
+    _startPortraitFocusNode.dispose();
     _subtitleSizeFocusNode.dispose();
     _subtitleStyleFocusNode.dispose();
     _subtitleColorFocusNode.dispose();
@@ -369,6 +379,7 @@ class _ExternalPlayerSettingsPageState
       final nightModeIndex = await StorageService.getPlayerNightModeIndex();
       final systemAudioEffects =
           await StorageService.getPlayerSystemAudioEffects();
+      final startPortrait = await StorageService.getPlayerStartPortrait();
       final defaultSubtitleLanguage =
           await StorageService.getDefaultSubtitleLanguage();
       final defaultAudioLanguage =
@@ -411,6 +422,7 @@ class _ExternalPlayerSettingsPageState
         _defaultAspectIndex = defaultAspectIndex;
         _nightModeIndex = nightModeIndex;
         _systemAudioEffects = systemAudioEffects;
+        _startPortrait = startPortrait;
         _defaultSubtitleLanguage = defaultSubtitleLanguage;
         _defaultAudioLanguage = defaultAudioLanguage;
         _subtitleSizeIndex = subtitleSettings.sizeIndex;
@@ -864,6 +876,11 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setSystemAudioEffects(bool enabled) async {
     setState(() => _systemAudioEffects = enabled);
     await StorageService.setPlayerSystemAudioEffects(enabled);
+  }
+
+  Future<void> _setStartPortrait(bool enabled) async {
+    setState(() => _startPortrait = enabled);
+    await StorageService.setPlayerStartPortrait(enabled);
   }
 
   Future<void> _setDefaultSubtitleLanguage(String? languageCode) async {
@@ -1786,7 +1803,7 @@ class _ExternalPlayerSettingsPageState
 
     if (!isSupportedPlatform) {
       return SettingsPageScaffold(
-        title: 'Player Settings',
+        title: 'Playback',
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -1811,7 +1828,7 @@ class _ExternalPlayerSettingsPageState
 
     if (_loading) {
       return const SettingsPageScaffold(
-        title: 'Player Settings',
+        title: 'Playback',
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -1819,7 +1836,7 @@ class _ExternalPlayerSettingsPageState
     final theme = Theme.of(context);
 
     return SettingsPageScaffold(
-      title: 'Player Settings',
+      title: 'Playback',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Center(
@@ -1831,7 +1848,7 @@ class _ExternalPlayerSettingsPageState
                 // Header
                 const SettingsPageHeader(
                   icon: Icons.open_in_new_rounded,
-                  title: 'Player Settings',
+                  title: 'Playback',
                   subtitle: 'Choose which player to use for video playback',
                 ),
 
@@ -1957,6 +1974,28 @@ class _ExternalPlayerSettingsPageState
                             focusNode: _defaultSubtitleLangFocusNode,
                             isFocused: _defaultSubtitleLangFocused,
                           ),
+
+                          // Start orientation (phones only — a TV has no
+                          // portrait, and a desktop window ignores the
+                          // preferred-orientation call entirely). Gated on the
+                          // WARM flag, not this page's `_isAndroidTv`: that one
+                          // is loaded async and starts false, so a TV would
+                          // paint the row and then drop it.
+                          if (PlatformUtil.isPhone) ...[
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Open the player in portrait',
+                              subtitle:
+                                  'Start videos upright instead of turning the '
+                                  'phone landscape. The player\'s rotate button '
+                                  'switches to landscape whenever you want it.',
+                              value: _startPortrait,
+                              onChanged: _setStartPortrait,
+                              focusNode: _startPortraitFocusNode,
+                              isFocused: _startPortraitFocused,
+                            ),
+                          ],
 
                           // System audio effects (Android only). Off by
                           // default because enabling it switches the audio
@@ -2243,22 +2282,12 @@ class _ExternalPlayerSettingsPageState
                                   );
                                   return Text(
                                     'Sample Subtitle',
-                                    style: TextStyle(
-                                      fontSize: previewSize,
-                                      color: data.color.color,
-                                      fontWeight: _subtitleBold
-                                          ? FontWeight.w700
-                                          : FontWeight.w400,
-                                      shadows: _subtitleBold
-                                          ? [
-                                              ...?data.style.shadows,
-                                              ...data.fauxBoldShadows(
-                                                previewSize,
-                                              ),
-                                            ]
-                                          : data.style.shadows,
-                                      backgroundColor: data.background.color,
-                                      fontFamily: data.fontFamily,
+                                    // Built by the same code the player uses,
+                                    // at the preview's size — a preview that
+                                    // styles text its own way is a preview
+                                    // that can lie about bold.
+                                    style: data.buildTextStyle(
+                                      fontSizePx: previewSize,
                                     ),
                                   );
                                 },

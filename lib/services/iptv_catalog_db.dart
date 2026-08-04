@@ -325,6 +325,32 @@ class IptvCatalogDb {
       CREATE INDEX IF NOT EXISTS idx_channels_url
       ON channels(catalog_key, generation, url)
     ''',
+    // Categories the user has hidden, per catalog. Keyed by the group NAME
+    // rather than by channel rows, so it survives every ingest: a refresh
+    // writes a whole new generation with new row ids, and a name-keyed
+    // exclusion just keeps applying. Deliberately NOT generation-scoped for
+    // the same reason.
+    //
+    // Lives in the catalog database (not debrify_tv.db) so the exclusion can
+    // be an argument-free sub-select inside the channel queries themselves —
+    // that keeps every positional query argument where it was, and lets the
+    // group-count worker isolate see the same hidden set through its own
+    // connection without it being shipped over the isolate boundary.
+    //
+    // Plain rowid table: WITHOUT ROWID would be a slightly tighter probe, but
+    // this schema runs UNGUARDED on every connection open — a DDL the bundled
+    // SQLite didn't like would take the whole catalog database down with it,
+    // and this codebase has already been burned once by assuming the bundled
+    // engine matches the host's (see the FTS5 cleanup above). Nothing is worth
+    // that risk on a table holding a handful of rows.
+    '''
+      CREATE TABLE IF NOT EXISTS hidden_groups (
+        catalog_key TEXT NOT NULL,
+        grp TEXT NOT NULL,
+        hidden_at INTEGER NOT NULL,
+        PRIMARY KEY (catalog_key, grp)
+      )
+    ''',
     '''
       CREATE TABLE IF NOT EXISTS channel_number_namespaces (
         namespace_id TEXT PRIMARY KEY,
@@ -427,6 +453,22 @@ class IptvCatalogDb {
   static const _numberIndexSql =
       'CREATE INDEX IF NOT EXISTS idx_channels_number '
       'ON channels(catalog_key, generation, channel_number)';
+
+  /// Excludes rows whose category the user has hidden. Appended to a query
+  /// that already has a WHERE clause over `channels`.
+  ///
+  /// Argument-free on purpose: every reader here binds its arguments
+  /// POSITIONALLY, so a predicate carrying its own `?` would have to be
+  /// threaded through each call site's argument list in the right order. The
+  /// correlated sub-select probes a primary-key index on a table with a
+  /// handful of rows — resident in the page cache after the first probe.
+  ///
+  /// `h.grp = channels.grp` is never true for an ungrouped row (SQL equality
+  /// with NULL is unknown), which is the behaviour we want: the "no category"
+  /// bucket has no name to hide by and always stays visible.
+  static const _notHiddenSql =
+      'AND NOT EXISTS (SELECT 1 FROM hidden_groups h '
+      'WHERE h.catalog_key = channels.catalog_key AND h.grp = channels.grp)';
 
   /// Tests point this at a temp directory; production resolves the app
   /// documents directory once in [open].
@@ -904,22 +946,41 @@ class IptvCatalogDb {
   /// flash that is still not work for the frame that builds the page. Every
   /// page-open / revalidate caller awaits this; the synchronous
   /// [CatalogSnapshot.groups] remains for the rare fallback reads.
-  static Future<List<CatalogGroup>> groupsAsync(CatalogSnapshot snap) {
+  static Future<List<CatalogGroup>> groupsAsync(
+    CatalogSnapshot snap, {
+    bool includeHidden = false,
+  }) {
     return compute(
       _readGroupsJob,
-      (dbPath: path, catalogKey: snap.catalogKey, generation: snap.generation),
+      (
+        dbPath: path,
+        catalogKey: snap.catalogKey,
+        generation: snap.generation,
+        includeHidden: includeHidden,
+      ),
       debugLabel: 'iptv-catalog-groups',
     );
   }
 
   static List<CatalogGroup> _readGroupsJob(
-    ({String dbPath, String catalogKey, int generation}) job,
+    ({
+      String dbPath,
+      String catalogKey,
+      int generation,
+      bool includeHidden,
+    })
+    job,
   ) {
     final db = _openConnection(job.dbPath);
     try {
+      // The hidden set is read through THIS connection rather than shipped in
+      // the job: the exclusion is argument-free SQL, so the worker sees
+      // whatever the UI isolate last committed without either side having to
+      // serialize it.
       final rows = db.select(
         'SELECT grp, COUNT(*) AS c, MIN(position) AS first_pos '
         'FROM channels WHERE catalog_key = ? AND generation = ? '
+        '${job.includeHidden ? '' : _notHiddenSql} '
         'GROUP BY grp ORDER BY first_pos',
         [job.catalogKey, job.generation],
       );
@@ -1775,6 +1836,78 @@ class IptvCatalogDb {
     }
   }
 
+  // ── Hidden categories ────────────────────────────────────────────────────
+
+  /// Categories the user has hidden in [catalogKey]. Cheap enough to re-read
+  /// on every catalog present — it's a primary-key range scan over a table
+  /// that holds one row per hidden category.
+  static Set<String> hiddenGroups(String catalogKey) {
+    if (!isOpen) return const {};
+    final rows = _requireDb().select(
+      'SELECT grp FROM hidden_groups WHERE catalog_key = ?',
+      [catalogKey],
+    );
+    return {for (final row in rows) row['grp'] as String};
+  }
+
+  /// How many categories are hidden in each of [catalogKeys] — the count the
+  /// settings screens badge a source with. One query for all of them, so a
+  /// source list doesn't cost a query per row.
+  static Map<String, int> hiddenGroupCounts(Iterable<String> catalogKeys) {
+    final keys = catalogKeys.toList();
+    if (!isOpen || keys.isEmpty) return const {};
+    final placeholders = List.filled(keys.length, '?').join(', ');
+    final rows = _requireDb().select(
+      'SELECT catalog_key, COUNT(*) AS c FROM hidden_groups '
+      'WHERE catalog_key IN ($placeholders) GROUP BY catalog_key',
+      keys,
+    );
+    return {
+      for (final row in rows) row['catalog_key'] as String: row['c'] as int,
+    };
+  }
+
+  /// Hide or reveal one category. Ungrouped channels can't be hidden (they
+  /// have no name to key on), so an empty [group] is a no-op rather than a
+  /// row that would silently never match.
+  static void setGroupHidden(String catalogKey, String group, bool hidden) {
+    if (group.isEmpty || !isOpen) return;
+    final db = _requireDb();
+    if (hidden) {
+      db.execute(
+        'INSERT OR REPLACE INTO hidden_groups (catalog_key, grp, hidden_at) '
+        'VALUES (?, ?, ?)',
+        [catalogKey, group, DateTime.now().millisecondsSinceEpoch],
+      );
+    } else {
+      db.execute(
+        'DELETE FROM hidden_groups WHERE catalog_key = ? AND grp = ?',
+        [catalogKey, group],
+      );
+    }
+  }
+
+  /// Reveal every hidden category in [catalogKey].
+  static void showAllGroups(String catalogKey) {
+    if (!isOpen) return;
+    _requireDb().execute('DELETE FROM hidden_groups WHERE catalog_key = ?', [
+      catalogKey,
+    ]);
+  }
+
+  /// Drops a deleted source's hidden categories. Called when its catalogs go,
+  /// so re-adding the same playlist later doesn't inherit invisible rules the
+  /// user has no memory of setting.
+  static void forgetHiddenGroups(Iterable<String> catalogKeys) {
+    final keys = catalogKeys.toList();
+    if (!isOpen || keys.isEmpty) return;
+    final placeholders = List.filled(keys.length, '?').join(', ');
+    _requireDb().execute(
+      'DELETE FROM hidden_groups WHERE catalog_key IN ($placeholders)',
+      keys,
+    );
+  }
+
   // ── Reads (UI isolate, synchronous) ──────────────────────────────────────
 
   static Database _requireDb() {
@@ -1884,6 +2017,12 @@ class CatalogSnapshot {
     int? beforePosition,
   }) {
     final buf = StringBuffer(_base);
+    // Before the caller's own filters, and unconditional: a hidden category
+    // is hidden from the "All" view, from a search, and from the position →
+    // index arithmetic the zap ladder does (count(beforePosition:) and
+    // page(offset:) must agree on which rows exist, or the player tunes to
+    // the wrong channel).
+    buf.write(' ${IptvCatalogDb._notHiddenSql}');
     if (group != null) buf.write(' AND grp = ?');
     if (search != null && search.isNotEmpty) {
       buf.write(" AND search_key LIKE ? ESCAPE '\\'");
@@ -1914,6 +2053,11 @@ class CatalogSnapshot {
   ///
   /// This avoids treating VOD-only catalogs as missing a durable live-channel
   /// numbering assignment and repeatedly revalidating them on every visit.
+  ///
+  /// Deliberately NOT filtered by hidden categories: this is a fact about the
+  /// catalog, not about the current view. Hiding every live category would
+  /// otherwise flip it to false and put the source back into the
+  /// revalidate-on-every-visit loop the flag exists to prevent.
   bool get hasLiveChannels {
     return _db
         .select(
@@ -1962,11 +2106,13 @@ class CatalogSnapshot {
     return (position: row['position'] as int, channel: _channelFromRow(row));
   }
 
-  /// Catalog position of an assigned live-channel number.
+  /// Catalog position of an assigned live-channel number. Hidden categories
+  /// are skipped: typing a number must never land on a channel the user has
+  /// taken out of the guide.
   int? positionOfChannelNumber(int channelNumber) {
     final rows = _db.select(
-      'SELECT position $_base AND channel_number = ? '
-      'ORDER BY position LIMIT 1',
+      'SELECT position $_base ${IptvCatalogDb._notHiddenSql} '
+      'AND channel_number = ? ORDER BY position LIMIT 1',
       [catalogKey, generation, channelNumber],
     );
     return rows.isEmpty ? null : rows.first['position'] as int;
@@ -1978,8 +2124,8 @@ class CatalogSnapshot {
     int channelNumber,
   ) {
     final rows = _db.select(
-      'SELECT * $_base AND channel_number = ? '
-      'ORDER BY position LIMIT 1',
+      'SELECT * $_base ${IptvCatalogDb._notHiddenSql} '
+      'AND channel_number = ? ORDER BY position LIMIT 1',
       [catalogKey, generation, channelNumber],
     );
     if (rows.isEmpty) return null;
@@ -2036,9 +2182,14 @@ class CatalogSnapshot {
   /// Distinct groups with counts, in first-appearance (catalog) order — the
   /// order the category chips show today. Channels without a group come back
   /// as a null-named entry.
-  List<CatalogGroup> groups() {
+  ///
+  /// [includeHidden] is for the settings manager, which has to list what the
+  /// page is NOT showing; everything that feeds the page leaves it false so
+  /// the chips and their counts agree with the rows.
+  List<CatalogGroup> groups({bool includeHidden = false}) {
     final rows = _db.select(
       'SELECT grp, COUNT(*) AS c, MIN(position) AS first_pos $_base '
+      '${includeHidden ? '' : IptvCatalogDb._notHiddenSql} '
       'GROUP BY grp ORDER BY first_pos',
       [catalogKey, generation],
     );

@@ -34,15 +34,20 @@ import '../services/debrify_tv_repository.dart';
 import '../services/stremio_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/live_recording_service.dart';
+import '../services/desktop_schedule_service.dart';
 import '../services/update_service.dart';
 import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
 import 'settings/settings_search.dart';
+import 'settings/discover_layout_page.dart';
+import 'settings/tv_home_style_page.dart';
+import 'settings/tv_screen_size_page.dart';
+import 'settings/recordings_page.dart';
+import 'settings/tv_sidebar_style_page.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
-import 'settings/reddit_settings_page.dart';
 import 'settings/iptv_settings_page.dart';
 import 'settings/home_page_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
@@ -58,6 +63,7 @@ import 'settings/trakt_settings_page.dart';
 import 'settings/simkl_settings_page.dart';
 import 'settings/mdblist_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
+import 'settings/stremio_tv_settings_page.dart';
 import '../widgets/remote/remote_role_picker_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -76,6 +82,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// IPTV recording engine availability (Android 10+); gates its search entry.
   bool _recordingSearchable = false;
+
+  // ── Platform gates for search entries ───────────────────────────────────
+  // A search result must never open a page that has no matching control, so
+  // any indexed row whose page renders it conditionally is gated on the SAME
+  // condition the page uses.
+
+  bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+
+  /// Handsets only. The player's start-orientation control is hidden on TV
+  /// (no portrait to open in) and on desktop (the orientation call is a no-op
+  /// there) — see ExternalPlayerSettingsPage.
+  bool get _isPhone => PlatformUtil.isPhone;
+
+  /// Custom launch command (macOS/Linux/Windows) or custom URL scheme (iOS).
+  /// Android's external-player branch offers neither — it only explains the
+  /// system app chooser. See ExternalPlayerSettingsPage's platform branches.
+  bool get _customPlayerCommandSupported =>
+      !kIsWeb &&
+      (Platform.isMacOS ||
+          Platform.isLinux ||
+          Platform.isWindows ||
+          Platform.isIOS);
+
+  /// The recordings page has a working backend: the Android engine (tracked by
+  /// [_recordingSearchable]) or the desktop recorder. On iOS it has neither —
+  /// scheduling only raises a storage error and the library is always empty.
+  bool get _recordingSupported =>
+      _recordingSearchable || DesktopScheduleService.instance.isSupported;
 
   // TV content focus handler (stored for proper unregistration)
   VoidCallback? _tvContentFocusHandler;
@@ -128,6 +162,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _updateDownloadTaskId;
   bool _autoUpdateChecksEnabled = true;
   bool _tvKeyboardEnabled = true;
+  int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
+  String _tvHomeStyle = 'canvas';
+  String _discoverLayout = 'stage';
+  String _tvSidebarStyle = 'ghost';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
@@ -193,6 +231,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getMdblistApiKey(),
       StorageService.getMdblistUsername(),
       StorageService.getTvKeyboardEnabled(),
+      StorageService.getTvUiScalePercent(),
+      StorageService.getTvHomeStyle(),
+      StorageService.getTvSidebarStyle(),
+      StorageService.getDiscoverLayout(),
     ]);
 
     if (!mounted) return;
@@ -216,6 +258,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final mdblistKey = results[16] as String?;
     final mdblistUsername = results[17] as String?;
     final tvKeyboardEnabled = results[18] as bool;
+    final tvUiScalePercent = results[19] as int;
+    final tvHomeStyle = results[20] as String;
+    final tvSidebarStyle = results[21] as String;
+    final discoverLayout = results[22] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -348,6 +394,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loading = false;
     _autoUpdateChecksEnabled = autoCheckEnabled;
     _tvKeyboardEnabled = tvKeyboardEnabled;
+    _tvUiScalePercent = tvUiScalePercent;
+    _tvHomeStyle = tvHomeStyle;
+    _tvSidebarStyle = tvSidebarStyle;
+    _discoverLayout = discoverLayout;
 
     setState(() {});
 
@@ -550,13 +600,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     caption: _webDavCaption,
     onTap: _openWebDavSettings,
   );
-  ConnectionInfo get _redditInfo => ConnectionInfo(
-    title: 'Reddit',
-    connected: true,
-    status: 'Active',
-    caption: 'Browse video subreddits',
-    onTap: _openRedditSettings,
-  );
   ConnectionInfo get _iptvInfo => ConnectionInfo(
     title: 'IPTV',
     connected: true,
@@ -602,8 +645,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _allDebridInfo,
         _pikpakInfo,
         _webDavInfo,
-        // Reddit source is retired — card hidden, settings code kept.
-        // _redditInfo,
         _iptvInfo,
         _indexerManagersInfo,
       ],
@@ -642,6 +683,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
       tvKeyboardEnabled: _tvKeyboardEnabled,
       onToggleTvKeyboard: _toggleTvKeyboard,
+      tvUiScalePercent: _tvUiScalePercent,
+      onOpenTvScreenSize: _openTvScreenSize,
+      tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
+      onOpenTvSidebarStyle: _openTvSidebarStyle,
+      discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
+      onOpenDiscoverLayout: _openDiscoverLayout,
+      onOpenRecordings: _openRecordings,
+      onOpenIptvSettings: _openIptvSettings,
       showSupportDonation: _supportDonation.hasProviders,
       supportDonationLabel: _supportSettingsLabel,
       supportDonationSubtitle: _supportSettingsSubtitle,
@@ -658,7 +707,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         allDebrid: _allDebridInfo,
         pikpak: _pikpakInfo,
         webDav: _webDavInfo,
-        reddit: _redditInfo,
         iptv: _iptvInfo,
         trakt: _traktInfo,
         simkl: _simklInfo,
@@ -700,6 +748,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       supportDonationLabel: _supportSettingsLabel,
       supportDonationSubtitle: _supportSettingsSubtitle,
       onOpenSupportDonation: _openSupportDonation,
+      onOpenRecordings: _openRecordings,
+      onOpenIptvSettings: _openIptvSettings,
+      tvUiScalePercent: _tvUiScalePercent,
+      onOpenTvScreenSize: _openTvScreenSize,
+      tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
+      onOpenTvSidebarStyle: _openTvSidebarStyle,
+      discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
+      onOpenDiscoverLayout: _openDiscoverLayout,
     );
   }
 
@@ -720,10 +776,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// `_openXxx` handlers the layouts wire, so actions never drift; toggle
   /// entries read/write the same state fields as their inline rows.
   ///
-  /// Only top-level destinations are indexed today; [SettingsSearchEntry.keywords]
-  /// carry the in-page concepts (sd card, 4k, epg, scrobble…) so a search still
-  /// lands on the owning page. Per-leaf deep-links are a future extension —
-  /// add entries here.
+  /// Top-level destinations live here; in-page options are appended by
+  /// [_leafSearchEntries] and deep-link to the page that hosts them (no
+  /// scroll-to-highlight yet). [SettingsSearchEntry.keywords] carry the
+  /// concepts a row's copy doesn't say out loud (sd card, 4k, epg, scrobble…).
+  /// A few pages reachable only from outside Settings — Stremio TV's channel
+  /// settings, the Addons tab — are indexed here too, since a settings search
+  /// is where people look for them.
   List<SettingsSearchEntry> _buildSearchIndex() {
     SettingsSearchEntry conn(
       ConnectionInfo info,
@@ -777,7 +836,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.bookmark_rounded,
         title: 'IPTV lists',
         subtitle: 'Create and manage your channel lists',
-        category: 'Connections',
+        category: 'Live TV & DVR',
         keywords: const [
           'list',
           'lists',
@@ -793,7 +852,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.live_tv_rounded,
         title: 'Startup channel',
         subtitle: 'Open straight into a live channel when the app starts',
-        category: 'Connections',
+        category: 'Live TV & DVR',
         keywords: const [
           'startup',
           'start up',
@@ -809,37 +868,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
         onTap: _openIptvSettings,
       ),
-      if (_recordingSearchable)
-        SettingsSearchEntry(
-          icon: Icons.fiber_manual_record_rounded,
-          title: 'IPTV recording',
-          subtitle:
-              'Recording engine, scheduled recordings and your recordings '
-              'library',
-          category: 'Connections',
-          keywords: const [
-            'record',
-            'recording',
-            'recordings',
-            'dvr',
-            'capture',
-            'schedule',
-            'scheduled',
-            'timer',
-            'rec',
-            'iptv',
-            'live tv',
-            'engine',
-            'library',
-            'simultaneous',
-            'parallel',
-            'connections',
-            'battery',
-            'doze',
-            'notifications',
-          ],
-          onTap: _openIptvSettings,
-        ),
+      SettingsSearchEntry(
+        icon: Icons.history_toggle_off_rounded,
+        title: 'IPTV continue watching',
+        subtitle: 'Track the movies and series you start on IPTV',
+        category: 'Live TV & DVR',
+        keywords: const [
+          'continue watching',
+          'continue',
+          'resume',
+          'history',
+          'watch history',
+          'track',
+          'tracking',
+          'shelf',
+          'iptv',
+          'vod',
+          'movies',
+          'series',
+        ],
+        onTap: _openIptvSettings,
+      ),
       conn(_indexerManagersInfo, const [
         'indexer',
         'torznab',
@@ -867,13 +916,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // General
       nav(
         SettingsRows.homePage,
-        'General',
+        'Home & Display',
         _openHomePageSettings,
         keywords: const ['default view', 'startup', 'landing', 'tab'],
       ),
       nav(
         SettingsRows.player,
-        'General',
+        'Playback',
         _openExternalPlayerSettings,
         keywords: const [
           'external player',
@@ -888,7 +937,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       nav(
         SettingsRows.remote,
-        'General',
+        'Devices',
         _openRemoteControl,
         keywords: const [
           'cast',
@@ -902,7 +951,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!PlatformUtil.isAndroidTvCached)
         nav(
           SettingsRows.navigationStyle,
-          'General',
+          'Home & Display',
           _openNavigationSettings,
           keywords: const [
             'navigation',
@@ -950,35 +999,209 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _openQuickPlaySettings,
         keywords: const ['instant', 'auto play', 'one tap'],
       ),
+      // "addon" was a settings search dead end. This is NOT a settings page,
+      // so it opens the Addons TAB (the house switchTab idiom) rather than
+      // pushing a page: the tab resolves the hub-vs-classic flag itself, and
+      // the standalone `StremioAddonsPage`/`EngineImportPage` wrappers are
+      // stale duplicates of the tab bodies that nothing else renders.
+      // Its own category, because it does not live in a settings section.
+      SettingsSearchEntry(
+        icon: Icons.extension_rounded,
+        title: 'Addons',
+        subtitle: 'Stremio addons and torrent search engines',
+        category: 'Addons',
+        keywords: const [
+          'addon',
+          'addons',
+          'stremio',
+          'manifest',
+          'install',
+          'catalog',
+          'catalogs',
+          'subtitles',
+          'torrentio',
+          'marketplace',
+          'engine',
+          'engines',
+          'import',
+          'yaml',
+          'add engine',
+        ],
+        onTap: () async => MainPageBridge.switchTab?.call(
+          7, // 7 = Addons (see main.dart _pages)
+        ),
+      ),
 
       // TV Mode
       nav(
         SettingsRows.debrifyTv,
-        'TV Mode',
+        'Live TV & DVR',
         _openDebrifyTvSettings,
         keywords: const ['channels', 'limits', 'playback', 'android tv'],
+      ),
+      // One row, one entry: the recordings page owns the whole DVR — a second
+      // "IPTV recording" entry pointed at the same page and only split the
+      // keywords. The engine/battery/concurrency switches live in IPTV
+      // settings instead, and are indexed as leaves there.
+      nav(
+        SettingsRows.recordings,
+        'Live TV & DVR',
+        _openRecordings,
+        keywords: const [
+          'record',
+          'recording',
+          'recordings',
+          'dvr',
+          'schedule',
+          'scheduled',
+          'timer',
+          'rec',
+          'library',
+          'capture',
+          'iptv',
+          'live tv',
+        ],
+      ),
+      nav(
+        SettingsRows.iptvPlaylists,
+        'Live TV & DVR',
+        _openIptvSettings,
+        keywords: const ['m3u', 'xtream', 'channels', 'epg', 'live tv'],
+      ),
+      // Reachable only from the Stremio TV screen's own gear — indexed so its
+      // settings are findable where every other setting is. Categorised under
+      // its own name, not a settings section it isn't a row of.
+      SettingsSearchEntry(
+        icon: Icons.smart_display_rounded,
+        title: 'Stremio TV',
+        subtitle: 'Rotation, quality, provider and playback for Stremio TV',
+        category: 'Stremio TV',
+        keywords: const [
+          'stremio tv',
+          'channel',
+          'channels',
+          'rotation',
+          'random',
+          'episodes',
+          'quality',
+          'debrid provider',
+          'torrents first',
+          'auto-refresh',
+          'now playing',
+          'start position',
+        ],
+        onTap: _openStremioTvSettings,
       ),
       SettingsSearchEntry(
         icon: SettingsRows.tvKeyboard.icon,
         title: SettingsRows.tvKeyboard.title,
         subtitle: SettingsRows.tvKeyboard.subtitle,
-        category: 'TV Mode',
+        category: 'Home & Display',
         keywords: const [
           'on-screen keyboard',
           'remote',
           'text input',
           'ime',
           'typing',
+          // The mic key is a keyboard feature with no row of its own.
+          'voice',
+          'mic',
+          'microphone',
+          'dictation',
+          'speak',
         ],
         toggleValue: () => _tvKeyboardEnabled,
         onToggle: _toggleTvKeyboard,
       ),
+      // Android TV only — the size factor is applied natively in MainActivity,
+      // so the row would be inert anywhere else.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvScreenSize,
+          'Home & Display',
+          _openTvScreenSize,
+          subtitle: tvUiScaleLabel(_tvUiScalePercent),
+          keywords: const [
+            'zoom',
+            'zoomed in',
+            'scale',
+            'ui size',
+            'text size',
+            'font size',
+            'bigger',
+            'smaller',
+            'density',
+            'dpi',
+            'resolution',
+            'compact',
+            'fit more',
+          ],
+        ),
+      // Android TV only — the layout branch only exists on the TV home board.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvHomeStyle,
+          'Home & Display',
+          _openTvHomeStyle,
+          subtitle: tvHomeStyleLabel(_tvHomeStyle),
+          keywords: const [
+            'home',
+            'layout',
+            'home screen',
+            'canvas',
+            'shelf',
+            'classic',
+            'rows',
+            'redesign',
+            'view',
+          ],
+        ),
+      // Android TV only — the stage layout is a TV-canvas design; phones and
+      // desktop always browse Discover as a grid.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.discoverLayout,
+          'Home & Display',
+          _openDiscoverLayout,
+          subtitle: discoverLayoutLabel(_discoverLayout),
+          keywords: const [
+            'discover',
+            'layout',
+            'stage',
+            'grid',
+            'browse',
+            'shelf',
+            'catalog',
+            'view',
+            'posters',
+          ],
+        ),
+      // Android TV only — the rail is TV chrome.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvSidebarStyle,
+          'Home & Display',
+          _openTvSidebarStyle,
+          subtitle: tvSidebarStyleLabel(_tvSidebarStyle),
+          keywords: const [
+            'sidebar',
+            'nav',
+            'navigation',
+            'rail',
+            'menu',
+            'ghost',
+            'island',
+            'marquee',
+            'badge',
+            'dock',
+          ],
+        ),
 
       // Downloads
       if (_downloadLocationSupported)
         nav(
           SettingsRows.downloadLocation,
-          'Downloads',
+          'Data & Backup',
           _openDownloadLocationSettings,
           subtitle: _downloadLocationSubtitle,
           keywords: const [
@@ -996,13 +1219,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Maintenance
       nav(
         SettingsRows.clearDownloads,
-        'Maintenance',
+        'Data & Backup',
         _clearDownloadData,
         keywords: const ['queue', 'history', 'clear', 'remove'],
       ),
       nav(
         SettingsRows.clearPlayback,
-        'Maintenance',
+        'Data & Backup',
         _clearPlaybackData,
         keywords: const [
           'resume',
@@ -1015,13 +1238,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Backup & Restore
       nav(
         SettingsRows.createBackup,
-        'Backup & Restore',
+        'Data & Backup',
         _createBackup,
         keywords: const ['export', 'save', 'addons'],
       ),
       nav(
         SettingsRows.restoreBackup,
-        'Backup & Restore',
+        'Data & Backup',
         _restoreBackup,
         keywords: const ['import', 'load'],
       ),
@@ -1031,14 +1254,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: SettingsRows.autoUpdate.icon,
         title: SettingsRows.autoUpdate.title,
         subtitle: SettingsRows.autoUpdate.subtitle,
-        category: 'Updates',
+        category: 'About',
         keywords: const ['notify', 'releases', 'startup'],
         toggleValue: () => _autoUpdateChecksEnabled,
         onToggle: _toggleAutoUpdateChecks,
       ),
       nav(
         SettingsRows.checkUpdates,
-        'Updates',
+        'About',
         _checkForAppUpdates,
         subtitle: _updateSubtitle,
         keywords: const ['version', 'upgrade', 'github', 'new build'],
@@ -1050,25 +1273,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: SettingsRows.supportDebrify.icon,
           title: _supportSettingsLabel,
           subtitle: _supportSettingsSubtitle,
-          category: 'Support',
+          category: 'About',
           keywords: const ['donate', 'tip', 'contribute', 'fund'],
           onTap: _openSupportDonation,
         ),
       nav(
         SettingsRows.reddit,
-        'Support',
+        'About',
         () => launchSettingsUrl(SettingsRows.reddit.url!),
         keywords: const ['community', 'subreddit'],
       ),
       nav(
         SettingsRows.discord,
-        'Support',
+        'About',
         () => launchSettingsUrl(SettingsRows.discord.url!),
         keywords: const ['community', 'chat', 'help'],
       ),
       nav(
         SettingsRows.github,
-        'Support',
+        'About',
         () => launchSettingsUrl(SettingsRows.github.url!),
         keywords: const ['source code', 'contribute', 'issues'],
       ),
@@ -1100,13 +1323,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Real Debrid': Icons.link_rounded,
       'AllDebrid': Icons.link_rounded,
       'PikPak': Icons.link_rounded,
-      'Search Settings': Icons.search_rounded,
-      'Filter Settings': Icons.filter_list_rounded,
-      'Provider Settings': Icons.cloud_sync_rounded,
+      'Engines': Icons.search_rounded,
+      'Filters': Icons.filter_list_rounded,
+      'Default Provider': Icons.cloud_sync_rounded,
       'Quick Play': Icons.bolt_rounded,
-      'Home Page': Icons.home_rounded,
-      'Player Settings': Icons.open_in_new_rounded,
+      'Home Screen': Icons.home_rounded,
+      'Playback': Icons.open_in_new_rounded,
       'Debrify TV': Icons.live_tv_rounded,
+      'Stremio TV': Icons.smart_display_rounded,
+      'IPTV Playlists': Icons.playlist_play_rounded,
+      'Recordings': Icons.fiber_dvr_rounded,
+      'Trakt': Icons.sync_rounded,
+      'Simkl': Icons.sync_rounded,
+      'MDBList': Icons.list_alt_rounded,
+      'Remote': Icons.phonelink_rounded,
     };
     final pageOpeners = <String, Future<void> Function()>{
       'Torbox': _openTorboxSettings,
@@ -1114,27 +1344,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Real Debrid': _openRealDebridSettings,
       'AllDebrid': _openAllDebridSettings,
       'PikPak': _openPikPakSettings,
-      'Search Settings': _openTorrentSettings,
-      'Filter Settings': _openFilterSettings,
-      'Provider Settings': _openProviderSettings,
+      'Engines': _openTorrentSettings,
+      'Filters': _openFilterSettings,
+      'Default Provider': _openProviderSettings,
       'Quick Play': _openQuickPlaySettings,
-      'Home Page': _openHomePageSettings,
-      'Player Settings': _openExternalPlayerSettings,
+      'Home Screen': _openHomePageSettings,
+      'Playback': _openExternalPlayerSettings,
       'Debrify TV': _openDebrifyTvSettings,
+      'Stremio TV': _openStremioTvSettings,
+      'IPTV Playlists': _openIptvSettings,
+      'Recordings': _openRecordings,
+      'Trakt': _openTraktSettings,
+      'Simkl': _openSimklSettings,
+      'MDBList': _openMdblistSettings,
+      'Remote': _openRemoteControl,
     };
 
     SettingsSearchEntry leaf(
       String page,
       String title,
       String subtitle,
-      List<String> keywords,
-    ) => SettingsSearchEntry(
+      List<String> keywords, {
+      // Overrides the page's opener for a leaf that wants a deeper landing
+      // (the add-source form rather than the IPTV page's default view).
+      Future<void> Function()? onTap,
+    }) => SettingsSearchEntry(
       icon: pageIcons[page]!,
       title: title,
       subtitle: subtitle,
       category: page,
       keywords: keywords,
-      onTap: pageOpeners[page]!,
+      onTap: onTap ?? pageOpeners[page]!,
     );
 
     return [
@@ -1158,6 +1398,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const ['hide', 'navigation', 'nav', 'tab'],
       ),
       leaf(
+        'Torbox',
+        'Enable Torbox',
+        'Turn the Torbox integration on or off',
+        const ['enable', 'disable', 'turn off', 'integration', 'account'],
+      ),
+      leaf(
         'Premiumize',
         'Check Premiumize cache during searches',
         'Show a cached badge on Premiumize results',
@@ -1168,6 +1414,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Post-Torrent Action',
         'What happens after adding a torrent to Premiumize',
         const ['after adding', 'post torrent', 'play', 'download', 'open'],
+      ),
+      leaf(
+        'Premiumize',
+        'Hide Premiumize from Navigation',
+        'Hide the Premiumize tab from the nav bar',
+        const ['hide', 'navigation', 'nav', 'tab'],
+      ),
+      leaf(
+        'Premiumize',
+        'Enable Premiumize',
+        'Turn the Premiumize integration on or off',
+        const ['enable', 'disable', 'turn off', 'integration', 'account'],
       ),
       leaf(
         'Real Debrid',
@@ -1201,10 +1459,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
       leaf(
+        'Real Debrid',
+        'Hide Real Debrid from Navigation',
+        'Hide the Real-Debrid tab from the nav bar',
+        const ['hide', 'navigation', 'nav', 'tab'],
+      ),
+      leaf(
+        'Real Debrid',
+        'Enable Real Debrid',
+        'Turn the Real-Debrid integration on or off',
+        const ['enable', 'disable', 'turn off', 'integration', 'account'],
+      ),
+      leaf(
         'AllDebrid',
         'Post-Torrent Action',
         'What happens after adding a torrent to AllDebrid',
         const ['after adding', 'post torrent', 'play', 'download'],
+      ),
+      leaf(
+        'AllDebrid',
+        'Hide AllDebrid from Navigation',
+        'Hide the AllDebrid tab from the nav bar',
+        const ['hide', 'navigation', 'nav', 'tab'],
+      ),
+      leaf(
+        'AllDebrid',
+        'Enable AllDebrid',
+        'Turn the AllDebrid integration on or off',
+        const ['enable', 'disable', 'turn off', 'integration', 'account'],
       ),
       leaf(
         'PikPak',
@@ -1230,16 +1512,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Limit PikPak access to a single folder',
         const ['restrict', 'folder', 'access', 'security'],
       ),
+      leaf(
+        'PikPak',
+        'Hide PikPak from Navigation',
+        'Hide the PikPak button and tab from the nav bar',
+        const ['hide', 'navigation', 'nav', 'tab'],
+      ),
+      leaf(
+        'PikPak',
+        'Enable PikPak Integration',
+        'Turn the PikPak integration on or off',
+        const ['enable', 'disable', 'turn off', 'integration', 'account'],
+      ),
+      // Lives in the logged-OUT login form (pikpak_settings_page: the
+      // `if (!_isConnected)` block), so the subtitle says where to find it
+      // rather than promising a row a connected user won't see.
+      leaf(
+        'PikPak',
+        'Reset Device ID',
+        'On the PikPak login screen — issue a fresh device ID if sign-in fails',
+        const ['device id', 'reset', 'login problem', 'captcha', 'sign in'],
+      ),
 
       // Search / Filter / Provider
       leaf(
-        'Filter Settings',
+        'Engines',
+        'Search engine defaults',
+        'Which torrent engines searches use by default',
+        const ['engine', 'engines', 'default engines', 'torrent', 'sources'],
+      ),
+      leaf(
+        'Engines',
+        'Indexer managers',
+        'Jackett & Prowlarr connections for extra engines',
+        const ['jackett', 'prowlarr', 'torznab', 'indexer', 'indexers'],
+      ),
+      leaf(
+        'Filters',
         'Quality filter',
         'Default resolution filter for results',
         const ['quality', 'resolution', '4k', '2160p', '1080p', '720p', '480p'],
       ),
       leaf(
-        'Filter Settings',
+        'Filters',
         'Rip / Source filter',
         'Default release type filter',
         const [
@@ -1254,25 +1569,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
       leaf(
-        'Filter Settings',
+        'Filters',
         'Language filter',
         'Default audio-language filter',
         const ['language', 'audio', 'english', 'hindi', 'multi-audio'],
       ),
       leaf(
-        'Filter Settings',
+        'Filters',
         'Size filter',
         'Default file/pack size filter',
         const ['size', 'gb', 'mb', 'file size'],
       ),
       leaf(
-        'Filter Settings',
+        'Filters',
         'Apply filters to Quick Play',
         'Quick Play prefers filtered sources',
         const ['quick play', 'apply filters', 'honor', 'sources'],
       ),
       leaf(
-        'Provider Settings',
+        'Default Provider',
         'Default Torrent Provider',
         'Which service torrents are added to',
         const ['default provider', 'ask every time', 'torbox', 'real-debrid'],
@@ -1312,52 +1627,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
 
       // Home Page
-      leaf('Home Page', 'Home Rows', 'Choose which rows appear on Home', const [
+      leaf('Home Screen', 'Home Rows', 'Choose which rows appear on Home', const [
         'home rows',
         'rows',
         'catalogs',
         'customize',
       ]),
       leaf(
-        'Home Page',
+        'Home Screen',
         'Continue Watching',
         'Show recently watched on Home',
         const ['continue watching', 'recently watched', 'history'],
       ),
       leaf(
-        'Home Page',
+        'Home Screen',
         'Hide Provider Cards',
         'Hide debrid status cards on Home',
         const ['hide', 'provider cards', 'debrid', 'status'],
       ),
       leaf(
-        'Home Page',
+        'Home Screen',
         'Home trailer & sound',
         'Ambient trailer playback and volume',
         const ['trailer', 'spotlight', 'hero', 'sound', 'volume', 'autoplay'],
       ),
+      // Not on TV: TV has separate Home and Search tabs, so the page hides the
+      // selector there (home_page_settings_page's !isAndroidTvCached block).
+      if (!_isAndroidTv)
+        leaf(
+          'Home Screen',
+          'Default view',
+          'Which view Home opens on (Catalog or Keyword)',
+          const [
+            'default view',
+            'catalog',
+            'keyword',
+            'landing',
+            'opens on',
+            'startup',
+          ],
+        ),
+      // Exactly ONE ambient-trailer surface is offered per platform (see
+      // home_page_settings_page): the Home spotlight on TV, the detail-page
+      // backdrop everywhere else. Index each where its row actually exists.
+      if (!_isAndroidTv)
+        leaf(
+          'Home Screen',
+          'Trailer on Detail Page',
+          'Play a trailer behind the movie/series detail page',
+          const ['trailer', 'detail page', 'preview', 'backdrop', 'autoplay'],
+        ),
+      if (_isAndroidTv)
+        leaf(
+          'Home Screen',
+          'Trailer on Home Spotlight',
+          'Play a trailer in the Home and Discover hero',
+          const ['trailer', 'spotlight', 'hero', 'ambient', 'autoplay'],
+        ),
+      // TV only: the native hardware-plane renderer for those trailers.
+      if (_isAndroidTv)
+        leaf(
+          'Home Screen',
+          'Native Trailer Surface',
+          'Render trailers on a hardware surface for smoother playback',
+          const [
+            'native',
+            'surface',
+            'hardware',
+            'smooth',
+            'stutter',
+            'glitch',
+            'performance',
+            'trailer',
+          ],
+        ),
 
       // Player Settings
       leaf(
-        'Player Settings',
+        'Playback',
         'Default Player',
         'Which player plays videos',
         const ['default player', 'debrify player', 'external', 'deovr'],
       ),
       leaf(
-        'Player Settings',
+        'Playback',
         'Default Subtitle language',
         'Preferred subtitle language',
         const ['subtitle', 'subtitles', 'language', 'captions'],
       ),
       leaf(
-        'Player Settings',
+        'Playback',
         'Default Audio language',
         'Preferred audio language / track',
         const ['audio', 'language', 'track', 'dub'],
       ),
       leaf(
-        'Player Settings',
+        'Playback',
         'Subtitle Appearance',
         'Subtitle size, style, color, background & font',
         const [
@@ -1373,23 +1738,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
       leaf(
-        'Player Settings',
+        'Playback',
         'Default Aspect Ratio',
         'Default video aspect / zoom',
         const ['aspect', 'ratio', 'zoom', 'fit', 'fill'],
       ),
       leaf(
-        'Player Settings',
+        'Playback',
         'Allow system audio effects',
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
       ),
+      if (_isPhone)
+        leaf(
+          'Playback',
+          'Open the player in portrait',
+          'Start videos upright instead of turning the phone landscape',
+          const [
+            'portrait',
+            'landscape',
+            'orientation',
+            'rotate',
+            'rotation',
+            'vertical',
+            'horizontal',
+          ],
+        ),
       leaf(
-        'Player Settings',
+        'Playback',
         'Preferred external player',
         'Choose the external player app',
         const ['external', 'vlc', 'mpv', 'mx player', 'custom command'],
       ),
+      if (_customPlayerCommandSupported)
+        leaf(
+          'Playback',
+          'Custom player command',
+          'Custom launch command or URL scheme for an external player',
+          const [
+            'custom command',
+            'url scheme',
+            'launch',
+            'arguments',
+            'external',
+          ],
+        ),
+      leaf(
+        'Playback',
+        'Import Custom Font',
+        'Add your own TTF/OTF font for subtitles',
+        const ['font', 'ttf', 'otf', 'import font', 'custom font', 'subtitle'],
+      ),
+      // Android only: the page disables the DeoVR mode off Android and builds
+      // its format controls under `Platform.isAndroid`.
+      if (_isAndroid)
+        leaf(
+          'Playback',
+          'VR / DeoVR format',
+          'Screen type, stereo mode and format detection for DeoVR',
+          const [
+            'vr',
+            'deovr',
+            'stereo',
+            'screen type',
+            '180',
+            '360',
+            'sbs',
+            'side by side',
+            'over under',
+            'format',
+          ],
+        ),
 
       // Debrify TV
       leaf(
@@ -1397,6 +1816,276 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Channel result limits',
         'Per-engine channel size & result caps',
         const ['limits', 'result limit', 'channel max', 'engines', 'nsfw'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Reset to Defaults',
+        'Restore the default Debrify TV engine settings',
+        const ['reset', 'defaults', 'restore', 'engines'],
+      ),
+
+      // Stremio TV
+      leaf(
+        'Stremio TV',
+        'Rotation Interval',
+        'How often the channel changes (movies and series)',
+        const ['rotation', 'interval', 'minutes', 'change', 'shuffle'],
+      ),
+      leaf(
+        'Stremio TV',
+        'Preferred Quality',
+        'Prioritize streams matching this quality',
+        const ['quality', '4k', '2160p', '1080p', '720p', 'resolution'],
+      ),
+      leaf(
+        'Stremio TV',
+        'Debrid Provider',
+        'Which provider resolves Stremio TV torrent streams',
+        const ['debrid', 'provider', 'real-debrid', 'torbox', 'pikpak'],
+      ),
+      leaf(
+        'Stremio TV',
+        'Try torrents first',
+        'Resolve torrents via debrid before trying direct streams',
+        const ['torrents first', 'direct', 'stream', 'order', 'fallback'],
+      ),
+      leaf(
+        'Stremio TV',
+        'Random Episodes',
+        'Pick episodes at random on series channels',
+        const ['random', 'shuffle', 'episodes', 'series'],
+      ),
+      leaf(
+        'Stremio TV',
+        'Start Position',
+        'Where playback begins within the current slot',
+        const ['start', 'position', 'beginning', 'slot progress', 'resume'],
+      ),
+      leaf(
+        'Stremio TV',
+        'Hide Currently Playing',
+        'Blur the poster and hide details for a surprise',
+        const ['hide', 'spoiler', 'surprise', 'blur', 'now playing'],
+      ),
+      leaf(
+        'Stremio TV',
+        'Auto-refresh',
+        'Refresh Stremio TV channels automatically',
+        const ['auto refresh', 'refresh', 'update', 'channels'],
+      ),
+
+      // IPTV playlists page — the whole source/guide/startup surface.
+      leaf(
+        'IPTV Playlists',
+        'Add a source',
+        'Add an M3U link, an Xtream login, or a local file',
+        const [
+          'add',
+          'source',
+          'playlist',
+          'm3u',
+          'm3u8',
+          'xtream',
+          'login',
+          'url',
+          'file',
+          'import',
+        ],
+        onTap: _openIptvAddSource,
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Guide (EPG) source',
+        'Provider guide or a custom XMLTV URL per source',
+        const [
+          'epg',
+          'guide',
+          'xmltv',
+          'tv guide',
+          'programme',
+          'schedule',
+          'now next',
+          'custom guide',
+        ],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Hidden categories',
+        'Bring back categories you hid on the IPTV page',
+        const [
+          'hidden',
+          'hide',
+          'unhide',
+          'category',
+          'categories',
+          'adult',
+          'restore',
+        ],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Default playlist',
+        'Which source loads when you open IPTV',
+        const ['default', 'playlist', 'source', 'opens', 'preferred'],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Refresh playlist',
+        'Re-fetch channels and rebuild the catalog',
+        const [
+          'refresh',
+          'reload',
+          'update',
+          'rebuild',
+          'catalog',
+          're-fetch',
+          'missing channels',
+        ],
+      ),
+      // The recording switches live on the IPTV page, but only where the
+      // engine can actually run (Android 10+) — same gate as the DVR row.
+      if (_recordingSearchable) ...[
+        leaf(
+          'IPTV Playlists',
+          'Background recording engine',
+          'Keep recordings running when you zap or leave the app',
+          const [
+            'background',
+            'engine',
+            'recording',
+            'dvr',
+            'scheduled',
+            'player-tied',
+          ],
+        ),
+        leaf(
+          'IPTV Playlists',
+          'Simultaneous recordings',
+          'How many recordings can run at once',
+          const [
+            'simultaneous',
+            'concurrent',
+            'parallel',
+            'at once',
+            'connections',
+            'limit',
+          ],
+        ),
+        leaf(
+          'IPTV Playlists',
+          'Battery optimization',
+          'Exclude Debrify so recordings survive doze',
+          const [
+            'battery',
+            'doze',
+            'optimization',
+            'background',
+            'killed',
+            'stops',
+          ],
+        ),
+      ],
+      // Gated on a backend that actually records — the Android engine OR the
+      // desktop recorder. NOT on [_recordingSearchable] alone (Android-only,
+      // which would hide these on desktop where they work), and not ungated
+      // (on iOS neither backend exists: scheduling raises a storage error and
+      // the library is permanently empty).
+      if (_recordingSupported) ...[
+        leaf(
+          'Recordings',
+          'Schedule a recording',
+          'Record a channel at a set date and time',
+          const [
+            'schedule',
+            'timer',
+            'record later',
+            'date',
+            'start time',
+            'alarm',
+          ],
+        ),
+        leaf(
+          'Recordings',
+          'Recordings library',
+          'Your recorded files, and where they are saved',
+          const [
+            'library',
+            'recorded',
+            'files',
+            'folder',
+            'storage',
+            'downloads',
+            'delete recording',
+          ],
+        ),
+      ],
+
+      // Trackers — the pages behind the connection cards.
+      leaf(
+        'Trakt',
+        'Sync Catalog Items',
+        'Sync your Trakt lists and watch history into catalogs',
+        const [
+          'sync',
+          'catalog',
+          'watchlist',
+          'collection',
+          'history',
+          'scrobble',
+          'refresh',
+        ],
+      ),
+      leaf(
+        'Simkl',
+        'Sync Catalog Items',
+        'Sync your Simkl lists and watch history into catalogs',
+        const [
+          'sync',
+          'catalog',
+          'watchlist',
+          'plan to watch',
+          'history',
+          'scrobble',
+          'refresh',
+        ],
+      ),
+      if (kMdblistEnabled)
+        leaf(
+          'MDBList',
+          'MDBList API Key',
+          'Connect MDBList and browse your lists',
+          const ['api key', 'lists', 'liked', 'supporter', 'usage'],
+        ),
+
+      // Remote
+      leaf(
+        'Remote',
+        'Control another device',
+        'Use this device as a remote, or send your setup to another',
+        const [
+          'remote',
+          'control',
+          'pair',
+          'wifi',
+          'send setup',
+          'push addons',
+          'handoff',
+          'd-pad',
+        ],
+      ),
+      leaf(
+        'Remote',
+        'Receive from another device',
+        'Let another device control this one or send it addons & channels',
+        const [
+          'receive',
+          'target',
+          'pair',
+          'import setup',
+          'addons',
+          'channels',
+          'sessions',
+        ],
       ),
     ];
   }
@@ -1428,6 +2117,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
+  /// Stremio TV's channel settings. The row lives on the Stremio TV screen
+  /// (not in Settings), but the page is self-contained — search deep-links
+  /// into it so "random episodes"/"rotation" are findable from Settings.
+  Future<void> _openStremioTvSettings() async {
+    await pushSettingsPage(context, const StremioTvSettingsPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
+
   Future<void> _openPikPakSettings() async {
     final loggedOut = await pushSettingsPage<bool>(
       context,
@@ -1444,12 +2143,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await pushSettingsPage(context, const WebDavSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
-  }
-
-  Future<void> _openRedditSettings() async {
-    await pushSettingsPage(context, const RedditSettingsPage());
-    if (!mounted) return;
-    setState(() {});
   }
 
   Future<void> _openTraktSettings() async {
@@ -1543,6 +2236,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await pushSettingsPage(context, const IptvSettingsPage());
     if (!mounted) return;
     setState(() {});
+  }
+
+  /// IPTV settings landing on the add-source form — what a search for "add
+  /// playlist" is actually after. Without the flag the wide (TV/desktop)
+  /// layout opens its source rail instead, and the form is another hop away.
+  Future<void> _openIptvAddSource() async {
+    await pushSettingsPage(
+      context,
+      const IptvSettingsPage(openAddSource: true),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Live TV & DVR › Recordings — the same page IPTV settings and the
+  /// recording dialogs open, promoted to a first-class settings row.
+  Future<void> _openRecordings() async {
+    await pushSettingsPage(context, const RecordingsPage());
   }
 
   Future<void> _openHomePageSettings() async {
@@ -2610,6 +3321,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.setTvKeyboardEnabled(enabled);
   }
 
+  /// The page writes the pref itself (and says a restart is needed — the
+  /// engine is built with the factor in MainActivity.onCreate); re-read it on
+  /// the way back so the rail row's caption matches.
+  Future<void> _openTvScreenSize() async {
+    await pushSettingsPage(context, const TvScreenSizePage());
+    if (!mounted) return;
+    final percent = await StorageService.getTvUiScalePercent();
+    if (!mounted) return;
+    setState(() {
+      _tvUiScalePercent = percent;
+    });
+  }
+
+  /// The page writes the pref and live-applies via MainPageBridge; re-read it
+  /// on the way back so the rail row's caption matches.
+  Future<void> _openTvHomeStyle() async {
+    await pushSettingsPage(context, const TvHomeStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getTvHomeStyle();
+    if (!mounted) return;
+    setState(() {
+      _tvHomeStyle = style;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the Discover layout picker.
+  Future<void> _openDiscoverLayout() async {
+    await pushSettingsPage(context, const DiscoverLayoutPage());
+    if (!mounted) return;
+    final layout = await StorageService.getDiscoverLayout();
+    if (!mounted) return;
+    setState(() {
+      _discoverLayout = layout;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the sidebar chrome picker.
+  Future<void> _openTvSidebarStyle() async {
+    await pushSettingsPage(context, const TvSidebarStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getTvSidebarStyle();
+    if (!mounted) return;
+    setState(() {
+      _tvSidebarStyle = style;
+    });
+  }
+
   Future<void> _startAndroidUpdateDownload(AppRelease release) async {
     if (kIsWeb) {
       await _openReleasesPage(release.htmlUrl);
@@ -2797,6 +3555,16 @@ class _SettingsLayout extends StatelessWidget {
   final String supportDonationLabel;
   final String supportDonationSubtitle;
   final Future<void> Function() onOpenSupportDonation;
+  // Live TV & DVR.
+  final Future<void> Function() onOpenRecordings;
+  final Future<void> Function() onOpenIptvSettings;
+  // TV display rows (shown only when [isAndroidTv]).
+  final int tvUiScalePercent;
+  final Future<void> Function() onOpenTvScreenSize;
+  final String tvSidebarStyleLabel;
+  final Future<void> Function() onOpenTvSidebarStyle;
+  final String discoverLayoutLabel;
+  final Future<void> Function() onOpenDiscoverLayout;
 
   const _SettingsLayout({
     required this.connections,
@@ -2831,6 +3599,14 @@ class _SettingsLayout extends StatelessWidget {
     required this.supportDonationLabel,
     required this.supportDonationSubtitle,
     required this.onOpenSupportDonation,
+    required this.onOpenRecordings,
+    required this.onOpenIptvSettings,
+    required this.tvUiScalePercent,
+    required this.onOpenTvScreenSize,
+    required this.tvSidebarStyleLabel,
+    required this.onOpenTvSidebarStyle,
+    required this.discoverLayoutLabel,
+    required this.onOpenDiscoverLayout,
   });
 
   @override
@@ -2851,28 +3627,40 @@ class _SettingsLayout extends StatelessWidget {
                 // Connections section with cards
                 connections,
                 const SizedBox(height: 24),
-                // General section
+                // ONE information architecture, shared verbatim with the TV
+                // rail (_kCategories in settings_tv_layout.dart) and the
+                // search index — organized by what the user is changing,
+                // never by platform. Platform-only rows hide where they don't
+                // apply; the section names never differ between surfaces.
                 SettingsSection(
-                  title: 'General',
+                  title: 'Home & Display',
                   children: [
                     SettingsTile.spec(
                       SettingsRows.homePage,
                       onTap: onOpenHomePageSettings,
                     ),
-                    SettingsTile.spec(
-                      SettingsRows.player,
-                      onTap: onOpenExternalPlayerSettings,
-                    ),
-                    // Remote is listed on every platform. It used to be hidden
-                    // off TV and desktop on the grounds that "mobile keeps its
-                    // entry in the floating menu" — but that menu is gated on
-                    // width (isDesktopWide, >= 600 px), not on platform, so a
-                    // tablet or a phone in landscape lost both entry points at
-                    // once and could only reach Remote through settings search.
-                    SettingsTile.spec(
-                      SettingsRows.remote,
-                      onTap: () async => onOpenRemoteControl(),
-                    ),
+                    if (isAndroidTv) ...[
+                      SettingsTile.spec(
+                        SettingsRows.tvSidebarStyle,
+                        subtitle: tvSidebarStyleLabel,
+                        onTap: onOpenTvSidebarStyle,
+                      ),
+                      SettingsTile.spec(
+                        SettingsRows.discoverLayout,
+                        subtitle: discoverLayoutLabel,
+                        onTap: onOpenDiscoverLayout,
+                      ),
+                      SettingsTile.spec(
+                        SettingsRows.tvScreenSize,
+                        subtitle: tvUiScaleLabel(tvUiScalePercent),
+                        onTap: onOpenTvScreenSize,
+                      ),
+                      SettingsToggleTile.spec(
+                        SettingsRows.tvKeyboard,
+                        value: tvKeyboardEnabled,
+                        onChanged: onToggleTvKeyboard,
+                      ),
+                    ],
                     // Phone/small-window chrome only — TVs navigate by
                     // sidebar and never read the style.
                     if (!isAndroidTv)
@@ -2883,7 +3671,16 @@ class _SettingsLayout extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-                // Search section
+                SettingsSection(
+                  title: 'Playback',
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.player,
+                      onTap: onOpenExternalPlayerSettings,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
                 SettingsSection(
                   title: 'Search',
                   children: [
@@ -2906,40 +3703,49 @@ class _SettingsLayout extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-                // TV Mode section
                 SettingsSection(
-                  title: 'TV Mode',
+                  title: 'Live TV & DVR',
                   children: [
                     SettingsTile.spec(
                       SettingsRows.debrifyTv,
                       onTap: onOpenDebrifyTvSettings,
                     ),
-                    SettingsToggleTile.spec(
-                      SettingsRows.tvKeyboard,
-                      value: tvKeyboardEnabled,
-                      onChanged: onToggleTvKeyboard,
+                    SettingsTile.spec(
+                      SettingsRows.recordings,
+                      onTap: onOpenRecordings,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.iptvPlaylists,
+                      onTap: onOpenIptvSettings,
                     ),
                   ],
                 ),
-                if (onOpenDownloadLocation != null) ...[
-                  const SizedBox(height: 24),
-                  // Downloads section
-                  SettingsSection(
-                    title: 'Downloads',
-                    children: [
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Devices',
+                  children: [
+                    // Remote is listed on every platform. It used to be hidden
+                    // off TV and desktop on the grounds that "mobile keeps its
+                    // entry in the floating menu" — but that menu is gated on
+                    // width (isDesktopWide, >= 600 px), not on platform, so a
+                    // tablet or a phone in landscape lost both entry points at
+                    // once and could only reach Remote through settings search.
+                    SettingsTile.spec(
+                      SettingsRows.remote,
+                      onTap: () async => onOpenRemoteControl(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Data & Backup',
+                  children: [
+                    if (onOpenDownloadLocation != null)
                       SettingsTile.spec(
                         SettingsRows.downloadLocation,
                         subtitle: downloadLocationSubtitle,
                         onTap: onOpenDownloadLocation!,
                       ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 24),
-                // Maintenance section
-                SettingsSection(
-                  title: 'Maintenance',
-                  children: [
                     SettingsTile.spec(
                       SettingsRows.clearDownloads,
                       onTap: onClearDownloads,
@@ -2948,13 +3754,6 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.clearPlayback,
                       onTap: onClearPlayback,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Backup & Restore section
-                SettingsSection(
-                  title: 'Backup & Restore',
-                  children: [
                     SettingsTile.spec(
                       SettingsRows.createBackup,
                       onTap: onCreateBackup,
@@ -2962,19 +3761,6 @@ class _SettingsLayout extends StatelessWidget {
                     SettingsTile.spec(
                       SettingsRows.restoreBackup,
                       onTap: onRestoreBackup,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Danger Zone section
-                SettingsSection(
-                  title: 'Danger Zone',
-                  accentColor: kSettingsRed.withValues(alpha: 0.85),
-                  children: [
-                    SettingsTile.spec(
-                      SettingsRows.resetDebrify,
-                      onTap: onDangerAction,
-                      destructive: true,
                     ),
                   ],
                 ),
@@ -3025,6 +3811,20 @@ class _SettingsLayout extends StatelessWidget {
                     SettingsInfoTile.spec(
                       SettingsRows.version,
                       value: appVersion,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Danger Zone LAST — destructive actions live at the end of
+                // the page, isolated in their own red section on purpose.
+                SettingsSection(
+                  title: 'Danger Zone',
+                  accentColor: kSettingsRed.withValues(alpha: 0.85),
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.resetDebrify,
+                      onTap: onDangerAction,
+                      destructive: true,
                     ),
                   ],
                 ),

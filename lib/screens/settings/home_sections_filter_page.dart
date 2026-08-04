@@ -436,7 +436,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
           color: Colors.white.withValues(alpha: 0.7)),
     );
     const title = Text(
-      'Home Page',
+      'Home Screen',
       style: TextStyle(
         color: Colors.white,
         fontSize: 19,

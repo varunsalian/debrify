@@ -24,6 +24,23 @@ enum DesktopRecordingEnd {
   durationCap,
 }
 
+/// How one capture ended, for the app-level reporter. Captures outlive the
+/// screen that started them, so an ending has to be announceable by someone
+/// who is still alive — this is what gets handed over.
+class DesktopRecordingReport {
+  final DesktopRecordingEnd end;
+  final String channelName;
+  final String path;
+  final int bytes;
+
+  const DesktopRecordingReport({
+    required this.end,
+    required this.channelName,
+    required this.path,
+    required this.bytes,
+  });
+}
+
 /// One live capture: a plain HTTP byte copy of a progressive stream into a
 /// local file. This is the Android engine's core loop transplanted to Dart
 /// for desktop, where it is the ONLY recorder that works at all — mpv's
@@ -195,8 +212,16 @@ class DesktopRecordingCapture {
     );
     // In the capture itself, NOT an onFinished wrapper: callers may null
     // onFinished (the player does at dispose), and the UI revision must bump
-    // for every ending regardless.
-    DesktopRecordingService.instance.revision.value++;
+    // for every ending regardless. Same for the report — the whole point is
+    // that it reaches a listener who outlives whoever started this.
+    final service = DesktopRecordingService.instance;
+    service.revision.value++;
+    service.lastEnding.value = DesktopRecordingReport(
+      end: end,
+      channelName: channelName,
+      path: path,
+      bytes: _bytes,
+    );
     if (!_completion.isCompleted) _completion.complete(_bytes);
     try {
       onFinished?.call(end, _bytes);
@@ -218,6 +243,13 @@ class DesktopRecordingService {
   /// a SCHEDULED capture starting while focus parks on the channel flips the
   /// button too.
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  /// The most recent ending, for the app-level reporter wired in main(). A
+  /// capture is not owned by the screen that started it — it can end long
+  /// after that screen is gone (stream drop, 6h cap), and "reports to nobody"
+  /// is not an acceptable ending. Never reset: it is read on notification.
+  final ValueNotifier<DesktopRecordingReport?> lastEnding =
+      ValueNotifier<DesktopRecordingReport?>(null);
 
   final List<DesktopRecordingCapture> _captures = [];
 
@@ -272,7 +304,9 @@ class DesktopRecordingService {
     return capture;
   }
 
-  /// Stop every running capture; resolves once their files are closed.
+  /// Stop every running capture; resolves once their files are closed. Called
+  /// on app exit — the HTTP pipe lives in this process, so quitting without
+  /// this truncates whatever was mid-write.
   Future<void> stopAll() async {
     for (final capture in captures) {
       await capture.stop();

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -33,6 +34,7 @@ import 'screens/stremio_tv/stremio_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
+import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/storage_service.dart';
 import 'services/simkl/simkl_service.dart';
@@ -64,6 +66,7 @@ import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
+import 'services/desktop_recording_service.dart';
 import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
 
@@ -182,8 +185,15 @@ Future<void> main() async {
   // landscape. _initOrientation warms PlatformUtil's TV cache, so the
   // _capImageCache call right after resolves without a second channel trip.
   await _initOrientation();
+  // Warms playerStartPortraitCached: the player picks its orientation while
+  // building, and the IPTV startup channel can open one on the first frame.
+  await StorageService.getPlayerStartPortrait();
   await _capImageCache();
   await _resolveStartupChannel();
+  // Discover's remembered Sort per source, warmed before first frame so the
+  // panels can read it synchronously in initState and paint already-sorted.
+  // Cheap: SharedPreferences is already open by this point.
+  await DiscoverPrefs.warmUp();
   // Old-playback-state cleanup is pure housekeeping — never block first frame
   // on a storage sweep (slow flash on TV boxes).
   unawaited(_cleanupPlaybackState());
@@ -194,6 +204,9 @@ Future<void> main() async {
   // Arms stored timers + late-joins anything already in its window; no-op on
   // non-desktop platforms.
   unawaited(DesktopScheduleService.instance.init());
+  // Desktop captures outlive the screen that started them, so their endings
+  // and their final flush need an owner that outlives it too.
+  _wireDesktopRecordings();
   // Prepare the paged IPTV catalog while the user is on the startup/home
   // experience. The expensive file open and schema work run on a worker
   // isolate after first paint; opening IPTV later shares this future or finds
@@ -324,6 +337,59 @@ Future<void> _cleanupPlaybackState() async {
 // Global scaffold messenger key for showing snackbars from anywhere
 final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
+
+/// Give desktop recordings a process-scoped owner.
+///
+/// A capture belongs to the SERVICE, not to whatever screen pressed Record:
+/// close the player and it keeps running, exactly like the Android engine's
+/// (the Recordings hub is its stop control either way). Two jobs follow from
+/// that, and neither can live in a screen:
+///
+/// * **Endings nobody asked for** — a stream that drops or hits the 6h cap
+///   after the player closed used to report to a dead callback. Announced here
+///   instead, so it lands wherever the user actually is.
+/// * **The final flush** — the HTTP pipe lives in THIS process, so quitting
+///   truncates whatever is mid-write. Only cancelable exits get a say; a
+///   force-quit or a crash still loses the tail (a raw .ts survives it).
+void _wireDesktopRecordings() {
+  final service = DesktopRecordingService.instance;
+  if (!service.isSupported) return;
+  service.lastEnding.addListener(() {
+    final report = service.lastEnding.value;
+    if (report == null) return;
+    final channel = report.channelName.trim();
+    final subject = channel.isEmpty ? 'Recording' : 'Recording of $channel';
+    final message = switch (report.end) {
+      // Whoever asked for the stop reports it themselves, with the size.
+      DesktopRecordingEnd.stopped => null,
+      DesktopRecordingEnd.streamEnded => '$subject ended — the stream stopped',
+      DesktopRecordingEnd.durationCap => '$subject saved (6h limit)',
+      // bytes > 0 survives on disk even here (a mid-write crash keeps what it
+      // wrote); only the zero-byte case deletes its own file.
+      DesktopRecordingEnd.failed => report.bytes > 0
+          ? '$subject failed — the partial file was kept'
+          : '$subject failed — nothing was captured',
+    };
+    if (message == null) return;
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  });
+  // Unheld on purpose and never disposed: the constructor registers it with
+  // WidgetsBinding, which keeps it alive for as long as the process — exactly
+  // the scope this needs.
+  AppLifecycleListener(
+    onExitRequested: () async {
+      // Never let a wedged capture hold the window hostage: a truncated .ts
+      // still plays, a quit that never finishes does not.
+      await service.stopAll().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {},
+      );
+      return AppExitResponse.exit;
+    },
+  );
+}
 
 // Global navigator key for app navigation (used for remote config restart)
 final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
@@ -690,6 +756,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   String _phoneNavStyle = 'classic';
   bool _phoneNavLoaded = false;
 
+  /// TV sidebar chrome style (see TvSidebarNav.navStyle). Loaded with the
+  /// nav prefs; live-reloaded when the Settings picker fires the bridge.
+  /// Ghost is the product default — matching it here avoids a one-frame
+  /// classic flash before the pref read lands.
+  String _tvSidebarStyle = 'ghost';
+
   /// The classic bar's stored middle-slot picks (real indices; may contain
   /// currently-hidden tabs — validated against visibility at build). Null =
   /// never customized.
@@ -879,6 +951,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       });
     }
     unawaited(_loadPhoneNavPrefs());
+    MainPageBridge.tvSidebarStyleChanged = () {
+      if (mounted) unawaited(_loadPhoneNavPrefs());
+    };
     MainPageBridge.navPrefsChanged = () {
       if (mounted) unawaited(_loadPhoneNavPrefs());
     };
@@ -1103,6 +1178,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.switchTab = null;
     MainPageBridge.navPrefsChanged = null;
+    MainPageBridge.tvSidebarStyleChanged = null;
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
@@ -1902,11 +1978,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   Future<void> _loadPhoneNavPrefs() async {
     final style = await StorageService.getPhoneNavStyle();
     final picks = await StorageService.getPhoneNavBarIndices();
+    final tvSidebar = await StorageService.getTvSidebarStyle();
     if (!mounted) return;
     MainPageBridge.phoneNavStyleCached = style;
     setState(() {
       _phoneNavStyle = style;
       _phoneNavBarPicks = picks;
+      _tvSidebarStyle = tvSidebar;
       _phoneNavLoaded = true;
     });
   }
@@ -2742,6 +2820,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                 ),
                             child: TvSidebarNav(
                               key: _tvSidebarKey,
+                              navStyle: _tvSidebarStyle,
                               currentIndex: tvSelected == -1 ? 0 : tvSelected,
                               items: [
                                 for (final index in tvIndices)

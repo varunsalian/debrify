@@ -447,39 +447,104 @@ class SubtitleSettingsData {
     return const Color(0xFFFF5722);
   }
 
-  /// Same-colour glyph "halo" that fakes bold for fonts without a real bold
-  /// face. Flutter only honours [FontWeight] when the font family ships a
-  /// matching weight asset — but most bundled subtitle fonts (and every
-  /// imported custom font) are single-weight, so `w700` alone renders no
-  /// differently for them. Stamping offset copies of the text in eight
-  /// directions thickens the strokes, which works for ANY font and mirrors the
-  /// native player's `Typeface.create(base, BOLD)` synthetic bold.
-  List<Shadow> fauxBoldShadows(double fontSizePx) {
-    final d = (fontSizePx * 0.018).clamp(0.5, 1.4);
-    const dirs = <Offset>[
-      Offset(1, 0), Offset(-1, 0), Offset(0, 1), Offset(0, -1),
-      Offset(0.7, 0.7), Offset(-0.7, 0.7),
-      Offset(0.7, -0.7), Offset(-0.7, -0.7),
-    ];
+  /// Subtitle families that ship a REAL bold face, so [FontWeight.w700] alone
+  /// renders true bold glyphs.
+  ///
+  /// Everything else in the picker — Open Sans, Inter, Lato, Poppins, Nunito,
+  /// Merriweather, Source Serif, Fira Mono, Noto Sans — is declared with a
+  /// single Regular asset in pubspec.yaml, and every user-imported font is one
+  /// file by definition. Flutter silently ignores [FontWeight] for those, which
+  /// is what synthetic emboldening exists to cover.
+  static const Set<String> _familiesWithBoldAsset = {'Roboto'};
+
+  /// Whether [fontFamily] can be bolded by asking for the weight.
+  bool get hasRealBoldFace {
+    final family = fontFamily;
+    // No family = the platform's own UI font (Roboto / SF / Segoe), all of
+    // which carry a bold face.
+    if (family == null || family.isEmpty) return true;
+    return _familiesWithBoldAsset.contains(family);
+  }
+
+  /// Stroke width that emboldens a single-weight font at [fontSizePx].
+  ///
+  /// ~5.5% of the em is the range real bold faces sit in relative to their
+  /// regular. Clamped so tiny text doesn't lose its counters and giant text
+  /// doesn't turn into slabs.
+  double _emboldenStroke(double fontSizePx) =>
+      (fontSizePx * 0.055).clamp(0.8, 3.2);
+
+  /// The edge shadows pushed [expand] further out along their own direction.
+  ///
+  /// Emboldening grows the glyph by half the stroke, which would otherwise eat
+  /// the rim from the inside and leave a thin, patchy outline. Moving each
+  /// shadow out by the same amount keeps the rim's VISIBLE thickness the same
+  /// whether bold is on or off.
+  List<Shadow>? _edgeShadows(double expand) {
+    final base = resolvedShadows;
+    if (base == null || expand <= 0) return base;
     return [
-      for (final o in dirs)
-        Shadow(offset: Offset(o.dx * d, o.dy * d), color: color.color),
+      for (final s in base)
+        Shadow(
+          offset: s.offset.distance == 0
+              ? s.offset
+              : s.offset + (s.offset / s.offset.distance) * expand,
+          blurRadius: s.blurRadius,
+          color: s.color,
+        ),
     ];
   }
 
-  /// Build TextStyle for subtitles
-  TextStyle buildTextStyle() {
-    final base = resolvedShadows;
-    // Outline shadows first (drawn furthest back), then the faux-bold halo on
-    // top of them but under the glyph fill — so the outline still rims the
-    // thickened text rather than being swallowed by it.
-    final shadows = bold ? [...?base, ...fauxBoldShadows(size.sizePx)] : base;
+  /// Build the subtitle [TextStyle] — the ONE place subtitle text is styled,
+  /// so the player and every preview agree. [fontSizePx] overrides the
+  /// configured size for previews that render at a fraction of it; the
+  /// emboldening scales with whatever size is actually drawn.
+  ///
+  /// Bold is done two different ways ON PURPOSE:
+  ///  - a font with a real bold face just gets [FontWeight.w700] — one
+  ///    rasterisation of glyphs a type designer drew, which is as crisp as
+  ///    text gets;
+  ///  - a single-weight font gets a STROKE around the glyph outline instead.
+  ///    Still one rasterisation, uniformly thickened in every direction.
+  ///
+  /// The stroke lives in [TextStyle.foreground], which is mutually exclusive
+  /// with [TextStyle.color] — so the fill is supplied as a zero-offset,
+  /// zero-blur shadow underneath it. That is the only way to get fill AND
+  /// stroke out of a single TextStyle, and it's why the fill is a "shadow"
+  /// that casts nothing.
+  ///
+  /// [includeBackground] is for callers that already paint [background]
+  /// themselves (the tracks-sheet preview wraps the sample in a chip of that
+  /// colour). The background alphas are TRANSLUCENT, so painting the same
+  /// colour twice darkens the band behind the glyphs relative to the chip.
+  TextStyle buildTextStyle({double? fontSizePx, bool includeBackground = true}) {
+    final resolvedSize = fontSizePx ?? size.sizePx;
+    final embolden = bold && !hasRealBoldFace;
+    final stroke = embolden ? _emboldenStroke(resolvedSize) : 0.0;
+    final edges = _edgeShadows(stroke / 2);
+    // Null, not an empty list, when there is nothing to paint — so an
+    // edge-style of "None" with bold off stays byte-identical to before.
+    final shadows = <Shadow>[
+      ...?edges,
+      if (embolden) Shadow(color: color.color),
+    ];
     return TextStyle(
-      fontSize: size.sizePx,
-      color: color.color,
-      fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
-      shadows: shadows,
-      backgroundColor: background.color,
+      fontSize: resolvedSize,
+      color: embolden ? null : color.color,
+      foreground: embolden
+          ? (Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = stroke
+              // Round joins keep corners from spiking out at heavy strokes.
+              ..strokeJoin = StrokeJoin.round
+              ..strokeCap = StrokeCap.round
+              ..color = color.color)
+          : null,
+      fontWeight: bold && !embolden ? FontWeight.w700 : FontWeight.w400,
+      // Painted in list order, first furthest back: rim, then fill, then the
+      // glyph itself (the stroke) on top.
+      shadows: shadows.isEmpty ? null : shadows,
+      backgroundColor: includeBackground ? background.color : null,
       fontFamily: fontFamily,
     );
   }

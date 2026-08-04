@@ -18,6 +18,22 @@ class MainPageBridge {
   /// keyword bar's clearance for the floating button, which the classic bar
   /// doesn't have). 'classic' | 'floating'.
   static String phoneNavStyleCached = 'classic';
+
+  /// Fired by the TV Home Layout picker after writing `tv_home_style`, so the
+  /// live Home board re-reads the pref and rebuilds without a restart. Set by
+  /// the HOME SearchScreen instance only (not the Search tab's).
+  static VoidCallback? tvHomeStyleChanged;
+
+  /// Fired by the Discover Layout picker after writing `discover_layout`, so
+  /// the live Discover tab re-reads the pref and swaps between the grid and
+  /// the stage without a restart. Set by the DISCOVER SearchScreen instance
+  /// only (the Home board and the Search tab never render that layout).
+  static VoidCallback? discoverLayoutChanged;
+
+  /// Fired by the TV Sidebar Style picker after writing `tv_sidebar_style`,
+  /// so the app shell re-reads the pref and reskins the rail live. Set by
+  /// main.dart.
+  static VoidCallback? tvSidebarStyleChanged;
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;

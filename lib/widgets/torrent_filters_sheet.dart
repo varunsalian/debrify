@@ -28,6 +28,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
   late Set<RipSourceCategory> _selectedSources;
   late Set<AudioLanguage> _selectedLanguages;
   late Set<SizeBucket> _selectedSizes;
+  late Set<DynamicRange> _selectedRanges;
   final FocusNode _clearButtonFocusNode = FocusNode();
   final FocusNode _closeButtonFocusNode = FocusNode();
   final FocusNode _applyButtonFocusNode = FocusNode();
@@ -35,10 +36,12 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
   final List<FocusNode> _ripChipFocusNodes = [];
   final List<FocusNode> _languageChipFocusNodes = [];
   final List<FocusNode> _sizeChipFocusNodes = [];
+  final List<FocusNode> _rangeChipFocusNodes = [];
   final List<bool> _qualityChipFocusStates = [];
   final List<bool> _ripChipFocusStates = [];
   final List<bool> _languageChipFocusStates = [];
   final List<bool> _sizeChipFocusStates = [];
+  final List<bool> _rangeChipFocusStates = [];
 
   @override
   void initState() {
@@ -47,6 +50,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
     _selectedSources = widget.initialState.ripSources.toSet();
     _selectedLanguages = widget.initialState.languages.toSet();
     _selectedSizes = widget.initialState.sizes.toSet();
+    _selectedRanges = widget.initialState.dynamicRanges.toSet();
 
     // Create focus nodes for quality chips
     for (int i = 0; i < _qualityOptions.length; i++) {
@@ -104,6 +108,20 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       _sizeChipFocusStates.add(false);
     }
 
+    // Create focus nodes for dynamic-range chips
+    for (int i = 0; i < _rangeOptions.length; i++) {
+      final node = FocusNode(debugLabel: 'range-chip-$i');
+      node.addListener(() {
+        if (mounted) {
+          setState(() {
+            _rangeChipFocusStates[i] = node.hasFocus;
+          });
+        }
+      });
+      _rangeChipFocusNodes.add(node);
+      _rangeChipFocusStates.add(false);
+    }
+
     // Auto-focus first quality chip after sheet is fully built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _qualityChipFocusNodes.isNotEmpty) {
@@ -127,6 +145,9 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       node.dispose();
     }
     for (final node in _sizeChipFocusNodes) {
+      node.dispose();
+    }
+    for (final node in _rangeChipFocusNodes) {
       node.dispose();
     }
     super.dispose();
@@ -156,6 +177,14 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
     });
   }
 
+  void _toggleRange(DynamicRange range) {
+    setState(() {
+      if (!_selectedRanges.add(range)) {
+        _selectedRanges.remove(range);
+      }
+    });
+  }
+
   void _toggleSize(SizeBucket bucket) {
     setState(() {
       if (!_selectedSizes.add(bucket)) {
@@ -170,6 +199,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       _selectedSources.clear();
       _selectedLanguages.clear();
       _selectedSizes.clear();
+      _selectedRanges.clear();
     });
   }
 
@@ -177,7 +207,8 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       _selectedQualities.isNotEmpty ||
       _selectedSources.isNotEmpty ||
       _selectedLanguages.isNotEmpty ||
-      _selectedSizes.isNotEmpty;
+      _selectedSizes.isNotEmpty ||
+      _selectedRanges.isNotEmpty;
 
   void _apply() {
     Navigator.of(context).pop(
@@ -186,6 +217,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
         ripSources: _selectedSources.toSet(),
         languages: _selectedLanguages.toSet(),
         sizes: _selectedSizes.toSet(),
+        dynamicRanges: _selectedRanges.toSet(),
       ),
     );
   }
@@ -454,6 +486,72 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                       ),
                       const SizedBox(height: 24),
                       const Text(
+                        'Dynamic range',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _rangeOptions
+                            .asMap()
+                            .entries
+                            .map((entry) {
+                              final index = entry.key;
+                              final option = entry.value;
+                              final isFocused = _rangeChipFocusStates[index];
+                              return Focus(
+                                focusNode: _rangeChipFocusNodes[index],
+                                onKeyEvent: (node, event) {
+                                  if (event is KeyDownEvent &&
+                                      (isActivateKey(event.logicalKey) ||
+                                          event.logicalKey ==
+                                              LogicalKeyboardKey.space)) {
+                                    _toggleRange(option.value);
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    border: isFocused
+                                        ? Border.all(
+                                            color: const Color(0xFF3B82F6),
+                                            width: 2,
+                                          )
+                                        : null,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: FilterChip(
+                                    label: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(option.title),
+                                        Text(
+                                          option.subtitle,
+                                          style: const TextStyle(fontSize: 10),
+                                        ),
+                                      ],
+                                    ),
+                                    selected: _selectedRanges.contains(
+                                      option.value,
+                                    ),
+                                    onSelected: (_) =>
+                                        _toggleRange(option.value),
+                                  ),
+                                ),
+                              );
+                            })
+                            .toList(),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
                         'Size',
                         style: TextStyle(
                           color: Colors.white70,
@@ -603,6 +701,13 @@ const _ripOptions = <_ChipOption<RipSourceCategory>>[
   _ChipOption(RipSourceCategory.dvdrip, 'DVDRip', 'DVD sources, SD rips'),
   _ChipOption(RipSourceCategory.cam, 'CAM / TS', 'CAM, HDCAM, telesync'),
   _ChipOption(RipSourceCategory.other, 'Other', 'Unclassified / scene'),
+];
+
+/// Two chips, not one per HDR flavour — see [DynamicRange]. Selecting SDR
+/// alone is how a user on an SDR display excludes HDR entirely.
+const _rangeOptions = <_ChipOption<DynamicRange>>[
+  _ChipOption(DynamicRange.sdr, 'SDR', 'No HDR tag'),
+  _ChipOption(DynamicRange.hdr, 'HDR', 'HDR10/10+, DV, HLG'),
 ];
 
 const _sizeOptions = <_ChipOption<SizeBucket>>[

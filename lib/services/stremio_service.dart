@@ -512,12 +512,21 @@ class StremioService {
 
     // Filter addons that support the content type AND the content ID prefix
     final applicableAddons = addons.where((a) {
-      // Check content type support
+      // Check content type support. An addon that declares NO types is treated
+      // as unrestricted — the same rule the `else` branch below already used,
+      // and the one Stremio itself follows. Without it, movie and series were
+      // the only queries that could silently drop an addon for saying nothing.
+      // "Saying nothing" is common, not exotic: manifests that use the
+      // object form of `resources` put their types inside the resource and
+      // leave the top level empty (StremThru Torz does), and fromManifest
+      // deliberately leaves those unread — hoisting them would narrow the
+      // filters that treat empty as unrestricted. Fixing it HERE also rescues
+      // addons already stored with empty types, with no re-add needed.
       bool supportsType = true;
       if (type == 'movie') {
-        supportsType = a.supportsMovies;
+        supportsType = a.supportsMovies || a.types.isEmpty;
       } else if (type == 'series') {
-        supportsType = a.supportsSeries;
+        supportsType = a.supportsSeries || a.types.isEmpty;
       }
       // For other types (anime, tv, channel, etc.), allow if addon declares that type
       else {

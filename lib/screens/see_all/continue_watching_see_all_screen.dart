@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/app_route_observer.dart';
+import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
@@ -118,6 +120,12 @@ class _ContinueWatchingSeeAllScreenState
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     _items = widget.items;
     _category = widget.initialCategory;
+    // Discover only: reopen on the order the user last picked for this source.
+    // Read before the first _recompute so the grid paints already sorted.
+    if (widget.embedded) {
+      final saved = DiscoverPrefs.enumSortFor(DiscoverPrefs.cw, _CwSort.values);
+      if (saved != null) _sort = saved;
+    }
     _recompute();
     // Embedded (Discover): the host focuses the Source dropdown on entry, and a
     // source swap re-mounts this panel — so don't yank focus into the grid here,
@@ -250,6 +258,16 @@ class _ContinueWatchingSeeAllScreenState
         break;
     }
     _visible = list;
+  }
+
+  /// Sort picks are remembered (Discover only) so the next launch — and the next
+  /// swap back to this source — opens on the same order. Only an explicit pick
+  /// is stored; nothing else in this screen resets the sort.
+  void _setSort(_CwSort v) {
+    _setFilter(() => _sort = v);
+    if (widget.embedded) {
+      unawaited(DiscoverPrefs.setEnumSort(DiscoverPrefs.cw, v));
+    }
   }
 
   void _setFilter(VoidCallback change) {
@@ -395,7 +413,7 @@ class _ContinueWatchingSeeAllScreenState
                 StremioDropdownOption(_CwSort.az, 'A–Z'),
                 StremioDropdownOption(_CwSort.za, 'Z–A'),
               ],
-              onSelected: (v) => _setFilter(() => _sort = v),
+              onSelected: _setSort,
             ),
             StremioDropdown<String>(
               label: 'State',

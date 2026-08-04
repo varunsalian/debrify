@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
@@ -63,6 +65,11 @@ class IptvFiltersBar extends StatelessWidget {
   final VoidCallback? onOpenRecordings;
   final bool recordingLive;
 
+  /// Non-null lets a category be hidden by long-pressing (or holding OK on)
+  /// it in the picker. Null on sources that have no stored catalog to hide
+  /// against, which is also what keeps the hint off those pickers.
+  final ValueChanged<String>? onHideCategory;
+
   const IptvFiltersBar({
     super.key,
     required this.playlists,
@@ -86,6 +93,7 @@ class IptvFiltersBar extends StatelessWidget {
     this.onDownArrowPressed,
     this.onOpenRecordings,
     this.recordingLive = false,
+    this.onHideCategory,
   });
 
   @override
@@ -163,6 +171,7 @@ class IptvFiltersBar extends StatelessWidget {
                     onDownArrowPressed: onDownArrowPressed,
                     onLeftArrowPressed: categoryLeftArrow,
                     onRightArrowPressed: null,
+                    onHideCategory: onHideCategory,
                   ),
                 ),
 
@@ -413,6 +422,7 @@ class _CategoryDropdown extends StatefulWidget {
   final VoidCallback? onDownArrowPressed;
   final VoidCallback? onLeftArrowPressed;
   final VoidCallback? onRightArrowPressed;
+  final ValueChanged<String>? onHideCategory;
 
   const _CategoryDropdown({
     required this.categories,
@@ -424,6 +434,7 @@ class _CategoryDropdown extends StatefulWidget {
     this.onDownArrowPressed,
     this.onLeftArrowPressed,
     this.onRightArrowPressed,
+    this.onHideCategory,
   });
 
   @override
@@ -450,19 +461,25 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
   }
 
   Future<void> _showCategoryPicker() async {
-    final result = await showModalBottomSheet<String?>(
+    final result = await showModalBottomSheet<_CategoryChoice>(
       context: context,
       isScrollControlled: true,
       builder: (context) => _CategoryPickerSheet(
         categories: widget.categories,
         categoryCounts: widget.categoryCounts,
         selectedCategory: widget.selectedCategory,
+        canHide: widget.onHideCategory != null,
       ),
     );
 
-    if (result != null) {
-      widget.onChanged(result.isEmpty ? null : result);
+    if (result == null) return;
+    // The sheet is closed before the hide runs, so its confirmation opens
+    // over the page rather than over a list that is about to change.
+    if (result.hide) {
+      widget.onHideCategory?.call(result.category);
+      return;
     }
+    widget.onChanged(result.category.isEmpty ? null : result.category);
   }
 
   @override
@@ -907,16 +924,30 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
   }
 }
 
+/// What the category sheet closed with: a category to select, or one to hide.
+class _CategoryChoice {
+  const _CategoryChoice(this.category, {this.hide = false});
+
+  /// Empty means "All categories" (never valid with [hide]).
+  final String category;
+  final bool hide;
+}
+
 /// Bottom sheet for selecting category with DPAD support
 class _CategoryPickerSheet extends StatefulWidget {
   final List<String> categories;
   final Map<String, int>? categoryCounts;
   final String? selectedCategory;
 
+  /// Whether long-press / hold-OK on a category offers to hide it. False on
+  /// sources with no stored catalog to hide against.
+  final bool canHide;
+
   const _CategoryPickerSheet({
     required this.categories,
     this.categoryCounts,
     required this.selectedCategory,
+    this.canHide = false,
   });
 
   @override
@@ -1016,11 +1047,29 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
             // Title
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Select Category',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Select Category',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  // Once, in the header — a per-row caption would repeat
+                  // itself down a list that can run to hundreds of entries.
+                  if (widget.canHide)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Long-press (or hold OK on) a category to hide it',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
@@ -1034,6 +1083,9 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                 itemCount: _optionCount,
                 itemBuilder: (context, index) {
                   if (index == 0) {
+                    void pickAll() => Navigator.of(
+                      context,
+                    ).pop(const _CategoryChoice(''));
                     return _FocusablePickerTile(
                       focusNode: _nodeFor(0),
                       label: 'All Categories',
@@ -1041,24 +1093,29 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                           ? Icons.check_circle
                           : Icons.folder_outlined,
                       isSelected: widget.selectedCategory == null,
-                      onTap: () => Navigator.of(context).pop(''),
-                      onKeyEvent: (node, event) => _handleKeyEvent(
-                        node, event, 0, () => Navigator.of(context).pop(''),
-                      ),
+                      onTap: pickAll,
+                      onKeyEvent: (node, event) =>
+                          _handleKeyEvent(node, event, 0, pickAll),
                     );
                   }
                   final category = widget.categories[index - 1];
                   final isSelected = category == widget.selectedCategory;
                   final count = widget.categoryCounts?[category];
+                  void pick() =>
+                      Navigator.of(context).pop(_CategoryChoice(category));
                   return _FocusablePickerTile(
                     focusNode: _nodeFor(index),
                     label: count != null ? '$category  ($count)' : category,
                     icon: isSelected ? Icons.check_circle : Icons.folder_outlined,
                     isSelected: isSelected,
-                    onTap: () => Navigator.of(context).pop(category),
-                    onKeyEvent: (node, event) => _handleKeyEvent(
-                      node, event, index, () => Navigator.of(context).pop(category),
-                    ),
+                    onTap: pick,
+                    onHold: widget.canHide
+                        ? () => Navigator.of(
+                            context,
+                          ).pop(_CategoryChoice(category, hide: true))
+                        : null,
+                    onKeyEvent: (node, event) =>
+                        _handleKeyEvent(node, event, index, pick),
                   );
                 },
               ),
@@ -1082,6 +1139,11 @@ class _FocusablePickerTile extends StatefulWidget {
   final VoidCallback onTap;
   final KeyEventResult Function(FocusNode, KeyEvent)? onKeyEvent;
 
+  /// Secondary action: long-press, or hold OK on a remote. Wiring it changes
+  /// how OK is read — the tile then acts on key-UP, so a press can be told
+  /// from a hold.
+  final VoidCallback? onHold;
+
   const _FocusablePickerTile({
     this.focusNode,
     required this.label,
@@ -1090,6 +1152,7 @@ class _FocusablePickerTile extends StatefulWidget {
     required this.isSelected,
     required this.onTap,
     this.onKeyEvent,
+    this.onHold,
   });
 
   @override
@@ -1117,14 +1180,63 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
 
   @override
   void dispose() {
+    _holdTimer?.cancel();
     widget.focusNode?.removeListener(_onFocusChange);
     super.dispose();
+  }
+
+  /// Same 500ms as every other hold-OK in the app.
+  static const _holdDuration = Duration(milliseconds: 500);
+  Timer? _holdTimer;
+  bool _sawSelectDown = false;
+  bool _holdFired = false;
+
+  void _startHold() {
+    _holdFired = false;
+    _holdTimer?.cancel();
+    _holdTimer = Timer(_holdDuration, () {
+      _holdFired = true;
+      _sawSelectDown = false;
+      widget.onHold?.call();
+    });
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+  }
+
+  /// OK on a tile that has a hold action: the tap fires on key-UP, so that a
+  /// press held past [_holdDuration] runs the secondary action instead. A
+  /// key-up with no matching key-down on this tile (focus arrived mid-press)
+  /// is swallowed rather than treated as a tap.
+  KeyEventResult _handleSelectKey(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      _sawSelectDown = true;
+      _startHold();
+      return KeyEventResult.handled;
+    }
+    if (event is KeyUpEvent) {
+      _cancelHold();
+      final wasPress = _sawSelectDown && !_holdFired;
+      _sawSelectDown = false;
+      _holdFired = false;
+      if (wasPress) widget.onTap();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.handled; // swallow auto-repeat
   }
 
   void _onFocusChange() {
     if (mounted) {
       final hasFocus = widget.focusNode?.hasFocus ?? false;
       setState(() => _isFocused = hasFocus);
+      if (!hasFocus) {
+        // The key-up will land elsewhere; a timer firing after that would
+        // act on a tile the user has already left.
+        _cancelHold();
+        _sawSelectDown = false;
+      }
 
       // Scroll into view when focused
       if (hasFocus) {
@@ -1149,9 +1261,19 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
 
     return Focus(
       focusNode: widget.focusNode,
-      onKeyEvent: widget.onKeyEvent,
+      onKeyEvent: (node, event) {
+        // A holdable tile owns OK itself; everything else (BACK, up, down)
+        // still belongs to the list that built it.
+        if (widget.onHold != null &&
+            (isActivateKey(event.logicalKey) ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          return _handleSelectKey(event);
+        }
+        return widget.onKeyEvent?.call(node, event) ?? KeyEventResult.ignored;
+      },
       child: GestureDetector(
         onTap: widget.onTap,
+        onLongPress: widget.onHold,
         child: AnimatedContainer(
           key: _tileKey,
           duration: const Duration(milliseconds: 150),

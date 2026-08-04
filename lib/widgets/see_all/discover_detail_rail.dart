@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
@@ -12,9 +13,25 @@ import '../../services/youtube_service.dart';
 import '../home/home_theme.dart';
 import 'see_all_theme.dart';
 
+/// How the reactive detail block is drawn.
+enum DiscoverDetailLayout {
+  /// The fixed left column of the two-pane GRID layout: a tall glass rail.
+  rail,
+
+  /// The STAGE layout's identity block: the same facts laid out wide and
+  /// bottom-anchored over the full-bleed art, above the shelf.
+  stage,
+}
+
 /// The fixed left pane of the Discover two-pane layout (TV). It never takes
 /// focus — it purely *reacts* to whichever grid tile the DPAD is on, showing a
 /// backdrop, title, metadata and plot for that title.
+///
+/// It is also the STAGE layout's identity block ([DiscoverDetailLayout.stage]):
+/// the *decisions* — enrichment debounce, trailer dwell/resolve, single-decoder
+/// suppression, what's published to the host's stage — are identical and stay
+/// here, and only the arrangement changes. Both layouts must keep this widget
+/// mounted, since it is what resolves the ambient trailer at all.
 ///
 /// List items are metadata-poor (usually just poster + name), so the rail draws
 /// what it has instantly and then, after a short dwell, fetches the enriched
@@ -51,6 +68,35 @@ class DiscoverDetailRail extends StatefulWidget {
   /// during build, when marking the already-built stage dirty would assert).
   final ValueNotifier<StremioMeta?> shownItem;
 
+  /// Which arrangement to paint. Defaults to the two-pane rail.
+  final DiscoverDetailLayout layout;
+
+  /// STAGE only: true while trailer frames own the screen, which fades the
+  /// meta line and plot away and leaves the title art holding the stage — the
+  /// Home board's move, transplanted.
+  final ValueListenable<bool>? trailerShowing;
+
+  /// STAGE only: how wide the identity block may run before wrapping. The host
+  /// sizes it off the canvas so the text never crosses into the art.
+  final double stageMaxWidth;
+
+  /// STAGE only: the height the identity block may occupy in the BROWSE
+  /// state. Passed in rather than measured, because theater animates the
+  /// block's box open — reading the live constraint would flip the detail
+  /// ladder below mid-glide and jump the title art.
+  final double stageBudget;
+
+  /// Wait for the DPAD to REST this long before swapping which title is shown.
+  ///
+  /// The Home board's billboard settle, transplanted: holding a direction
+  /// across a shelf should cost only the card's own focus visuals, never a
+  /// full identity rebuild — and, downstream of [shownItem], a full-bleed
+  /// backdrop decode — on every step. The trailer is still torn down on the
+  /// FIRST keypress, so the lights come back up with the press rather than
+  /// after the settle. Zero (the default, and the two-pane rail) swaps on
+  /// every focus change, which is right for a small side rail.
+  final Duration settleDelay;
+
   const DiscoverDetailRail({
     super.key,
     required this.item,
@@ -59,6 +105,11 @@ class DiscoverDetailRail extends StatefulWidget {
     required this.trailerVolume,
     required this.trailerMeta,
     required this.shownItem,
+    this.layout = DiscoverDetailLayout.rail,
+    this.trailerShowing,
+    this.stageMaxWidth = 470,
+    this.stageBudget = double.infinity,
+    this.settleDelay = Duration.zero,
   });
 
   @override
@@ -188,16 +239,54 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     _evaluateTrailer();
   }
 
+  /// Pending settle (see [DiscoverDetailRail.settleDelay]).
+  Timer? _settle;
+
+  /// A new title has focus. With a settle delay, only the cheap half runs now
+  /// — releasing the trailer so the stage's lights lift with the keypress —
+  /// and the visible swap waits for the remote to rest. The FIRST title never
+  /// waits: an empty stage should dress itself promptly.
+  void _adopt(StremioMeta? m) {
+    _settle?.cancel();
+    if (widget.settleDelay > Duration.zero && _shown != null && m != null) {
+      _dropTrailer();
+      // setState, not a bare call: [_applyAdopt] assigns _shown directly on
+      // the assumption that a build always follows it — true for its two
+      // original callers (initState / didUpdateWidget), false for a Timer on
+      // an idle tree. Without this the identity block never repaints, and
+      // _publishShown's post-frame callback (which does NOT schedule a frame)
+      // never runs either, so the backdrop stays on the previous title too.
+      _settle = Timer(widget.settleDelay, () {
+        if (mounted) setState(() => _applyAdopt(m));
+      });
+      return;
+    }
+    _applyAdopt(m);
+  }
+
+  /// Release the trailer without touching what's shown: cancels the dwells,
+  /// clears the pill and unpublishes the streams so the stage tears its player
+  /// down. Nulling [_trailerImdb] leaves the next [_evaluateTrailer] free to
+  /// re-arm for whatever title actually lands.
+  void _dropTrailer() {
+    _trailerDwell?.cancel();
+    _pillDwell?.cancel();
+    _loadingWatchdog?.cancel();
+    _trailerImdb = null;
+    widget.trailerLoading.value = false;
+    _streams = null;
+  }
+
   /// Show the best we have for [m] right now — its already-enriched form if
   /// we've seen it, else the raw list item — then debounce a fetch if it's
   /// still thin.
-  void _adopt(StremioMeta? m) {
+  void _applyAdopt(StremioMeta? m) {
     // Drop any pending fetch for the title we're leaving.
     _enrichDebounce?.cancel();
-    // Direct assignment, not setState: both callers (initState, didUpdateWidget)
-    // are always followed by a build, so a rebuild is already scheduled. Only
-    // the async enrichment callback — which fires outside a build — needs
-    // setState.
+    // Direct assignment, not setState: the callers that reach here during a
+    // build (initState, didUpdateWidget) already have a rebuild scheduled.
+    // The two that DON'T — the settle timer and the enrichment callback —
+    // wrap their call in setState themselves.
     final cached = _cachedFor(m);
     _shown = cached ?? m;
     _publishShown();
@@ -217,6 +306,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
 
   @override
   void dispose() {
+    _settle?.cancel();
     _enrichDebounce?.cancel();
     _trailerDwell?.cancel();
     _pillDwell?.cancel();
@@ -336,7 +426,16 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
       if (mounted) widget.trailerLoading.value = false;
     });
 
-    bool stale() => !mounted || _suppressed || _shown?.imdbId != imdb;
+    // _trailerImdb is checked FIRST because it is the only marker cleared at
+    // keypress time: with a settle delay _shown deliberately still holds the
+    // title being left, so an in-flight resolve would otherwise sail past
+    // this guard and mount a decoder for a card the user has walked away
+    // from — a spurious lights-down mid-settle.
+    bool stale() =>
+        !mounted ||
+        _suppressed ||
+        _trailerImdb != imdb ||
+        _shown?.imdbId != imdb;
     void fail() {
       if (mounted && _shown?.imdbId == imdb) widget.trailerLoading.value = false;
     }
@@ -407,6 +506,32 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   @override
   Widget build(BuildContext context) {
     final item = _shown;
+    if (widget.layout == DiscoverDetailLayout.stage) {
+      // Nothing focused yet: the stage shows its art and the shelf below —
+      // a "browse to preview" card would be talking about the only thing
+      // already on screen.
+      if (item == null) return const SizedBox.shrink();
+      // Titles CROSSFADE, matching the board's identity block. The two-pane
+      // rail deliberately snaps (a saveLayer over the whole column on every
+      // DPAD step is the jank the grid avoids) — but here a swap happens once
+      // per REST, not per keypress, which is exactly the cadence the board
+      // pays this for. Pinned bottom-left: the switcher's stock layout
+      // centres, which would float the block off the scrim it stands on.
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        layoutBuilder: (current, previous) => Stack(
+          alignment: Alignment.bottomLeft,
+          children: [...previous, if (current != null) current],
+        ),
+        child: _StageContent(
+          key: ValueKey('disc-stage-id-${item.id}'),
+          item: item,
+          maxWidth: widget.stageMaxWidth,
+          budget: widget.stageBudget,
+          trailerShowing: widget.trailerShowing,
+        ),
+      );
+    }
     // No panel, no border: the rail is an open glass column floating on the
     // host's full-frame stage (the stage's veils supply the legibility, the
     // host draws the backdrop). Swaps stay instant — no crossfade, a saveLayer
@@ -550,6 +675,165 @@ class _RailContent extends StatelessWidget {
   }
 }
 
+/// The STAGE layout's identity block: title art over a meta line and a short
+/// plot, bottom-anchored on the left of the full-bleed art with the shelf
+/// below. Same facts as [_RailContent], laid out wide instead of tall.
+///
+/// While the ambient trailer plays, meta + plot fade and the TITLE ART HOLDS
+/// THE STAGE — the Home board's premium move; any DPAD step brings them back
+/// with the lights. The plot slot is fixed-height and the whole block is
+/// bottom-anchored, so the late-arriving `/meta` description can't shove the
+/// title art upward as it lands.
+class _StageContent extends StatelessWidget {
+  final StremioMeta item;
+  final double maxWidth;
+
+  /// Height available in the BROWSE state — what the ladder below spends.
+  final double budget;
+  final ValueListenable<bool>? trailerShowing;
+
+  const _StageContent({
+    super.key,
+    required this.item,
+    required this.maxWidth,
+    required this.budget,
+    this.trailerShowing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final rating = item.imdbRating;
+    final runtime = item.runtimeDisplay;
+    final year = item.year;
+    final genres = item.genres ?? const [];
+
+    // year · runtime · two genres — folded into ONE line here (the rail's
+    // separate genre-chip row belongs to a tall column, not a wide block).
+    final facts = <String>[
+      if (year != null && year.isNotEmpty) year,
+      if (runtime != null && runtime.isNotEmpty) runtime,
+      if (genres.isNotEmpty) genres.take(2).join(' · '),
+    ];
+
+    Widget quiet(bool showPlot) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 9,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _TypeBadge(item.type == 'series' ? 'SERIES' : 'MOVIE'),
+            for (var i = 0; i < facts.length; i++) ...[
+              if (i > 0)
+                Container(
+                  width: 3,
+                  height: 3,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF6B6386),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              _MetaText(facts[i]),
+            ],
+            if (rating != null) _ImdbChip(rating),
+          ],
+        ),
+        if (showPlot) ...[
+        const SizedBox(height: 12),
+        // Fixed 3-line slot: enrichment usually lands ~300ms after the settle,
+        // and this block grows upward — reserving the lines keeps the title
+        // art still when the text arrives.
+        SizedBox(
+          height: 60,
+          width: maxWidth,
+          child: item.description != null && item.description!.isNotEmpty
+              ? Text(
+                  item.description!,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontSize: 13,
+                    height: 1.5,
+                    fontWeight: FontWeight.w500,
+                    // Crisp, tight shadow — legibility over the trailer
+                    // without smearing (big radii read as muddy text on TV).
+                    shadows: const [
+                      Shadow(
+                        color: Color(0xBF000000),
+                        blurRadius: 3,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        ],
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 24, right: 24),
+      // Height ladder, so a short TV canvas sheds detail instead of growing
+      // up into the filter line: full block → no plot → title art alone. The
+      // host hands us exactly the space between the filter line and the shelf
+      // column, so what fits here is what's genuinely free.
+      child: Builder(
+        builder: (context) {
+          final h = budget;
+          final showPlot = !h.isFinite || h >= _fullHeight;
+          final showMeta = !h.isFinite || h >= _metaHeight;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: _RailTitleArt(
+                  item: item,
+                  height: 72,
+                  maxWidth: 320,
+                  textSize: 26,
+                ),
+              ),
+              if (showMeta)
+                if (trailerShowing == null)
+                  quiet(showPlot)
+                else
+                  // Sibling-above-the-hole opacity — the on-device-proven
+                  // overlay pattern; the video layer underneath is untouched.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: trailerShowing!,
+                    builder: (context, showing, kid) => AnimatedOpacity(
+                      opacity: showing ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 480),
+                      curve: Curves.easeOut,
+                      child: kid,
+                    ),
+                    child: quiet(showPlot),
+                  ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Title art + meta + the 3-line plot slot. Measures ~174 at the TV's fixed
+  /// 1.0 text scale (72 art + 10 + ~20 meta + 12 + 60 plot), so there is only
+  /// a couple of pixels of margin here — anything added to the meta line
+  /// should raise this rather than eat the slack.
+  static const double _fullHeight = 176;
+
+  /// Title art + meta, no plot (~102 measured). Below this only the title art
+  /// is drawn; both steps degrade quietly, neither can overflow.
+  static const double _metaHeight = 116;
+}
+
 /// The rail's title, IMAGE-FIRST — the same contract as the Home hero's title
 /// art: the studio title-treatment when a logo URL is known (from the item, or
 /// derived from the IMDb id — metahub serves `/logo/medium/{tt}/img` for
@@ -560,7 +844,17 @@ class _RailContent extends StatelessWidget {
 class _RailTitleArt extends StatefulWidget {
   final StremioMeta item;
 
-  const _RailTitleArt({required this.item});
+  /// Fixed slot height — successive titles keep one anchor as focus flies.
+  final double height;
+  final double maxWidth;
+  final double textSize;
+
+  const _RailTitleArt({
+    required this.item,
+    this.height = 68,
+    this.maxWidth = 280,
+    this.textSize = 23,
+  });
 
   @override
   State<_RailTitleArt> createState() => _RailTitleArtState();
@@ -584,7 +878,7 @@ class _RailTitleArtState extends State<_RailTitleArt> {
     final logo = _logoUrl;
     if (logo == null || _deadLogoUrls.contains(logo)) {
       return SizedBox(
-        height: 68,
+        height: widget.height,
         width: double.infinity,
         child: Align(
           alignment: Alignment.bottomLeft,
@@ -592,13 +886,13 @@ class _RailTitleArtState extends State<_RailTitleArt> {
             widget.item.name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
-              fontSize: 23,
+              fontSize: widget.textSize,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.4,
               height: 1.1,
-              shadows: [
+              shadows: const [
                 Shadow(
                   color: Colors.black87,
                   blurRadius: 10,
@@ -615,12 +909,12 @@ class _RailTitleArtState extends State<_RailTitleArt> {
     // stays blank until art lands; a failure flips (via the memo + rebuild) to
     // the full text path above, not a cramped in-slot fallback.
     return SizedBox(
-      height: 68,
+      height: widget.height,
       width: double.infinity,
       child: Align(
         alignment: Alignment.centerLeft,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 280),
+          constraints: BoxConstraints(maxWidth: widget.maxWidth),
           child: CachedNetworkImage(
             imageUrl: logo,
             fit: BoxFit.contain,
