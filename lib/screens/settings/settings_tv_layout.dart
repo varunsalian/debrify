@@ -68,6 +68,8 @@ class SettingsTvLayout extends StatefulWidget {
   // Screen settings page — everything about the home screen in one place.)
   final String tvSidebarStyleLabel;
   final Future<void> Function() onOpenTvSidebarStyle;
+  final String discoverLayoutLabel;
+  final Future<void> Function() onOpenDiscoverLayout;
   // Live TV & DVR.
   final Future<void> Function() onOpenRecordings;
   final Future<void> Function() onOpenIptvSettings;
@@ -109,6 +111,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenTvScreenSize,
     required this.tvSidebarStyleLabel,
     required this.onOpenTvSidebarStyle,
+    required this.discoverLayoutLabel,
+    required this.onOpenDiscoverLayout,
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showSupportDonation,
@@ -141,7 +145,7 @@ const List<_Category> _kCategories = [
   _Category(
     Icons.home_rounded,
     'Home & Display',
-    'Home screen, sidebar & screen size',
+    'Home, Discover, sidebar & screen size',
   ),
   _Category(
     Icons.play_circle_outline_rounded,
@@ -543,16 +547,22 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 focusNode: _paneNodes[1],
               ),
               SettingsTile.spec(
+                SettingsRows.discoverLayout,
+                subtitle: widget.discoverLayoutLabel,
+                onTap: widget.onOpenDiscoverLayout,
+                focusNode: _paneNodes[2],
+              ),
+              SettingsTile.spec(
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[2],
+                focusNode: _paneNodes[3],
               ),
               SettingsToggleTile.spec(
                 SettingsRows.tvKeyboard,
                 value: widget.tvKeyboardEnabled,
                 onChanged: widget.onToggleTvKeyboard,
-                focusNode: _paneNodes[3],
+                focusNode: _paneNodes[4],
               ),
             ],
           ),

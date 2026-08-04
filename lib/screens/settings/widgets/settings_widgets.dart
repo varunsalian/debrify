@@ -142,6 +142,12 @@ abstract final class SettingsRows {
     title: 'Home Layout',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen layout) — passed per call site.
+  static const discoverLayout = SettingsRowContent(
+    icon: Icons.explore_rounded,
+    title: 'Discover Layout',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen style) — passed per call site.
   static const tvSidebarStyle = SettingsRowContent(
     icon: Icons.view_sidebar_rounded,

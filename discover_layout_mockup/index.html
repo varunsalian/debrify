@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrify — Discover Layout (Grid / Stage)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  :root{
+    --bg:#05040a; --panel:#0d0b1a; --txt:#fff;
+    --dim:rgba(255,255,255,.55); --faint:rgba(255,255,255,.32);
+    --violet:#a78bfa;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0910;color:var(--txt);font-family:Inter,system-ui,sans-serif;padding:40px 24px 140px}
+  h1{font-size:22px;font-weight:800;letter-spacing:-.5px;margin-bottom:4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:10px;max-width:940px;line-height:1.55}
+  h2{font-size:15px;font-weight:700;margin:60px 0 6px;letter-spacing:-.2px}
+  h2 .tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:1.2px;color:#0a0910;background:#fff;border-radius:4px;padding:2px 7px;margin-right:10px;vertical-align:2px}
+  h2 .tag.no{background:#3a3350;color:rgba(255,255,255,.72)}
+  h2 .tag.yes{background:#a78bfa;color:#12091f}
+  .note{color:var(--dim);font-size:12.5px;line-height:1.6;max-width:940px;margin-bottom:14px}
+  .note b{color:#fff;font-weight:600}
+  .note code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--violet);background:rgba(167,139,250,.1);border-radius:4px;padding:1px 5px}
+  .frame{width:960px;height:540px;position:relative;overflow:hidden;border-radius:10px;
+         background:var(--bg);box-shadow:0 30px 80px rgba(0,0,0,.6);margin-bottom:10px}
+  .cap{color:var(--faint);font-size:11px;margin-bottom:26px;width:960px;line-height:1.5}
+  img{display:block}
+  .scrim{position:absolute;inset:0;pointer-events:none}
+
+  /* ── sidebar spine (ghost rail) ───────────────────────── */
+  .spine{position:absolute;left:0;top:0;bottom:0;width:46px;z-index:40;
+         background:linear-gradient(90deg,rgba(5,4,10,.85),rgba(5,4,10,0));
+         display:flex;flex-direction:column;align-items:center;gap:26px;padding-top:120px}
+  .spine i{width:17px;height:17px;border-radius:5px;background:rgba(255,255,255,.28)}
+  .spine i.on{background:#fff;box-shadow:0 0 14px rgba(255,255,255,.55)}
+
+  /* ── shared bits ──────────────────────────────────────── */
+  .stagebg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .amb{position:absolute;right:34px;top:30px;display:flex;align-items:center;gap:7px;z-index:30;
+       font-size:10px;font-weight:800;letter-spacing:1.6px;color:rgba(255,255,255,.72);
+       background:rgba(10,9,16,.4);border:1px solid rgba(255,255,255,.14);border-radius:99px;padding:6px 12px}
+  .amb i{width:6px;height:6px;border-radius:99px;background:#ffb547;box-shadow:0 0 10px #ffb547}
+
+  /* quiet filter line — bare text segments split by dots */
+  .filters{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:700;letter-spacing:.25px;white-space:nowrap}
+  .filters .src{color:var(--violet)}
+  .filters .seg{color:rgba(255,255,255,.86)}
+  .filters .seg small{font-weight:600;color:var(--faint);margin-right:4px;letter-spacing:.4px}
+  .filters .dot{color:rgba(255,255,255,.2)}
+  .filters .ring{box-shadow:0 0 0 2px #fff;border-radius:5px;padding:3px 7px;margin:-3px -1px}
+  .filters .caret{color:var(--faint);font-size:9px;margin-left:3px}
+
+  /* ── A : GRID (today) ─────────────────────────────────── */
+  .grid .stagebg{filter:brightness(.30) saturate(.75)}
+  .grid .stagescrim{background:
+      radial-gradient(120% 90% at 12% 40%,rgba(36,30,68,.55),rgba(5,4,10,0) 60%),
+      linear-gradient(90deg,rgba(5,4,10,.55) 0%,rgba(5,4,10,.72) 38%,rgba(5,4,10,.86) 100%)}
+  .rail{position:absolute;left:0;top:0;bottom:0;width:360px;padding:34px 26px 26px 76px}
+  .rail .art{width:258px;height:145px;border-radius:9px;overflow:hidden;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+  .rail .art img{width:100%;height:100%;object-fit:cover}
+  .rail .logo{width:186px;margin-top:18px;filter:drop-shadow(0 5px 18px rgba(0,0,0,.6))}
+  .rail .meta{margin-top:12px;font-size:11.5px;font-weight:600;color:var(--dim)}
+  .rail .meta b{color:#f5c518;font-weight:800;margin-right:4px}
+  .rail .meta span{margin:0 6px;color:rgba(255,255,255,.2)}
+  .rail .plot{margin-top:12px;font-size:11.5px;line-height:1.62;color:rgba(255,255,255,.62);max-width:258px}
+  .rail .gen{margin-top:14px;display:flex;gap:6px}
+  .rail .gen em{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.9px;color:var(--faint);
+                border:1px solid rgba(255,255,255,.16);border-radius:99px;padding:3px 9px}
+  .pane{position:absolute;left:360px;right:0;top:0;bottom:0;padding:30px 24px 0 24px}
+  .pgrid{margin-top:22px;display:grid;grid-template-columns:repeat(4,118px);gap:20px 16px}
+  .pcell .p{width:118px;height:177px;border-radius:8px;overflow:hidden;position:relative;
+            box-shadow:0 10px 24px rgba(0,0,0,.5)}
+  .pcell .p img{width:100%;height:100%;object-fit:cover}
+  .pcell.focus .p{outline:2.5px solid #fff;outline-offset:-1px;box-shadow:0 16px 38px rgba(0,0,0,.75)}
+  .pcell .t{margin-top:8px;font-size:10.5px;font-weight:600;color:rgba(255,255,255,.62);line-height:1.35;
+            max-width:118px;overflow:hidden}
+  .pcell.focus .t{color:#fff}
+
+  /* ── B : STAGE (proposed) ─────────────────────────────── */
+  .stage .stagescrim{background:
+      linear-gradient(90deg,rgba(5,4,10,.90) 0%,rgba(5,4,10,.5) 34%,rgba(5,4,10,0) 66%),
+      linear-gradient(0deg,rgba(5,4,10,.97) 0%,rgba(5,4,10,.8) 22%,rgba(5,4,10,0) 52%)}
+  .stage .filters{position:absolute;left:88px;top:32px;z-index:20}
+  .stage .logo{position:absolute;left:88px;bottom:292px;width:268px;filter:drop-shadow(0 6px 24px rgba(0,0,0,.6))}
+  .stage .meta{position:absolute;left:90px;bottom:264px;font-size:12.5px;font-weight:600;color:var(--dim)}
+  .stage .meta b{color:#f5c518;font-weight:800;margin-right:4px}
+  .stage .meta span{margin:0 7px;color:rgba(255,255,255,.22)}
+  .stage .plot{position:absolute;left:90px;bottom:214px;width:470px;font-size:11.5px;line-height:1.62;
+               color:rgba(255,255,255,.6)}
+  .stage .shelfhead{position:absolute;left:90px;right:34px;bottom:190px;display:flex;align-items:baseline;
+                    justify-content:space-between}
+  .stage .shelfhead .who{font-size:12px;font-weight:800;letter-spacing:.4px;color:rgba(255,255,255,.8)}
+  .stage .shelfhead .pos{font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--faint)}
+  .shelf{position:absolute;left:90px;bottom:22px;display:flex;gap:14px;align-items:flex-end}
+  .shelf .card{width:106px;height:159px;border-radius:9px;overflow:hidden;flex:none;position:relative;
+               box-shadow:0 12px 28px rgba(0,0,0,.55)}
+  .shelf .card img{width:100%;height:100%;object-fit:cover}
+  .shelf .card.focus{width:120px;height:180px;outline:2.5px solid #fff;outline-offset:-1px;
+                     box-shadow:0 18px 44px rgba(0,0,0,.75)}
+  .shelf .card.ghost{opacity:.55}
+  .hint{position:absolute;right:34px;bottom:28px;font-size:10px;font-weight:700;letter-spacing:1.1px;
+        color:rgba(255,255,255,.3)}
+
+  /* ── C : STAGE, lights out ────────────────────────────── */
+  .theater .logo{opacity:.9}
+  .theater .meta,.theater .plot,.theater .shelfhead,.theater .filters{opacity:.06}
+  .theater .shelf{opacity:.05;transform:translateY(26px)}
+  .theater .stagescrim{background:linear-gradient(0deg,rgba(5,4,10,.42) 0%,rgba(5,4,10,0) 34%)}
+  .theater .spine{opacity:.12}
+  .playing{position:absolute;inset:0;overflow:hidden}
+  .playing img{width:100%;height:100%;object-fit:cover;filter:saturate(1.05) contrast(1.04)}
+
+  /* ── D : dropped variant (rail + shelf) ───────────────── */
+  .keeprail .pane{padding:30px 24px 0 24px}
+  .keeprail .bigshelf{position:absolute;left:384px;bottom:60px;display:flex;gap:16px;align-items:flex-end}
+  .keeprail .bigshelf .card{width:168px;height:252px;border-radius:10px;overflow:hidden;flex:none;
+                            box-shadow:0 14px 34px rgba(0,0,0,.6)}
+  .keeprail .bigshelf .card img{width:100%;height:100%;object-fit:cover}
+  .keeprail .bigshelf .card.focus{width:186px;height:279px;outline:2.5px solid #fff;outline-offset:-1px}
+  .keeprail .count{position:absolute;left:386px;bottom:26px;font-size:11px;font-weight:700;
+                   letter-spacing:.8px;color:var(--faint)}
+  .cross{position:absolute;inset:0;z-index:60;background:
+      repeating-linear-gradient(135deg,rgba(255,60,90,.05) 0 12px,rgba(0,0,0,0) 12px 26px)}
+
+  /* ── E : settings picker ──────────────────────────────── */
+  .set{position:absolute;inset:0;background:linear-gradient(180deg,#12101f,#0b0916);padding:46px 60px 0 96px}
+  .set h3{font-size:19px;font-weight:800;letter-spacing:-.3px}
+  .set .crumb{font-size:10.5px;font-weight:700;letter-spacing:1.6px;color:var(--faint);margin-bottom:8px}
+  .set .blurb{font-size:12px;color:var(--dim);margin:8px 0 26px;max-width:600px;line-height:1.6}
+  .opt{display:flex;align-items:flex-start;gap:16px;padding:16px 18px;border-radius:12px;margin-bottom:10px;
+       background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);max-width:620px}
+  .opt.focus{background:rgba(167,139,250,.14);border-color:rgba(167,139,250,.55);box-shadow:0 0 0 2px rgba(167,139,250,.45)}
+  .opt .radio{width:17px;height:17px;border-radius:99px;border:2px solid rgba(255,255,255,.35);margin-top:2px;flex:none;position:relative}
+  .opt.on .radio{border-color:#a78bfa}
+  .opt.on .radio::after{content:"";position:absolute;inset:3px;border-radius:99px;background:#a78bfa}
+  .opt .lbl{font-size:14px;font-weight:700}
+  .opt .desc{font-size:11.5px;color:var(--dim);margin-top:3px;line-height:1.5}
+  .opt .badge{font-size:9px;font-weight:800;letter-spacing:1px;color:#12091f;background:#a78bfa;
+              border-radius:4px;padding:2px 6px;margin-left:8px;vertical-align:2px}
+</style>
+</head>
+<body>
+
+<h1>Discover — layout option</h1>
+<p class="sub">
+  Not Canvas ported over: Discover has no rails for Canvas's UP/DOWN rail switcher to move through, and it
+  already owns Canvas's other half (the full-bleed trailer stage, the theater ladder, the chrome-dim relay).
+  What's actually missing is the art-first <b>browse posture</b>. So: a Discover-only pref with two layouts —
+  <b>Grid</b> (today, default) and <b>Stage</b>.
+  Frames are 960×540, the real TV logical canvas.
+</p>
+
+<!-- ══════════════════════════════ A ══════════════════════════════ -->
+<h2><span class="tag">A</span>Grid — what ships today, for comparison</h2>
+<p class="note">
+  Two-pane: the reactive detail rail on the left, the quiet filter line and the poster grid on the right.
+  ~8 titles legible at once. This stays the default — it's the right shape for scanning a catalog you don't know.
+</p>
+<div class="frame grid">
+  <img class="stagebg" src="https://images.metahub.space/background/medium/tt15239678/img">
+  <div class="scrim stagescrim"></div>
+  <div class="spine"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+  <div class="rail">
+    <div class="art"><img src="https://images.metahub.space/background/medium/tt15239678/img"></div>
+    <img class="logo" src="https://images.metahub.space/logo/medium/tt15239678/img">
+    <div class="meta"><b>★ 7.2</b> IMDb <span>·</span> 2024 <span>·</span> 2h 46m <span>·</span> PG-13</div>
+    <div class="plot">Paul Atreides unites with the Fremen while on a warpath of revenge against the
+      conspirators who destroyed his family.</div>
+    <div class="gen"><em>SCI-FI</em><em>ADVENTURE</em><em>DRAMA</em></div>
+  </div>
+  <div class="pane">
+    <div class="filters">
+      <span class="src">Cinemeta<span class="caret">▾</span></span>
+      <span class="dot">·</span><span class="seg"><small>TYPE</small>Movies<span class="caret">▾</span></span>
+      <span class="dot">·</span><span class="seg"><small>CATALOG</small>Popular<span class="caret">▾</span></span>
+      <span class="dot">·</span><span class="seg"><small>GENRE</small>Any<span class="caret">▾</span></span>
+    </div>
+    <div class="pgrid">
+      <div class="pcell focus"><div class="p"><img src="https://images.metahub.space/poster/medium/tt15239678/img"></div><div class="t">Dune: Part Two</div></div>
+      <div class="pcell"><div class="p"><img src="https://images.metahub.space/poster/medium/tt15398776/img"></div><div class="t">Oppenheimer</div></div>
+      <div class="pcell"><div class="p"><img src="https://images.metahub.space/poster/medium/tt1160419/img"></div><div class="t">Dune</div></div>
+      <div class="pcell"><div class="p"><img src="https://images.metahub.space/poster/medium/tt0816692/img"></div><div class="t">Interstellar</div></div>
+      <div class="pcell"><div class="p"><img src="https://images.metahub.space/poster/medium/tt1877830/img"></div><div class="t">The Batman</div></div>
+      <div class="pcell"><div class="p"><img src="https://images.metahub.space/poster/medium/tt4154796/img"></div><div class="t">Avengers: Endgame</div></div>
+      <div class="pcell"><div class="p"><img src="https://images.metahub.space/poster/medium/tt1392190/img"></div><div class="t">Mad Max: Fury Road</div></div>
+      <div class="pcell"><div class="p"><img src="https://images.metahub.space/poster/medium/tt2582802/img"></div><div class="t">Whiplash</div></div>
+    </div>
+  </div>
+</div>
+<p class="cap">Baseline. Rail 37.5% of the width (320–460 clamp), grid ~4 columns × 2 rows on the TV canvas.</p>
+
+<!-- ══════════════════════════════ B ══════════════════════════════ -->
+<h2><span class="tag yes">B</span>Stage — the proposed second layout</h2>
+<p class="note">
+  The rail dissolves: the focused title's backdrop goes full-bleed, its identity block (logo, meta, two lines of
+  plot) sits bottom-left over the art, and the results become one shelf across the bottom.
+  The filter line survives intact, moved to the top-left — <b>UP from the shelf still lands on it</b>, exactly as
+  UP from the grid does today, so the source/type/catalog/genre path is unchanged.
+  <br><br>
+  <b>The density argument, honestly:</b> 7 posters visible against the grid's 8. Nearly free, because the grid
+  was already spending 37.5% of the screen on a rail that the stage now draws at full size. What you lose is the
+  second row's <i>peripheral</i> read; what you gain is a full-frame backdrop and a trailer with somewhere to play.
+  The <code>12 / 312</code> counter is there to replace the sense-of-place the second row was giving you.
+</p>
+<div class="frame stage">
+  <img class="stagebg" src="https://images.metahub.space/background/medium/tt0816692/img">
+  <div class="scrim stagescrim"></div>
+  <div class="spine"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+  <div class="filters">
+    <span class="src">Cinemeta<span class="caret">▾</span></span>
+    <span class="dot">·</span><span class="seg"><small>TYPE</small>Movies<span class="caret">▾</span></span>
+    <span class="dot">·</span><span class="seg"><small>CATALOG</small>Popular<span class="caret">▾</span></span>
+    <span class="dot">·</span><span class="seg"><small>GENRE</small>Any<span class="caret">▾</span></span>
+  </div>
+  <img class="logo" src="https://images.metahub.space/logo/medium/tt0816692/img">
+  <div class="meta"><b>★ 8.7</b> IMDb <span>·</span> 2014 <span>·</span> 2h 49m <span>·</span> Sci-Fi, Drama</div>
+  <div class="plot">A team of explorers travel through a wormhole in space in an attempt to ensure
+    humanity's survival.</div>
+  <div class="shelfhead">
+    <span class="who">CINEMETA · POPULAR</span>
+    <span class="pos">12 / 312</span>
+  </div>
+  <div class="shelf">
+    <div class="card ghost"><img src="https://images.metahub.space/poster/medium/tt1160419/img"></div>
+    <div class="card focus"><img src="https://images.metahub.space/poster/medium/tt0816692/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt15398776/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt15239678/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt1877830/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt4154796/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt1392190/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt2582802/img"></div>
+  </div>
+  <div class="hint">◀ ▶ BROWSE · ▲ FILTERS · OK OPEN</div>
+</div>
+<p class="cap">
+  DPAD contract: LEFT/RIGHT walks the result list and pages it (the last card pulls the next batch, same
+  infinite-scroll the grid has); UP goes to the filter line; DOWN from the filter line returns to the shelf;
+  LEFT at the shelf's head still reaches the sidebar. No new gesture to learn, and no UP/DOWN rail axis —
+  that's the part of Canvas that doesn't exist here.
+</p>
+
+<!-- ══════════════════════════════ C ══════════════════════════════ -->
+<h2><span class="tag yes">C</span>Stage, lights out — the theater ladder it already has</h2>
+<p class="note">
+  Nothing new is being built here: the trailer stage, the veils and the theater dwell are already wired on
+  Discover. Grid can only dim <i>around</i> a poster wall; Stage is the layout those pieces were drawn for —
+  the chrome recedes and the trailer owns all 960×540, the logo and the AMBIENT chip holding.
+</p>
+<div class="frame stage theater">
+  <div class="playing"><img src="https://images.metahub.space/background/medium/tt0816692/img"></div>
+  <div class="scrim stagescrim"></div>
+  <div class="spine"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+  <div class="amb"><i></i>AMBIENT</div>
+  <div class="filters">
+    <span class="src">Cinemeta</span><span class="dot">·</span><span class="seg">Movies</span>
+    <span class="dot">·</span><span class="seg">Popular</span>
+  </div>
+  <img class="logo" src="https://images.metahub.space/logo/medium/tt0816692/img">
+  <div class="meta"><b>★ 8.7</b> IMDb <span>·</span> 2014</div>
+  <div class="plot">A team of explorers travel through a wormhole in space.</div>
+  <div class="shelfhead"><span class="who">CINEMETA · POPULAR</span><span class="pos">12 / 312</span></div>
+  <div class="shelf">
+    <div class="card ghost"><img src="https://images.metahub.space/poster/medium/tt1160419/img"></div>
+    <div class="card focus"><img src="https://images.metahub.space/poster/medium/tt0816692/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt15398776/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt15239678/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt1877830/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt4154796/img"></div>
+  </div>
+</div>
+<p class="cap">Any key wakes the lights and re-arms the dwell; the shelf is hidden visually only, so focus never moves.</p>
+
+<!-- ══════════════════════════════ D ══════════════════════════════ -->
+<h2><span class="tag no">D</span>Considered and dropped — keep the rail, shrink the grid to one row</h2>
+<p class="note">
+  The cheapest version: leave the two-pane alone and swap only the grid for a big-poster row. It reads worse than
+  either neighbour — <b>3 titles at a time</b> against the grid's 8, and the art you paid for is stuck in a 360px
+  column that already showed it. All cost, no posture change. If Stage isn't worth building, the answer is to
+  keep the Grid, not to build this.
+</p>
+<div class="frame grid keeprail">
+  <img class="stagebg" src="https://images.metahub.space/background/medium/tt15239678/img">
+  <div class="scrim stagescrim"></div>
+  <div class="spine"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+  <div class="rail">
+    <div class="art"><img src="https://images.metahub.space/background/medium/tt15239678/img"></div>
+    <img class="logo" src="https://images.metahub.space/logo/medium/tt15239678/img">
+    <div class="meta"><b>★ 7.2</b> IMDb <span>·</span> 2024 <span>·</span> 2h 46m</div>
+    <div class="plot">Paul Atreides unites with the Fremen while on a warpath of revenge against the
+      conspirators who destroyed his family.</div>
+    <div class="gen"><em>SCI-FI</em><em>ADVENTURE</em></div>
+  </div>
+  <div class="pane">
+    <div class="filters">
+      <span class="src">Cinemeta<span class="caret">▾</span></span>
+      <span class="dot">·</span><span class="seg"><small>TYPE</small>Movies<span class="caret">▾</span></span>
+      <span class="dot">·</span><span class="seg"><small>GENRE</small>Any<span class="caret">▾</span></span>
+    </div>
+  </div>
+  <div class="bigshelf">
+    <div class="card focus"><img src="https://images.metahub.space/poster/medium/tt15239678/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt15398776/img"></div>
+    <div class="card"><img src="https://images.metahub.space/poster/medium/tt1160419/img"></div>
+  </div>
+  <div class="count">12 / 312</div>
+  <div class="cross"></div>
+</div>
+<p class="cap">Crosshatched = not recommended.</p>
+
+<!-- ══════════════════════════════ E ══════════════════════════════ -->
+<h2><span class="tag yes">E</span>The pref — its own key, not shared with Home</h2>
+<p class="note">
+  A separate <code>discover_layout</code> alongside <code>tv_home_style</code>, on its own page under
+  Discover in the settings IA. One pref governing both screens would promise a symmetry the two layouts can't
+  keep — Home's Canvas has a rail axis, Discover's Stage has a filter line, and neither has the other's.
+  TV-only, same as the Home picker.
+</p>
+<div class="frame">
+  <div class="set">
+    <div class="crumb">SETTINGS · DISCOVER</div>
+    <h3>Discover Layout</h3>
+    <p class="blurb">How the Discover tab browses on TV. Phones and desktop always use the grid.</p>
+    <div class="opt on">
+      <div class="radio"></div>
+      <div>
+        <div class="lbl">Grid<span class="badge">DEFAULT</span></div>
+        <div class="desc">Detail rail beside a wall of posters — most titles on screen at once</div>
+      </div>
+    </div>
+    <div class="opt focus">
+      <div class="radio"></div>
+      <div>
+        <div class="lbl">Stage</div>
+        <div class="desc">Full-screen art and trailers, one bottom shelf — art first</div>
+      </div>
+    </div>
+  </div>
+  <div class="spine"><i></i><i></i><i></i><i class="on"></i><i></i></div>
+</div>
+<p class="cap">Wording deliberately echoes the Home Layout picker so the two read as siblings without sharing a key.</p>
+
+<h2>What this costs</h2>
+<p class="note">
+  The stage, the trailer ladder, the theater dwell, the chrome-dim relay and the detail enrichment all exist —
+  Stage rearranges them, it doesn't add an engine. The real work is that the shelf has to live inside the shared
+  See-All grid widget, because Discover's five sources (Continue Watching, Trakt, Simkl, MDBList, addon catalogs)
+  all render through it — so a shelf mode there is a shelf mode for every one of them, and every one needs its
+  DPAD path re-checked. That's the honest price, and it's the reason to decide on the layout before anything is built.
+</p>
+
+</body>
+</html>

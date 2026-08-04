@@ -24,6 +24,12 @@ class MainPageBridge {
   /// the HOME SearchScreen instance only (not the Search tab's).
   static VoidCallback? tvHomeStyleChanged;
 
+  /// Fired by the Discover Layout picker after writing `discover_layout`, so
+  /// the live Discover tab re-reads the pref and swaps between the grid and
+  /// the stage without a restart. Set by the DISCOVER SearchScreen instance
+  /// only (the Home board and the Search tab never render that layout).
+  static VoidCallback? discoverLayoutChanged;
+
   /// Fired by the TV Sidebar Style picker after writing `tv_sidebar_style`,
   /// so the app shell re-reads the pref and reskins the rail live. Set by
   /// main.dart.

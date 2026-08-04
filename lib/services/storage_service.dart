@@ -643,6 +643,27 @@ class StorageService {
     );
   }
 
+  static const String _discoverLayoutKey = 'discover_layout';
+
+  /// TV Discover layout: 'grid' (the detail rail beside a poster wall, the
+  /// default) or 'stage' (the focused title full-bleed with one bottom shelf).
+  /// Its own key, deliberately NOT shared with [getTvHomeStyle]: Home's Canvas
+  /// switches rails with UP/DOWN and Discover's Stage owns a filter line —
+  /// neither layout has the other's axis, so one pref governing both would
+  /// promise a symmetry they can't keep. Phone/desktop never read it.
+  static Future<String> getDiscoverLayout() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_discoverLayoutKey) == 'stage' ? 'stage' : 'grid';
+  }
+
+  static Future<void> setDiscoverLayout(String layout) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _discoverLayoutKey,
+      layout == 'stage' ? 'stage' : 'grid',
+    );
+  }
+
   static const String _tvSidebarStyleKey = 'tv_sidebar_style';
   static const Set<String> _tvSidebarStyles = {
     'classic',

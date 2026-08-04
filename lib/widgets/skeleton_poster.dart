@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'see_all/discover_shelf_scope.dart';
 import 'see_all/see_all_poster_grid.dart';
 
 /// Keeps its child perfectly still for [delay], then starts a slow whole-layer
@@ -110,6 +111,10 @@ class SkeletonPosterGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Discover's stage layout replaces the wall with one bottom shelf — stand
+    // in for THAT, or the load state announces a grid that never arrives.
+    final shelf = DiscoverShelfScope.of(context);
+    if (shelf != null) return _buildShelfSkeleton(shelf);
     final m = SeeAllGridMetrics.resolve(context, isTelevision: isTelevision);
     return DelayedPulse(
       child: GridView.builder(
@@ -154,6 +159,43 @@ class SkeletonPosterGrid extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// The stage shelf's stand-in: one row of posters at the same height and
+  /// pitch the real shelf uses, so the placeholders hand off with no shift.
+  /// Over-count so a wide panel never shows a short row (it clips).
+  Widget _buildShelfSkeleton(DiscoverShelfMetrics m) {
+    return DelayedPulse(
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: m.boxHeight,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const NeverScrollableScrollPhysics(),
+                clipBehavior: Clip.hardEdge,
+                padding: EdgeInsets.symmetric(horizontal: m.hPad),
+                itemCount: 10,
+                itemBuilder: (context, index) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 7),
+                  child: Center(
+                    child: SizedBox(
+                      width: m.cardWidth,
+                      height: m.cardHeight,
+                      child: const ShimmerBox(radius: 14),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: DiscoverShelfMetrics.tail),
+          ],
+        ),
       ),
     );
   }

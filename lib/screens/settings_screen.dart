@@ -40,6 +40,7 @@ import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
 import 'settings/settings_search.dart';
+import 'settings/discover_layout_page.dart';
 import 'settings/tv_home_style_page.dart';
 import 'settings/tv_screen_size_page.dart';
 import 'settings/recordings_page.dart';
@@ -158,6 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _tvKeyboardEnabled = true;
   int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
   String _tvHomeStyle = 'canvas';
+  String _discoverLayout = 'grid';
   String _tvSidebarStyle = 'ghost';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
@@ -227,6 +229,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTvUiScalePercent(),
       StorageService.getTvHomeStyle(),
       StorageService.getTvSidebarStyle(),
+      StorageService.getDiscoverLayout(),
     ]);
 
     if (!mounted) return;
@@ -253,6 +256,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvUiScalePercent = results[19] as int;
     final tvHomeStyle = results[20] as String;
     final tvSidebarStyle = results[21] as String;
+    final discoverLayout = results[22] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -388,6 +392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _tvUiScalePercent = tvUiScalePercent;
     _tvHomeStyle = tvHomeStyle;
     _tvSidebarStyle = tvSidebarStyle;
+    _discoverLayout = discoverLayout;
 
     setState(() {});
 
@@ -677,6 +682,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTvScreenSize: _openTvScreenSize,
       tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
       onOpenTvSidebarStyle: _openTvSidebarStyle,
+      discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
+      onOpenDiscoverLayout: _openDiscoverLayout,
       onOpenRecordings: _openRecordings,
       onOpenIptvSettings: _openIptvSettings,
       showSupportDonation: _supportDonation.hasProviders,
@@ -742,6 +749,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTvScreenSize: _openTvScreenSize,
       tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
       onOpenTvSidebarStyle: _openTvSidebarStyle,
+      discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
+      onOpenDiscoverLayout: _openDiscoverLayout,
     );
   }
 
@@ -1119,6 +1128,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'rows',
             'redesign',
             'view',
+          ],
+        ),
+      // Android TV only — the stage layout is a TV-canvas design; phones and
+      // desktop always browse Discover as a grid.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.discoverLayout,
+          'Home & Display',
+          _openDiscoverLayout,
+          subtitle: discoverLayoutLabel(_discoverLayout),
+          keywords: const [
+            'discover',
+            'layout',
+            'stage',
+            'grid',
+            'browse',
+            'shelf',
+            'catalog',
+            'view',
+            'posters',
           ],
         ),
       // Android TV only — the rail is TV chrome.
@@ -3276,6 +3305,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract as [_openTvHomeStyle], for the Discover layout picker.
+  Future<void> _openDiscoverLayout() async {
+    await pushSettingsPage(context, const DiscoverLayoutPage());
+    if (!mounted) return;
+    final layout = await StorageService.getDiscoverLayout();
+    if (!mounted) return;
+    setState(() {
+      _discoverLayout = layout;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the sidebar chrome picker.
   Future<void> _openTvSidebarStyle() async {
     await pushSettingsPage(context, const TvSidebarStylePage());
@@ -3482,6 +3522,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenTvScreenSize;
   final String tvSidebarStyleLabel;
   final Future<void> Function() onOpenTvSidebarStyle;
+  final String discoverLayoutLabel;
+  final Future<void> Function() onOpenDiscoverLayout;
 
   const _SettingsLayout({
     required this.connections,
@@ -3522,6 +3564,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenTvScreenSize,
     required this.tvSidebarStyleLabel,
     required this.onOpenTvSidebarStyle,
+    required this.discoverLayoutLabel,
+    required this.onOpenDiscoverLayout,
   });
 
   @override
@@ -3559,6 +3603,11 @@ class _SettingsLayout extends StatelessWidget {
                         SettingsRows.tvSidebarStyle,
                         subtitle: tvSidebarStyleLabel,
                         onTap: onOpenTvSidebarStyle,
+                      ),
+                      SettingsTile.spec(
+                        SettingsRows.discoverLayout,
+                        subtitle: discoverLayoutLabel,
+                        onTap: onOpenDiscoverLayout,
                       ),
                       SettingsTile.spec(
                         SettingsRows.tvScreenSize,

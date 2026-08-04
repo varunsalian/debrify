@@ -71,6 +71,7 @@ import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
+import '../widgets/see_all/discover_shelf_scope.dart';
 import '../widgets/see_all/discover_trailer_stage.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
@@ -246,6 +247,17 @@ const double _kCanvasShelfSlack = 10;
 
 /// Breathing room between the identity block's bottom and the tab row's top.
 const double _kCanvasIdentityGap = 25;
+
+/// Discover STAGE: the air between the identity block and the shelf column
+/// below it. The block's clearance is [DiscoverShelfMetrics.columnHeight] plus
+/// this — derived from what the shelf actually occupies, never guessed.
+const double _kDiscStageIdentityGap = 22;
+
+/// Discover STAGE: the band the quiet filter line owns at the top of the
+/// panel — its 16px top padding, one line of segments and its 10px tail,
+/// measuring ~56, plus a little air. It never needs a second row: the quiet
+/// bar scrolls its segments horizontally rather than wrapping.
+const double _kDiscStageFilterBand = 62;
 
 /// Height of the Canvas rail-tab row at the current text scale.
 double _canvasTabsHeight(BuildContext context) => max(
@@ -1044,6 +1056,48 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   void _relayDiscoverChromeDim() =>
       MainPageBridge.tvChromeDim.value = _discTakeover.value;
 
+  // ── Discover layout (grid / stage) ───────────────────────────────────────
+
+  /// Last loaded `discover_layout`, kept for the life of the process. The
+  /// pref read is async but the layout is needed on the FIRST frame: without
+  /// this, every entry to the Discover tab would build the grid, then swap to
+  /// the stage a frame later — a visible flash on each tab switch. Only the
+  /// very first entry after launch pays it.
+  static String _discLayoutCached = 'grid';
+
+  /// Active Discover layout, from `discover_layout`. Grid is the default and
+  /// the only thing phone/desktop ever render (see [_discStage]).
+  String _discLayout = _discLayoutCached;
+
+  /// Whether the STAGE layout is what this surface should render: the pref, on
+  /// the Discover tab, on a TV. The canvas-size guard lives in the LayoutBuilder
+  /// (a too-small canvas falls back to the flat panel, exactly like the grid's
+  /// two-pane does).
+  bool get _discStage =>
+      widget.discoverMode && widget.isTelevision && _discLayout == 'stage';
+
+  Future<void> _loadDiscoverLayout() async {
+    final layout = await StorageService.getDiscoverLayout();
+    _discLayoutCached = layout;
+    if (!mounted || layout == _discLayout) return;
+    setState(() => _discLayout = layout);
+  }
+
+  /// Settings picker fired: tear the trailer down BEFORE the relayout, so the
+  /// player is never re-parented mid-play into the other layout's tree (the
+  /// Home board's rule for the same swap), then re-read the pref and rebuild.
+  void _onDiscoverLayoutChanged() {
+    if (!mounted) return;
+    _discTrailerStreams.value = null;
+    _discTrailerMeta.value = null;
+    _discTrailerLoading.value = false;
+    _discTrailerShowing.value = false;
+    _discTheater.value = false;
+    _discTheaterTimer?.cancel();
+    _discTakeover.value = 0;
+    unawaited(_loadDiscoverLayout());
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1140,6 +1194,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (widget.discoverMode && widget.isTelevision) {
       _discTakeover.addListener(_relayDiscoverChromeDim);
       _discTrailerShowing.addListener(_onDiscShowingChanged);
+      // Layout pref (grid/stage): read once here, then live-reloaded whenever
+      // the Settings picker fires the bridge. DISCOVER instance only — Home
+      // and Search never render this layout and must not take the slot.
+      unawaited(_loadDiscoverLayout());
+      MainPageBridge.discoverLayoutChanged = _onDiscoverLayoutChanged;
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     // Playback that ran in a separate ACTIVITY (Android TV native player,
@@ -1471,6 +1530,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _discTakeover.removeListener(_relayDiscoverChromeDim);
       _discTrailerShowing.removeListener(_onDiscShowingChanged);
       _discTheaterTimer?.cancel();
+      // Only clear the bridge slot if it's still OURS — a newly-mounted
+      // Discover instance may have claimed it before this one tears down.
+      if (MainPageBridge.discoverLayoutChanged == _onDiscoverLayoutChanged) {
+        MainPageBridge.discoverLayoutChanged = null;
+      }
       // Never leave the sidebar hidden after Discover is torn down mid-takeover,
       // but reset AFTER this frame: dispose can run inside finalizeTree (tab
       // switch mid-takeover) while the tree is locked, and a synchronous write
@@ -10086,6 +10150,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           }
           return panel;
         }
+        if (_discStage) return _buildDiscoverStage(c, panel);
         final railW = (c.maxWidth * 0.375).clamp(320.0, 460.0);
         final panelW = c.maxWidth - railW;
         final mq = MediaQuery.of(context);
@@ -10255,6 +10320,158 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           ],
         );
       },
+    );
+  }
+
+  /// The Discover STAGE layout (`discover_layout` = 'stage', TV only).
+  ///
+  /// Same stage as the grid's two-pane — same backdrop, same full-canvas
+  /// trailer, same theater ladder — with the rail dissolved: the focused
+  /// title's art owns the whole frame, its identity block sits bottom-left over
+  /// it, and the results become ONE shelf across the bottom. The filter line
+  /// stays exactly where the grid put it (top-left of the panel), so UP from
+  /// the shelf lands on it just as UP from the grid does.
+  ///
+  /// It is the SAME panel widget as the grid layout: the See-All screen keeps
+  /// owning fetch, filters and paging, and only the arrangement of its results
+  /// changes — declared by the [DiscoverShelfScope] wrapped around it here.
+  Widget _buildDiscoverStage(BoxConstraints c, Widget panel) {
+    // Canvas's poster proportion (30% of the board, clamped) so the two
+    // full-bleed shelves on this TV read as the same furniture.
+    final cardH = (c.maxHeight * 0.30).clamp(140.0, 200.0);
+    final metrics = DiscoverShelfMetrics(cardHeight: cardH, hPad: 24);
+    // The identity block never crosses the middle of the frame — the art on
+    // the right half is the point of this layout.
+    final identityMax = (c.maxWidth * 0.5).clamp(320.0, 560.0);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const DecoratedBox(decoration: HomeTheme.pageBackground),
+        RepaintBoundary(child: _DiscoverStageBackdrop(shown: _discShown)),
+        DiscoverTrailerStage(
+          trailer: _discTrailerStreams,
+          loading: _discTrailerLoading,
+          volume: _discTrailerVolume,
+          meta: _discTrailerMeta,
+          railRect: Rect.zero,
+          takeover: _discTakeover,
+          fullStage: true,
+          showing: _discTrailerShowing,
+        ),
+        RepaintBoundary(
+          child: _DiscoverStageVeils(
+            showing: _discTrailerShowing,
+            theater: _discTheater,
+            stage: true,
+          ),
+        ),
+        // The identity block, bottom-left, clearing exactly what the shelf
+        // column below occupies — derived from the same metrics the shelf lays
+        // itself out with, never guessed. It holds through theater (the title
+        // art is the signature on a clean frame); its own meta/plot fade with
+        // [_discTrailerShowing], inside the rail widget.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Padding(
+              // Top: the filter line's band, so a short canvas makes the
+              // identity block shed its plot rather than grow up under the
+              // filters. Bottom: exactly what the shelf column occupies.
+              padding: EdgeInsets.only(
+                top: _kDiscStageFilterBand,
+                bottom: metrics.columnHeight + _kDiscStageIdentityGap,
+              ),
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: RepaintBoundary(
+                  child: ValueListenableBuilder<StremioMeta?>(
+                    valueListenable: _discFocused,
+                    builder: (_, item, __) => DiscoverDetailRail(
+                      item: item,
+                      layout: DiscoverDetailLayout.stage,
+                      trailerShowing: _discTrailerShowing,
+                      stageMaxWidth: identityMax,
+                      trailerStreams: _discTrailerStreams,
+                      trailerLoading: _discTrailerLoading,
+                      trailerVolume: _discTrailerVolume,
+                      trailerMeta: _discTrailerMeta,
+                      shownItem: _discShown,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Filter line + shelf. Theater recede: the Canvas cadence — slow
+        // lights-down, instant lights-up — as a slide + fade. The children
+        // stay MOUNTED (opacity only), so DPAD focus survives the dark and the
+        // wake keypress still performs its normal move. This is the one
+        // full-canvas Opacity on the page; it pays its saveLayer during the
+        // ease and composites as a cached raster at rest, exactly like the
+        // two-pane's panel fade it replaces.
+        Positioned.fill(
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _discTheater,
+            child: RepaintBoundary(
+              child: DiscoverShelfScope(metrics: metrics, child: panel),
+            ),
+            builder: (_, deep, kid) => AnimatedSlide(
+              offset: deep ? const Offset(0, 0.12) : Offset.zero,
+              duration: deep
+                  ? const Duration(milliseconds: 900)
+                  : const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+              child: AnimatedOpacity(
+                opacity: deep ? 0.0 : 1.0,
+                duration: deep
+                    ? const Duration(milliseconds: 900)
+                    : const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                child: kid,
+              ),
+            ),
+          ),
+        ),
+        // Recede everything as the trailer promotes to a fullscreen takeover —
+        // a baked scrim, never an Opacity layer. Dormant while the takeover
+        // stays disabled, kept wired for its revival (as in the two-pane).
+        ValueListenableBuilder<double>(
+          valueListenable: _discTakeover,
+          builder: (_, t, __) => t <= 0.001
+              ? const SizedBox.shrink()
+              : IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D0B1A).withValues(alpha: 0.92 * t),
+                    ),
+                  ),
+                ),
+        ),
+        // Status corner: the same TRAILER→AMBIENT chip pair the two-pane
+        // shows, moved to the TOP-right — the bottom-left corner belongs to
+        // the identity block here.
+        Positioned(
+          top: 16,
+          right: 22,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _discTrailerLoading,
+            builder: (_, loading, __) =>
+                _HeroTrailerLoadingPill(visible: loading),
+          ),
+        ),
+        Positioned(
+          top: 16,
+          right: 22,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _discTrailerShowing,
+            builder: (_, showing, __) => ValueListenableBuilder<bool>(
+              valueListenable: _discTrailerLoading,
+              builder: (_, loading, __) =>
+                  _HeroAmbientChip(visible: showing && !loading),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -18226,7 +18443,18 @@ class _DiscoverStageVeils extends StatelessWidget {
   final ValueListenable<bool> showing;
   final ValueListenable<bool> theater;
 
-  const _DiscoverStageVeils({required this.showing, required this.theater});
+  /// STAGE layout: there is no pane divide to light for, so the tint moves to
+  /// where the text actually is — a left column and a bottom ramp under the
+  /// shelf, with the right/upper art left clear. Same browse→playback→theater
+  /// ladder and the same baked-alpha paint (never an Opacity layer, which
+  /// forces a per-frame full-screen saveLayer on weak TV GPUs).
+  final bool stage;
+
+  const _DiscoverStageVeils({
+    required this.showing,
+    required this.theater,
+    this.stage = false,
+  });
 
   /// Page ink at an alpha walked along the browse→playback→theater ladder by
   /// [phase] (0..2).
@@ -18252,7 +18480,67 @@ class _DiscoverStageVeils extends StatelessWidget {
                     ? const Duration(milliseconds: 900)
                     : const Duration(milliseconds: 250),
             curve: Curves.easeInOutCubic,
-            builder: (_, t, __) => Stack(
+            builder: (_, t, __) => stage
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Left column: seats the identity block. Dissolves by
+                      // two thirds across so the art keeps the right half.
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              _ink(0.88, 0.56, 0.10, t),
+                              _ink(0.60, 0.34, 0.06, t),
+                              const Color(0x000D0B1A),
+                            ],
+                            stops: const [0.0, 0.32, 0.66],
+                          ),
+                        ),
+                      ),
+                      // Bottom ramp: seats the shelf and the filter line's
+                      // opposite edge; top edge gets a whisper so the filter
+                      // segments stay legible over bright art.
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              _ink(0.94, 0.70, 0.16, t),
+                              _ink(0.74, 0.46, 0.10, t),
+                              const Color(0x000D0B1A),
+                              _ink(0.30, 0.14, 0.04, t),
+                            ],
+                            stops: const [0.0, 0.20, 0.52, 1.0],
+                          ),
+                        ),
+                      ),
+                      // The text pocket, straight off the Canvas board: the
+                      // identity block's meta line and plot are allowed to run
+                      // to half the frame, past where the left column has
+                      // dissolved, and the bottom ramp alone leaves their
+                      // right end sitting on bare artwork. Centred under the
+                      // block, gone well before mid-screen so the art keeps
+                      // its glow everywhere else.
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(
+                            center: const Alignment(-0.72, 0.55),
+                            radius: 0.95,
+                            colors: [
+                              _ink(0.80, 0.45, 0.06, t),
+                              const Color(0x000D0B1A),
+                            ],
+                            stops: const [0.12, 1.0],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Stack(
               fit: StackFit.expand,
               children: [
                 DecoratedBox(
