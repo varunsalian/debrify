@@ -635,6 +635,18 @@ class StremioAddon {
     }
 
     // Parse resources - can be list of strings or list of objects
+    //
+    // The object form also carries per-resource `types`/`idPrefixes`, and
+    // manifests using it commonly leave the top-level `types` empty — StremThru
+    // Torz ships exactly that:
+    //   "resources":[{"name":"stream","types":["movie","series","anime"],...}]
+    //   "types":[]
+    // Those are deliberately NOT hoisted into [types]. The query filters
+    // (searchStreams, recommendations, meta candidates) read empty types as
+    // "unrestricted", so filling them in would NARROW addons that are queried
+    // permissively today — e.g. a `tv`-type channel search against an addon
+    // that never declared `tv`. searchStreams treats empty as unrestricted
+    // instead, which fixes the reported case without taking anything away.
     final resourcesRaw = manifest['resources'];
     final resources = <String>[];
     if (resourcesRaw is List) {
