@@ -5532,13 +5532,12 @@ class StorageService {
   /// audio as playback runs (Settings → Playback, Android TV only). Read by
   /// the NATIVE side as `flutter.subtitle_auto_sync_enabled` — a plain
   /// SharedPreferences bool is exactly what FlutterSharedPreferences stores,
-  /// the same bridge the recording engine flag rides. ON by default (device
-  /// verified 2026-08-04); the toggle is the opt-out. The NATIVE read's
-  /// default must stay in lock-step or an untouched toggle would mean
-  /// different things on the two sides.
+  /// the same bridge the recording engine flag rides. OFF by default; the
+  /// toggle is the opt-in. The NATIVE read's default must stay in lock-step
+  /// or an untouched toggle would mean different things on the two sides.
   static Future<bool> getSubtitleAutoSyncEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_subtitleAutoSyncKey) ?? true;
+    return prefs.getBool(_subtitleAutoSyncKey) ?? false;
   }
 
   static Future<void> setSubtitleAutoSyncEnabled(bool enabled) async {

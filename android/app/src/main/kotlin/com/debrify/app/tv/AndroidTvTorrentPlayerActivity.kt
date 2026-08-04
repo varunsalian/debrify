@@ -10631,10 +10631,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** Settings → Playback → "Auto-sync addon subtitles" (Flutter-side pref). */
+    /**
+     * Settings → Playback → "Auto-sync addon subtitles" (Flutter-side pref).
+     *
+     * OFF by default. Must stay in lock-step with the Dart default in
+     * StorageService.getSubtitleAutoSyncEnabled, or an untouched toggle would
+     * mean different things on the two sides.
+     */
     private fun isAutoSyncPrefEnabled(): Boolean =
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-            .getBoolean("flutter.subtitle_auto_sync_enabled", true)
+            .getBoolean("flutter.subtitle_auto_sync_enabled", false)
 
     private fun umSearchRows(): List<UnifiedMenuController.Row> {
         if (pendingSeriesResult != null) {
