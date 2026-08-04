@@ -4481,26 +4481,14 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (!mounted) return;
     final path = await DesktopScheduleService.buildRecordingPath(channel.name);
     if (!mounted) return;
+    // No onFinished: the revision listener already flips Stop back to Record,
+    // and endings are announced app-wide by the reporter in main() — which,
+    // unlike this widget, is still around when the capture outlives the page.
     final capture = DesktopRecordingService.instance.start(
       url: recordUrl,
       path: path,
       channelName: channel.name,
       headers: channel.playbackHeaders,
-      onFinished: (end, bytes) {
-        if (!mounted) return;
-        setState(() {}); // a self-ended capture must flip Stop back to Record
-        final message = switch (end) {
-          DesktopRecordingEnd.streamEnded =>
-            'Recording ended — the stream stopped',
-          DesktopRecordingEnd.durationCap => 'Recording saved (6h limit)',
-          DesktopRecordingEnd.failed => 'Recording failed — see logs',
-          DesktopRecordingEnd.stopped => null,
-        };
-        if (message != null) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(message)));
-        }
-      },
     );
     if (!mounted) return;
     if (capture != null) setState(() {}); // show Stop immediately

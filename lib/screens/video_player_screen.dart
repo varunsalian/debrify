@@ -571,12 +571,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// stream-record failures log in.
   StreamSubscription<mk.PlayerLog>? _recordLogSub;
 
-  /// The desktop recorder's capture, when this screen started one. Desktop
-  /// has no tee (mpv can't mux on media_kit's libs) and no Android engine —
-  /// this raw HTTP copy is the only recorder there. It survives zaps but is
-  /// stopped when the player screen closes: with no notifications on desktop,
-  /// this screen's Record button is the only stop control it has.
-  DesktopRecordingCapture? _desktopCapture;
+  /// Repaints the Record button when a desktop capture starts or ends behind
+  /// this screen's back — a scheduled one firing on the channel being watched,
+  /// or any capture self-ending (stream drop, 6h cap). Sampling on rebuild
+  /// alone would leave the button claiming to record something already dead.
+  ///
+  /// This screen deliberately keeps NO handle on a desktop capture. Desktop has
+  /// no tee (mpv can't mux on media_kit's libs) and no Android engine — the raw
+  /// HTTP copy is the only recorder there — but like the engine it belongs to
+  /// the SERVICE, so closing the player leaves it running and nothing here may
+  /// stop it implicitly. [_desktopCaptureForCurrent] asks the service instead,
+  /// which is also what makes a SCHEDULER-started capture stoppable from this
+  /// same button.
+  VoidCallback? _desktopRecordingRevisionListener;
 
   /// Bumped whenever a stop, a channel change or a teardown supersedes an
   /// in-flight [_startRecording]. That start does async work (storage lookup,
@@ -894,6 +901,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       },
       onResume: _resumeFromBackground,
     );
+
+    // Observe, don't sample: see [_desktopRecordingRevisionListener].
+    if (DesktopRecordingService.instance.isSupported) {
+      void onRevision() {
+        if (mounted) setState(() {});
+      }
+
+      _desktopRecordingRevisionListener = onRevision;
+      DesktopRecordingService.instance.revision.addListener(onRevision);
+    }
 
     // Launch-time subtitles (e.g. YouTube captions): wrap into a single loaded
     // provider group so they appear in the subtitle menu without an addon
@@ -4197,7 +4214,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final savedPath = desktopCapture.path;
       final bytes = await desktopCapture.stop();
       if (!mounted) return;
-      setState(() => _desktopCapture = null);
+      // The revision listener has already repainted (the capture ended during
+      // that await); this only guarantees it for the pathological case where
+      // the notification was swallowed.
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -4308,35 +4328,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Raw byte copy → the capture IS a transport stream: .ts, not the
       // tee's .mkv.
       final path = await _recordingTargetPath(channel.name, extension: 'ts');
-      // The screen may have closed during that await — dispose() has already
-      // run and saw no capture to stop, so starting one NOW would leave it
-      // running unowned until the 6h cap.
+      // The screen may have closed during that await. Starting now would be
+      // legitimate — captures outlive this screen — but the state below can't
+      // be set on a dead widget, and the user asked for this from a surface
+      // that is gone.
       if (!mounted) return;
+      // No onFinished: endings are announced app-wide by the reporter in
+      // main(), which is still alive when this screen isn't, and the revision
+      // listener repaints the button. A screen-scoped callback would only
+      // duplicate the toast while the player happens to be open.
       final capture = DesktopRecordingService.instance.start(
         url: recordUrl,
         path: path,
         channelName: channel.name,
         headers: channel.playbackHeaders,
-        onFinished: (end, bytes) {
-          if (!mounted) return;
-          // Self-terminations (stream died, 6h cap) need a repaint and a
-          // word; user stops already reported in the toggle.
-          if (_desktopCapture != null && !_desktopCapture!.isActive) {
-            setState(() => _desktopCapture = null);
-          }
-          final message = switch (end) {
-            DesktopRecordingEnd.streamEnded =>
-              'Recording ended — the stream stopped',
-            DesktopRecordingEnd.durationCap => 'Recording saved (6h limit)',
-            DesktopRecordingEnd.failed => 'Recording failed — see logs',
-            DesktopRecordingEnd.stopped => null,
-          };
-          if (message != null) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(message)));
-          }
-        },
       );
       if (!mounted) return;
       if (capture == null) {
@@ -4345,12 +4350,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
         return;
       }
-      setState(() => _desktopCapture = capture);
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Recording — keeps going while the player is open. '
-            'Stop from this button.',
+            'Recording in background — keeps going if you zap or leave. '
+            'Stop from here or Settings → Recordings.',
           ),
         ),
       );
@@ -6892,17 +6897,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void dispose() {
     _lifecycle?.dispose();
-    // Desktop capture THIS SCREEN started: closing the player closes its only
-    // stop control, so finish it now (flushes and closes the file; a raw .ts
-    // is playable however it ends). Captures the desktop SCHEDULER started
-    // are deliberately left running — they have their own end timer and their
-    // contract is "while the app is open", not "while the player is open".
-    final ownCapture = _desktopCapture;
-    if (ownCapture != null) {
-      ownCapture.onFinished = null;
-      if (ownCapture.isActive) unawaited(ownCapture.stop());
-      _desktopCapture = null;
+    final revisionListener = _desktopRecordingRevisionListener;
+    if (revisionListener != null) {
+      DesktopRecordingService.instance.revision.removeListener(
+        revisionListener,
+      );
+      _desktopRecordingRevisionListener = null;
     }
+    // Nothing to do for a desktop capture: closing the player is not a stop
+    // request, on either platform. This screen used to finish its own capture
+    // because it was the only stop control desktop had; the Recordings hub
+    // (one Stop card per capture, both backends) is that control now, so the
+    // contract matches Android's engine — "runs while the app runs" — and
+    // endings are announced by the app-level reporter in main(), which
+    // outlives this screen.
     // Finalize any in-progress recording before the player is torn down. The
     // bump also cancels a start still awaiting its storage setup (it would
     // otherwise arm a disposed player and leave the file untracked).
