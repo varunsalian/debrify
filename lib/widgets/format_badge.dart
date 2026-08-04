@@ -68,6 +68,7 @@ class FormatBadge extends StatelessWidget {
     FormatTag.dolbyVision => ('Dolby Vision', _gold),
     FormatTag.hdr10Plus => ('HDR10+', _gold),
     FormatTag.hdr10 => ('HDR10', _gold),
+    FormatTag.hlg => ('HLG', _gold),
     FormatTag.hdr => ('HDR', _gold),
     // spec
     FormatTag.imax => ('IMAX', _white),

@@ -21,12 +21,14 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
   final Set<RipSourceCategory> _selectedSources = {};
   final Set<AudioLanguage> _selectedLanguages = {};
   final Set<SizeBucket> _selectedSizes = {};
+  final Set<DynamicRange> _selectedRanges = {};
 
   // Focus nodes for D-pad navigation
   final List<FocusNode> _qualityFocusNodes = [];
   final List<FocusNode> _sourceFocusNodes = [];
   final List<FocusNode> _languageFocusNodes = [];
   final List<FocusNode> _sizeFocusNodes = [];
+  final List<FocusNode> _rangeFocusNodes = [];
   final FocusNode _clearAllFocusNode = FocusNode(debugLabel: 'clear-all');
   bool _clearAllFocused = false;
 
@@ -64,6 +66,10 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     for (int i = 0; i < _sizeOptions.length; i++) {
       _sizeFocusNodes.add(FocusNode(debugLabel: 'size-$i'));
     }
+    // Dynamic-range focus nodes
+    for (int i = 0; i < _rangeOptions.length; i++) {
+      _rangeFocusNodes.add(FocusNode(debugLabel: 'range-$i'));
+    }
   }
 
   @override
@@ -82,6 +88,9 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     for (final node in _sizeFocusNodes) {
       node.dispose();
     }
+    for (final node in _rangeFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -91,6 +100,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
       final sources = await StorageService.getDefaultFilterRipSources();
       final languages = await StorageService.getDefaultFilterLanguages();
       final sizes = await StorageService.getDefaultFilterSizes();
+      final ranges = await StorageService.getDefaultFilterDynamicRanges();
       final quickPlayHonors = await StorageService.getQuickPlayHonorsFilters();
 
       setState(() {
@@ -115,6 +125,12 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         for (final s in sizes) {
           final bucket = SizeBucket.values.where((e) => e.name == s).firstOrNull;
           if (bucket != null) _selectedSizes.add(bucket);
+        }
+        for (final r in ranges) {
+          final range = DynamicRange.values
+              .where((e) => e.name == r)
+              .firstOrNull;
+          if (range != null) _selectedRanges.add(range);
         }
         _loading = false;
       });
@@ -177,6 +193,15 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     await _saveSizes();
   }
 
+  Future<void> _toggleRange(DynamicRange range) async {
+    setState(() {
+      if (!_selectedRanges.add(range)) {
+        _selectedRanges.remove(range);
+      }
+    });
+    await _saveRanges();
+  }
+
   Future<void> _saveQualities() async {
     await StorageService.setDefaultFilterQualities(
       _selectedQualities.map((e) => e.name).toList(),
@@ -201,6 +226,12 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     );
   }
 
+  Future<void> _saveRanges() async {
+    await StorageService.setDefaultFilterDynamicRanges(
+      _selectedRanges.map((e) => e.name).toList(),
+    );
+  }
+
   Future<void> _clearAll() async {
     // Clearing unmounts the AppBar "Clear All" button (it's only built while
     // filters exist) — if it held DPAD/keyboard focus, hand focus to the
@@ -211,6 +242,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
       _selectedSources.clear();
       _selectedLanguages.clear();
       _selectedSizes.clear();
+      _selectedRanges.clear();
     });
     if (reseedFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -224,6 +256,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
       _saveSources(),
       _saveLanguages(),
       _saveSizes(),
+      _saveRanges(),
     ]);
   }
 
@@ -240,7 +273,8 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         _selectedQualities.isNotEmpty ||
         _selectedSources.isNotEmpty ||
         _selectedLanguages.isNotEmpty ||
-        _selectedSizes.isNotEmpty;
+        _selectedSizes.isNotEmpty ||
+        _selectedRanges.isNotEmpty;
 
     return SettingsPageScaffold(
       title: 'Filters',
@@ -311,6 +345,13 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
                     title: 'Language',
                     subtitle: 'Filter by audio language',
                     children: _buildLanguageChips(),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildSection(
+                    context,
+                    title: 'Dynamic range',
+                    subtitle: 'Pick SDR alone to exclude HDR sources',
+                    children: _buildRangeChips(),
                   ),
                   const SizedBox(height: 20),
                   _buildSection(
@@ -416,6 +457,20 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         label: option.title,
         selected: _selectedLanguages.contains(option.value),
         onSelected: () => _toggleLanguage(option.value),
+      );
+    }).toList();
+  }
+
+  List<Widget> _buildRangeChips() {
+    return _rangeOptions.asMap().entries.map((entry) {
+      final index = entry.key;
+      final option = entry.value;
+      return _DpadFilterChip(
+        focusNode: _rangeFocusNodes[index],
+        label: option.title,
+        subtitle: option.subtitle,
+        selected: _selectedRanges.contains(option.value),
+        onSelected: () => _toggleRange(option.value),
       );
     }).toList();
   }
@@ -553,6 +608,20 @@ class _SizeOption {
   final String subtitle;
   const _SizeOption(this.value, this.title, this.subtitle);
 }
+
+class _RangeOption {
+  final DynamicRange value;
+  final String title;
+  final String subtitle;
+  const _RangeOption(this.value, this.title, this.subtitle);
+}
+
+/// Two chips, not one per HDR flavour — see [DynamicRange]. Selecting SDR
+/// alone is how a user on an SDR display excludes HDR entirely.
+const _rangeOptions = <_RangeOption>[
+  _RangeOption(DynamicRange.sdr, 'SDR', 'No HDR tag'),
+  _RangeOption(DynamicRange.hdr, 'HDR', 'HDR10 / 10+, Dolby Vision, HLG'),
+];
 
 // Options lists
 const _qualityOptions = <_QualityOption>[

@@ -5534,12 +5534,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       final sources = await StorageService.getDefaultFilterRipSources();
       final languages = await StorageService.getDefaultFilterLanguages();
       final sizes = await StorageService.getDefaultFilterSizes();
+      final ranges = await StorageService.getDefaultFilterDynamicRanges();
       if (!mounted) return;
 
       final qualitySet = <QualityTier>{};
       final sourceSet = <RipSourceCategory>{};
       final languageSet = <AudioLanguage>{};
       final sizeSet = <SizeBucket>{};
+      final rangeSet = <DynamicRange>{};
       for (final q in qualities) {
         for (final e in QualityTier.values) {
           if (e.name == q) qualitySet.add(e);
@@ -5560,11 +5562,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           if (e.name == s) sizeSet.add(e);
         }
       }
+      for (final r in ranges) {
+        for (final e in DynamicRange.values) {
+          if (e.name == r) rangeSet.add(e);
+        }
+      }
 
       if (qualitySet.isEmpty &&
           sourceSet.isEmpty &&
           languageSet.isEmpty &&
-          sizeSet.isEmpty) {
+          sizeSet.isEmpty &&
+          rangeSet.isEmpty) {
         return;
       }
       // If the user already picked filters while these async reads were in
@@ -5572,7 +5580,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (_kwFilters.qualities.isNotEmpty ||
           _kwFilters.ripSources.isNotEmpty ||
           _kwFilters.languages.isNotEmpty ||
-          _kwFilters.sizes.isNotEmpty) {
+          _kwFilters.sizes.isNotEmpty ||
+          _kwFilters.dynamicRanges.isNotEmpty) {
         return;
       }
       setState(() {
@@ -5581,6 +5590,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           ripSources: sourceSet,
           languages: languageSet,
           sizes: sizeSet,
+          dynamicRanges: rangeSet,
         );
       });
       // If results are already on screen (defaults resolved after a fast
@@ -9657,10 +9667,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// toolbar stays Sort/Filters/Sources and never swaps to selection controls.
   Widget _buildKeywordToolbar({bool floatingSelect = false}) {
     final scheme = Theme.of(context).colorScheme;
+    // Every facet counts. Sizes were already missing here, so a size-only
+    // filter quietly trimmed the results while the pill still read "Filters"
+    // and rendered inactive — the same trap a dynamic-range-only filter would
+    // fall into.
     final filterCount =
         _kwFilters.qualities.length +
         _kwFilters.ripSources.length +
-        _kwFilters.languages.length;
+        _kwFilters.languages.length +
+        _kwFilters.sizes.length +
+        _kwFilters.dynamicRanges.length;
 
     // [navIndex]/[navTotal], when provided, make the pill keyboard/DPAD
     // focusable at that position in the toolbar (left/right between pills, up to
@@ -17224,6 +17240,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       for (final q in _filters.qualities) 'Quality · ${_qualityFilterLabel(q)}',
       for (final r in _filters.ripSources) 'Source · ${_ripFilterLabel(r)}',
       for (final l in _filters.languages) 'Lang · ${_langFilterLabel(l)}',
+      for (final s in _filters.sizes) 'Size · ${_sizeFilterLabel(s)}',
+      for (final d in _filters.dynamicRanges)
+        'Range · ${_rangeFilterLabel(d)}',
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
@@ -17417,6 +17436,24 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   static String _langFilterLabel(AudioLanguage l) =>
       l.name[0].toUpperCase() + l.name.substring(1);
+
+  static String _sizeFilterLabel(SizeBucket s) => switch (s) {
+    SizeBucket.under500mb => '< 500 MB',
+    SizeBucket.mb500to1gb => '500 MB – 1 GB',
+    SizeBucket.gb1to1p5 => '1 – 1.5 GB',
+    SizeBucket.gb1p5to2p5 => '1.5 – 2.5 GB',
+    SizeBucket.gb2p5to4 => '2.5 – 4 GB',
+    SizeBucket.gb4to6 => '4 – 6 GB',
+    SizeBucket.gb6to10 => '6 – 10 GB',
+    SizeBucket.gb10to20 => '10 – 20 GB',
+    SizeBucket.gb20to40 => '20 – 40 GB',
+    SizeBucket.over40gb => '> 40 GB',
+  };
+
+  static String _rangeFilterLabel(DynamicRange d) => switch (d) {
+    DynamicRange.sdr => 'SDR',
+    DynamicRange.hdr => 'HDR',
+  };
 
   /// Redesigned result row (flag-gated) — a [SourceRow] with format-logo badges
   /// for detail-screen Sources, or a compact quality-tag row for keyword search

@@ -28,6 +28,7 @@ enum FormatTag {
   dolbyVision,
   hdr10Plus,
   hdr10,
+  hlg,
   hdr,
   // Spec
   imax,
@@ -64,6 +65,7 @@ extension FormatTagInfo on FormatTag {
     FormatTag.dolbyVision => 'Dolby Vision',
     FormatTag.hdr10Plus => 'HDR10+',
     FormatTag.hdr10 => 'HDR10',
+    FormatTag.hlg => 'HLG',
     FormatTag.hdr => 'HDR',
     FormatTag.imax => 'IMAX',
     FormatTag.hevc => 'HEVC',
@@ -139,6 +141,10 @@ class FormatTagDetector {
       tags.add(FormatTag.hdr10Plus);
     } else if (_has(text, r'HDR10')) {
       tags.add(FormatTag.hdr10);
+    } else if (_has(text, r'HLG')) {
+      // Its own token — an HLG release names neither "HDR" nor "HDR10", so
+      // without this it reads as SDR to anything that asks.
+      tags.add(FormatTag.hlg);
     } else if (_has(text, r'HDR')) {
       tags.add(FormatTag.hdr);
     }

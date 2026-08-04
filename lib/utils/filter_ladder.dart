@@ -31,6 +31,7 @@ class FilterLadder {
       StorageService.getDefaultFilterRipSources(),
       StorageService.getDefaultFilterLanguages(),
       StorageService.getDefaultFilterSizes(),
+      StorageService.getDefaultFilterDynamicRanges(),
     ]);
     final qualities = <QualityTier>{
       for (final q in results[0])
@@ -48,12 +49,17 @@ class FilterLadder {
       for (final s in results[3])
         ...SizeBucket.values.where((e) => e.name == s),
     };
+    final dynamicRanges = <DynamicRange>{
+      for (final r in results[4])
+        ...DynamicRange.values.where((e) => e.name == r),
+    };
     return FilterLadder(
       TorrentFilterState(
         qualities: qualities,
         ripSources: ripSources,
         languages: languages,
         sizes: sizes,
+        dynamicRanges: dynamicRanges,
       ),
     );
   }
@@ -69,9 +75,15 @@ class FilterLadder {
     final tiers = <TorrentFilterState>[f];
     var current = f;
     // Relaxation order (plan §3.1): language first — name-based language
-    // detection is the least reliable signal — then rip source, then quality.
-    // Size is a hard byte count (the most reliable dimension), so it's honored
-    // the longest — relaxed last, just before the unrestricted floor.
+    // detection is the least reliable signal — then rip source, then quality,
+    // then size (a hard byte count, the most reliable dimension).
+    //
+    // Dynamic range is relaxed LAST, after size, so it is honored longest of
+    // all: excluding HDR is a statement about what the user's display can show,
+    // not a preference about which release is nicer, and a quick play that
+    // quietly hands back an HDR file has failed at the thing that mattered.
+    // The floor tier is still unrestricted, so it can only ever rank SDR above
+    // HDR — never leave the user with nothing to play.
     if (current.languages.isNotEmpty) {
       current = current.copyWith(languages: const <AudioLanguage>{});
       tiers.add(current);
@@ -85,6 +97,10 @@ class FilterLadder {
       tiers.add(current);
     }
     if (current.sizes.isNotEmpty) {
+      current = current.copyWith(sizes: const <SizeBucket>{});
+      tiers.add(current);
+    }
+    if (current.dynamicRanges.isNotEmpty) {
       tiers.add(const TorrentFilterState.empty());
     }
     return tiers;
@@ -110,7 +126,12 @@ class FilterLadder {
         selected.contains(AudioLanguage.english);
   }
 
-  bool _matchesTier(String name, int sizeBytes, TorrentFilterState tier) {
+  bool _matchesTier(
+    String name,
+    int sizeBytes,
+    TorrentFilterState tier,
+    DynamicRange? range,
+  ) {
     if (tier.qualities.isNotEmpty &&
         !tier.qualities.contains(qualityTierForName(name))) {
       return false;
@@ -130,6 +151,10 @@ class FilterLadder {
       final bucket = sizeBucketForBytes(sizeBytes);
       if (bucket == null || !tier.sizes.contains(bucket)) return false;
     }
+    if (tier.dynamicRanges.isNotEmpty &&
+        (range == null || !tier.dynamicRanges.contains(range))) {
+      return false;
+    }
     return true;
   }
 
@@ -146,8 +171,15 @@ class FilterLadder {
             RipSourceCategory.cam) {
       return tierCount; // §3.3c: cams never outrank a real rip.
     }
+    // Classified ONCE per name, not once per tier. Dynamic range is relaxed
+    // last, so every tier but the floor carries it — and unlike the other
+    // detectors this one walks the full FormatTagDetector tag list, which
+    // `order` would otherwise rebuild ~tierCount times for every candidate.
+    final range = filters.dynamicRanges.isEmpty
+        ? null
+        : TorrentFilterMatcher.detectDynamicRange(name);
     for (var i = 0; i < _tiers.length; i++) {
-      if (_matchesTier(name, sizeBytes, _tiers[i])) return i;
+      if (_matchesTier(name, sizeBytes, _tiers[i], range)) return i;
     }
     // Unreachable — the last tier is unrestricted — but stay total.
     return tierCount - 1;
