@@ -1064,10 +1064,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// this, every entry to the Discover tab would build the grid, then swap to
   /// the stage a frame later — a visible flash on each tab switch. Only the
   /// very first entry after launch pays it.
-  static String _discLayoutCached = 'grid';
+  static String _discLayoutCached = 'stage';
 
-  /// Active Discover layout, from `discover_layout`. Grid is the default and
-  /// the only thing phone/desktop ever render (see [_discStage]).
+  /// Active Discover layout, from `discover_layout`. Stage is the default;
+  /// grid is the only thing phone/desktop ever render (see [_discStage]).
   String _discLayout = _discLayoutCached;
 
   /// Whether the STAGE layout is what this surface should render: the pref, on

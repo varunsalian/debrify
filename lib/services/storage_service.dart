@@ -645,22 +645,30 @@ class StorageService {
 
   static const String _discoverLayoutKey = 'discover_layout';
 
-  /// TV Discover layout: 'grid' (the detail rail beside a poster wall, the
-  /// default) or 'stage' (the focused title full-bleed with one bottom shelf).
-  /// Its own key, deliberately NOT shared with [getTvHomeStyle]: Home's Canvas
+  /// TV Discover layout: 'stage' (the focused title full-bleed with one bottom
+  /// shelf, the default) or 'grid' (the detail rail beside a poster wall). Its
+  /// own key, deliberately NOT shared with [getTvHomeStyle]: Home's Canvas
   /// switches rails with UP/DOWN and Discover's Stage owns a filter line —
   /// neither layout has the other's axis, so one pref governing both would
   /// promise a symmetry they can't keep. Phone/desktop never read it.
+  ///
+  /// Unset reads as 'stage', so users who never opened the picker move to it.
+  /// Everything else that holds a pre-load placeholder for this pref must
+  /// agree, or the UI paints one layout and then swaps: SearchScreen's
+  /// `_discLayoutCached`, DiscoverLayoutPage, SettingsScreen.
   static Future<String> getDiscoverLayout() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_discoverLayoutKey) == 'stage' ? 'stage' : 'grid';
+    return prefs.getString(_discoverLayoutKey) == 'grid' ? 'grid' : 'stage';
   }
 
+  /// Normalizes toward 'stage' on the same terms [getDiscoverLayout] does —
+  /// an unrecognized value has to mean the default on BOTH sides, or writing
+  /// one would silently pin the layout the reader treats as the exception.
   static Future<void> setDiscoverLayout(String layout) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _discoverLayoutKey,
-      layout == 'stage' ? 'stage' : 'grid',
+      layout == 'grid' ? 'grid' : 'stage',
     );
   }
 

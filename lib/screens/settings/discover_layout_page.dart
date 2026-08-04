@@ -32,7 +32,7 @@ String discoverLayoutLabel(String layout) {
   for (final c in kDiscoverLayoutChoices) {
     if (c.value == layout) return c.label;
   }
-  return 'Grid';
+  return 'Stage';
 }
 
 /// Android TV "Discover Layout" picker.
@@ -50,7 +50,10 @@ class DiscoverLayoutPage extends StatefulWidget {
 
 class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
   bool _loading = true;
-  String _layout = 'grid';
+
+  /// Placeholder until [_load] lands — must match StorageService's unset
+  /// default, or the checked row jumps on first paint.
+  String _layout = 'stage';
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
