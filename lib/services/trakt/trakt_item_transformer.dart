@@ -102,7 +102,34 @@ class TraktItemTransformer {
       year: year,
       imdbRating: rating,
       genres: genres,
+      addedAtMs: rowDateMs(raw),
     );
+  }
+
+  /// Epoch-ms of whichever date field the WRAPPER row carries, or null when it
+  /// carries none (trending/popular/recommendations are plain content rows).
+  ///
+  /// Trakt names the field after the list: `listed_at` on the watchlist and on
+  /// custom/liked lists, `collected_at` on the collection, `rated_at` on
+  /// ratings, `watched_at` on history. One extractor for all of them, so a
+  /// caller never has to know which list a row came from.
+  static int? rowDateMs(Map<String, dynamic> row) {
+    const fields = [
+      'watched_at',
+      'rated_at',
+      'collected_at',
+      'last_collected_at',
+      'listed_at',
+      'last_watched_at',
+    ];
+    for (final f in fields) {
+      final v = row[f];
+      if (v is String) {
+        final t = DateTime.tryParse(v);
+        if (t != null) return t.millisecondsSinceEpoch;
+      }
+    }
+    return null;
   }
 
   /// Transform a list of Trakt API items into [StremioMeta] objects.

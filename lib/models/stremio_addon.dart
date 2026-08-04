@@ -187,6 +187,15 @@ class StremioMeta {
   /// as fallback.
   final String? logo;
 
+  /// When the user's tracker row was created — Trakt's `listed_at` /
+  /// `collected_at` / `rated_at` / `watched_at`, Simkl's
+  /// `added_to_watchlist_at`. Epoch ms, or null for anything that isn't a
+  /// personal list row (trending, popular, addon catalogs), which is why the
+  /// "Date Added" sort is offered only when the loaded list actually carries
+  /// them. NOT a property of the title — the same film has a different value
+  /// per user and per list.
+  final int? addedAtMs;
+
   const StremioMeta({
     required this.id,
     this.imdbId,
@@ -202,6 +211,7 @@ class StremioMeta {
     this.sourceAddon,
     this.trailerYtId,
     this.logo,
+    this.addedAtMs,
   });
 
   /// Create a copy with a source addon attached.
@@ -220,6 +230,7 @@ class StremioMeta {
     sourceAddon: addon,
     trailerYtId: trailerYtId,
     logo: logo,
+    addedAtMs: addedAtMs,
   );
 
   /// Extract a trailer's YouTube ID from a meta JSON. Cinemeta exposes trailers

@@ -14,12 +14,13 @@ import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
 import '../../widgets/see_all/see_all_random_button.dart';
+import '../../widgets/see_all/see_all_sort.dart';
 import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 
 /// Sort orders for the grid. [natural] keeps the API's own rank/interleave
 /// order.
-enum _Sort { natural, az, za, imdbDesc, imdbAsc }
+enum _Sort { natural, az, za, imdbDesc, imdbAsc, addedNewest, addedOldest }
 
 /// Full-screen "See All" for the Simkl source. Opens on Continue Watching when
 /// the host provides some (else Trending — public, no auth wall, always
@@ -113,6 +114,12 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   String _category = 'all'; // all | movie | series
   _Sort _sort = _Sort.natural;
 
+  /// A remembered date sort waiting for a list that can honour it. Resolved by
+  /// [_recompute] the first time dated rows load, and dropped the moment the
+  /// user picks any sort themselves — a stored preference should re-apply once,
+  /// not keep overriding the choice they just made.
+  _Sort? _deferredSort;
+
   bool _loading = false;
   bool _error = false;
 
@@ -131,6 +138,30 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   /// The Random button is a Discover affordance: only the embedded host
   /// wires Quick Play (and hides it in PikPak-only mode by passing null).
   bool get _showRandom => widget.embedded && widget.onQuickPlay != null;
+
+  /// "Date Added" is offered only where the rows carry a date — Simkl stamps
+  /// `added_to_watchlist_at` on the watchlist statuses (Plan to Watch,
+  /// Watching, Completed, …) but the best/premieres/trending lists are public
+  /// catalogue rows with none. Asked of the LOADED items, so nothing has to
+  /// enumerate which Simkl list is which.
+  bool get _showAdded => hasAddedDates(_items);
+
+  /// What the date on THIS list's rows actually means. The watchlist statuses
+  /// carry `added_to_watchlist_at`, but Ratings comes from `/sync/ratings`,
+  /// where the date is `user_rated_at` — calling that "Date Added" would tell
+  /// the user the list is ordered by when they saved a title when it is
+  /// ordered by when they rated it.
+  String get _addedLabel =>
+      _list == SimklSeeAllList.ratings ? 'Date Rated' : 'Date Added';
+
+  /// The sort actually applied. A remembered "Date Added" pick can outlive the
+  /// list it was made on (swap Plan to Watch → Trending, or relaunch), and the
+  /// dropdown must not be handed a value absent from its options.
+  _Sort get _effectiveSort =>
+      (!_showAdded &&
+              (_sort == _Sort.addedNewest || _sort == _Sort.addedOldest))
+          ? _Sort.natural
+          : _sort;
 
   List<FocusNode> get _filterNodes => [
         if (widget.leadingNode != null) widget.leadingNode!,
@@ -154,7 +185,17 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
     if (widget.embedded) {
       final saved =
           DiscoverPrefs.enumSortFor(DiscoverPrefs.simkl, _Sort.values);
-      if (saved != null) _sort = saved;
+      if (saved != null) {
+        _sort = saved;
+        // A remembered DATE sort can't take effect here: Simkl opens on
+        // Continue Watching or Trending, both undated, and the list switch that
+        // finally reaches a dated list resets _sort. Held aside so it can be
+        // claimed when dated rows actually arrive — otherwise the preference
+        // would be stored and never once applied.
+        if (saved == _Sort.addedNewest || saved == _Sort.addedOldest) {
+          _deferredSort = saved;
+        }
+      }
     }
     _fetchList(_list);
   }
@@ -198,6 +239,17 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   // ── Derived list (memoized; recomputed only on data/filter change) ──────────
 
   void _recompute() {
+    // Dated rows have arrived: settle the remembered date sort. Claimed only
+    // over `natural`, so the list switch that got us here (which resets the
+    // sort) is honoured while an explicit pick made since is not overridden.
+    final settled = settleDeferredSort(
+      deferred: _deferredSort,
+      current: _sort,
+      natural: _Sort.natural,
+      listHasDates: hasAddedDates(_items),
+    );
+    _sort = settled.sort;
+    _deferredSort = settled.deferred;
     Iterable<StremioMeta> it = _items;
     if (_category == 'movie') {
       it = it.where((m) => m.type != 'series');
@@ -205,7 +257,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       it = it.where((m) => m.type == 'series');
     }
     final list = it.toList();
-    switch (_sort) {
+    switch (_effectiveSort) {
       case _Sort.natural:
         break; // items already arrive in the list's natural (rank) order
       case _Sort.az:
@@ -233,6 +285,10 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
           return a.name.toLowerCase().compareTo(b.name.toLowerCase());
         });
         break;
+      case _Sort.addedNewest:
+      case _Sort.addedOldest:
+        list.sort(byAddedDate(newest: _sort == _Sort.addedNewest));
+        break;
     }
     _visible = list;
   }
@@ -249,6 +305,8 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   /// is stored: switching lists resets the sort in-session, and that reset must
   /// not erase the user's standing choice.
   void _setSort(_Sort v) {
+    // An explicit pick supersedes anything still waiting to be restored.
+    _deferredSort = null;
     _setFilter(() => _sort = v);
     if (widget.embedded) {
       unawaited(DiscoverPrefs.setEnumSort(DiscoverPrefs.simkl, v));
@@ -382,7 +440,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   int get _activeFilterCount {
     var n = 0;
     if (_category != 'all') n++;
-    if (_sort != _Sort.natural) n++;
+    if (_effectiveSort != _Sort.natural) n++;
     return n;
   }
 
@@ -438,18 +496,24 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
             ),
             StremioDropdown<_Sort>(
               label: 'Sort',
-              value: _sort,
+              value: _effectiveSort,
               isTelevision: widget.isTelevision,
               quiet: _quiet,
               focusNode: _sortNode,
-              options: const [
-                StremioDropdownOption(_Sort.natural, 'Default'),
-                StremioDropdownOption(_Sort.az, 'A–Z'),
-                StremioDropdownOption(_Sort.za, 'Z–A'),
-                StremioDropdownOption(
+              options: [
+                const StremioDropdownOption(_Sort.natural, 'Default'),
+                const StremioDropdownOption(_Sort.az, 'A–Z'),
+                const StremioDropdownOption(_Sort.za, 'Z–A'),
+                const StremioDropdownOption(
                     _Sort.imdbDesc, 'IMDb Rating · High → Low'),
-                StremioDropdownOption(
+                const StremioDropdownOption(
                     _Sort.imdbAsc, 'IMDb Rating · Low → High'),
+                if (_showAdded) ...[
+                  StremioDropdownOption(
+                      _Sort.addedNewest, '$_addedLabel · Newest'),
+                  StremioDropdownOption(
+                      _Sort.addedOldest, '$_addedLabel · Oldest'),
+                ],
               ],
               onSelected: _setSort,
             ),

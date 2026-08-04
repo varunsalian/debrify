@@ -300,7 +300,14 @@ class TraktListSource {
       if (episodeShaped) {
         final show = r['show'];
         if (show is Map<String, dynamic>) {
-          meta = TraktItemTransformer.transformItem({'show': show},
+          // Keep the WHOLE row and just retype it: `type: 'episode'` would make
+          // the transformer pick the episode (whose own imdb is null), but a
+          // stripped `{'show': show}` would throw away `watched_at` with it —
+          // and the transformer now stamps that onto the meta for the grid's
+          // date sort. Dropping it left every show in History undated while
+          // the movies beside them kept their date.
+          meta = TraktItemTransformer.transformItem(
+              {...r, 'type': 'show'},
               inferredType: 'show');
         }
       } else {
@@ -313,23 +320,10 @@ class TraktListSource {
   }
 
   /// Epoch-ms of whichever known Trakt date field a row carries; 0 when absent
-  /// so the item sorts last rather than crashing.
-  int _rowTime(Map<String, dynamic> r) {
-    const fields = [
-      'watched_at',
-      'rated_at',
-      'collected_at',
-      'last_collected_at',
-      'listed_at',
-      'last_watched_at',
-    ];
-    for (final f in fields) {
-      final v = r[f];
-      if (v is String) {
-        final t = DateTime.tryParse(v);
-        if (t != null) return t.millisecondsSinceEpoch;
-      }
-    }
-    return 0;
-  }
+  /// so the item sorts last rather than crashing. The field list lives on the
+  /// transformer, which stamps the same value onto every meta it builds — one
+  /// definition, so the merge order here and the "Date Added" sort in the grid
+  /// can never disagree about what a row's date is.
+  int _rowTime(Map<String, dynamic> r) =>
+      TraktItemTransformer.rowDateMs(r) ?? 0;
 }
