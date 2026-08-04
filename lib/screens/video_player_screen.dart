@@ -731,6 +731,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   int _skipSegmentsFetchGeneration = 0;
   final Map<String, SkipSegments> _skipSegmentsCache = <String, SkipSegments>{};
 
+  /// Whether _position/_duration describe the item currently selected, rather
+  /// than the one being switched away from. The native player's equivalent is
+  /// `hasEverBeenReady`.
+  ///
+  /// Cleared when a playlist switch starts and set again on the first real
+  /// duration for the incoming media. It cannot stick: media_kit's `open()`
+  /// pushes Duration.zero to the duration stream unconditionally, so a fresh
+  /// duration always follows — even when the new episode runs exactly as long
+  /// as the old one.
+  bool _skipSegmentsMediaReady = true;
+
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
 
@@ -1075,8 +1086,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   ({String imdbId, int season, int episode, Duration duration, String key})?
   _currentSkipSegmentRequest() {
+    // Two stale-media windows, both of which would judge the incoming item
+    // against the outgoing one's clock:
+    //
+    // * _skipSegmentsMediaReady covers a playlist switch. _loadPlaylistIndex
+    //   points _currentIndex at the new episode and only then saves resume and
+    //   resolves the stream URL — a network round trip for debrid/PikPak
+    //   links. Through all of that _position/_duration still describe the
+    //   outgoing episode, and that position is usually deep enough to land
+    //   inside a segment, so the button flashes on the moment next-episode is
+    //   pressed. It also asks SkipDB for the new episode at the old episode's
+    //   duration, which comes back graded as a mismatch.
+    // * _isTransitioning covers an IPTV zap / source switch, where the key
+    //   flips before the incoming stream opens (the same window _saveResume
+    //   guards against).
     if (!_skipSegmentSettingsLoaded ||
         !_skipSegmentsEnabled ||
+        !_skipSegmentsMediaReady ||
+        _isTransitioning ||
         _duration <= Duration.zero) {
       return null;
     }
@@ -1180,6 +1207,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _loadingSkipSegmentsKey = null;
           }
         });
+  }
+
+  /// Forget the outgoing item's skip segments when switching playlist entries,
+  /// and stop reading its clock until the incoming one opens. The native TV
+  /// player does the same in playItem.
+  ///
+  /// The fetch cache survives on purpose: it's keyed per episode, so going
+  /// back to one already looked up is instant.
+  void _resetSkipSegmentState() {
+    _skipSegmentsFetchGeneration++;
+    _loadingSkipSegmentsKey = null;
+    _loadedSkipSegmentsKey = null;
+    _skipSegments = SkipSegments.empty;
+    _skipSegmentsMediaReady = false;
   }
 
   SkipSegment? get _activeSkipSegment {
@@ -2039,6 +2080,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _durSub = _player.stream.duration.listen((d) {
       _duration = d;
+      // A real duration means the incoming media has opened, so the clock the
+      // skip lookup reads is finally the new item's.
+      if (d > Duration.zero) _skipSegmentsMediaReady = true;
       _syncSkipSegmentsForCurrentContent();
       if (mounted) setState(() {});
     });
@@ -6005,6 +6049,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _rainbowController.stop();
     _transitionRunning = false;
     _rainbowActive = false;
+    // No new media will open, so the duration emit that normally re-arms the
+    // skip lookup never comes. Leaving it disarmed would silently cost the
+    // skip button for the rest of whatever is still playing.
+    _skipSegmentsMediaReady = true;
     if (mounted) {
       setState(() {
         _isTransitioning = false;
@@ -6051,6 +6099,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Clear subtitle cache and selection when changing content
     _resetSubtitleState();
+    _resetSkipSegmentState();
 
     // For movie collections, prefetch movie metadata for the new index
     // This runs in background so subtitles are ready when user opens TracksSheet

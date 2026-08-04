@@ -5022,6 +5022,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun updateSkipSegmentState(positionMs: Long, durationMs: Long) {
         if (!::skipSegmentButton.isInitialized) return
+
+        // Between playlist items the player still reports the OUTGOING media's
+        // position and duration for a moment, while currentIndex already names
+        // the incoming episode. Judging the new episode against those makes the
+        // button flash on as soon as next-episode is pressed — the old position
+        // is usually deep in the outgoing episode, which lands inside a segment
+        // — and fetches its segments against a duration that isn't its own,
+        // which SkipDB then grades as a mismatch. Wait until the new media is
+        // prepared; resetSkipSegmentState() has already hidden the button.
+        if (!hasEverBeenReady) {
+            presentSkipSegment(null, null)
+            return
+        }
+
         val request = currentSkipSegmentRequest(durationMs)
         if (request == null) {
             presentSkipSegment(null, null)
