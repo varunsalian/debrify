@@ -80,6 +80,23 @@ class DiscoverDetailRail extends StatefulWidget {
   /// sizes it off the canvas so the text never crosses into the art.
   final double stageMaxWidth;
 
+  /// STAGE only: the height the identity block may occupy in the BROWSE
+  /// state. Passed in rather than measured, because theater animates the
+  /// block's box open — reading the live constraint would flip the detail
+  /// ladder below mid-glide and jump the title art.
+  final double stageBudget;
+
+  /// Wait for the DPAD to REST this long before swapping which title is shown.
+  ///
+  /// The Home board's billboard settle, transplanted: holding a direction
+  /// across a shelf should cost only the card's own focus visuals, never a
+  /// full identity rebuild — and, downstream of [shownItem], a full-bleed
+  /// backdrop decode — on every step. The trailer is still torn down on the
+  /// FIRST keypress, so the lights come back up with the press rather than
+  /// after the settle. Zero (the default, and the two-pane rail) swaps on
+  /// every focus change, which is right for a small side rail.
+  final Duration settleDelay;
+
   const DiscoverDetailRail({
     super.key,
     required this.item,
@@ -91,6 +108,8 @@ class DiscoverDetailRail extends StatefulWidget {
     this.layout = DiscoverDetailLayout.rail,
     this.trailerShowing,
     this.stageMaxWidth = 470,
+    this.stageBudget = double.infinity,
+    this.settleDelay = Duration.zero,
   });
 
   @override
@@ -220,16 +239,54 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     _evaluateTrailer();
   }
 
+  /// Pending settle (see [DiscoverDetailRail.settleDelay]).
+  Timer? _settle;
+
+  /// A new title has focus. With a settle delay, only the cheap half runs now
+  /// — releasing the trailer so the stage's lights lift with the keypress —
+  /// and the visible swap waits for the remote to rest. The FIRST title never
+  /// waits: an empty stage should dress itself promptly.
+  void _adopt(StremioMeta? m) {
+    _settle?.cancel();
+    if (widget.settleDelay > Duration.zero && _shown != null && m != null) {
+      _dropTrailer();
+      // setState, not a bare call: [_applyAdopt] assigns _shown directly on
+      // the assumption that a build always follows it — true for its two
+      // original callers (initState / didUpdateWidget), false for a Timer on
+      // an idle tree. Without this the identity block never repaints, and
+      // _publishShown's post-frame callback (which does NOT schedule a frame)
+      // never runs either, so the backdrop stays on the previous title too.
+      _settle = Timer(widget.settleDelay, () {
+        if (mounted) setState(() => _applyAdopt(m));
+      });
+      return;
+    }
+    _applyAdopt(m);
+  }
+
+  /// Release the trailer without touching what's shown: cancels the dwells,
+  /// clears the pill and unpublishes the streams so the stage tears its player
+  /// down. Nulling [_trailerImdb] leaves the next [_evaluateTrailer] free to
+  /// re-arm for whatever title actually lands.
+  void _dropTrailer() {
+    _trailerDwell?.cancel();
+    _pillDwell?.cancel();
+    _loadingWatchdog?.cancel();
+    _trailerImdb = null;
+    widget.trailerLoading.value = false;
+    _streams = null;
+  }
+
   /// Show the best we have for [m] right now — its already-enriched form if
   /// we've seen it, else the raw list item — then debounce a fetch if it's
   /// still thin.
-  void _adopt(StremioMeta? m) {
+  void _applyAdopt(StremioMeta? m) {
     // Drop any pending fetch for the title we're leaving.
     _enrichDebounce?.cancel();
-    // Direct assignment, not setState: both callers (initState, didUpdateWidget)
-    // are always followed by a build, so a rebuild is already scheduled. Only
-    // the async enrichment callback — which fires outside a build — needs
-    // setState.
+    // Direct assignment, not setState: the callers that reach here during a
+    // build (initState, didUpdateWidget) already have a rebuild scheduled.
+    // The two that DON'T — the settle timer and the enrichment callback —
+    // wrap their call in setState themselves.
     final cached = _cachedFor(m);
     _shown = cached ?? m;
     _publishShown();
@@ -249,6 +306,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
 
   @override
   void dispose() {
+    _settle?.cancel();
     _enrichDebounce?.cancel();
     _trailerDwell?.cancel();
     _pillDwell?.cancel();
@@ -368,7 +426,16 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
       if (mounted) widget.trailerLoading.value = false;
     });
 
-    bool stale() => !mounted || _suppressed || _shown?.imdbId != imdb;
+    // _trailerImdb is checked FIRST because it is the only marker cleared at
+    // keypress time: with a settle delay _shown deliberately still holds the
+    // title being left, so an in-flight resolve would otherwise sail past
+    // this guard and mount a decoder for a card the user has walked away
+    // from — a spurious lights-down mid-settle.
+    bool stale() =>
+        !mounted ||
+        _suppressed ||
+        _trailerImdb != imdb ||
+        _shown?.imdbId != imdb;
     void fail() {
       if (mounted && _shown?.imdbId == imdb) widget.trailerLoading.value = false;
     }
@@ -444,10 +511,25 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
       // a "browse to preview" card would be talking about the only thing
       // already on screen.
       if (item == null) return const SizedBox.shrink();
-      return _StageContent(
-        item: item,
-        maxWidth: widget.stageMaxWidth,
-        trailerShowing: widget.trailerShowing,
+      // Titles CROSSFADE, matching the board's identity block. The two-pane
+      // rail deliberately snaps (a saveLayer over the whole column on every
+      // DPAD step is the jank the grid avoids) — but here a swap happens once
+      // per REST, not per keypress, which is exactly the cadence the board
+      // pays this for. Pinned bottom-left: the switcher's stock layout
+      // centres, which would float the block off the scrim it stands on.
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        layoutBuilder: (current, previous) => Stack(
+          alignment: Alignment.bottomLeft,
+          children: [...previous, if (current != null) current],
+        ),
+        child: _StageContent(
+          key: ValueKey('disc-stage-id-${item.id}'),
+          item: item,
+          maxWidth: widget.stageMaxWidth,
+          budget: widget.stageBudget,
+          trailerShowing: widget.trailerShowing,
+        ),
       );
     }
     // No panel, no border: the rail is an open glass column floating on the
@@ -605,11 +687,16 @@ class _RailContent extends StatelessWidget {
 class _StageContent extends StatelessWidget {
   final StremioMeta item;
   final double maxWidth;
+
+  /// Height available in the BROWSE state — what the ladder below spends.
+  final double budget;
   final ValueListenable<bool>? trailerShowing;
 
   const _StageContent({
+    super.key,
     required this.item,
     required this.maxWidth,
+    required this.budget,
     this.trailerShowing,
   });
 
@@ -695,9 +782,9 @@ class _StageContent extends StatelessWidget {
       // up into the filter line: full block → no plot → title art alone. The
       // host hands us exactly the space between the filter line and the shelf
       // column, so what fits here is what's genuinely free.
-      child: LayoutBuilder(
-        builder: (context, cons) {
-          final h = cons.maxHeight;
+      child: Builder(
+        builder: (context) {
+          final h = budget;
           final showPlot = !h.isFinite || h >= _fullHeight;
           final showMeta = !h.isFinite || h >= _metaHeight;
           return Column(

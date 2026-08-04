@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
 import '../utils/tv_keys.dart';
+import 'home/card_focus_rise.dart';
 import 'home/home_theme.dart';
 
 /// Poster-first grid tile for catalog and search results.
@@ -48,6 +49,16 @@ class CatalogItemTile extends StatefulWidget {
   /// on every poster is noise against the glass stage.
   final bool showRatingBadge;
 
+  /// Wear the HOME BOARD's card grammar instead of this tile's own: the shared
+  /// [CardFocusRise] (calm 1.045 lift, twin shadow, ring — all on one curve),
+  /// the board's short poster fade, and a 140ms scroll GLIDE on TV instead of
+  /// a hard jump, which the board calls the single biggest "not native" tell.
+  ///
+  /// Set by the Discover STAGE shelf, which sits on a full-bleed stage beside
+  /// the Home board and has to move like it. Every other caller keeps this
+  /// tile's existing gold-rim grammar, untouched.
+  final bool boardChrome;
+
   const CatalogItemTile({
     super.key,
     required this.item,
@@ -61,6 +72,7 @@ class CatalogItemTile extends StatefulWidget {
     this.showInlineTitle = true,
     this.showTypeBadge = true,
     this.showRatingBadge = true,
+    this.boardChrome = false,
   });
 
   @override
@@ -88,195 +100,219 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
     final poster = item.poster;
     final rating = item.imdbRating;
     final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
+    final board = widget.boardChrome;
     // TVs are low-powered: keep the focus highlight but make it instant
-    // (no per-frame tweening of large posters/shadows).
+    // (no per-frame tweening of large posters/shadows). Board chrome animates
+    // instead — [CardFocusRise] is shaped to be cheap enough for it.
     final fx = widget.isTelevision
         ? Duration.zero
         : const Duration(milliseconds: 180);
 
-    final card = AnimatedScale(
-      duration: fx,
-      curve: Curves.easeOutCubic,
-      scale: _active ? 1.08 : 1.0,
-      child: AnimatedContainer(
-        duration: fx,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: _active ? 0.7 : 0.35),
-              blurRadius: _active ? (widget.isTelevision ? 20 : 38) : 14,
-              offset: const Offset(0, 14),
-            ),
-            if (_active) ...[
-              // Tight bright gold rim.
-              BoxShadow(
-                color: HomeTheme.focusGold.withValues(alpha: 0.6),
-                blurRadius: 30,
-                spreadRadius: 1,
+    // The poster and everything drawn over it, shared by both chromes. The
+    // selection ring is deliberately NOT here: the classic tree appends its
+    // own gold one, and [CardFocusRise] draws the board's above whatever it
+    // is handed.
+    final layers = <Widget>[
+      if (poster != null && poster.isNotEmpty)
+        CachedNetworkImage(
+          imageUrl: poster,
+          fit: BoxFit.cover,
+          // Decode posters at a capped width instead of full source
+          // resolution (~780px → ~3.6MB each). Tiles never exceed ~320px
+          // wide, so this roughly thirds the decoded bytes per poster —
+          // the biggest memory win for the catalog grid on low-RAM TVs.
+          memCacheWidth: widget.isTelevision ? 320 : 480,
+          // TV, classic chrome: no per-image crossfade — a saveLayer per
+          // poster janks the weak GPU when a whole grid fills in at once
+          // (matches the board's _ArtPoster path). Board chrome takes the
+          // board's short fade instead: one shelf of cards is a far smaller
+          // burst than a grid, and posters snapping in as hard rectangles is
+          // the last cheap tell at the card level.
+          fadeInDuration: board
+              ? HomeTheme.imageFadeIn(widget.isTelevision)
+              : (widget.isTelevision
+                    ? Duration.zero
+                    : const Duration(milliseconds: 250)),
+          fadeOutDuration: board
+              ? HomeTheme.imageFadeOut(widget.isTelevision)
+              : (widget.isTelevision
+                    ? Duration.zero
+                    : const Duration(milliseconds: 100)),
+          placeholder: (_, __) => _placeholder(item.name),
+          errorWidget: (_, __, ___) => _placeholder(item.name),
+        )
+      else
+        _placeholder(item.name),
+
+      // Bottom gradient — only when focused — for the inline title. Board
+      // chrome skips it: board cards carry no focus wash, and on a stage the
+      // focused title is named at full size below the shelf anyway.
+      if (_active && !board)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.0),
+                    Colors.black.withValues(alpha: 0.65),
+                    Colors.black.withValues(alpha: 0.92),
+                  ],
+                  stops: const [0.0, 0.55, 0.85, 1.0],
+                ),
               ),
-              // Wide warm amber bloom for the cinematic falloff. Skipped on TV:
-              // a blur-90 soft shadow repainted on every D-pad focus move is the
-              // main scroll-jank source on weak TV GPUs.
-              if (!widget.isTelevision)
-                BoxShadow(
-                  color: HomeTheme.focusGoldDeep.withValues(alpha: 0.32),
-                  blurRadius: 90,
-                  spreadRadius: 10,
-                ),
-            ],
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (poster != null && poster.isNotEmpty)
-                CachedNetworkImage(
-                  imageUrl: poster,
-                  fit: BoxFit.cover,
-                  // Decode posters at a capped width instead of full source
-                  // resolution (~780px → ~3.6MB each). Tiles never exceed ~320px
-                  // wide, so this roughly thirds the decoded bytes per poster —
-                  // the biggest memory win for the catalog grid on low-RAM TVs.
-                  memCacheWidth: widget.isTelevision ? 320 : 480,
-                  // TV: no per-image crossfade — a saveLayer per poster janks the
-                  // weak GPU when a whole grid fills in at once (matches the board's
-                  // _ArtPoster path).
-                  fadeInDuration:
-                      widget.isTelevision ? Duration.zero : const Duration(milliseconds: 250),
-                  fadeOutDuration:
-                      widget.isTelevision ? Duration.zero : const Duration(milliseconds: 100),
-                  placeholder: (_, __) => _placeholder(item.name),
-                  errorWidget: (_, __, ___) => _placeholder(item.name),
-                )
-              else
-                _placeholder(item.name),
-
-              // Bottom gradient — only when focused — for the inline title.
-              if (_active)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.0),
-                            Colors.black.withValues(alpha: 0.65),
-                            Colors.black.withValues(alpha: 0.92),
-                          ],
-                          stops: const [0.0, 0.55, 0.85, 1.0],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-              if (widget.showTypeBadge)
-                Positioned(
-                  top: 10,
-                  left: 10,
-                  child: _GlassChip(label: typeLabel),
-                ),
-
-              if (rating != null && widget.showRatingBadge)
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: _RatingChip(value: rating),
-                ),
-
-              if (widget.hasBoundSource)
-                const Positioned(
-                  bottom: 10,
-                  right: 10,
-                  child: Icon(
-                    Icons.bookmark_rounded,
-                    size: 18,
-                    color: Colors.white,
-                    shadows: [Shadow(color: Colors.black, blurRadius: 6)],
-                  ),
-                ),
-
-              // Focused title overlay — appears inside the poster on focus
-              // so the chrome below the tile stays calm. Suppressed when the
-              // caller shows a persistent title below the poster.
-              if (_active && widget.showInlineTitle)
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: IgnorePointer(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          item.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.2,
-                            height: 1.15,
-                          ),
-                        ),
-                        if (item.year != null && item.year!.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              item.year!,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // Continue-watching progress bar, pinned to the poster bottom.
-              if (widget.progress != null && widget.progress! > 0)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: IgnorePointer(
-                    child: _ProgressBar(
-                      value: widget.progress!.clamp(0.0, 1.0),
-                    ),
-                  ),
-                ),
-
-              if (_active)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: HomeTheme.focusGold,
-                          width: 2.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+            ),
           ),
         ),
-      ),
-    );
+
+      if (widget.showTypeBadge)
+        Positioned(top: 10, left: 10, child: _GlassChip(label: typeLabel)),
+
+      if (rating != null && widget.showRatingBadge)
+        Positioned(top: 10, right: 10, child: _RatingChip(value: rating)),
+
+      if (widget.hasBoundSource)
+        const Positioned(
+          bottom: 10,
+          right: 10,
+          child: Icon(
+            Icons.bookmark_rounded,
+            size: 18,
+            color: Colors.white,
+            shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+          ),
+        ),
+
+      // Focused title overlay — appears inside the poster on focus so the
+      // chrome below the tile stays calm. Suppressed when the caller shows a
+      // persistent title below the poster.
+      if (_active && widget.showInlineTitle)
+        Positioned(
+          left: 12,
+          right: 12,
+          bottom: 12,
+          child: IgnorePointer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
+                    height: 1.15,
+                  ),
+                ),
+                if (item.year != null && item.year!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      item.year!,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+      // Continue-watching progress bar, pinned to the poster bottom.
+      if (widget.progress != null && widget.progress! > 0)
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            child: _ProgressBar(value: widget.progress!.clamp(0.0, 1.0)),
+          ),
+        ),
+    ];
+
+    // Board chrome re-hosts those very same layers in the board's rise; the
+    // classic scale/shadow/clip below simply isn't built.
+    final Widget card;
+    if (board) {
+      card = CardFocusRise(
+        active: _active,
+        isTelevision: widget.isTelevision,
+        // White ring, like the Canvas board's cells — the violet stays with
+        // classic chrome.
+        ringColor: Colors.white,
+        children: layers,
+      );
+    } else {
+      card = AnimatedScale(
+        duration: fx,
+        curve: Curves.easeOutCubic,
+        scale: _active ? 1.08 : 1.0,
+        child: AnimatedContainer(
+          duration: fx,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: _active ? 0.7 : 0.35),
+                blurRadius: _active ? (widget.isTelevision ? 20 : 38) : 14,
+                offset: const Offset(0, 14),
+              ),
+              if (_active) ...[
+                // Tight bright gold rim.
+                BoxShadow(
+                  color: HomeTheme.focusGold.withValues(alpha: 0.6),
+                  blurRadius: 30,
+                  spreadRadius: 1,
+                ),
+                // Wide warm amber bloom for the cinematic falloff. Skipped on
+                // TV: a blur-90 soft shadow repainted on every D-pad focus move
+                // is the main scroll-jank source on weak TV GPUs.
+                if (!widget.isTelevision)
+                  BoxShadow(
+                    color: HomeTheme.focusGoldDeep.withValues(alpha: 0.32),
+                    blurRadius: 90,
+                    spreadRadius: 10,
+                  ),
+              ],
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ...layers,
+                if (_active)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: HomeTheme.focusGold,
+                            width: 2.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Focus(
       focusNode: widget.focusNode,
@@ -295,8 +331,13 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               context,
               alignment: 0.5,
               alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              // TV, board chrome: GLIDE (140ms) rather than jump — a held
+              // DPAD repeat retargets the in-flight scroll from the current
+              // offset, and a short glide converges fast enough that the
+              // motion never reads as trailing the keypress. Classic chrome
+              // keeps the instant jump its grids were tuned around.
               duration: widget.isTelevision
-                  ? Duration.zero
+                  ? (board ? const Duration(milliseconds: 140) : Duration.zero)
                   : const Duration(milliseconds: 280),
               curve: Curves.easeOutCubic,
             );

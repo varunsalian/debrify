@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/widgets/see_all/discover_detail_rail.dart';
 import 'package:debrify/widgets/catalog_item_tile.dart';
+import 'package:debrify/widgets/home/card_focus_rise.dart';
 import 'package:debrify/widgets/see_all/discover_shelf_scope.dart';
 import 'package:debrify/widgets/see_all/see_all_poster_grid.dart';
 
@@ -15,6 +19,8 @@ import 'package:debrify/widgets/see_all/see_all_poster_grid.dart';
 /// clearance is derived from the shelf's own height.
 void main() {
   const tvSize = Size(960, 540);
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   List<StremioMeta> items(int n) => [
     for (var i = 0; i < n; i++)
@@ -69,10 +75,15 @@ void main() {
   /// The metrics the Discover host publishes on a 540-high canvas.
   const shelf = DiscoverShelfMetrics(cardHeight: 162, hPad: 24);
 
+  /// A DPAD press, then enough frames for the shelf's scroll GLIDE (140ms on
+  /// TV) and the card's focus rise to finish. Pumping a single frame would
+  /// leave the animated scroll parked where it started — the shelf would look
+  /// like it never moved.
   Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
     await tester.sendKeyDownEvent(key);
     await tester.sendKeyUpEvent(key);
-    await tester.pump();
+    await tester.pump(); // deliver the key + queue the post-frame reveal
+    await tester.pump(const Duration(milliseconds: 200)); // let it glide
   }
 
   testWidgets('lays out ONE row on the TV canvas, inside its bounds', (
@@ -191,6 +202,30 @@ void main() {
     expect(loads, greaterThan(0));
   });
 
+  testWidgets('shelf cards wear the board\'s focus grammar', (tester) async {
+    // The stage sits beside the Home board, so its posters must rise, fade
+    // and glide like the board's — not like the grid's gold-rim tiles.
+    await tester.pumpWidget(harness(grid(items(6)), shelf: shelf));
+    await tester.pump();
+    final shelfTiles = tester.widgetList<CatalogItemTile>(
+      find.byType(CatalogItemTile),
+    );
+    expect(shelfTiles, isNotEmpty);
+    expect(shelfTiles.every((t) => t.boardChrome), isTrue);
+    expect(find.byType(CardFocusRise), findsWidgets);
+  });
+
+  testWidgets('the wall keeps its own chrome', (tester) async {
+    await tester.pumpWidget(harness(grid(items(6))));
+    await tester.pump();
+    final wallTiles = tester.widgetList<CatalogItemTile>(
+      find.byType(CatalogItemTile),
+    );
+    expect(wallTiles, isNotEmpty);
+    expect(wallTiles.any((t) => t.boardChrome), isFalse);
+    expect(find.byType(CardFocusRise), findsNothing);
+  });
+
   testWidgets('no scope → the poster wall, unchanged', (tester) async {
     await tester.pumpWidget(harness(grid(items(12))));
     await tester.pump();
@@ -280,5 +315,87 @@ void main() {
       greaterThanOrEqualTo(metaOnly),
       reason: 'title art + meta line must survive the shortest stage canvas',
     );
+  });
+
+  group('stage identity settle', () {
+    /// A title complete enough that the rail never fetches: no imdbId (so no
+    /// enrichment and no metahub logo either, which makes the name render as
+    /// TEXT and therefore findable).
+    StremioMeta full(String name) => StremioMeta(
+      id: name.toLowerCase(),
+      type: 'movie',
+      name: name,
+      description: '$name synopsis.',
+      background: 'https://example.invalid/$name.jpg',
+      year: '2024',
+      runtime: '120 min',
+      imdbRating: 8.0,
+      genres: const ['Drama'],
+    );
+
+    Widget rail(StremioMeta? item, Duration settle, ValueNotifier<StremioMeta?> shown) =>
+        MediaQuery(
+          data: const MediaQueryData(size: tvSize),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: DiscoverDetailRail(
+                item: item,
+                layout: DiscoverDetailLayout.stage,
+                settleDelay: settle,
+                stageBudget: 240,
+                trailerStreams: ValueNotifier(null),
+                trailerLoading: ValueNotifier(false),
+                trailerVolume: ValueNotifier(0),
+                trailerMeta: ValueNotifier(null),
+                shownItem: shown,
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('the settled swap actually repaints', (tester) async {
+      // The defect this pins: the settle runs from a Timer, outside any build.
+      // _applyAdopt assigns its shown item directly — on the assumption that a
+      // build always follows — so without an explicit setState the identity
+      // block kept painting the PREVIOUS title indefinitely, one step behind
+      // the focus ring, and never published the new one to the backdrop.
+      final shown = ValueNotifier<StremioMeta?>(null);
+      addTearDown(shown.dispose);
+      const settle = Duration(milliseconds: 260);
+
+      await tester.pumpWidget(rail(full('Alpha'), settle, shown));
+      await tester.pump();
+      expect(find.text('Alpha'), findsOneWidget);
+
+      await tester.pumpWidget(rail(full('Bravo'), settle, shown));
+      await tester.pump();
+      // Still the old title — that part is the point of a settle.
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text('Bravo'), findsNothing);
+
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Bravo'), findsOneWidget);
+      expect(shown.value?.name, 'Bravo');
+      // Alpha is still on screen for a moment — the identity block crossfades
+      // titles, like the board's. Once that lands it is gone.
+      await tester.pumpAndSettle();
+      expect(find.text('Alpha'), findsNothing);
+    });
+
+    testWidgets('no settle (the two-pane rail) swaps on the focus change', (
+      tester,
+    ) async {
+      final shown = ValueNotifier<StremioMeta?>(null);
+      addTearDown(shown.dispose);
+
+      await tester.pumpWidget(rail(full('Alpha'), Duration.zero, shown));
+      await tester.pump();
+      await tester.pumpWidget(rail(full('Bravo'), Duration.zero, shown));
+      await tester.pump();
+      expect(find.text('Bravo'), findsOneWidget);
+      expect(shown.value?.name, 'Bravo');
+    });
   });
 }

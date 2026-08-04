@@ -457,7 +457,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                 final item = items[index];
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 7),
-                  // Centred in the slack so the focus scale's lift isn't
+                  // Centred in the slack so the board rise's lift isn't
                   // clipped at the viewport's top edge.
                   child: Center(
                     child: SizedBox(
@@ -485,6 +485,10 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                           showInlineTitle: false,
                           showTypeBadge: widget.showTypeBadge,
                           showRatingBadge: widget.showRatingBadge,
+                          // The stage sits beside the Home board and has to
+                          // move like it: the board's rise, the board's poster
+                          // fade, and a glide instead of a jump.
+                          boardChrome: true,
                         ),
                       ),
                     ),

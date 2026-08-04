@@ -52,6 +52,7 @@ import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
 import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/home/cw_card_menu.dart';
+import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
@@ -94,7 +95,7 @@ const Color kStremioBg = Color(0xFF0D0B1A);
 /// TV focus ring for board cards — violet-300, deliberately LIGHTER than
 /// [kStremioAccent]: a light ring over dark art pops at 10ft, while the deep
 /// accent stays for chrome (tags, sidebar). Pairs with the calm 1.045 scale.
-const Color kStremioFocusRing = Color(0xFFA78BFA);
+const Color kStremioFocusRing = kCardFocusRing;
 
 /// Continue Watching progress-bar fill (Stremio shows a white line; we use red).
 const Color _kCwProgressRed = Color(0xFFE50914);
@@ -10343,11 +10344,28 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // The identity block never crosses the middle of the frame — the art on
     // the right half is the point of this layout.
     final identityMax = (c.maxWidth * 0.5).clamp(320.0, 560.0);
+    // What the identity block may occupy while BROWSING: the canvas less the
+    // filter band above and the shelf column below. Computed here and handed
+    // down, because theater animates that box open — a block that measured
+    // its live constraint would gain a plot line mid-glide and jump.
+    final identityBudget =
+        c.maxHeight -
+        _kDiscStageFilterBand -
+        (metrics.columnHeight + _kDiscStageIdentityGap);
     return Stack(
       fit: StackFit.expand,
       children: [
         const DecoratedBox(decoration: HomeTheme.pageBackground),
-        RepaintBoundary(child: _DiscoverStageBackdrop(shown: _discShown)),
+        RepaintBoundary(
+          child: _DiscoverStageBackdrop(
+            shown: _discShown,
+            // The identity block settles this feed upstream, so no second
+            // dwell here — art and title land together, and they crossfade
+            // like the Home board's own full-bleed stage.
+            dwell: Duration.zero,
+            crossfade: true,
+          ),
+        ),
         DiscoverTrailerStage(
           trailer: _discTrailerStreams,
           loading: _discTrailerLoading,
@@ -10367,35 +10385,68 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ),
         // The identity block, bottom-left, clearing exactly what the shelf
         // column below occupies — derived from the same metrics the shelf lays
-        // itself out with, never guessed. It holds through theater (the title
-        // art is the signature on a clean frame); its own meta/plot fade with
-        // [_discTrailerShowing], inside the rail widget.
+        // itself out with, never guessed.
+        //
+        // THEATER: the block glides to the top-left and shrinks — the Canvas
+        // board's billboard move, so a clean full-bleed trailer still carries
+        // a quiet signature. What actually travels is the title art alone:
+        // meta and plot faded out earlier, with [_discTrailerShowing], inside
+        // the rail widget. Padding/Align/Scale animate on ONE cadence (slow
+        // lights-down, instant lights-up) — three transforms and a layout
+        // inset, no repaint of the stage under them.
         Positioned.fill(
           child: IgnorePointer(
-            child: Padding(
-              // Top: the filter line's band, so a short canvas makes the
-              // identity block shed its plot rather than grow up under the
-              // filters. Bottom: exactly what the shelf column occupies.
-              padding: EdgeInsets.only(
-                top: _kDiscStageFilterBand,
-                bottom: metrics.columnHeight + _kDiscStageIdentityGap,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _discTheater,
+              child: RepaintBoundary(
+                child: ValueListenableBuilder<StremioMeta?>(
+                  valueListenable: _discFocused,
+                  builder: (_, item, __) => DiscoverDetailRail(
+                    item: item,
+                    layout: DiscoverDetailLayout.stage,
+                    trailerShowing: _discTrailerShowing,
+                    stageMaxWidth: identityMax,
+                    stageBudget: identityBudget,
+                    // The Home board's billboard settle: holding a direction
+                    // across the shelf costs only the cards' focus visuals,
+                    // never an identity rebuild plus a full-bleed decode per
+                    // step. The trailer still releases on the first keypress.
+                    settleDelay: const Duration(milliseconds: 260),
+                    trailerStreams: _discTrailerStreams,
+                    trailerLoading: _discTrailerLoading,
+                    trailerVolume: _discTrailerVolume,
+                    trailerMeta: _discTrailerMeta,
+                    shownItem: _discShown,
+                  ),
+                ),
               ),
-              child: Align(
-                alignment: Alignment.bottomLeft,
-                child: RepaintBoundary(
-                  child: ValueListenableBuilder<StremioMeta?>(
-                    valueListenable: _discFocused,
-                    builder: (_, item, __) => DiscoverDetailRail(
-                      item: item,
-                      layout: DiscoverDetailLayout.stage,
-                      trailerShowing: _discTrailerShowing,
-                      stageMaxWidth: identityMax,
-                      trailerStreams: _discTrailerStreams,
-                      trailerLoading: _discTrailerLoading,
-                      trailerVolume: _discTrailerVolume,
-                      trailerMeta: _discTrailerMeta,
-                      shownItem: _discShown,
-                    ),
+              builder: (_, deep, kid) => AnimatedPadding(
+                // Browse — top: the filter line's band, so a short canvas
+                // makes the block shed its plot rather than grow up under the
+                // filters; bottom: exactly what the shelf column occupies.
+                // Theater — the block rides up to the top corner instead.
+                padding: EdgeInsets.only(
+                  top: deep ? 30 : _kDiscStageFilterBand,
+                  bottom: deep ? 0 : metrics.columnHeight + _kDiscStageIdentityGap,
+                ),
+                duration: deep
+                    ? const Duration(milliseconds: 900)
+                    : const Duration(milliseconds: 250),
+                curve: Curves.easeInOutCubic,
+                child: AnimatedAlign(
+                  alignment: deep ? Alignment.topLeft : Alignment.bottomLeft,
+                  duration: deep
+                      ? const Duration(milliseconds: 900)
+                      : const Duration(milliseconds: 250),
+                  curve: Curves.easeInOutCubic,
+                  child: AnimatedScale(
+                    scale: deep ? 0.7 : 1.0,
+                    alignment: Alignment.topLeft,
+                    duration: deep
+                        ? const Duration(milliseconds: 900)
+                        : const Duration(milliseconds: 250),
+                    curve: Curves.easeInOutCubic,
+                    child: kid,
                   ),
                 ),
               ),
@@ -14838,111 +14889,9 @@ class _CanvasIdentity extends StatelessWidget {
   }
 }
 
-/// Shared focus "rise" chrome for the board's 2:3 poster cards
-/// ([_StremioCard], [_ArtPoster]): scale, shadow and selection ring animate
-/// together on ONE duration + curve — mismatched timing (scale tweening while
-/// ring/shadow snapped) is what read as cheap. Everything animated is
-/// GPU-cheap: the scale is a transform; the shadow is TWO fixed-blur layers
-/// whose colors crossfade (blurRadius/offset are identical on both ends of
-/// the lerp, so the tween never re-derives a blur — it only fades a
-/// pre-shaped one, and the transparent lift layer is skipped at rest); the
-/// ring fades via opacity (skipped at 0). 120ms on TV: two cards animate on
-/// every DPAD move (loser + gainer), so the shorter the tween, the shorter
-/// the double-repaint window.
-///
-/// Extracted so focus-feel tuning lands ONCE — the cards were carrying
-/// copy-pasted, drift-prone clones of this block.
-class _CardFocusRise extends StatelessWidget {
-  final bool active;
-  final bool isTelevision;
-
-  /// Focus ring colour override (Canvas uses white). Null keeps the classic
-  /// grammar: violet on TV, soft white on hover elsewhere.
-  final Color? ringColor;
-
-  /// The card's content layers, stacked (StackFit.expand) inside the rounded
-  /// clip; the selection ring draws above all of them.
-  final List<Widget> children;
-
-  const _CardFocusRise({
-    required this.active,
-    required this.isTelevision,
-    this.ringColor,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final focusFx = isTelevision
-        ? const Duration(milliseconds: 120)
-        : const Duration(milliseconds: 160);
-    return AnimatedScale(
-      duration: focusFx,
-      curve: Curves.easeOutCubic,
-      // TV pop calmed from 1.09 to the Nuvio-class 1.045: with the lighter
-      // ring the smaller lift reads premium, and neighbours shift less.
-      scale: active ? (isTelevision ? 1.045 : 1.05) : 1.0,
-      child: AspectRatio(
-        aspectRatio: 2 / 3,
-        child: AnimatedContainer(
-          duration: focusFx,
-          curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              // Resting shadow — constant, keeps the card grounded.
-              const BoxShadow(
-                color: Color(0x59000000),
-                blurRadius: 12,
-                offset: Offset(0, 10),
-              ),
-              // Lift shadow — same geometry always, only its alpha animates
-              // (transparent at rest, so Skia skips the draw entirely).
-              BoxShadow(
-                color: Colors.black.withValues(alpha: active ? 0.6 : 0.0),
-                blurRadius: 28,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ...children,
-                // Selection ring — accent on TV focus, subtle white on hover.
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedOpacity(
-                      opacity: active ? 1.0 : 0.0,
-                      duration: focusFx,
-                      curve: Curves.easeOutCubic,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            // Violet-300 on TV: the "light ring + small scale"
-                            // focus grammar (deep accent stays for chrome).
-                            color: ringColor ??
-                                (isTelevision
-                                    ? kStremioFocusRing
-                                    : Colors.white.withValues(alpha: 0.6)),
-                            width: isTelevision ? 2.5 : 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+// The board's card focus chrome ([CardFocusRise]) moved to
+// widgets/home/card_focus_rise.dart — the Discover stage's shelf wears the
+// same grammar, and focus feel has to be tuned in exactly one place.
 
 /// Stremio-style poster card: clean rounded poster with a soft shadow that
 /// lifts on hover/focus. Deliberately minimal — no title band, no MOVIE/rating
@@ -15045,7 +14994,7 @@ class _StremioCardState extends State<_StremioCard>
     final item = widget.item;
     final poster = item.poster;
     // Focus visuals (scale + shadow + ring on one curve) live in the shared
-    // [_CardFocusRise] so tuning lands once for every board card.
+    // [CardFocusRise] so tuning lands once for every board card.
     final List<Widget> layers = [
         if (poster != null && poster.isNotEmpty)
           CachedNetworkImage(
@@ -15122,7 +15071,7 @@ class _StremioCardState extends State<_StremioCard>
         if (_holding) _holdLayer(),
       ];
 
-    final posterCard = _CardFocusRise(
+    final posterCard = CardFocusRise(
       active: _active,
       isTelevision: widget.isTelevision,
       ringColor: widget.ringColor,
@@ -15504,8 +15453,8 @@ class _ArtPosterState extends State<_ArtPoster> {
     final hasImage = url != null && url.isNotEmpty;
 
     // Focus visuals (scale + shadow + ring on one curve) live in the shared
-    // [_CardFocusRise] so tuning lands once for every board card.
-    final posterCard = _CardFocusRise(
+    // [CardFocusRise] so tuning lands once for every board card.
+    final posterCard = CardFocusRise(
       active: _active,
       isTelevision: widget.isTelevision,
       ringColor: widget.ringColor,
@@ -18351,7 +18300,24 @@ class _KeywordSourcesDialogState extends State<_KeywordSourcesDialog> {
 class _DiscoverStageBackdrop extends StatefulWidget {
   final ValueListenable<StremioMeta?> shown;
 
-  const _DiscoverStageBackdrop({required this.shown});
+  /// How long the DPAD must rest before this adopts a new backdrop. The STAGE
+  /// layout passes ZERO: its feed is already settled upstream (the identity
+  /// block's own settle), so a second dwell here would only make the art trail
+  /// the title it belongs to.
+  final Duration dwell;
+
+  /// Crossfade swaps instead of snapping them. The two-pane keeps the snap —
+  /// a full-screen crossfade is a saveLayer on weak TV GPUs, and behind a
+  /// grid it buys little. The STAGE turns it on: the art IS the layout there,
+  /// and its swaps are already rate-limited by the settle, so this matches the
+  /// Home board's own full-bleed art, which crossfades on the same cadence.
+  final bool crossfade;
+
+  const _DiscoverStageBackdrop({
+    required this.shown,
+    this.dwell = const Duration(milliseconds: 380),
+    this.crossfade = false,
+  });
 
   @override
   State<_DiscoverStageBackdrop> createState() => _DiscoverStageBackdropState();
@@ -18396,7 +18362,11 @@ class _DiscoverStageBackdropState extends State<_DiscoverStageBackdrop> {
       setState(() => _url = next);
       return;
     }
-    _dwell = Timer(const Duration(milliseconds: 380), () {
+    if (widget.dwell == Duration.zero) {
+      setState(() => _url = next);
+      return;
+    }
+    _dwell = Timer(widget.dwell, () {
       if (!mounted) return;
       final cur = _bgOf(widget.shown.value);
       if (cur != null && cur != _url) setState(() => _url = cur);
@@ -18406,20 +18376,45 @@ class _DiscoverStageBackdropState extends State<_DiscoverStageBackdrop> {
   @override
   Widget build(BuildContext context) {
     final url = _url;
-    if (url == null) return const SizedBox.shrink();
-    // Snap swaps (fade Duration.zero): a per-image opacity crossfade is a
-    // full-screen saveLayer on weak TV GPUs — same rule as the Home hero
-    // backdrop. Slight upward bias keeps faces/titles in the art's clear zone.
-    return CachedNetworkImage(
-      key: ValueKey(url),
-      imageUrl: url,
-      fit: BoxFit.cover,
-      alignment: const Alignment(0, -0.4),
-      memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
-      fadeInDuration: Duration.zero,
-      fadeOutDuration: Duration.zero,
-      placeholder: (_, __) => const SizedBox.shrink(),
-      errorWidget: (_, __, ___) => const SizedBox.shrink(),
+    // Per-IMAGE fades stay off in both modes (a CachedNetworkImage crossfade
+    // runs on every arrival, including cache hits). Slight upward bias keeps
+    // faces/titles in the art's clear zone.
+    final art = url == null
+        ? const SizedBox.shrink()
+        : CachedNetworkImage(
+            key: ValueKey(url),
+            imageUrl: url,
+            fit: BoxFit.cover,
+            alignment: const Alignment(0, -0.4),
+            memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
+            fadeInDuration: Duration.zero,
+            fadeOutDuration: Duration.zero,
+            placeholder: (_, __) => const SizedBox.shrink(),
+            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+          );
+    if (!widget.crossfade) return art;
+    // Between two SETTLED titles — at most one swap per rest — so the
+    // saveLayer this costs is bounded, exactly as on the Home board's stage.
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 240),
+      // LOSING the art snaps instead of fading. Catalog list items usually
+      // arrive with no `background` at all — it comes with the /meta
+      // enrichment a moment later — so a symmetric crossfade would dip the
+      // whole frame to ink and back on nearly every rest. Only the arrival is
+      // worth animating.
+      reverseDuration: url == null
+          ? Duration.zero
+          : const Duration(milliseconds: 240),
+      // EXPAND, not the default centre-and-shrink-wrap: a switcher's stock
+      // layout hands its children loose constraints, which would let each
+      // backdrop paint at its own intrinsic size instead of covering the
+      // frame — outgoing and incoming art must both be the same full-bleed
+      // crop, or the swap reads as a jump in zoom.
+      layoutBuilder: (current, previous) => Stack(
+        fit: StackFit.expand,
+        children: [...previous, if (current != null) current],
+      ),
+      child: art,
     );
   }
 }

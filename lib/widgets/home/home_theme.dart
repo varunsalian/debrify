@@ -83,8 +83,9 @@ class HomeTheme {
   /// overlap window tiny when a board fills (memory-cached images skip the
   /// fade entirely — OctoImage lands synchronous loads settled — so the
   /// many-saveLayers-at-once case is only ever fresh disk/network arrivals,
-  /// which IO already staggers). One helper so every site stays in lockstep
-  /// (catalog_item_tile keeps its own intentionally snappier fade).
+  /// which IO already staggers). One helper so every site stays in lockstep —
+  /// including catalog_item_tile's board-chrome path, which opts into this
+  /// fade; its classic path keeps its own intentionally snappier one.
   static Duration imageFadeIn(bool isTelevision) =>
       isTelevision ? const Duration(milliseconds: 150) : const Duration(milliseconds: 500);
   static Duration imageFadeOut(bool isTelevision) =>

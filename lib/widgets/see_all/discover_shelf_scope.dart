@@ -20,8 +20,9 @@ class DiscoverShelfMetrics {
 
   double get cardWidth => cardHeight * 2 / 3;
 
-  /// Headroom for the focus scale (tiles grow 1.08 about their centre) plus a
-  /// little air, so a focused poster's lift is never clipped by the viewport.
+  /// Headroom for the focus scale (the board's rise grows cards 1.045 about
+  /// their centre) plus a little air, so a focused poster's lift is never
+  /// clipped by the viewport.
   static const double slack = 20;
 
   /// The gap under the shelf, before the screen edge.
