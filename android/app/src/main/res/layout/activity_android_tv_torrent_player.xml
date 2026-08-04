@@ -418,6 +418,34 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Manual SkipDB action. The activity only reveals this while the current
+         series episode is inside a validated intro/outro segment. -->
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/android_tv_skip_segment_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="44dp"
+        android:layout_marginBottom="40dp"
+        android:minWidth="0dp"
+        android:minHeight="40dp"
+        android:background="@drawable/skip_segment_pill"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.01"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="0dp"
+        android:paddingBottom="0dp"
+        android:stateListAnimator="@animator/cinema_button_state"
+        android:text="Skip intro »"
+        android:textAllCaps="false"
+        android:textColor="@color/cinema_control_button_text"
+        android:textSize="14sp"
+        android:visibility="gone"
+        android:elevation="36dp" />
+
     <!-- Custom Seekbar Overlay -->
     <include layout="@layout/view_custom_seekbar" />
 

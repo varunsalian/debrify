@@ -150,7 +150,7 @@ const List<_Category> _kCategories = [
   _Category(
     Icons.play_circle_outline_rounded,
     'Playback',
-    'Player, subtitles & audio',
+    'Player, skip segments, subtitles & audio',
   ),
   _Category(Icons.search_rounded, 'Search', 'Engines, filters & providers'),
   _Category(

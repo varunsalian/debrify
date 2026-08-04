@@ -933,6 +933,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'subtitle',
           'subtitles',
           'audio track',
+          'skip intro',
+          'skip credits',
+          'outro',
+          'skipdb',
         ],
       ),
       nav(
@@ -1745,10 +1749,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Playback',
+        'Skip intros & credits',
+        'Show manual skip buttons when timestamps are available',
+        const [
+          'skip intro',
+          'skip credits',
+          'outro',
+          'opening',
+          'ending',
+          'skip segment',
+        ],
+      ),
+      leaf(
+        'Playback',
+        'Timestamp provider',
+        'Choose the source for intro and outro timestamps',
+        const ['skipdb', 'provider', 'timestamp', 'segments'],
+      ),
+      leaf(
+        'Playback',
         'Allow system audio effects',
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
       ),
+      if (_isAndroid && PlatformUtil.isAndroidTvCached)
+        leaf(
+          'Playback',
+          'Auto-sync addon subtitles',
+          'Align downloaded subtitles to the audio automatically',
+          const ['subtitle', 'sync', 'auto', 'align', 'timing', 'offset'],
+        ),
       if (_isPhone)
         leaf(
           'Playback',
@@ -2125,7 +2155,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {});
   }
-
 
   Future<void> _openPikPakSettings() async {
     final loggedOut = await pushSettingsPage<bool>(

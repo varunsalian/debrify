@@ -12,6 +12,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../services/skip_segment_service.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
@@ -76,6 +77,7 @@ import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/widgets/subtitle_line_picker_overlay.dart';
+import 'video_player/widgets/skip_segment_button.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
@@ -716,6 +718,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? get _effectiveContentTitle =>
       _currentStremioTvContentTitle ?? widget.contentTitle;
 
+  // Community intro/outro markers for the currently playing series episode.
+  // The request key includes the stream duration because SkipDB uses it to
+  // distinguish releases with extra logos or different cuts.
+  bool _skipSegmentSettingsLoaded = false;
+  bool _skipSegmentsEnabled = false;
+  String _skipSegmentProviderId = SkipSegmentProviders.skipDb;
+  SkipSegmentProvider? _skipSegmentProvider;
+  SkipSegments _skipSegments = SkipSegments.empty;
+  String? _loadedSkipSegmentsKey;
+  String? _loadingSkipSegmentsKey;
+  int _skipSegmentsFetchGeneration = 0;
+  final Map<String, SkipSegments> _skipSegmentsCache = <String, SkipSegments>{};
+
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
 
@@ -987,6 +1002,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // a previous video's offset can't leak in (mirrors the TV side's onCreate).
     SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
+    unawaited(_loadSkipSegmentSettings());
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
@@ -1032,6 +1048,158 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Check if Trakt scrobbling should be enabled for this playback
     _initTraktScrobble();
     _initSimklScrobble();
+  }
+
+  Future<void> _loadSkipSegmentSettings() async {
+    final values = await Future.wait<Object>([
+      StorageService.getSkipSegmentsEnabled(),
+      StorageService.getSkipSegmentProvider(),
+    ]);
+    if (!mounted) return;
+
+    final enabled = values[0] as bool;
+    final storedProvider = values[1] as String;
+    final providerId = SkipSegmentProviders.supports(storedProvider)
+        ? storedProvider
+        : SkipSegmentProviders.skipDb;
+
+    _skipSegmentProvider?.close();
+    _skipSegmentProvider = enabled
+        ? SkipSegmentProviders.create(providerId)
+        : null;
+    _skipSegmentsEnabled = enabled;
+    _skipSegmentProviderId = providerId;
+    _skipSegmentSettingsLoaded = true;
+    _syncSkipSegmentsForCurrentContent();
+  }
+
+  ({String imdbId, int season, int episode, Duration duration, String key})?
+  _currentSkipSegmentRequest() {
+    if (!_skipSegmentSettingsLoaded ||
+        !_skipSegmentsEnabled ||
+        _duration <= Duration.zero) {
+      return null;
+    }
+
+    final seriesPlaylist = _seriesPlaylist;
+    final isSeries =
+        _effectiveContentType == 'series' || seriesPlaylist?.isSeries == true;
+    if (!isSeries) return null;
+
+    var imdbId = _effectiveContentImdbId?.trim();
+    if (imdbId == null || !RegExp(r'^tt\d+$').hasMatch(imdbId)) {
+      imdbId = seriesPlaylist?.imdbId?.trim();
+    }
+    if (imdbId == null || !RegExp(r'^tt\d+$').hasMatch(imdbId)) return null;
+
+    int? season;
+    int? episode;
+    if (seriesPlaylist?.isSeries == true) {
+      final current = _findSeriesEpisodeForCurrentIndex(seriesPlaylist!);
+      season = current?.seriesInfo.season;
+      episode = current?.seriesInfo.episode;
+    }
+    season ??= _effectiveContentSeason;
+    episode ??= _effectiveContentEpisode;
+    if (season == null || episode == null) {
+      final parsed = _traktSeasonEpisode();
+      season ??= parsed.season;
+      episode ??= parsed.episode;
+    }
+    if (season == null || episode == null || season < 0 || episode < 1) {
+      return null;
+    }
+
+    final durationSeconds = _duration.inSeconds;
+    final key =
+        '$_skipSegmentProviderId:$imdbId:$season:$episode:$durationSeconds';
+    return (
+      imdbId: imdbId,
+      season: season,
+      episode: episode,
+      duration: _duration,
+      key: key,
+    );
+  }
+
+  void _syncSkipSegmentsForCurrentContent() {
+    final request = _currentSkipSegmentRequest();
+    final provider = _skipSegmentProvider;
+    if (request == null || provider == null) return;
+    if (_loadedSkipSegmentsKey == request.key ||
+        _loadingSkipSegmentsKey == request.key) {
+      return;
+    }
+
+    if (_skipSegmentsCache.containsKey(request.key)) {
+      final cached = _skipSegmentsCache[request.key]!;
+      if (mounted) {
+        setState(() {
+          _skipSegments = cached;
+          _loadedSkipSegmentsKey = request.key;
+        });
+      }
+      return;
+    }
+
+    final generation = ++_skipSegmentsFetchGeneration;
+    _loadingSkipSegmentsKey = request.key;
+    provider
+        .fetch(
+          imdbId: request.imdbId,
+          season: request.season,
+          episode: request.episode,
+          duration: request.duration,
+        )
+        .then((segments) {
+          _skipSegmentsCache[request.key] = segments;
+          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
+          if (_currentSkipSegmentRequest()?.key != request.key) return;
+          setState(() {
+            _skipSegments = segments;
+            _loadedSkipSegmentsKey = request.key;
+          });
+        })
+        .catchError((Object error) {
+          // Missing skip data must never affect playback. Cache the miss for
+          // this session so an offline API cannot be retried on every position
+          // tick.
+          _skipSegmentsCache[request.key] = SkipSegments.empty;
+          debugPrint(
+            'SkipSegments: ${provider.displayName} fetch failed: $error',
+          );
+          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
+          if (_currentSkipSegmentRequest()?.key != request.key) return;
+          setState(() {
+            _skipSegments = SkipSegments.empty;
+            _loadedSkipSegmentsKey = request.key;
+          });
+        })
+        .whenComplete(() {
+          if (_loadingSkipSegmentsKey == request.key) {
+            _loadingSkipSegmentsKey = null;
+          }
+        });
+  }
+
+  SkipSegment? get _activeSkipSegment {
+    final request = _currentSkipSegmentRequest();
+    if (request == null || request.key != _loadedSkipSegmentsKey) return null;
+    return _skipSegments.segmentAt(_position);
+  }
+
+  void _skipActiveSegment() {
+    final segment = _activeSkipSegment;
+    if (segment == null || !_playerCreated) return;
+    final target = _duration > Duration.zero && segment.end > _duration
+        ? _duration
+        : segment.end;
+    _position = target;
+    unawaited(_player.seek(target));
+    _traktScrobbleSeek(target);
+    _simklScrobbleSeek(target);
+    HapticFeedback.selectionClick();
+    if (mounted) setState(() {});
   }
 
   Future<void> _initTraktScrobble() async {
@@ -1863,6 +2031,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _posSub = _player.stream.position.listen((d) {
       _position = d;
+      _syncSkipSegmentsForCurrentContent();
       // throttle UI updates
       if (mounted) setState(() {});
       // Check if episode should be marked as finished (for manual seeking)
@@ -1870,6 +2039,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _durSub = _player.stream.duration.listen((d) {
       _duration = d;
+      _syncSkipSegmentsForCurrentContent();
       if (mounted) setState(() {});
     });
     _playSub = _player.stream.playing.listen((p) {
@@ -6993,6 +7163,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _pikPakRetryMessage = null;
 
     _cleanupTempSubtitleFilesSync();
+    _skipSegmentsFetchGeneration++;
+    _skipSegmentProvider?.close();
+    _skipSegmentProvider = null;
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
@@ -8181,6 +8354,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final isReady = _isReady;
     final duration = _duration;
     final pos = _position;
+    final activeSkipSegment = _activeSkipSegment;
     final String? channelBadgeText = _channelBadgeText;
     // In the PiP window, hide every interactive/decorative layer so only the
     // video texture (and the buffering spinner) shows. Restores on exit.
@@ -8848,6 +9022,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 _engineTaskId != null ||
                                 _desktopCaptureForCurrent() != null,
                             onRecord: _canRecord ? _toggleRecording : null,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                // Manual OTT-style skip action. It stays available even when
+                // the main controls are hidden, and lifts above the dock when
+                // they are visible so neither control intercepts the other.
+                if (activeSkipSegment != null && !inPip)
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _controlsVisible,
+                    builder: (context, controlsVisible, _) {
+                      return AnimatedPositioned(
+                        duration: const Duration(milliseconds: 150),
+                        curve: Curves.easeOut,
+                        right: 24,
+                        bottom: controlsVisible && !widget.hideOptions
+                            ? 160
+                            : 28,
+                        child: SafeArea(
+                          top: false,
+                          left: false,
+                          child: SkipSegmentButton(
+                            key: ValueKey(activeSkipSegment.type),
+                            type: activeSkipSegment.type,
+                            onPressed: _skipActiveSegment,
                           ),
                         ),
                       );

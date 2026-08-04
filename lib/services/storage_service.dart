@@ -169,10 +169,18 @@ class StorageService {
   static const String _playerSystemAudioEffectsKey =
       'player_system_audio_effects';
   static const String _playerStartPortraitKey = 'player_start_portrait';
+  static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
   static const String _playerDefaultAudioLanguageKey =
       'player_default_audio_language';
+  static const String _skipSegmentsEnabledKey = 'skip_segments_enabled';
+  static const String _skipSegmentProviderKey = 'skip_segment_provider';
+
+  /// Stable provider identifier persisted by the Playback settings page.
+  /// Kept here rather than using a display label so future provider names can
+  /// change without migrating preferences.
+  static const String skipSegmentProviderSkipDb = 'skipdb';
 
   // IPTV settings
   static const String _iptvPlaylistsKey = 'iptv_playlists';
@@ -5462,6 +5470,37 @@ class StorageService {
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
   }
 
+  /// Whether the Debrify Player should request community timestamps and show
+  /// manual skip buttons. Manual buttons are enabled by default; this setting
+  /// never authorizes automatic seeking.
+  static Future<bool> getSkipSegmentsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_skipSegmentsEnabledKey) ?? true;
+  }
+
+  static Future<void> setSkipSegmentsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_skipSegmentsEnabledKey, enabled);
+  }
+
+  /// Timestamp source used by the Debrify Player. Unknown stored values fall
+  /// back safely so removing a provider cannot strand the feature.
+  static Future<String> getSkipSegmentProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    final provider = prefs.getString(_skipSegmentProviderKey);
+    return provider == skipSegmentProviderSkipDb
+        ? provider!
+        : skipSegmentProviderSkipDb;
+  }
+
+  static Future<void> setSkipSegmentProvider(String provider) async {
+    final prefs = await SharedPreferences.getInstance();
+    final supported = provider == skipSegmentProviderSkipDb
+        ? provider
+        : skipSegmentProviderSkipDb;
+    await prefs.setString(_skipSegmentProviderKey, supported);
+  }
+
   /// Whether the phone player OPENS upright instead of turning the handset
   /// landscape for you. Off by default — a video wants the long edge, and that
   /// is what the player has always done. On, it opens portrait and the
@@ -5487,6 +5526,24 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerStartPortraitKey, enabled);
     playerStartPortraitCached = enabled;
+  }
+
+  /// Whether the native TV player silently aligns addon subtitles to the
+  /// audio as playback runs (Settings → Playback, Android TV only). Read by
+  /// the NATIVE side as `flutter.subtitle_auto_sync_enabled` — a plain
+  /// SharedPreferences bool is exactly what FlutterSharedPreferences stores,
+  /// the same bridge the recording engine flag rides. ON by default (device
+  /// verified 2026-08-04); the toggle is the opt-out. The NATIVE read's
+  /// default must stay in lock-step or an untouched toggle would mean
+  /// different things on the two sides.
+  static Future<bool> getSubtitleAutoSyncEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_subtitleAutoSyncKey) ?? true;
+  }
+
+  static Future<void> setSubtitleAutoSyncEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_subtitleAutoSyncKey, enabled);
   }
 
   /// Get default subtitle language code
