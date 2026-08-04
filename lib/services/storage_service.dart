@@ -168,6 +168,7 @@ class StorageService {
   static const String _playerNightModeIndexKey = 'player_night_mode_index';
   static const String _playerSystemAudioEffectsKey =
       'player_system_audio_effects';
+  static const String _playerStartPortraitKey = 'player_start_portrait';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
   static const String _playerDefaultAudioLanguageKey =
@@ -5441,6 +5442,33 @@ class StorageService {
   static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
+  }
+
+  /// Whether the phone player OPENS upright instead of turning the handset
+  /// landscape for you. Off by default — a video wants the long edge, and that
+  /// is what the player has always done. On, it opens portrait and the
+  /// player's own Portrait/Landscape button is how the user turns it.
+  /// Phone-only: a TV has no portrait and a desktop window ignores this
+  /// entirely.
+  ///
+  /// [playerStartPortraitCached] mirrors it for SYNCHRONOUS reads. The player
+  /// commits its orientation while building, so an async read there would set
+  /// landscape and correct it a frame later — performing the exact flip this
+  /// setting exists to prevent. Warmed in main() before runApp (the IPTV
+  /// startup channel can open a player on the first frame) and kept in sync by
+  /// the setter.
+  static bool playerStartPortraitCached = false;
+
+  static Future<bool> getPlayerStartPortrait() async {
+    final prefs = await SharedPreferences.getInstance();
+    playerStartPortraitCached = prefs.getBool(_playerStartPortraitKey) ?? false;
+    return playerStartPortraitCached;
+  }
+
+  static Future<void> setPlayerStartPortrait(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_playerStartPortraitKey, enabled);
+    playerStartPortraitCached = enabled;
   }
 
   /// Get default subtitle language code

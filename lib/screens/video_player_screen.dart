@@ -22,6 +22,7 @@ import '../widgets/recording_limit_dialogs.dart';
 import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/alldebrid_service.dart';
+import '../utils/platform_util.dart';
 import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
@@ -801,6 +802,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Orientation
   bool _landscapeLocked = false;
 
+  /// Whether this player should OPEN upright rather than turning the device
+  /// landscape for the user (Settings → Playback → "Open the player in
+  /// portrait").
+  ///
+  /// Phone-only on purpose. A TV has no portrait to open in, and on desktop
+  /// [SystemChrome.setPreferredOrientations] does nothing — but honouring the
+  /// pref there would still flip the rotate button's label to "Landscape" over
+  /// a window that is already wide, describing a rotation that can't happen.
+  bool get _startsInPortrait =>
+      PlatformUtil.isPhone && StorageService.playerStartPortraitCached;
+
   // Rainbow next animation
   late AnimationController _rainbowController;
   late Animation<double> _rainbowOpacity;
@@ -977,12 +989,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _loadSubtitleSettings();
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    // Default to landscape when entering the player
-    SystemChrome.setPreferredOrientations(<DeviceOrientation>[
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    _landscapeLocked = true;
+    // The player opens landscape — a video wants the long edge — unless the
+    // user asked it to open upright, in which case the Portrait/Landscape
+    // button is how they turn it. Read from the SYNCHRONOUS cache: setting
+    // landscape here and correcting it once an async read lands would perform
+    // the exact flip the setting exists to prevent.
+    _landscapeLocked = !_startsInPortrait;
+    SystemChrome.setPreferredOrientations(
+      _landscapeLocked
+          ? const <DeviceOrientation>[
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]
+          : const <DeviceOrientation>[DeviceOrientation.portraitUp],
+    );
     // Held for the LOADING phase only — a slow debrid resolve must not let
     // the screen sleep before the first frame. From the first playing event
     // onward the lock follows play/pause (see _syncWakelock).

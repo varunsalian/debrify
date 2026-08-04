@@ -629,10 +629,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   /// A hand-held phone (not TV, desktop or web) — the only surface where
   /// forcing device rotation for a bigger trailer makes sense.
-  bool get _isPhone =>
-      !kIsWeb &&
-      (Platform.isAndroid || Platform.isIOS) &&
-      !PlatformUtil.isAndroidTvCached;
+  bool get _isPhone => PlatformUtil.isPhone;
 
   /// Phone rotate button: swing the device into landscape for a full-width
   /// trailer, or back to upright. Restored to free rotation on close/dispose.

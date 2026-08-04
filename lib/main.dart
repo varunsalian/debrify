@@ -184,6 +184,9 @@ Future<void> main() async {
   // landscape. _initOrientation warms PlatformUtil's TV cache, so the
   // _capImageCache call right after resolves without a second channel trip.
   await _initOrientation();
+  // Warms playerStartPortraitCached: the player picks its orientation while
+  // building, and the IPTV startup channel can open one on the first frame.
+  await StorageService.getPlayerStartPortrait();
   await _capImageCache();
   await _resolveStartupChannel();
   // Old-playback-state cleanup is pure housekeeping — never block first frame

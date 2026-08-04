@@ -90,6 +90,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool get _isAndroid => !kIsWeb && Platform.isAndroid;
 
+  /// Handsets only. The player's start-orientation control is hidden on TV
+  /// (no portrait to open in) and on desktop (the orientation call is a no-op
+  /// there) — see ExternalPlayerSettingsPage.
+  bool get _isPhone => PlatformUtil.isPhone;
+
   /// Custom launch command (macOS/Linux/Windows) or custom URL scheme (iOS).
   /// Android's external-player branch offers neither — it only explains the
   /// system app chooser. See ExternalPlayerSettingsPage's platform branches.
@@ -1744,6 +1749,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
       ),
+      if (_isPhone)
+        leaf(
+          'Playback',
+          'Open the player in portrait',
+          'Start videos upright instead of turning the phone landscape',
+          const [
+            'portrait',
+            'landscape',
+            'orientation',
+            'rotate',
+            'rotation',
+            'vertical',
+            'horizontal',
+          ],
+        ),
       leaf(
         'Playback',
         'Preferred external player',
