@@ -19,6 +19,7 @@ void main() {
   final refreshed = <String>[];
   final defaulted = <String>[];
   var startupToggles = <bool>[];
+  var cwToggles = <bool>[];
 
   Widget harness({
     required List<IptvPlaylist> playlists,
@@ -59,6 +60,8 @@ void main() {
           onToggleStartup: startupToggles.add,
           onStartupModeChanged: (_) {},
           onPickStartupChannel: () {},
+          trackContinueWatching: true,
+          onToggleTrackContinueWatching: cwToggles.add,
         ),
       ),
     );
@@ -69,6 +72,7 @@ void main() {
     refreshed.clear();
     defaulted.clear();
     startupToggles = [];
+    cwToggles = [];
   });
 
   testWidgets('opens on the default source, not on Add', (tester) async {
@@ -249,6 +253,8 @@ void main() {
               onToggleStartup: (_) {},
               onStartupModeChanged: (_) {},
               onPickStartupChannel: () {},
+              trackContinueWatching: true,
+              onToggleTrackContinueWatching: (_) {},
             ),
           ),
         ),
@@ -318,15 +324,17 @@ void main() {
 
     key.currentState!.focusRail();
     await tester.pump();
-    // Walk past the end: source, Add, Channel lists, Startup, then extra.
+    // Walk past the end: source, Add, Channel lists, Startup, Continue
+    // watching (last, with no recorder in this harness), then extra.
     for (var i = 0; i < 8; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
     }
 
-    // Still on Startup — not flung sideways into the pane, where OK would
-    // have toggled the startup switch by accident.
-    expect(find.text('Start on a channel'), findsOneWidget);
+    // Still on Continue watching — not flung sideways into the pane, where OK
+    // would have toggled its switch by accident.
+    expect(find.text('Track movies and series'), findsOneWidget);
+    expect(cwToggles, isEmpty);
     expect(startupToggles, isEmpty);
   });
 

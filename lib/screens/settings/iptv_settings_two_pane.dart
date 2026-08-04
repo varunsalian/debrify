@@ -60,6 +60,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.onToggleStartup,
     required this.onStartupModeChanged,
     required this.onPickStartupChannel,
+    required this.trackContinueWatching,
+    required this.onToggleTrackContinueWatching,
     this.showRecordingSection = false,
     this.showEngineToggle = true,
     this.recordingEngineEnabled = true,
@@ -92,8 +94,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
 
   /// The Recording rail entry + pane exist where SOME recorder can run:
   /// Android 10+ (engine + toggle) or desktop (in-app scheduler only). On
-  /// iOS/pre-Q the rail ends at Startup and nothing promises recording that
-  /// cannot run.
+  /// iOS/pre-Q the rail ends at Continue watching and nothing promises
+  /// recording that cannot run.
   final bool showRecordingSection;
 
   /// Android only — the engine-vs-tee choice is meaningless on desktop, whose
@@ -156,6 +158,9 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final ValueChanged<String> onStartupModeChanged;
   final VoidCallback onPickStartupChannel;
 
+  final bool trackContinueWatching;
+  final ValueChanged<bool> onToggleTrackContinueWatching;
+
   @override
   State<IptvSettingsTwoPane> createState() => IptvSettingsTwoPaneState();
 }
@@ -181,6 +186,10 @@ class _ListsDest extends _Dest {
 
 class _StartupDest extends _Dest {
   const _StartupDest();
+}
+
+class _ContinueWatchingDest extends _Dest {
+  const _ContinueWatchingDest();
 }
 
 class _RecordingDest extends _Dest {
@@ -258,9 +267,9 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return _SourceDest(widget.playlists.first.id);
   }
 
-  /// Rail entries: every source, then Add, Lists, Startup.
+  /// Rail entries: every source, then Add, Lists, Startup, Continue watching.
   int get _railCount =>
-      widget.playlists.length + 3 + (widget.showRecordingSection ? 1 : 0);
+      widget.playlists.length + 4 + (widget.showRecordingSection ? 1 : 0);
 
   /// Grow-only, deliberately. Shrinking would dispose a node while the
   /// *previous* tree still holds a [Focus] referencing it — didUpdateWidget
@@ -352,7 +361,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _AddDest() => widget.playlists.length,
       _ListsDest() => widget.playlists.length + 1,
       _StartupDest() => widget.playlists.length + 2,
-      _RecordingDest() => widget.playlists.length + 3,
+      _ContinueWatchingDest() => widget.playlists.length + 3,
+      _RecordingDest() => widget.playlists.length + 4,
     };
   }
 
@@ -364,9 +374,10 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       0 => const _AddDest(),
       1 => const _ListsDest(),
       2 => const _StartupDest(),
+      3 => const _ContinueWatchingDest(),
       _ => widget.showRecordingSection
           ? const _RecordingDest()
-          : const _StartupDest(),
+          : const _ContinueWatchingDest(),
     };
   }
 
@@ -508,14 +519,29 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onFocused: () => _dest.value = const _StartupDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(widget.playlists.length + 1),
+                onDown: () => _focusRail(widget.playlists.length + 3),
+                onRight: _enterPane,
+              ),
+              _RailEntry(
+                focusNode: _railNodes[widget.playlists.length + 3],
+                icon: Icons.history_toggle_off_rounded,
+                title: 'Continue watching',
+                subtitle: widget.trackContinueWatching
+                    ? 'Tracking movies and series'
+                    : 'Off',
+                selected: selected == widget.playlists.length + 3,
+                chevron: true,
+                onFocused: () => _dest.value = const _ContinueWatchingDest(),
+                onSelect: _enterPane,
+                onUp: () => _focusRail(widget.playlists.length + 2),
                 onDown: widget.showRecordingSection
-                    ? () => _focusRail(widget.playlists.length + 3)
+                    ? () => _focusRail(widget.playlists.length + 4)
                     : null,
                 onRight: _enterPane,
               ),
               if (widget.showRecordingSection)
                 _RailEntry(
-                  focusNode: _railNodes[widget.playlists.length + 3],
+                  focusNode: _railNodes[widget.playlists.length + 4],
                   icon: Icons.fiber_manual_record_rounded,
                   title: 'Recording',
                   subtitle: !widget.showEngineToggle
@@ -527,11 +553,11 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                             ? 'Engine on'
                             : 'Engine on · ${widget.scheduledCount} scheduled')
                       : 'Player-tied',
-                  selected: selected == widget.playlists.length + 3,
+                  selected: selected == widget.playlists.length + 4,
                   chevron: true,
                   onFocused: () => _dest.value = const _RecordingDest(),
                   onSelect: _enterPane,
-                  onUp: () => _focusRail(widget.playlists.length + 2),
+                  onUp: () => _focusRail(widget.playlists.length + 3),
                   onDown: null,
                   onRight: _enterPane,
                 ),
@@ -572,6 +598,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _AddDest() => _buildAddPane(),
       _ListsDest() => _buildListsPane(),
       _StartupDest() => _buildStartupPane(),
+      _ContinueWatchingDest() => _buildContinueWatchingPane(),
       _RecordingDest() => _buildRecordingPane(),
     };
     // A key per destination gives each view its own scroll position, so
@@ -583,6 +610,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         _AddDest() => 'add',
         _ListsDest() => 'lists',
         _StartupDest() => 'startup',
+        _ContinueWatchingDest() => 'continue-watching',
         _RecordingDest() => 'recording',
       }),
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 32),
@@ -972,6 +1000,44 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   isLast: true,
                 ),
             ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContinueWatchingPane() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _PaneHeader(
+          icon: Icons.history_toggle_off_rounded,
+          title: 'Continue watching',
+          meta: 'The shelf of on-demand movies and series you have started, '
+              'on Home and in IPTV.',
+          badges: [],
+        ),
+        const SizedBox(height: 20),
+        _RowGroup(
+          children: [
+            _PaneRow(
+              focusNode: _paneNode(0),
+              icon: Icons.playlist_add_check_rounded,
+              title: 'Track movies and series',
+              // Says what stays behind, because "off" reading as "my resume
+              // positions are gone" is the obvious wrong guess here.
+              subtitle: 'Off hides the shelf and stops adding to it. Nothing '
+                  'is deleted, and playback still resumes where you left off',
+              trailing: Switch(
+                value: widget.trackContinueWatching,
+                onChanged: widget.onToggleTrackContinueWatching,
+              ),
+              onTap: () => widget.onToggleTrackContinueWatching(
+                !widget.trackContinueWatching,
+              ),
+              onLeft: _returnToRail,
+              isLast: true,
+            ),
           ],
         ),
       ],

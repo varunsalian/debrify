@@ -320,6 +320,28 @@ void main() {
           reason: 'a finished middle episode keeps the series visible');
     });
 
+    test('tracking off stops recording and hides what was already stored',
+        () async {
+      await watchAndResume('http://h/before.mp4',
+          positionMs: 50000, durationMs: 100000, updatedAt: 30);
+
+      await StorageService.setIptvTrackContinueWatching(false);
+      await watchAndResume('http://h/after.mp4',
+          positionMs: 50000, durationMs: 100000, updatedAt: 40);
+
+      expect(await StorageService.getIptvContinueWatching(), isEmpty,
+          reason: 'the shelf is hidden wholesale while tracking is off');
+      // Resume positions are a separate store and deliberately survive, so
+      // both items still play from where they were left.
+      expect(await StorageService.getVideoResume('http://h/after.mp4'),
+          isNotNull);
+
+      await StorageService.setIptvTrackContinueWatching(true);
+      final shelf = await StorageService.getIptvContinueWatching();
+      expect(shelf.map((e) => e['url']), ['http://h/before.mp4'],
+          reason: 'nothing was deleted, but nothing new was recorded either');
+    });
+
     test('most recently played sorts first', () async {
       await watchAndResume('http://h/older.mp4',
           positionMs: 50000, durationMs: 100000, updatedAt: 100);

@@ -262,6 +262,7 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
     );
     await settings.setGlobalMaxKeywords(tvDefaults.maxKeywords);
     await settings.setGlobalAvoidNsfw(tvDefaults.avoidNsfw);
+    await settings.setGlobalBackgroundPrefetchEnabled(true);
 
     // Reset per-engine TV settings from their configs
     for (final config in registry.getAllConfigs().values) {

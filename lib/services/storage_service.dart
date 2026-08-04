@@ -3321,6 +3321,29 @@ class StorageService {
   static const double _iptvWatchStartedFraction = 0.02;
   static const double iptvWatchFinishedFraction = 0.95;
 
+  /// Whether on-demand IPTV playback feeds the Continue Watching shelves at
+  /// all. Off is enforced at BOTH ends — nothing new is recorded, and whatever
+  /// is already stored is filtered out of [getIptvContinueWatching] — so the
+  /// shelves empty out immediately without deleting anything: turning it back
+  /// on restores the rows that were there.
+  ///
+  /// Deliberately does NOT touch playback positions. Those live in the
+  /// separate video-resume store, which the players write directly and which
+  /// backs both resuming a movie where you left off and the progress bars on
+  /// VOD/episode cards — all of that keeps working with tracking off.
+  static const String _iptvTrackContinueWatchingKey =
+      'iptv_track_continue_watching';
+
+  static Future<bool> getIptvTrackContinueWatching() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_iptvTrackContinueWatchingKey) ?? true;
+  }
+
+  static Future<void> setIptvTrackContinueWatching(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_iptvTrackContinueWatchingKey, value);
+  }
+
   /// Remember that an on-demand IPTV item was played, capturing enough
   /// metadata to rebuild its row without re-fetching the panel — the same
   /// trick [setIptvChannelFavorited] uses, and necessary for the same reason:
@@ -3331,6 +3354,12 @@ class StorageService {
   /// already write it to the shared video-resume store keyed by stream URL,
   /// and copying it would hand the shelf a second, staler truth to disagree
   /// with; [getIptvContinueWatching] joins the two at read time instead.
+  ///
+  /// A no-op when [getIptvTrackContinueWatching] is off. Gating here rather
+  /// than at each caller is deliberate: this is the single funnel every
+  /// on-demand play goes through — both players, the IPTV page, the series
+  /// page, the Home shelf, and the native TV player's bridge hop — and live
+  /// channels never reach it.
   static Future<void> recordIptvWatch(
     String channelUrl, {
     String? channelName,
@@ -3347,7 +3376,8 @@ class StorageService {
     int? season,
     int? episode,
     bool? hasNextEpisode,
-  }) {
+  }) async {
+    if (!await getIptvTrackContinueWatching()) return;
     return IptvMediaStore.recordWatch(
       channelUrl,
       channelName: channelName,
@@ -3384,6 +3414,10 @@ class StorageService {
   /// Each entry is the stored metadata plus `url`, `positionMs`, `durationMs`
   /// and `progress` (0-1).
   static Future<List<Map<String, dynamic>>> getIptvContinueWatching() async {
+    // Tracking off hides the shelf everywhere at once: Home's two IPTV rows,
+    // the IPTV page's virtual `continue://` playlist (which already drops
+    // itself when this comes back empty), and the command rail's count.
+    if (!await getIptvTrackContinueWatching()) return [];
     final history = await getIptvWatchHistory();
     if (history.isEmpty) return [];
 

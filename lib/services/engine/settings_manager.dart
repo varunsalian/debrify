@@ -288,6 +288,28 @@ class SettingsManager {
   }
 
   // ============================================================
+  // Global TV Settings - Background Torrent Prefetch
+  // ============================================================
+
+  /// Whether Debrify TV may add and prepare upcoming torrents while playback
+  /// is active. This only applies to providers without a separate cache-check
+  /// API (currently Real-Debrid and AllDebrid).
+  ///
+  /// Defaults to enabled to preserve the existing playback behaviour for
+  /// users who have not made an explicit choice.
+  Future<bool> getGlobalBackgroundPrefetchEnabled() async {
+    final key = generateGlobalTvKey('background_prefetch');
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(key) ?? true;
+  }
+
+  Future<void> setGlobalBackgroundPrefetchEnabled(bool value) async {
+    final key = generateGlobalTvKey('background_prefetch');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+  }
+
+  // ============================================================
   // Bulk Operations
   // ============================================================
 

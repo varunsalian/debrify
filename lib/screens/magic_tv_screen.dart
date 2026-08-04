@@ -253,6 +253,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _prefetchRunning = false;
   bool _prefetchStopRequested = false;
   Future<void>? _prefetchTask;
+  // Invalidates an async start when playback exits while the preference is
+  // still being read. Without this, a stopped player could start a late
+  // prefetch loop after _stopPrefetch returned.
+  int _prefetchEpoch = 0;
   String? _activeApiKey;
   // Which provider the active prefetch run resolves through. RD and AllDebrid
   // are the two cache-check-less providers that use the background prefetcher;
@@ -4534,7 +4538,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 if (!_watchCancelled) {
                   _activeApiKey = apiKeyEarly;
                   _activeProvider = _providerRealDebrid;
-                  _startPrefetch();
+                  unawaited(_startPrefetch());
 
                   final String? activeChannelId = _currentWatchingChannelId;
                   final int? activeChannelNumber;
@@ -4888,7 +4892,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       // Start background prefetch while player is active
       _activeApiKey = apiKey;
       _activeProvider = _providerRealDebrid;
-      _startPrefetch();
+      unawaited(_startPrefetch());
 
       if (_progressOpen && _progressSheetContext != null) {
         Navigator.of(_progressSheetContext!).pop();
@@ -5876,7 +5880,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _activeApiKey = apiKey;
       _activeProvider = _providerRealDebrid;
-      _startPrefetch();
+      unawaited(_startPrefetch());
       _closeProgressDialog();
 
       if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {
@@ -6124,7 +6128,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _activeApiKey = apiKey;
       _activeProvider = _providerAllDebrid;
-      _startPrefetch();
+      unawaited(_startPrefetch());
       _closeProgressDialog();
 
       if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {
@@ -6397,7 +6401,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('DebrifyTV: Channel "${targetChannel.name}" has no keywords');
       if (_provider == _providerRealDebrid ||
           _provider == _providerAllDebrid) {
-        _startPrefetch();
+        unawaited(_startPrefetch());
       }
       return null;
     }
@@ -6412,7 +6416,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('DebrifyTV: No torrents matched in selected channel');
       if (_provider == _providerRealDebrid ||
           _provider == _providerAllDebrid) {
-        _startPrefetch();
+        unawaited(_startPrefetch());
       }
       return null;
     }
@@ -6424,7 +6428,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('DebrifyTV: No playable torrents resolved for channel');
       if (_provider == _providerRealDebrid ||
           _provider == _providerAllDebrid) {
-        _startPrefetch();
+        unawaited(_startPrefetch());
       }
       return null;
     }
@@ -6591,7 +6595,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           _activeApiKey = apiKey;
           _activeProvider = _providerRealDebrid;
-          _startPrefetch();
+          unawaited(_startPrefetch());
           debugPrint(
             'DebrifyTV: Started Real-Debrid prefetcher for new channel',
           );
@@ -6673,7 +6677,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           _activeApiKey = apiKey;
           _activeProvider = _providerAllDebrid;
-          _startPrefetch();
+          unawaited(_startPrefetch());
           debugPrint('DebrifyTV: Started AllDebrid prefetcher for new channel');
           debugPrint('DebrifyTV: Successfully got stream from channel: $title');
 
@@ -6806,7 +6810,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     debugPrint('DebrifyTV: Channel switch failed');
     if (_provider == _providerRealDebrid || _provider == _providerAllDebrid) {
-      _startPrefetch();
+      unawaited(_startPrefetch());
       debugPrint(
         'DebrifyTV: Restarted prefetcher for current channel',
       );
@@ -10594,7 +10598,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       _activeApiKey = apiKey;
       _activeProvider = _providerAllDebrid;
-      _startPrefetch();
+      unawaited(_startPrefetch());
 
       if (await _handOffToExternalPlayer(first['url'] ?? '', firstTitle)) {
         return;
@@ -10843,10 +10847,30 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // ===================== Prefetcher =====================
 
-  void _startPrefetch() {
+  Future<void> _startPrefetch() async {
     if (_prefetchRunning || _activeApiKey == null || _activeApiKey!.isEmpty) {
       return;
     }
+
+    final startEpoch = _prefetchEpoch;
+    final enabled =
+        await _settingsManager.getGlobalBackgroundPrefetchEnabled();
+
+    // Re-check mutable state after the preference read. Multiple playback
+    // paths can request a start at nearly the same time, and playback may
+    // have stopped while this method was awaiting SharedPreferences.
+    if (!mounted ||
+        startEpoch != _prefetchEpoch ||
+        _prefetchRunning ||
+        _activeApiKey == null ||
+        _activeApiKey!.isEmpty) {
+      return;
+    }
+    if (!enabled) {
+      debugPrint('MagicTV: Background torrent prefetch is disabled.');
+      return;
+    }
+
     _prefetchRunning = true;
     _prefetchStopRequested = false;
     debugPrint('MagicTV: Prefetch started.');
@@ -10854,6 +10878,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _stopPrefetch() async {
+    _prefetchEpoch++;
     if (!_prefetchRunning) return;
     _prefetchStopRequested = true;
     try {

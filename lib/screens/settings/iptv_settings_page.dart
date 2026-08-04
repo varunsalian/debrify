@@ -154,6 +154,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   final FocusNode _startupChannelFocusNode = FocusNode(
     debugLabel: 'iptv-startup-channel',
   );
+
+  // Continue watching
+  bool _trackContinueWatching = true;
   bool _loading = true;
   bool _isAdding = false;
   // Ids of playlists currently being refreshed (re-fetched from source)
@@ -380,6 +383,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
   }
 
+  Future<void> _setTrackContinueWatching(bool value) async {
+    await StorageService.setIptvTrackContinueWatching(value);
+    if (mounted) setState(() => _trackContinueWatching = value);
+  }
+
   Future<void> _pickStartupChannel() async {
     final choice = await showIptvStartupChannelPicker(context);
     if (choice == null) return;
@@ -412,6 +420,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final startupMode = await StorageService.getStartupIptvMode();
     final startupChannel = await StorageService.getStartupIptvChannel();
     final lastLive = await StorageService.getIptvLastLiveChannel();
+    final trackCw = await StorageService.getIptvTrackContinueWatching();
     final engineSupported =
         !kIsWeb &&
         Platform.isAndroid &&
@@ -439,6 +448,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _startupMode = startupMode;
       _startupChannel = startupChannel;
       _lastLiveChannel = lastLive;
+      _trackContinueWatching = trackCw;
       _recordingSectionVisible = engineSupported || desktopSched;
       _engineToggleVisible = engineSupported;
       _recordingEngineOn = recordingEngineOn;
@@ -1690,6 +1700,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       },
       onStartupModeChanged: _setStartupMode,
       onPickStartupChannel: _pickStartupChannel,
+      trackContinueWatching: _trackContinueWatching,
+      onToggleTrackContinueWatching: _setTrackContinueWatching,
       showRecordingSection: _recordingSectionVisible,
       showEngineToggle: _engineToggleVisible,
       recordingEngineEnabled: _recordingEngineOn,
@@ -1893,6 +1905,24 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                     ),
                 ],
               ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Continue watching
+          const SettingsSectionLabel('Continue watching'),
+          const SizedBox(height: 6),
+          Card(
+            child: SwitchListTile(
+              title: const Text('Track movies and series'),
+              subtitle: const Text(
+                'Keeps a Continue watching shelf of the on-demand items you '
+                'start, on Home and in IPTV. Off hides it and stops adding to '
+                'it — nothing is deleted, and playback still resumes where '
+                'you left off.',
+              ),
+              value: _trackContinueWatching,
+              onChanged: _setTrackContinueWatching,
             ),
           ),
           const SizedBox(height: 24),
