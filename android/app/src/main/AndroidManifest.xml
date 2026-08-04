@@ -27,11 +27,21 @@
          plain file into public Download/ — which needs this, legacy-only. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     
-    <!-- Package visibility for the TV keyboard's voice key: without this,
-         resolveActivity() for the speech recognizer returns null on API 30+
-         (QUERY_ALL_PACKAGES above covers it today, but this keeps voice
-         working if that broad permission is ever dropped). -->
+    <!-- The TV keyboard's mic key records in-app (SpeechRecognizer) so the
+         listening state is drawn inside our own keyboard instead of the system
+         handing us a full-screen voice activity. Asked contextually on the
+         first mic press, never at app start. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Package visibility for the voice key: without this, both
+         isRecognitionAvailable() and the service bind come back empty on API
+         30+ even when a recognizer is installed (QUERY_ALL_PACKAGES above
+         covers it today, but this keeps voice working if that broad
+         permission is ever dropped). -->
     <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
@@ -40,6 +50,11 @@
     <!-- TV compatibility flags (do not restrict phone installs) -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- RECORD_AUDIO above IMPLIES a required microphone, which would exclude
+         every TV panel and box without one. Voice is an optional extra here —
+         the keyboard hides its mic key when there's no recognizer — so the
+         requirement is explicitly waived. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- Screen support declaration for proper TV scaling -->
     <!-- This prevents Android TV from applying compatibility scaling (zoom) -->

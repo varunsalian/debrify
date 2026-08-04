@@ -41,26 +41,20 @@ class MainActivity : FlutterActivity() {
 	private val REQUEST_PICK_DOWNLOAD_DIR = 51423
 	private var pendingDirPickResult: MethodChannel.Result? = null
 
-	// ── TV voice dictation (system speech recognizer) ───────────────────────
+	// ── TV voice dictation (in-app SpeechRecognizer) ────────────────────────
+	// Deliberately NOT the ACTION_RECOGNIZE_SPEECH activity: that hands the
+	// screen to a system voice UI, which pauses us (trailer/playback lifecycle)
+	// and drops a foreign text box over the Debrify keyboard. We bind the
+	// recognition SERVICE instead and stream its events to Dart, so the whole
+	// listening state is drawn inside our own keyboard panel.
 	private val VOICE_CHANNEL = "debrify/tv_voice"
-	private val REQUEST_VOICE_INPUT = 51424
-	private var pendingVoiceResult: MethodChannel.Result? = null
+	private val VOICE_EVENTS = "debrify/tv_voice_events"
+	private val recordAudioPermissionRequestCode = 7404
+	private var pendingVoicePermissionResult: MethodChannel.Result? = null
+	private var speechRecognizer: android.speech.SpeechRecognizer? = null
+	private var voiceEvents: EventChannel.EventSink? = null
 
 	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-		if (requestCode == REQUEST_VOICE_INPUT) {
-			val pending = pendingVoiceResult
-			pendingVoiceResult = null
-			// A cancel (BACK on the overlay) and a no-match both resolve to
-			// null — the keyboard just stays open with the text untouched.
-			val spoken = if (resultCode == RESULT_OK) {
-				data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-					?.firstOrNull()
-			} else {
-				null
-			}
-			pending?.success(spoken)
-			return
-		}
 		if (requestCode == REQUEST_PICK_DOWNLOAD_DIR) {
 			val pending = pendingDirPickResult
 			pendingDirPickResult = null
@@ -257,6 +251,127 @@ class MainActivity : FlutterActivity() {
                 pendingNotificationPermissionResult?.success(granted)
                 pendingNotificationPermissionResult = null
             }
+            recordAudioPermissionRequestCode -> {
+                // (see below for the capture engine these two feed)
+                // Unlike notifications, this one is asked EVERY time the mic
+                // key is pressed without the grant: it's a deliberate,
+                // user-initiated action and the feature simply cannot run
+                // without it. Android itself stops showing the dialog once the
+                // user has permanently declined, and the deny path just leaves
+                // the keyboard as it was.
+                pendingVoicePermissionResult?.success(granted)
+                pendingVoicePermissionResult = null
+            }
+        }
+    }
+
+    // ── Voice capture engine ────────────────────────────────────────────────
+
+    /** Last level frame sent to Dart. [android.speech.RecognitionListener.onRmsChanged]
+     *  fires far faster than a TV can usefully animate, and every frame is a
+     *  platform-channel hop plus a Flutter rebuild — throttled to ~10/s. */
+    private var lastVoiceLevelAt = 0L
+
+    /** Emits one voice event to Dart. Main thread only — every recognition
+     *  callback already arrives there. */
+    private fun emitVoice(type: String, data: Map<String, Any?> = emptyMap()) {
+        val sink = voiceEvents ?: return
+        val payload = HashMap<String, Any?>(data)
+        payload["type"] = type
+        runCatching { sink.success(payload) }
+    }
+
+    /** Tears the session down. Safe to call at any time, including when
+     *  nothing is listening. */
+    private fun destroyVoiceCapture() {
+        val recognizer = speechRecognizer
+        speechRecognizer = null
+        if (recognizer != null) {
+            runCatching { recognizer.cancel() }
+            runCatching { recognizer.destroy() }
+        }
+    }
+
+    /** Destroy AFTER the current callback returns — destroying a recognizer
+     *  from inside its own listener is how you get a half-torn-down service. */
+    private fun destroyVoiceCaptureDeferred() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post { destroyVoiceCapture() }
+    }
+
+    /** One recognizer per dictation, destroyed when it ends. Holding a single
+     *  instance across sessions is the classic route to a permanently
+     *  ERROR_RECOGNIZER_BUSY mic on Google's implementation. */
+    private fun startVoiceCapture(locale: String?) {
+        destroyVoiceCapture()
+        lastVoiceLevelAt = 0L
+        val recognizer = runCatching {
+            android.speech.SpeechRecognizer.createSpeechRecognizer(this)
+        }.getOrNull()
+        if (recognizer == null) {
+            emitVoice("error", mapOf("code" to -1, "message" to "no recognizer"))
+            return
+        }
+        speechRecognizer = recognizer
+        recognizer.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) = emitVoice("ready")
+            override fun onBeginningOfSpeech() = emitVoice("speech")
+
+            override fun onRmsChanged(rmsdB: Float) {
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - lastVoiceLevelAt < 100) return
+                lastVoiceLevelAt = now
+                emitVoice("level", mapOf("db" to rmsdB.toDouble()))
+            }
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() = emitVoice("processing")
+
+            override fun onError(error: Int) {
+                emitVoice("error", mapOf("code" to error))
+                destroyVoiceCaptureDeferred()
+            }
+
+            override fun onResults(results: Bundle?) {
+                val text = results
+                    ?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                emitVoice("result", mapOf("text" to text))
+                destroyVoiceCaptureDeferred()
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val text = partialResults
+                    ?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                if (!text.isNullOrBlank()) emitVoice("partial", mapOf("text" to text))
+            }
+
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+            // Some OEM recognition services reject a session without it.
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            if (!locale.isNullOrBlank()) {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
+            }
+            // People pause mid-title ("the… mandalorian"), so give them a beat
+            // more than the default before the engine calls it done. Advisory:
+            // several engines ignore these outright.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                1500L,
+            )
+        }
+        runCatching { recognizer.startListening(intent) }.onFailure {
+            emitVoice("error", mapOf("code" to -1, "message" to it.message))
+            destroyVoiceCapture()
         }
     }
 
@@ -836,6 +951,9 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         tvTrailerPlayer?.releaseAll()
         tvTrailerPlayer = null
+        // A live recognizer holds the microphone; never let one outlive the
+        // activity that opened it.
+        destroyVoiceCapture()
         // Safety net for the phone player: the Dart screen closes its own
         // session in dispose(), but an activity torn down without that (task
         // swipe, recreation) would otherwise leave effect apps attached to a
@@ -856,6 +974,13 @@ class MainActivity : FlutterActivity() {
         super.onPause()
         if (ActivityTracker.currentActivity == this) {
             ActivityTracker.currentActivity = null
+        }
+        // Backgrounded mid-dictation: Android cuts a background app off the
+        // microphone anyway, so end the session cleanly and tell Dart, rather
+        // than leaving the keyboard listening to a mic it no longer has.
+        if (speechRecognizer != null) {
+            destroyVoiceCapture()
+            emitVoice("aborted")
         }
     }
 
@@ -1882,47 +2007,70 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // TV voice dictation — the in-app keyboard's mic key hands off to the
-        // SYSTEM recognizer (it owns the remote's microphone; an app doing its
-        // own capture can't reach it on most TV hardware).
+        // TV voice dictation — in-app capture. Events (partials, levels, the
+        // final transcript, errors) go up the companion EventChannel; this
+        // channel only carries commands.
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, VOICE_EVENTS)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    voiceEvents = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    voiceEvents = null
+                }
+            })
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VOICE_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    // Real resolve, not a try/catch on launch: plenty of cheap
-                    // AOSP boxes (and Fire TV) ship no recognizer, and the
-                    // keyboard hides its mic key when this is false. NB the
-                    // manifest needs a <queries> entry for this action or
-                    // resolveActivity returns null on API 30+ even when a
-                    // recognizer is installed.
+                    // Ask the platform, don't try/catch a start: plenty of
+                    // cheap AOSP boxes (and Fire TV) ship no recognition
+                    // service at all, and the keyboard hides its mic key when
+                    // this is false. NB the manifest needs a <queries> entry
+                    // for android.speech.RecognitionService or this lies on
+                    // API 30+ even when a recognizer is installed.
                     "isAvailable" -> {
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                        result.success(intent.resolveActivity(packageManager) != null)
+                        result.success(
+                            runCatching {
+                                android.speech.SpeechRecognizer.isRecognitionAvailable(this)
+                            }.getOrDefault(false)
+                        )
                     }
-                    "listen" -> {
-                        if (pendingVoiceResult != null) {
-                            result.error("busy", "voice input already open", null)
-                            return@setMethodCallHandler
-                        }
-                        val prompt = call.argument<String>("prompt") ?: "Speak"
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                            putExtra(
-                                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                    // True once the mic is ours to use. Asked contextually, on
+                    // the press — never at app start.
+                    "ensurePermission" -> {
+                        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                            this,
+                            android.Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (granted) {
+                            result.success(true)
+                        } else if (pendingVoicePermissionResult != null) {
+                            result.success(false)
+                        } else {
+                            pendingVoicePermissionResult = result
+                            androidx.core.app.ActivityCompat.requestPermissions(
+                                this,
+                                arrayOf(android.Manifest.permission.RECORD_AUDIO),
+                                recordAudioPermissionRequestCode,
                             )
-                            putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
-                            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
                         }
-                        try {
-                            pendingVoiceResult = result
-                            startActivityForResult(intent, REQUEST_VOICE_INPUT)
-                        } catch (e: ActivityNotFoundException) {
-                            pendingVoiceResult = null
-                            result.success(null)
-                        } catch (e: Exception) {
-                            pendingVoiceResult = null
-                            result.error("voice_failed", e.message, null)
-                        }
+                    }
+                    "start" -> {
+                        startVoiceCapture(call.argument<String>("locale"))
+                        result.success(true)
+                    }
+                    // Stop = "I'm done talking, transcribe what you have"; the
+                    // final result still arrives on the event channel.
+                    "stop" -> {
+                        runCatching { speechRecognizer?.stopListening() }
+                        result.success(true)
+                    }
+                    // Cancel = throw it away, no result event follows.
+                    "cancel" -> {
+                        destroyVoiceCapture()
+                        result.success(true)
                     }
                     else -> result.notImplemented()
                 }
