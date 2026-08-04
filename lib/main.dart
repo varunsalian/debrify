@@ -34,6 +34,7 @@ import 'screens/stremio_tv/stremio_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
+import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/storage_service.dart';
 import 'services/simkl/simkl_service.dart';
@@ -189,6 +190,10 @@ Future<void> main() async {
   await StorageService.getPlayerStartPortrait();
   await _capImageCache();
   await _resolveStartupChannel();
+  // Discover's remembered Sort per source, warmed before first frame so the
+  // panels can read it synchronously in initState and paint already-sorted.
+  // Cheap: SharedPreferences is already open by this point.
+  await DiscoverPrefs.warmUp();
   // Old-playback-state cleanup is pure housekeeping — never block first frame
   // on a storage sweep (slow flash on TV boxes).
   unawaited(_cleanupPlaybackState());

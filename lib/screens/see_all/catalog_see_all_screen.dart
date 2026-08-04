@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
+import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/skeleton_poster.dart';
 import '../../services/stremio_service.dart';
@@ -141,6 +143,16 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     _type = widget.initialCatalog.type;
     _catalog = widget.initialCatalog;
     _searchQuery = widget.query?.trim() ?? '';
+    // Discover only: reopen on the order the user last picked. Ignore a stored
+    // id that is no longer one of the three options.
+    if (widget.embedded) {
+      final saved = DiscoverPrefs.sortFor(DiscoverPrefs.catalog);
+      if (saved == _sortDefault ||
+          saved == _sortImdbDesc ||
+          saved == _sortImdbAsc) {
+        _sort = saved!;
+      }
+    }
     if (widget.seedItems.isNotEmpty) {
       _items.addAll(widget.seedItems);
       _nextSkip = widget.seedNextSkip;
@@ -380,8 +392,13 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   void _onSortChanged(String sort) {
     if (sort == _sort) return;
     // Pure view change — re-orders what's loaded, no refetch. Persists across
-    // type/catalog/genre edits (it's a preference, not a filter).
+    // type/catalog/genre edits (it's a preference, not a filter) — and, in
+    // Discover, across source swaps and app restarts too, for the same reason:
+    // one standing preference shared by every addon catalog.
     setState(() => _sort = sort);
+    if (widget.embedded) {
+      unawaited(DiscoverPrefs.setSort(DiscoverPrefs.catalog, sort));
+    }
   }
 
   /// The grid's items in the selected order. Default = addon order (the list

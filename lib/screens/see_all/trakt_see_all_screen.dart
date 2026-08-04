@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
+import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/skeleton_poster.dart';
@@ -161,6 +163,13 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     AnalyticsService.screenView('trakt_see_all');
     _items = widget.cwItems;
     _category = widget.initialCategory;
+    // Discover only: reopen on the order the user last picked for this source.
+    // Read before the first _recompute so the grid paints already sorted.
+    if (widget.embedded) {
+      final saved =
+          DiscoverPrefs.enumSortFor(DiscoverPrefs.trakt, _Sort.values);
+      if (saved != null) _sort = saved;
+    }
     _recompute();
     // Embedded (Discover): the host focuses the Source dropdown on entry, and a
     // source swap re-mounts this panel — so don't yank focus into the grid here,
@@ -287,6 +296,17 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       change();
       _recompute();
     });
+  }
+
+  /// Sort picks are remembered (Discover only) so the next launch — and the next
+  /// swap back to this source — opens on the same order. Only an explicit pick
+  /// is stored: switching lists resets the sort in-session (it's progress-
+  /// specific to CW) and that reset must not erase the user's standing choice.
+  void _setSort(_Sort v) {
+    _setFilter(() => _sort = v);
+    if (widget.embedded) {
+      unawaited(DiscoverPrefs.setEnumSort(DiscoverPrefs.trakt, v));
+    }
   }
 
   /// Quick-play a random title from the filtered view. [_visible] already has
@@ -548,7 +568,7 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
                 const StremioDropdownOption(
                     _Sort.imdbAsc, 'IMDb Rating · Low → High'),
               ],
-              onSelected: (v) => _setFilter(() => _sort = v),
+              onSelected: _setSort,
             ),
             if (_showState)
               StremioDropdown<String>(

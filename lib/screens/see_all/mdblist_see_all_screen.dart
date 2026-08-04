@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
+import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_service.dart';
@@ -151,6 +153,15 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   void initState() {
     super.initState();
     AnalyticsService.screenView('mdblist_see_all');
+    // Discover only: reopen on the order the user last picked for this source.
+    // Read before the lists load so the arriving grid paints already sorted.
+    if (widget.embedded) {
+      final saved = DiscoverPrefs.enumSortFor(
+        DiscoverPrefs.mdblist,
+        _Sort.values,
+      );
+      if (saved != null) _sort = saved;
+    }
     _init();
     // Embedded (Discover): the host focuses the Source dropdown on entry, and a
     // source swap re-mounts this panel — so don't yank focus into the grid.
@@ -308,11 +319,18 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     });
   }
 
+  /// Sort picks are remembered (Discover only) so the next launch — and the next
+  /// swap back to this source — opens on the same order. Only an explicit pick
+  /// is stored: switching category/list resets the sort in-session, and that
+  /// reset must not erase the user's standing choice.
   void _setSort(_Sort v) {
     setState(() {
       _sort = v;
       _recompute();
     });
+    if (widget.embedded) {
+      unawaited(DiscoverPrefs.setEnumSort(DiscoverPrefs.mdblist, v));
+    }
   }
 
   void _selectList(MdblistListChoice choice) {

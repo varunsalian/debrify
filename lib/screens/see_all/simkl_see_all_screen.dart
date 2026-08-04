@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
+import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/skeleton_poster.dart';
@@ -147,6 +149,13 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
     _list = widget.cwItems.isNotEmpty
         ? SimklSeeAllList.continueWatching
         : SimklSeeAllList.trending;
+    // Discover only: reopen on the order the user last picked for this source.
+    // Read before the fetch so the arriving grid is sorted on its first paint.
+    if (widget.embedded) {
+      final saved =
+          DiscoverPrefs.enumSortFor(DiscoverPrefs.simkl, _Sort.values);
+      if (saved != null) _sort = saved;
+    }
     _fetchList(_list);
   }
 
@@ -233,6 +242,17 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       change();
       _recompute();
     });
+  }
+
+  /// Sort picks are remembered (Discover only) so the next launch — and the next
+  /// swap back to this source — opens on the same order. Only an explicit pick
+  /// is stored: switching lists resets the sort in-session, and that reset must
+  /// not erase the user's standing choice.
+  void _setSort(_Sort v) {
+    _setFilter(() => _sort = v);
+    if (widget.embedded) {
+      unawaited(DiscoverPrefs.setEnumSort(DiscoverPrefs.simkl, v));
+    }
   }
 
   /// Quick-play a random title from the filtered view — the whole list is in
@@ -431,7 +451,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
                 StremioDropdownOption(
                     _Sort.imdbAsc, 'IMDb Rating · Low → High'),
               ],
-              onSelected: (v) => _setFilter(() => _sort = v),
+              onSelected: _setSort,
             ),
           ],
         ),
