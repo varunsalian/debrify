@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../services/skip_segment_service.dart';
 
-/// The OTT skip action ("Skip intro »") as a quiet glass pill — dark glass,
-/// hairline border, no icon — matching the native TV player's redesigned pill
-/// so the two players speak one visual language.
+/// The OTT skip action ("Skip intro »") as a small squared chip, Netflix-style
+/// — near-black glass, crisp light border, no icon — matching the native TV
+/// player's chip so the two players speak one visual language.
 ///
 /// Sizing adapts to the surface: compact on phones, a step larger where
 /// there's room (tablet / desktop windows), keyed off the window's shortest
@@ -36,17 +36,17 @@ class SkipSegmentButton extends StatelessWidget {
       child: Container(
         key: const ValueKey('skip-segment-button'),
         decoration: BoxDecoration(
-          color: const Color(0xCC0F0F14),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+          color: const Color(0xD9101014),
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
         ),
         clipBehavior: Clip.antiAlias,
         child: Material(
           type: MaterialType.transparency,
           child: InkWell(
             onTap: onPressed,
-            borderRadius: BorderRadius.circular(10),
-            // No ripple: a quiet pill over video should tint, not sparkle.
+            borderRadius: BorderRadius.circular(3),
+            // No ripple: a quiet chip over video should tint, not sparkle.
             // (Also keeps the widget free of the M3 ink shader, which the
             // test harness can't load.)
             splashFactory: NoSplash.splashFactory,
@@ -62,14 +62,14 @@ class SkipSegmentButton extends StatelessWidget {
             }),
             child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: compact ? 16 : 20,
-                vertical: compact ? 9 : 11,
+                horizontal: compact ? 12 : 16,
+                vertical: compact ? 7 : 9,
               ),
               child: Text(
                 '$label »',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: compact ? 13.5 : 14.5,
+                  fontSize: compact ? 12.5 : 13.5,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.2,
                   height: 1.0,
