@@ -724,7 +724,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // to distinguish releases, and timestamps are always validated against it.
   bool _skipSegmentSettingsLoaded = false;
   bool _skipSegmentsEnabled = false;
-  String _skipSegmentProviderId = SkipSegmentProviders.skipDb;
+  String _skipSegmentProviderId = SkipSegmentProviders.auto;
   SkipSegmentProvider? _skipSegmentProvider;
   SkipSegments _skipSegments = SkipSegments.empty;
   String? _loadedSkipSegmentsKey;
@@ -1095,7 +1095,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final storedProvider = values[1] as String;
     final providerId = SkipSegmentProviders.isAvailable(storedProvider)
         ? storedProvider
-        : SkipSegmentProviders.skipDb;
+        : SkipSegmentProviders.auto;
 
     _skipSegmentProvider?.close();
     _skipSegmentProvider = enabled

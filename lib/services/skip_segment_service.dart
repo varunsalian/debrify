@@ -61,10 +61,12 @@ abstract class SkipSegmentProvider {
 }
 
 abstract final class SkipSegmentProviders {
+  static const auto = 'auto';
   static const skipDb = 'skipdb';
   static const introDb = 'introdb';
   static const theIntroDb = 'theintrodb';
   static const labels = <String, String>{
+    auto: 'Auto (Recommended)',
     skipDb: 'SkipDB',
     introDb: 'IntroDB',
     theIntroDb: 'TheIntroDB',
@@ -86,6 +88,8 @@ abstract final class SkipSegmentProviders {
 
   static SkipSegmentProvider create(String id, {http.Client? client}) {
     switch (id) {
+      case auto:
+        return AutoSkipSegmentProvider(client: client);
       case skipDb:
         return SkipDbSegmentProvider(client: client);
       case introDb:
@@ -93,8 +97,91 @@ abstract final class SkipSegmentProviders {
       case theIntroDb:
         return TheIntroDbSegmentProvider(client: client);
       default:
-        return SkipDbSegmentProvider(client: client);
+        return AutoSkipSegmentProvider(client: client);
     }
+  }
+}
+
+class AutoSkipSegmentProvider implements SkipSegmentProvider {
+  static const Duration _defaultTimeout = Duration(seconds: 3);
+
+  final http.Client _client;
+  final bool _ownsClient;
+  final Duration _timeout;
+  late final List<SkipSegmentProvider> _providers;
+
+  AutoSkipSegmentProvider({
+    http.Client? client,
+    Duration timeout = _defaultTimeout,
+  }) : _client = client ?? http.Client(),
+       _ownsClient = client == null,
+       _timeout = timeout {
+    _providers = <SkipSegmentProvider>[
+      SkipDbSegmentProvider(client: _client),
+      TheIntroDbSegmentProvider(client: _client),
+      if (!kIsWeb) IntroDbSegmentProvider(client: _client),
+    ];
+  }
+
+  @override
+  String get id => SkipSegmentProviders.auto;
+
+  @override
+  String get displayName => 'Auto';
+
+  @override
+  Future<SkipSegments> fetch({
+    required String imdbId,
+    required int season,
+    required int episode,
+    required Duration duration,
+  }) async {
+    final results = <String, SkipSegments>{};
+    final requests = _providers.map((provider) async {
+      try {
+        results[provider.id] = await provider.fetch(
+          imdbId: imdbId,
+          season: season,
+          episode: episode,
+          duration: duration,
+        );
+      } catch (error) {
+        debugPrint(
+          'SkipSegments: ${provider.displayName} fetch failed: $error',
+        );
+      }
+    });
+
+    try {
+      await Future.wait(requests).timeout(_timeout);
+    } on TimeoutException {
+      // Use whichever providers completed within the shared deadline. Each
+      // request catches its own late error, so unfinished work cannot surface
+      // as an unhandled exception after this result has been returned.
+    }
+
+    List<SkipSegment> intros = const [];
+    List<SkipSegment> outros = const [];
+    for (final provider in _providers) {
+      final candidate = results[provider.id];
+      if (candidate == null) continue;
+      if (intros.isEmpty && candidate.intros.isNotEmpty) {
+        intros = candidate.intros;
+      }
+      if (outros.isEmpty && candidate.outros.isNotEmpty) {
+        outros = candidate.outros;
+      }
+      if (intros.isNotEmpty && outros.isNotEmpty) break;
+    }
+    return SkipSegments(intros: intros, outros: outros);
+  }
+
+  @override
+  void close() {
+    for (final provider in _providers) {
+      provider.close();
+    }
+    if (_ownsClient) _client.close();
   }
 }
 

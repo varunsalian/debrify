@@ -227,7 +227,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      *  effect apps (Wavelet, OEM equalizers) can attach. Off by default. */
     private var systemAudioEffectsEnabled = false
     private var skipSegmentsEnabled = true
-    private var skipSegmentProviderId = TvSkipSegmentClients.SKIP_DB
+    private var skipSegmentProviderId = TvSkipSegmentClients.AUTO
     private var playlistMode: PlaylistMode = PlaylistMode.NONE
     private var playlistAdapter: PlaylistOverlayAdapter? = null
     private var seriesPlaylistAdapter: PlaylistAdapter? = null
@@ -11822,12 +11822,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             skipSegmentsEnabled = prefs.getBoolean("flutter.skip_segments_enabled", true)
             val storedSkipSegmentProvider = prefs.getString(
                 "flutter.skip_segment_provider",
-                TvSkipSegmentClients.SKIP_DB,
-            ) ?: TvSkipSegmentClients.SKIP_DB
+                TvSkipSegmentClients.AUTO,
+            ) ?: TvSkipSegmentClients.AUTO
             skipSegmentProviderId = if (TvSkipSegmentClients.supports(storedSkipSegmentProvider)) {
                 storedSkipSegmentProvider
             } else {
-                TvSkipSegmentClients.SKIP_DB
+                TvSkipSegmentClients.AUTO
             }
 
             android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled, skipSegments=$skipSegmentsEnabled, skipProvider=$skipSegmentProviderId")

@@ -937,6 +937,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'skip intro',
           'skip credits',
           'outro',
+          'auto provider',
           'skipdb',
           'introdb',
           'theintrodb',
@@ -1768,6 +1769,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Timestamp provider',
         'Choose the source for intro and outro timestamps',
         const [
+          'auto',
           'skipdb',
           'introdb',
           'theintrodb',

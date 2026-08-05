@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:debrify/services/skip_segment_service.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/screens/video_player/widgets/skip_segment_button.dart';
@@ -8,6 +10,68 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  group('AutoSkipSegmentProvider', () {
+    test(
+      'queries every provider in parallel and falls back per segment type',
+      () async {
+        final requestedHosts = <String>{};
+        final allRequestsStarted = Completer<void>();
+        final provider = AutoSkipSegmentProvider(
+          client: MockClient((request) async {
+            requestedHosts.add(request.url.host);
+            if (requestedHosts.length == 3 && !allRequestsStarted.isCompleted) {
+              allRequestsStarted.complete();
+            }
+            await allRequestsStarted.future;
+
+            switch (request.url.host) {
+              case 'api.skipdb.tv':
+                return http.Response('''
+                {
+                  "segments": {
+                    "intro": {"start_ms": 10000, "end_ms": 20000},
+                    "outro": null
+                  }
+                }
+              ''', 200);
+              case 'api.theintrodb.org':
+                return http.Response('''
+                {
+                  "intro": [{"start_ms": 30000, "end_ms": 40000}],
+                  "credits": [{"start_ms": 900000, "end_ms": null}]
+                }
+              ''', 200);
+              case 'api.introdb.app':
+                return http.Response('''
+                {
+                  "intro": {"start_ms": 50000, "end_ms": 60000},
+                  "outro": {"start_ms": 800000, "end_ms": 950000}
+                }
+              ''', 200);
+              default:
+                return http.Response('not found', 404);
+            }
+          }),
+        );
+
+        final result = await provider.fetch(
+          imdbId: 'tt0903747',
+          season: 1,
+          episode: 1,
+          duration: const Duration(seconds: 1000),
+        );
+
+        expect(requestedHosts, {
+          'api.skipdb.tv',
+          'api.theintrodb.org',
+          'api.introdb.app',
+        });
+        expect(result.intro?.start, const Duration(seconds: 10));
+        expect(result.outro?.start, const Duration(seconds: 900));
+      },
+    );
+  });
+
   group('SkipDbSegmentProvider', () {
     test(
       'requests a duration-aware episode and parses intro/outro markers',
@@ -289,6 +353,7 @@ void main() {
 
   test('provider registry exposes and creates every native provider', () {
     expect(SkipSegmentProviders.labels.keys, {
+      SkipSegmentProviders.auto,
       SkipSegmentProviders.skipDb,
       SkipSegmentProviders.introDb,
       SkipSegmentProviders.theIntroDb,
@@ -301,16 +366,23 @@ void main() {
       SkipSegmentProviders.create(SkipSegmentProviders.theIntroDb),
       isA<TheIntroDbSegmentProvider>(),
     );
+    expect(
+      SkipSegmentProviders.create(
+        SkipSegmentProviders.auto,
+        client: MockClient((_) async => http.Response('{}', 200)),
+      ),
+      isA<AutoSkipSegmentProvider>(),
+    );
   });
 
   group('skip segment preferences', () {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
-    test('manual skip buttons default on with SkipDB selected', () async {
+    test('manual skip buttons default on with Auto selected', () async {
       expect(await StorageService.getSkipSegmentsEnabled(), isTrue);
       expect(
         await StorageService.getSkipSegmentProvider(),
-        StorageService.skipSegmentProviderSkipDb,
+        StorageService.skipSegmentProviderAuto,
       );
     });
 
@@ -337,7 +409,7 @@ void main() {
       await StorageService.setSkipSegmentProvider('removed-provider');
       expect(
         await StorageService.getSkipSegmentProvider(),
-        StorageService.skipSegmentProviderSkipDb,
+        StorageService.skipSegmentProviderAuto,
       );
     });
   });

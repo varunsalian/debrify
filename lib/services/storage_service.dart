@@ -180,10 +180,12 @@ class StorageService {
   /// Stable provider identifier persisted by the Playback settings page.
   /// Kept here rather than using a display label so future provider names can
   /// change without migrating preferences.
+  static const String skipSegmentProviderAuto = 'auto';
   static const String skipSegmentProviderSkipDb = 'skipdb';
   static const String skipSegmentProviderIntroDb = 'introdb';
   static const String skipSegmentProviderTheIntroDb = 'theintrodb';
   static const Set<String> _supportedSkipSegmentProviders = <String>{
+    skipSegmentProviderAuto,
     skipSegmentProviderSkipDb,
     skipSegmentProviderIntroDb,
     skipSegmentProviderTheIntroDb,
@@ -5497,14 +5499,14 @@ class StorageService {
     final provider = prefs.getString(_skipSegmentProviderKey);
     return _supportedSkipSegmentProviders.contains(provider)
         ? provider!
-        : skipSegmentProviderSkipDb;
+        : skipSegmentProviderAuto;
   }
 
   static Future<void> setSkipSegmentProvider(String provider) async {
     final prefs = await SharedPreferences.getInstance();
     final supported = _supportedSkipSegmentProviders.contains(provider)
         ? provider
-        : skipSegmentProviderSkipDb;
+        : skipSegmentProviderAuto;
     await prefs.setString(_skipSegmentProviderKey, supported);
   }
 

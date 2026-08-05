@@ -84,7 +84,7 @@ class _ExternalPlayerSettingsPageState
   bool _startPortrait = false; // Phone only, opt-in
   bool _subtitleAutoSync = true; // Android TV only, ON by default (opt-out)
   bool _skipSegmentsEnabled = true;
-  String _skipSegmentProvider = SkipSegmentProviders.skipDb;
+  String _skipSegmentProvider = SkipSegmentProviders.auto;
   String?
   _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
   String?
@@ -418,7 +418,7 @@ class _ExternalPlayerSettingsPageState
       final skipSegmentProvider =
           SkipSegmentProviders.isAvailable(storedSkipSegmentProvider)
           ? storedSkipSegmentProvider
-          : SkipSegmentProviders.skipDb;
+          : SkipSegmentProviders.auto;
       final defaultSubtitleLanguage =
           await StorageService.getDefaultSubtitleLanguage();
       final defaultAudioLanguage =
@@ -2156,7 +2156,9 @@ class _ExternalPlayerSettingsPageState
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'Coverage varies by series, episode, and video release.',
+                            _skipSegmentProvider == SkipSegmentProviders.auto
+                                ? 'Checks every available source and prefers SkipDB, then TheIntroDB, then IntroDB.'
+                                : 'Coverage varies by series, episode, and video release.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: kSettingsDim2,
                             ),

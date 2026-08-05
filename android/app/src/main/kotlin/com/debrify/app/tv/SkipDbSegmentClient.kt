@@ -1,5 +1,10 @@
 package com.debrify.app.tv
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -31,17 +36,29 @@ internal data class TvSkipSegments(
 
 /** Provider dispatcher for manual skip markers in the native TV player. */
 internal object TvSkipSegmentClients {
+    const val AUTO = "auto"
     const val SKIP_DB = "skipdb"
     const val INTRO_DB = "introdb"
     const val THE_INTRO_DB = "theintrodb"
 
     fun supports(providerId: String): Boolean = when (providerId) {
-        SKIP_DB, INTRO_DB, THE_INTRO_DB -> true
+        AUTO, SKIP_DB, INTRO_DB, THE_INTRO_DB -> true
         else -> false
     }
 
-    /** Blocking network call. Invoke from an IO dispatcher. */
-    fun fetch(
+    /** Network call. Explicit providers remain blocking and run on the caller's IO dispatcher. */
+    suspend fun fetch(
+        providerId: String,
+        imdbId: String,
+        season: Int,
+        episode: Int,
+        durationSeconds: Long,
+    ): TvSkipSegments = when (providerId) {
+        AUTO -> fetchAuto(imdbId, season, episode, durationSeconds)
+        else -> fetchSingle(providerId, imdbId, season, episode, durationSeconds)
+    }
+
+    private fun fetchSingle(
         providerId: String,
         imdbId: String,
         season: Int,
@@ -52,6 +69,32 @@ internal object TvSkipSegmentClients {
         THE_INTRO_DB -> TheIntroDbSegmentClient.fetch(imdbId, season, episode, durationSeconds)
         SKIP_DB -> SkipDbSegmentClient.fetch(imdbId, season, episode, durationSeconds)
         else -> TvSkipSegments.EMPTY
+    }
+
+    private suspend fun fetchAuto(
+        imdbId: String,
+        season: Int,
+        episode: Int,
+        durationSeconds: Long,
+    ): TvSkipSegments = coroutineScope {
+        val providerIds = listOf(SKIP_DB, THE_INTRO_DB, INTRO_DB)
+        val results = providerIds.map { providerId ->
+            async(Dispatchers.IO) {
+                try {
+                    fetchSingle(providerId, imdbId, season, episode, durationSeconds)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    android.util.Log.w("SkipSegments", "$providerId request failed", error)
+                    TvSkipSegments.EMPTY
+                }
+            }
+        }.awaitAll()
+
+        TvSkipSegments(
+            intros = results.firstOrNull { it.intros.isNotEmpty() }?.intros.orEmpty(),
+            outros = results.firstOrNull { it.outros.isNotEmpty() }?.outros.orEmpty(),
+        )
     }
 }
 
