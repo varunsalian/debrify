@@ -227,7 +227,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      *  effect apps (Wavelet, OEM equalizers) can attach. Off by default. */
     private var systemAudioEffectsEnabled = false
     private var skipSegmentsEnabled = true
-    private var skipSegmentProviderId = SKIP_PROVIDER_SKIP_DB
+    private var skipSegmentProviderId = TvSkipSegmentClients.SKIP_DB
     private var playlistMode: PlaylistMode = PlaylistMode.NONE
     private var playlistAdapter: PlaylistOverlayAdapter? = null
     private var seriesPlaylistAdapter: PlaylistAdapter? = null
@@ -440,10 +440,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var manualSubtitleDisplayLabel: String? = null
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // Manual SkipDB actions for the native TV player. Requests are keyed by
-    // episode + exact stream duration so source changes cannot reuse timestamps
-    // from a differently cut release.
+    // Manual community skip actions for the native TV player. Requests are
+    // keyed by provider + episode + exact stream duration so source changes
+    // cannot reuse timestamps from a differently cut release.
     private data class SkipSegmentRequest(
+        val providerId: String,
         val imdbId: String,
         val season: Int,
         val episode: Int,
@@ -5062,7 +5063,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun currentSkipSegmentRequest(durationMs: Long): SkipSegmentRequest? {
         if (!skipSegmentsEnabled ||
-            skipSegmentProviderId != SKIP_PROVIDER_SKIP_DB ||
+            !TvSkipSegmentClients.supports(skipSegmentProviderId) ||
             isIptvMode ||
             durationMs <= 0L ||
             durationMs == C.TIME_UNSET
@@ -5080,6 +5081,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (durationSeconds <= 0L) return null
 
         return SkipSegmentRequest(
+            providerId = skipSegmentProviderId,
             imdbId = imdbId,
             season = season,
             episode = episode,
@@ -5097,8 +5099,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // button flash on as soon as next-episode is pressed — the old position
         // is usually deep in the outgoing episode, which lands inside a segment
         // — and fetches its segments against a duration that isn't its own,
-        // which SkipDB then grades as a mismatch. Wait until the new media is
-        // prepared; resetSkipSegmentState() has already hidden the button.
+        // which can select or validate the wrong release. Wait until the new
+        // media is prepared; resetSkipSegmentState() has already hidden the button.
         if (!hasEverBeenReady) {
             presentSkipSegment(null, null)
             return
@@ -5144,7 +5146,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         skipSegmentFetchJob = skipSegmentScope.launch {
             val result = try {
                 withContext(Dispatchers.IO) {
-                    SkipDbSegmentClient.fetch(
+                    TvSkipSegmentClients.fetch(
+                        providerId = request.providerId,
                         imdbId = request.imdbId,
                         season = request.season,
                         episode = request.episode,
@@ -5155,7 +5158,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 throw cancelled
             } catch (error: Exception) {
                 // Skip data is optional and must never interrupt playback.
-                android.util.Log.w("SkipSegments", "SkipDB request failed", error)
+                android.util.Log.w(
+                    "SkipSegments",
+                    "${request.providerId} request failed",
+                    error,
+                )
                 TvSkipSegments.EMPTY
             }
 
@@ -11813,10 +11820,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // Manual community intro/outro buttons. These are the same keys the
             // Flutter Playback settings page writes; enabled never means auto-seek.
             skipSegmentsEnabled = prefs.getBoolean("flutter.skip_segments_enabled", true)
-            skipSegmentProviderId = prefs.getString(
+            val storedSkipSegmentProvider = prefs.getString(
                 "flutter.skip_segment_provider",
-                SKIP_PROVIDER_SKIP_DB,
-            ) ?: SKIP_PROVIDER_SKIP_DB
+                TvSkipSegmentClients.SKIP_DB,
+            ) ?: TvSkipSegmentClients.SKIP_DB
+            skipSegmentProviderId = if (TvSkipSegmentClients.supports(storedSkipSegmentProvider)) {
+                storedSkipSegmentProvider
+            } else {
+                TvSkipSegmentClients.SKIP_DB
+            }
 
             android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled, skipSegments=$skipSegmentsEnabled, skipProvider=$skipSegmentProviderId")
         } catch (e: Exception) {
@@ -12921,7 +12933,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         stremioSubtitles.clear()
         stremioSubtitleService = null
 
-        // Cancel optional SkipDB work; late network responses must not retain
+        // Cancel optional skip-provider work; late network responses must not retain
         // or update a destroyed TV player.
         skipSegmentFetchGeneration++
         skipSegmentFetchJob?.cancel()
@@ -13676,7 +13688,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val SUBTITLE_LOADING_LABEL = "⏳ Loading external subtitles..."
         private const val EXTERNAL_SUBTITLE_TICK_MS = 250L
         private const val EXTERNAL_SUBTITLE_PREFIX = "⬇"
-        private const val SKIP_PROVIDER_SKIP_DB = "skipdb"
         private const val MAX_SKIP_SEGMENT_CACHE_ENTRIES = 64
         private val IMDB_ID_REGEX = Regex("^tt\\d+$")
 

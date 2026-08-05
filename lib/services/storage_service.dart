@@ -181,6 +181,13 @@ class StorageService {
   /// Kept here rather than using a display label so future provider names can
   /// change without migrating preferences.
   static const String skipSegmentProviderSkipDb = 'skipdb';
+  static const String skipSegmentProviderIntroDb = 'introdb';
+  static const String skipSegmentProviderTheIntroDb = 'theintrodb';
+  static const Set<String> _supportedSkipSegmentProviders = <String>{
+    skipSegmentProviderSkipDb,
+    skipSegmentProviderIntroDb,
+    skipSegmentProviderTheIntroDb,
+  };
 
   // IPTV settings
   static const String _iptvPlaylistsKey = 'iptv_playlists';
@@ -5488,14 +5495,14 @@ class StorageService {
   static Future<String> getSkipSegmentProvider() async {
     final prefs = await SharedPreferences.getInstance();
     final provider = prefs.getString(_skipSegmentProviderKey);
-    return provider == skipSegmentProviderSkipDb
+    return _supportedSkipSegmentProviders.contains(provider)
         ? provider!
         : skipSegmentProviderSkipDb;
   }
 
   static Future<void> setSkipSegmentProvider(String provider) async {
     final prefs = await SharedPreferences.getInstance();
-    final supported = provider == skipSegmentProviderSkipDb
+    final supported = _supportedSkipSegmentProviders.contains(provider)
         ? provider
         : skipSegmentProviderSkipDb;
     await prefs.setString(_skipSegmentProviderKey, supported);

@@ -720,8 +720,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _currentStremioTvContentTitle ?? widget.contentTitle;
 
   // Community intro/outro markers for the currently playing series episode.
-  // The request key includes the stream duration because SkipDB uses it to
-  // distinguish releases with extra logos or different cuts.
+  // The request key includes the stream duration because providers may use it
+  // to distinguish releases, and timestamps are always validated against it.
   bool _skipSegmentSettingsLoaded = false;
   bool _skipSegmentsEnabled = false;
   String _skipSegmentProviderId = SkipSegmentProviders.skipDb;
@@ -1093,7 +1093,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     final enabled = values[0] as bool;
     final storedProvider = values[1] as String;
-    final providerId = SkipSegmentProviders.supports(storedProvider)
+    final providerId = SkipSegmentProviders.isAvailable(storedProvider)
         ? storedProvider
         : SkipSegmentProviders.skipDb;
 
@@ -1118,8 +1118,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     //   links. Through all of that _position/_duration still describe the
     //   outgoing episode, and that position is usually deep enough to land
     //   inside a segment, so the button flashes on the moment next-episode is
-    //   pressed. It also asks SkipDB for the new episode at the old episode's
-    //   duration, which comes back graded as a mismatch.
+    //   pressed. It also asks the provider for the new episode at the old
+    //   episode's duration, which can select or validate the wrong release.
     // * _isTransitioning covers an IPTV zap / source switch, where the key
     //   flips before the incoming stream opens (the same window _saveResume
     //   guards against).

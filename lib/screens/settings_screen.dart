@@ -938,6 +938,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'skip credits',
           'outro',
           'skipdb',
+          'introdb',
+          'theintrodb',
         ],
       ),
       nav(
@@ -1765,7 +1767,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Playback',
         'Timestamp provider',
         'Choose the source for intro and outro timestamps',
-        const ['skipdb', 'provider', 'timestamp', 'segments'],
+        const [
+          'skipdb',
+          'introdb',
+          'theintrodb',
+          'provider',
+          'timestamp',
+          'segments',
+        ],
       ),
       leaf(
         'Playback',

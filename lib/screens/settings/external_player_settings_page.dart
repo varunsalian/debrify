@@ -413,7 +413,12 @@ class _ExternalPlayerSettingsPageState
       final startPortrait = await StorageService.getPlayerStartPortrait();
       final subtitleAutoSync = await StorageService.getSubtitleAutoSyncEnabled();
       final skipSegmentsEnabled = await StorageService.getSkipSegmentsEnabled();
-      final skipSegmentProvider = await StorageService.getSkipSegmentProvider();
+      final storedSkipSegmentProvider =
+          await StorageService.getSkipSegmentProvider();
+      final skipSegmentProvider =
+          SkipSegmentProviders.isAvailable(storedSkipSegmentProvider)
+          ? storedSkipSegmentProvider
+          : SkipSegmentProviders.skipDb;
       final defaultSubtitleLanguage =
           await StorageService.getDefaultSubtitleLanguage();
       final defaultAudioLanguage =
@@ -2143,7 +2148,7 @@ class _ExternalPlayerSettingsPageState
                             context,
                             label: 'Timestamp provider',
                             value: _skipSegmentProvider,
-                            items: SkipSegmentProviders.labels,
+                            items: SkipSegmentProviders.availableLabels,
                             onChanged: _setSkipSegmentProvider,
                             focusNode: _skipSegmentProviderFocusNode,
                             isFocused: _skipSegmentProviderFocused,
