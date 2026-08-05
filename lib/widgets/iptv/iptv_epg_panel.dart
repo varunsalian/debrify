@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_epg_service.dart';
+import 'styles/iptv_style.dart';
 import '../home/home_theme.dart';
 import '../../utils/tv_keys.dart';
 
@@ -67,11 +68,16 @@ class IptvRailEpgCard extends StatefulWidget {
   /// is short. Programme descriptions remain visible.
   final bool dense;
 
+  /// Styled-look tokens: swaps the card's gold (NOW tag, progress fill) for
+  /// the style's accent. Null = the shipped paint, verbatim.
+  final IptvStyleTokens? tokens;
+
   const IptvRailEpgCard({
     super.key,
     required this.channel,
     this.stageOverlay = false,
     this.dense = false,
+    this.tokens,
   });
 
   @override
@@ -185,7 +191,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
         if (next == null) return const SizedBox.shrink();
         return Row(
           children: [
-            const _EpgTag('NEXT', dim: true),
+            _EpgTag('NEXT', dim: true, accent: widget.tokens?.accent),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -218,7 +224,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
         children: [
           Row(
             children: [
-              const _EpgTag('NOW'),
+              _EpgTag('NOW', accent: widget.tokens?.accent),
               const Spacer(),
               Text(
                 '${_clock(context, now.start)} – ${_clock(context, now.stop)}',
@@ -267,7 +273,10 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
               ),
           ],
           SizedBox(height: widget.dense ? 5 : 9),
-          _EpgProgressBar(progress: now.progressAt(at)),
+          _EpgProgressBar(
+            progress: now.progressAt(at),
+            accent: widget.tokens?.accent,
+          ),
         ],
       );
     }
@@ -279,7 +288,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
         if (now != null) ...[
           Row(
             children: [
-              const _EpgTag('NOW'),
+              _EpgTag('NOW', accent: widget.tokens?.accent),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -309,7 +318,10 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
             ),
           ),
           const SizedBox(height: 8),
-          _EpgProgressBar(progress: now.progressAt(at)),
+          _EpgProgressBar(
+            progress: now.progressAt(at),
+            accent: widget.tokens?.accent,
+          ),
           const SizedBox(height: 4),
           Text(
             _remainingLabel(now, at),
@@ -339,7 +351,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           if (now != null) const SizedBox(height: 10),
           Row(
             children: [
-              const _EpgTag('NEXT', dim: true),
+              _EpgTag('NEXT', dim: true, accent: widget.tokens?.accent),
               const SizedBox(width: 8),
               Text(
                 _clock(context, next.start),
@@ -537,10 +549,7 @@ class _EpgRecordChip extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: rec,
-            ),
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: rec),
           ),
           const SizedBox(width: 5),
           Text(
@@ -563,13 +572,14 @@ class _EpgRecordChip extends StatelessWidget {
 class _EpgTag extends StatelessWidget {
   final String text;
   final bool dim;
-  const _EpgTag(this.text, {this.dim = false});
+  final Color? accent;
+  const _EpgTag(this.text, {this.dim = false, this.accent});
 
   @override
   Widget build(BuildContext context) {
     final color = dim
         ? Colors.white.withValues(alpha: 0.35)
-        : HomeTheme.focusGold;
+        : (accent ?? HomeTheme.focusGold);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
@@ -591,7 +601,8 @@ class _EpgTag extends StatelessWidget {
 
 class _EpgProgressBar extends StatelessWidget {
   final double progress;
-  const _EpgProgressBar({required this.progress});
+  final Color? accent;
+  const _EpgProgressBar({required this.progress, this.accent});
 
   @override
   Widget build(BuildContext context) {
@@ -603,7 +614,7 @@ class _EpgProgressBar extends StatelessWidget {
           children: [
             Expanded(
               flex: (progress * 1000).round().clamp(0, 1000),
-              child: const ColoredBox(color: HomeTheme.focusGold),
+              child: ColoredBox(color: accent ?? HomeTheme.focusGold),
             ),
             Expanded(
               flex: 1000 - (progress * 1000).round().clamp(0, 1000),

@@ -96,6 +96,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// there) — see ExternalPlayerSettingsPage.
   bool get _isPhone => PlatformUtil.isPhone;
 
+  /// The IPTV Appearance picker renders only where the cockpit does (Android
+  /// TV, desktop) — the SAME gate IptvSettingsPage uses for its section
+  /// (PlatformUtil's cache, not this screen's own `_isAndroidTv`, which
+  /// handles probe failures differently and could disagree).
+  bool get _iptvAppearanceSearchable =>
+      PlatformUtil.isAndroidTvCached ||
+      (!kIsWeb && (Platform.isMacOS || Platform.isLinux || Platform.isWindows));
+
   /// Custom launch command (macOS/Linux/Windows) or custom URL scheme (iOS).
   /// Android's external-player branch offers neither — it only explains the
   /// system app chooser. See ExternalPlayerSettingsPage's platform branches.
@@ -890,6 +898,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
         onTap: _openIptvSettings,
       ),
+      // Gated like the section itself: the Appearance picker only renders
+      // where the IPTV cockpit does (Android TV, desktop). Plain landing —
+      // opens IPTV settings, no scroll-to-section.
+      if (_iptvAppearanceSearchable)
+        SettingsSearchEntry(
+          icon: Icons.style_rounded,
+          title: 'IPTV appearance',
+          subtitle: 'Command Center, First Edition or Master Control',
+          category: 'Live TV & DVR',
+          keywords: const [
+            'iptv',
+            'style',
+            'theme',
+            'look',
+            'skin',
+            'appearance',
+            'command center',
+            'first edition',
+            'master control',
+            'cockpit',
+            'premium',
+          ],
+          onTap: _openIptvSettings,
+        ),
       conn(_indexerManagersInfo, const [
         'indexer',
         'torznab',
@@ -1582,12 +1614,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Default audio-language filter',
         const ['language', 'audio', 'english', 'hindi', 'multi-audio'],
       ),
-      leaf(
-        'Filters',
-        'Size filter',
-        'Default file/pack size filter',
-        const ['size', 'gb', 'mb', 'file size'],
-      ),
+      leaf('Filters', 'Size filter', 'Default file/pack size filter', const [
+        'size',
+        'gb',
+        'mb',
+        'file size',
+      ]),
       leaf(
         'Filters',
         'Apply filters to Quick Play',
@@ -1635,12 +1667,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
 
       // Home Page
-      leaf('Home Screen', 'Home Rows', 'Choose which rows appear on Home', const [
-        'home rows',
-        'rows',
-        'catalogs',
-        'customize',
-      ]),
+      leaf(
+        'Home Screen',
+        'Home Rows',
+        'Choose which rows appear on Home',
+        const ['home rows', 'rows', 'catalogs', 'customize'],
+      ),
       leaf(
         'Home Screen',
         'Continue Watching',
@@ -1711,12 +1743,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
 
       // Player Settings
-      leaf(
-        'Playback',
-        'Default Player',
-        'Which player plays videos',
-        const ['default player', 'debrify player', 'external', 'deovr'],
-      ),
+      leaf('Playback', 'Default Player', 'Which player plays videos', const [
+        'default player',
+        'debrify player',
+        'external',
+        'deovr',
+      ]),
       leaf(
         'Playback',
         'Default Subtitle language',
@@ -2439,10 +2471,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
                   'a file won\'t be included — re-import the file on the other '
                   'device. Starred channels from them still travel.',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white60,
-                  ),
+                  style: const TextStyle(fontSize: 12, color: Colors.white60),
                 ),
               ),
             const SizedBox(height: 12),
@@ -2835,9 +2864,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
     if (r.iptvFavoritesAlreadyPresent > 0) {
-      notes.add(
-        '${r.iptvFavoritesAlreadyPresent} favorite(s) already present',
-      );
+      notes.add('${r.iptvFavoritesAlreadyPresent} favorite(s) already present');
     }
     if (r.iptvListsMerged > 0) {
       notes.add('${r.iptvListsMerged} existing list(s) topped up');

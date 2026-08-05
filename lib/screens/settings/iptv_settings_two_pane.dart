@@ -62,6 +62,9 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.onPickStartupChannel,
     required this.trackContinueWatching,
     required this.onToggleTrackContinueWatching,
+    this.showAppearanceSection = false,
+    this.iptvStyle = 'command',
+    this.onIptvStyleChanged,
     this.showRecordingSection = false,
     this.showEngineToggle = true,
     this.recordingEngineEnabled = true,
@@ -161,6 +164,16 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final bool trackContinueWatching;
   final ValueChanged<bool> onToggleTrackContinueWatching;
 
+  /// The Appearance rail entry + pane exist only where the IPTV cockpit does
+  /// (Android TV and desktop) — a phone or touch tablet would be picking a
+  /// look it can never see.
+  final bool showAppearanceSection;
+
+  /// Current `iptv_style` value ('command' / 'edition' / 'console'). Owned by
+  /// the host page, which persists BEFORE reflecting the change back here.
+  final String iptvStyle;
+  final ValueChanged<String>? onIptvStyleChanged;
+
   @override
   State<IptvSettingsTwoPane> createState() => IptvSettingsTwoPaneState();
 }
@@ -190,6 +203,10 @@ class _StartupDest extends _Dest {
 
 class _ContinueWatchingDest extends _Dest {
   const _ContinueWatchingDest();
+}
+
+class _AppearanceDest extends _Dest {
+  const _AppearanceDest();
 }
 
 class _RecordingDest extends _Dest {
@@ -267,9 +284,22 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return _SourceDest(widget.playlists.first.id);
   }
 
-  /// Rail entries: every source, then Add, Lists, Startup, Continue watching.
+  /// Rail entries: every source, then Add, Lists, Startup, Continue watching,
+  /// then the optional Appearance (TV/desktop only) and Recording entries.
   int get _railCount =>
-      widget.playlists.length + 4 + (widget.showRecordingSection ? 1 : 0);
+      widget.playlists.length +
+      4 +
+      (widget.showAppearanceSection ? 1 : 0) +
+      (widget.showRecordingSection ? 1 : 0);
+
+  /// Rail index of the Appearance entry — meaningful only while
+  /// [IptvSettingsTwoPane.showAppearanceSection] is true.
+  int get _appearanceIndex => widget.playlists.length + 4;
+
+  /// Rail index of the Recording entry — shifts down one when Appearance is
+  /// present. Meaningful only while showRecordingSection is true.
+  int get _recordingIndex =>
+      widget.playlists.length + 4 + (widget.showAppearanceSection ? 1 : 0);
 
   /// Grow-only, deliberately. Shrinking would dispose a node while the
   /// *previous* tree still holds a [Focus] referencing it — didUpdateWidget
@@ -362,7 +392,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _ListsDest() => widget.playlists.length + 1,
       _StartupDest() => widget.playlists.length + 2,
       _ContinueWatchingDest() => widget.playlists.length + 3,
-      _RecordingDest() => widget.playlists.length + 4,
+      _AppearanceDest() => _appearanceIndex,
+      _RecordingDest() => _recordingIndex,
     };
   }
 
@@ -375,9 +406,18 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       1 => const _ListsDest(),
       2 => const _StartupDest(),
       3 => const _ContinueWatchingDest(),
-      _ => widget.showRecordingSection
-          ? const _RecordingDest()
-          : const _ContinueWatchingDest(),
+      4 =>
+        widget.showAppearanceSection
+            ? const _AppearanceDest()
+            : widget.showRecordingSection
+            ? const _RecordingDest()
+            : const _ContinueWatchingDest(),
+      _ =>
+        widget.showRecordingSection
+            ? const _RecordingDest()
+            : widget.showAppearanceSection
+            ? const _AppearanceDest()
+            : const _ContinueWatchingDest(),
     };
   }
 
@@ -534,14 +574,36 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onFocused: () => _dest.value = const _ContinueWatchingDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(widget.playlists.length + 2),
-                onDown: widget.showRecordingSection
-                    ? () => _focusRail(widget.playlists.length + 4)
+                onDown: widget.showAppearanceSection
+                    ? () => _focusRail(_appearanceIndex)
+                    : widget.showRecordingSection
+                    ? () => _focusRail(_recordingIndex)
                     : null,
                 onRight: _enterPane,
               ),
+              if (widget.showAppearanceSection)
+                _RailEntry(
+                  focusNode: _railNodes[_appearanceIndex],
+                  icon: Icons.style_rounded,
+                  title: 'Appearance',
+                  subtitle: switch (widget.iptvStyle) {
+                    'edition' => 'First Edition',
+                    'console' => 'Master Control',
+                    _ => 'Command Center',
+                  },
+                  selected: selected == _appearanceIndex,
+                  chevron: true,
+                  onFocused: () => _dest.value = const _AppearanceDest(),
+                  onSelect: _enterPane,
+                  onUp: () => _focusRail(widget.playlists.length + 3),
+                  onDown: widget.showRecordingSection
+                      ? () => _focusRail(_recordingIndex)
+                      : null,
+                  onRight: _enterPane,
+                ),
               if (widget.showRecordingSection)
                 _RailEntry(
-                  focusNode: _railNodes[widget.playlists.length + 4],
+                  focusNode: _railNodes[_recordingIndex],
                   icon: Icons.fiber_manual_record_rounded,
                   title: 'Recording',
                   subtitle: !widget.showEngineToggle
@@ -553,11 +615,15 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                             ? 'Engine on'
                             : 'Engine on · ${widget.scheduledCount} scheduled')
                       : 'Player-tied',
-                  selected: selected == widget.playlists.length + 4,
+                  selected: selected == _recordingIndex,
                   chevron: true,
                   onFocused: () => _dest.value = const _RecordingDest(),
                   onSelect: _enterPane,
-                  onUp: () => _focusRail(widget.playlists.length + 3),
+                  onUp: () => _focusRail(
+                    widget.showAppearanceSection
+                        ? _appearanceIndex
+                        : widget.playlists.length + 3,
+                  ),
                   onDown: null,
                   onRight: _enterPane,
                 ),
@@ -599,6 +665,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _ListsDest() => _buildListsPane(),
       _StartupDest() => _buildStartupPane(),
       _ContinueWatchingDest() => _buildContinueWatchingPane(),
+      _AppearanceDest() => _buildAppearancePane(),
       _RecordingDest() => _buildRecordingPane(),
     };
     // A key per destination gives each view its own scroll position, so
@@ -611,6 +678,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         _ListsDest() => 'lists',
         _StartupDest() => 'startup',
         _ContinueWatchingDest() => 'continue-watching',
+        _AppearanceDest() => 'appearance',
         _RecordingDest() => 'recording',
       }),
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 32),
@@ -1013,7 +1081,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         const _PaneHeader(
           icon: Icons.history_toggle_off_rounded,
           title: 'Continue watching',
-          meta: 'The shelf of on-demand movies and series you have started, '
+          meta:
+              'The shelf of on-demand movies and series you have started, '
               'on Home and in IPTV.',
           badges: [],
         ),
@@ -1026,7 +1095,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               title: 'Track movies and series',
               // Says what stays behind, because "off" reading as "my resume
               // positions are gone" is the obvious wrong guess here.
-              subtitle: 'Off hides the shelf and stops adding to it. Nothing '
+              subtitle:
+                  'Off hides the shelf and stops adding to it. Nothing '
                   'is deleted, and playback still resumes where you left off',
               trailing: Switch(
                 value: widget.trackContinueWatching,
@@ -1044,6 +1114,75 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     );
   }
 
+  Widget _buildAppearancePane() {
+    var row = 0;
+    Widget styleRow({
+      required IconData icon,
+      required String value,
+      required String title,
+      required String subtitle,
+      bool isLast = false,
+    }) {
+      return _PaneRow(
+        focusNode: _paneNode(row++),
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        trailing: Radio<String>(
+          value: value,
+          groupValue: widget.iptvStyle,
+          onChanged: (v) =>
+              v == null ? null : widget.onIptvStyleChanged?.call(v),
+        ),
+        onTap: () => widget.onIptvStyleChanged?.call(value),
+        onLeft: _returnToRail,
+        isLast: isLast,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _PaneHeader(
+          icon: Icons.style_rounded,
+          title: 'Appearance',
+          meta:
+              'How the IPTV page looks on TV and desktop. Phones keep the '
+              'classic list either way.',
+          badges: [],
+        ),
+        const SizedBox(height: 20),
+        _RowGroup(
+          children: [
+            styleRow(
+              icon: Icons.grid_view_rounded,
+              value: 'command',
+              title: 'Command Center',
+              subtitle: 'The shipped cockpit — dense guide, gold focus',
+            ),
+            styleRow(
+              icon: Icons.menu_book_rounded,
+              value: 'edition',
+              title: 'First Edition',
+              subtitle:
+                  'Editorial ink and serif headlines — hairline ledger, '
+                  'ivory focus',
+            ),
+            styleRow(
+              icon: Icons.tune_rounded,
+              value: 'console',
+              title: 'Master Control',
+              subtitle:
+                  'Broadcast console — pure black, mono numerals, amber '
+                  'playhead',
+              isLast: true,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildRecordingPane() {
     var row = 0;
     return Column(
@@ -1052,7 +1191,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         const _PaneHeader(
           icon: Icons.fiber_manual_record_rounded,
           title: 'Recording',
-          meta: 'Background captures that survive zapping and leaving the '
+          meta:
+              'Background captures that survive zapping and leaving the '
               'app, plus programmes scheduled from the TV guide.',
           badges: [],
         ),
@@ -1064,14 +1204,16 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 focusNode: _paneNode(row++),
                 icon: Icons.settings_backup_restore_rounded,
                 title: 'Background recording engine',
-                subtitle: 'Off returns to player-tied recording. Uses an '
+                subtitle:
+                    'Off returns to player-tied recording. Uses an '
                     'extra connection to your provider.',
                 trailing: Switch(
                   value: widget.recordingEngineEnabled,
                   onChanged: widget.onToggleRecordingEngine,
                 ),
-                onTap: () => widget.onToggleRecordingEngine
-                    ?.call(!widget.recordingEngineEnabled),
+                onTap: () => widget.onToggleRecordingEngine?.call(
+                  !widget.recordingEngineEnabled,
+                ),
                 onLeft: _returnToRail,
                 isLast: !widget.recordingEngineEnabled,
               ),

@@ -173,6 +173,29 @@ flutter:
       fonts:
         - asset: assets/fonts/NotoSans-Regular.ttf
 
+  # Style fonts — the IPTV premium looks (plan/IPTV_PREMIUM_STYLES_PLAN.md).
+  # Static faces referenced by plain fontFamily strings; never via GoogleFonts.
+    - family: Fraunces72
+      fonts:
+        - asset: assets/fonts/Fraunces72pt-Regular.ttf
+        - asset: assets/fonts/Fraunces72pt-Italic.ttf
+          style: italic
+    - family: Fraunces9
+      fonts:
+        - asset: assets/fonts/Fraunces9pt-Italic.ttf
+          style: italic
+    - family: SpaceGrotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk-Bold.ttf
+          weight: 700
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

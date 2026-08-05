@@ -663,6 +663,30 @@ class StorageService {
     );
   }
 
+  static const String _iptvStyleKey = 'iptv_style';
+  static const Set<String> _iptvStyles = {'command', 'edition', 'console'};
+
+  /// IPTV cockpit look: 'command' (the shipped Command Center, the default),
+  /// 'edition' (First Edition — editorial ink/serif) or 'console' (Master
+  /// Control — black instrument). Only the TV/desktop cockpit reads it; the
+  /// phone classic layout and the touch-tablet two-pane never do. Unknown or
+  /// unset coerces to 'command' on BOTH read and write, so an old build
+  /// downgrading past a newer value can never pin a look the reader treats
+  /// as the exception.
+  static Future<String> getIptvStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_iptvStyleKey);
+    return _iptvStyles.contains(raw) ? raw! : 'command';
+  }
+
+  static Future<void> setIptvStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _iptvStyleKey,
+      _iptvStyles.contains(style) ? style : 'command',
+    );
+  }
+
   static const String _discoverLayoutKey = 'discover_layout';
 
   /// TV Discover layout: 'stage' (the focused title full-bleed with one bottom
@@ -4976,10 +5000,7 @@ class StorageService {
 
   static Future<void> setDefaultFilterDynamicRanges(List<String> ranges) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _defaultFilterDynamicRangesKey,
-      jsonEncode(ranges),
-    );
+    await prefs.setString(_defaultFilterDynamicRangesKey, jsonEncode(ranges));
   }
 
   // Debrify TV Filter Settings — scoped to Debrify TV only, deliberately

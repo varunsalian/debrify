@@ -49,6 +49,9 @@ import 'iptv_empty_state.dart';
 import 'iptv_epg_panel.dart';
 import 'iptv_command_rail.dart';
 import 'iptv_stage_panel.dart';
+import 'styles/iptv_console_widgets.dart';
+import 'styles/iptv_edition_hero.dart';
+import 'styles/iptv_style.dart';
 import '../../screens/settings/recordings_page.dart';
 import '../../services/desktop_recording_service.dart';
 import '../../services/desktop_schedule_service.dart';
@@ -149,6 +152,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       'iptv_ios_recording_notice_dismissed';
   IptvPlaylist? _selectedPlaylist;
   bool _settingsLoaded = false;
+
+  /// The cockpit's visual style (`iptv_style` pref). Only the TV/desktop
+  /// cockpit branch consults it — classic and touch-tablet layouts ignore it.
+  IptvStyle _iptvStyle = IptvStyle.command;
 
   /// Desktop gets the full two-pane experience too: source rail, embedded
   /// live preview, quiet filters — hover previews, click plays.
@@ -763,6 +770,10 @@ class IptvResultsViewState extends State<IptvResultsView>
   Future<void> _loadSettings({bool forceReload = false}) async {
     var playlists = await StorageService.getIptvPlaylists();
     final defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
+    // Cockpit look. Read on every pass so returning from Settings (which
+    // re-enters here) adopts a changed style in the same setState as
+    // everything else — no separate listener, no style flash.
+    final iptvStyle = IptvStyle.fromPref(await StorageService.getIptvStyle());
 
     // Seed the starter playlist on first run (if not already initialized).
     // Deliberately NOT marked as the stored default: "Default playlist" is an
@@ -881,6 +892,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
 
     setState(() {
+      _iptvStyle = iptvStyle;
       _sourceCounts = sourceCounts;
       _playlists = playlists;
       _settingsLoaded = true;
@@ -4242,7 +4254,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (!kIsWeb && Platform.isAndroid) {
       // needs_permission counts as available — the affordances are how the
       // pre-Q storage grant gets requested in the first place.
-      can = await LiveRecordingService.engineEnabled() &&
+      can =
+          await LiveRecordingService.engineEnabled() &&
           (await LiveRecordingService.engineSupport()) != 'unsupported';
     } else {
       can = DesktopRecordingService.instance.isSupported;
@@ -4291,11 +4304,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   void _openScheduledRecordings() {
     unawaited(
       Navigator.of(context)
-          .push(
-            MaterialPageRoute<void>(
-              builder: (_) => const RecordingsPage(),
-            ),
-          )
+          .push(MaterialPageRoute<void>(builder: (_) => const RecordingsPage()))
           .then((_) {
             unawaited(_refreshScheduledCount());
             // A capture stopped inside the hub must flip the stage's
@@ -4518,8 +4527,9 @@ class IptvResultsViewState extends State<IptvResultsView>
       unawaited(() async {
         final message = await _scheduleProgrammeFromStage(channel, programme);
         if (message != null && mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(message)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         }
       }());
     };
@@ -4556,7 +4566,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     String clock(DateTime t) => MaterialLocalizations.of(
       context,
     ).formatTimeOfDay(TimeOfDay.fromDateTime(t));
-    final airsNow = !programme.start.isAfter(DateTime.now()) &&
+    final airsNow =
+        !programme.start.isAfter(DateTime.now()) &&
         programme.stop.isAfter(DateTime.now());
     final confirmed = await showDialog<bool>(
       context: context,
@@ -4571,7 +4582,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           '${channel.name} · ${clock(programme.start)} – '
           '${clock(programme.stop)}'
           '${airsNow ? '\n\nAlready airing — records the rest, '
-              'from now until it ends.' : ''}',
+                    'from now until it ends.' : ''}',
           style: const TextStyle(color: Colors.white70, height: 1.4),
         ),
         actions: [
@@ -4931,21 +4942,53 @@ class IptvResultsViewState extends State<IptvResultsView>
           offstage: scheduleChannel != null,
           child: ExcludeFocus(
             excluding: scheduleChannel != null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 14, 24, 4),
-                  child: _buildQuietFilters(),
-                ),
-                Expanded(
-                  child: _buildContent(
-                    tvPane: true,
-                    touchSelector: touchSelector,
-                    cockpit: cockpit,
+            // The LayoutBuilder is inside the Stack (bounded), so the styled
+            // branches can gate their display inserts on the real guide
+            // height. The command branch below it is the shipped tree,
+            // untouched.
+            child: LayoutBuilder(
+              builder: (context, gc) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 14, 24, 4),
+                    child: _buildQuietFilters(),
                   ),
-                ),
-              ],
+                  // First Edition's editorial hero — display-only (no focus
+                  // nodes), inside the Offstage subtree so the schedule pane
+                  // covers it. Gate = every vertical consumer at worst case:
+                  // filter line ~50 + hero 128 + progressive-status line ~24
+                  // + grid top pad 8 + 4 tall EPG rows (4x118) + 3 gaps
+                  // (3x4) = 694 → 700 with margin, so >=4 full rows always
+                  // survive the insert.
+                  if (cockpit &&
+                      _iptvStyle == IptvStyle.edition &&
+                      gc.maxHeight >= 700)
+                    IptvEditionHero(
+                      channel: _previewShown,
+                      tokens: IptvStyleTokens.edition,
+                      suspended: scheduleChannel != null,
+                    ),
+                  // Master Control's 6-hour strip — same display-only rules
+                  // as the hero. Same budget with its own 96px height:
+                  // 50 + 96 + 24 + 8 + 472 + 12 = 662 → 670 with margin.
+                  if (cockpit &&
+                      _iptvStyle == IptvStyle.console &&
+                      gc.maxHeight >= 670)
+                    IptvConsoleTimeline(
+                      channel: _previewShown,
+                      tokens: IptvStyleTokens.console,
+                      suspended: scheduleChannel != null,
+                    ),
+                  Expanded(
+                    child: _buildContent(
+                      tvPane: true,
+                      touchSelector: touchSelector,
+                      cockpit: cockpit,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -4974,13 +5017,15 @@ class IptvResultsViewState extends State<IptvResultsView>
         300.0,
         480.0,
       );
-      return Row(
+      final cockpitTokens = IptvStyleTokens.of(_iptvStyle);
+      final cockpitRow = Row(
         key: const ValueKey('iptv-cockpit'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
             width: railW,
             child: IptvCommandRail(
+              tokens: cockpitTokens,
               playlists: _playlists,
               selectedPlaylist: _selectedPlaylist,
               customLists: _lists,
@@ -4999,10 +5044,56 @@ class IptvResultsViewState extends State<IptvResultsView>
               showScheduled: _pageCanRecord,
             ),
           ),
-          Expanded(child: guideStack(cockpit: true)),
+          Expanded(
+            // Styled looks paint the guide column's background HERE, not as
+            // one sheet under the whole cockpit: the stage's RepaintBoundary
+            // is its own compositing layer, so the preview's BlendMode.clear
+            // hole cannot erase paint living in an ancestor layer — a page-
+            // wide ColoredBox turns the live underlay video into an opaque
+            // block (frozen frame + audio-only on TV). The rail and status
+            // bar paint their own; the stage's panel color already lives
+            // INSIDE the boundary where the hole clears it.
+            child: cockpitTokens == null
+                ? guideStack(cockpit: true)
+                : ColoredBox(
+                    color: cockpitTokens.bg,
+                    child: guideStack(cockpit: true),
+                  ),
+          ),
           SizedBox(width: cockpitStageW, child: _buildCockpitStage()),
         ],
       );
+      // NO ColoredBox around the cockpit row — see the guide-column note
+      // above (the underlay hole must composite against transparency all the
+      // way down). Master Control adds its status strip above the cockpit —
+      // the Row stays bounded inside the Expanded.
+      if (cockpitTokens == null) return cockpitRow;
+      if (_iptvStyle == IptvStyle.console) {
+        return Column(
+          children: [
+            IptvConsoleStatusBar(
+              tokens: cockpitTokens,
+              sourceName: _selectedPlaylist?.name ?? 'IPTV',
+              channelCount: _filteredChannels.length,
+              recCount: (!kIsWeb && Platform.isAndroid)
+                  ? _androidRecordingsByUrl.length
+                  : DesktopRecordingService.instance.isSupported
+                  ? DesktopRecordingService.instance.captures.length
+                  : 0,
+              schedCount: _scheduledCount,
+              statusText: _chipState == _CatalogChipState.hidden
+                  ? null
+                  : _chipMessage,
+              // The Android url→task map refreshes on selected events only;
+              // the bar's tick reconciles it so REC can't sit stale while
+              // focus is parked (no-op off Android / when recording is off).
+              onTick: () => unawaited(_refreshAndroidRecordingState()),
+            ),
+            Expanded(child: cockpitRow),
+          ],
+        );
+      }
+      return cockpitRow;
     }
 
     // Touch tablet keeps the shipped preview-left arrangement unchanged.
@@ -5037,12 +5128,25 @@ class IptvResultsViewState extends State<IptvResultsView>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: ColoredBox(
-                    color: const Color(0xFF0B0914),
+                    color:
+                        IptvStyleTokens.of(_iptvStyle)?.panel ??
+                        const Color(0xFF0B0914),
                     child: ch == null
                         ? const SizedBox.expand()
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              // UNDERLAY RULE (device-verified 2026-08-05):
+                              // the preview subtree is handed over UNWRAPPED,
+                              // byte-identical to the shipped Command Center
+                              // path. Wrapping it (a CustomPaint, a Column, a
+                              // foregroundDecoration Container) froze the
+                              // underlay video on Android TV — frozen frame +
+                              // audio-only. Styled chrome therefore lives as
+                              // SIBLINGS: the caption below is a plain child
+                              // of this ALREADY-EXISTING Column, and the
+                              // brackets/frame paint inside the preview's own
+                              // Stack next to the status chip.
                               _buildPreviewStage(ch, epoch),
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(
@@ -5070,6 +5174,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                                         : null;
                                     return IptvStagePanel(
                                       key: ValueKey('stage-${ch.url}'),
+                                      tokens: IptvStyleTokens.of(_iptvStyle),
                                       channel: ch,
                                       isTelevision: widget.isTelevision,
                                       isFavorited: _favoriteUrls.contains(
@@ -5150,7 +5255,10 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// Compact identity header for the cockpit: logo chip, CH number + name,
   /// group/resolution sub-line, then the shared now/next EPG card.
   Widget _cockpitIdentity(IptvChannel channel) {
-    final brand = brandAccentFor(channel.name);
+    final t = IptvStyleTokens.of(_iptvStyle);
+    final isConsole = _iptvStyle == IptvStyle.console;
+    // Styled looks never paint the brand color.
+    final brand = t == null ? brandAccentFor(channel.name) : Colors.transparent;
     final resMatch = _railResExp.firstMatch(channel.name);
     final resolution = resMatch?.group(1)?.toLowerCase();
     final displayName = resMatch == null
@@ -5172,14 +5280,23 @@ class IptvResultsViewState extends State<IptvResultsView>
             Container(
               width: 34,
               height: 34,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                color: Color.alphaBlend(
-                  brand.withValues(alpha: 0.18),
-                  const Color(0xFF171B19),
-                ),
-              ),
+              decoration: t == null
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                      color: Color.alphaBlend(
+                        brand.withValues(alpha: 0.18),
+                        const Color(0xFF171B19),
+                      ),
+                    )
+                  : BoxDecoration(
+                      shape: isConsole ? BoxShape.rectangle : BoxShape.circle,
+                      borderRadius: isConsole ? BorderRadius.circular(6) : null,
+                      border: Border.all(color: t.hairline2),
+                      color: t.fg.withValues(alpha: 0.03),
+                    ),
               clipBehavior: Clip.antiAlias,
               child: Padding(
                 padding: const EdgeInsets.all(5),
@@ -5194,13 +5311,13 @@ class IptvResultsViewState extends State<IptvResultsView>
                         errorWidget: (_, __, ___) => Icon(
                           Icons.live_tv_rounded,
                           size: 16,
-                          color: brand.withValues(alpha: 0.85),
+                          color: t?.fgDim ?? brand.withValues(alpha: 0.85),
                         ),
                       )
                     : Icon(
                         Icons.live_tv_rounded,
                         size: 16,
-                        color: brand.withValues(alpha: 0.85),
+                        color: t?.fgDim ?? brand.withValues(alpha: 0.85),
                       ),
               ),
             ),
@@ -5215,23 +5332,42 @@ class IptvResultsViewState extends State<IptvResultsView>
                         : 'CH ${channel.channelNumber}  $displayName',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w800,
-                      height: 1.1,
-                    ),
+                    style: t == null
+                        ? const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          )
+                        : TextStyle(
+                            color: t.fg,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            height: 1.1,
+                            fontFamily: t.nameFamily.isEmpty
+                                ? null
+                                : t.nameFamily,
+                          ),
                   ),
                   if (subParts.isNotEmpty)
                     Text(
                       subParts.join('  •  '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: t == null
+                          ? TextStyle(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                            )
+                          : TextStyle(
+                              color: t.fgDim,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: t.monoFamily.isEmpty
+                                  ? null
+                                  : t.monoFamily,
+                            ),
                     ),
                 ],
               ),
@@ -5239,7 +5375,12 @@ class IptvResultsViewState extends State<IptvResultsView>
           ],
         ),
         const SizedBox(height: 8),
-        IptvRailEpgCard(channel: channel, stageOverlay: true, dense: true),
+        IptvRailEpgCard(
+          channel: channel,
+          stageOverlay: true,
+          dense: true,
+          tokens: t,
+        ),
       ],
     );
   }
@@ -5740,6 +5881,13 @@ class IptvResultsViewState extends State<IptvResultsView>
                     _IptvStageChip(channel: ch, showing: showing),
               ),
             ),
+            // NO styled chrome over the video — final, device-verified rule.
+            // Wrapping the preview froze the underlay; even full-rect
+            // SIBLING overlays (Positioned.fill brackets/frame painted above
+            // the hole, the status-chip pattern) made it flicker on real TV
+            // hardware. The styles decorate the panel AROUND this stack only;
+            // the shipped chip/identity are the sole overlays. Do not add
+            // paint over the preview rect without an on-device test.
           ],
         ),
       ),
@@ -6021,6 +6169,15 @@ class IptvResultsViewState extends State<IptvResultsView>
                       poster: _showsPosterRows,
                       epg: epgRows,
                       twoLineName: cockpit && !_showsPosterRows,
+                      // Styled looks exist only in the cockpit, and only for
+                      // live/EPG rows — VOD/series posters keep the shipped
+                      // layout in every style (plan: posters are untouched).
+                      style: cockpit && !_showsPosterRows
+                          ? _iptvStyle
+                          : IptvStyle.command,
+                      tileWidth:
+                          (crossExtent - (columns - 1) * crossAxisSpacing) /
+                          columns,
                     );
                   },
                 ),

@@ -157,6 +157,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   // Continue watching
   bool _trackContinueWatching = true;
+
+  // Cockpit appearance (`iptv_style`). Shown only where the cockpit exists —
+  // Android TV and desktop; a phone or touch tablet would be picking a look
+  // it can never see.
+  String _iptvStyle = 'command';
+  static final bool _isDesktopPlatform =
+      !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+  bool get _appearanceVisible =>
+      PlatformUtil.isAndroidTvCached || _isDesktopPlatform;
+
   bool _loading = true;
   bool _isAdding = false;
   // Ids of playlists currently being refreshed (re-fetched from source)
@@ -388,6 +398,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (mounted) setState(() => _trackContinueWatching = value);
   }
 
+  Future<void> _setIptvStyle(String style) async {
+    // Persist BEFORE reflecting the choice: the IPTV page re-reads the pref
+    // the moment this route pops, and an unawaited write could lose that race.
+    await StorageService.setIptvStyle(style);
+    if (mounted) setState(() => _iptvStyle = style);
+  }
+
   Future<void> _pickStartupChannel() async {
     final choice = await showIptvStartupChannelPicker(context);
     if (choice == null) return;
@@ -421,6 +438,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final startupChannel = await StorageService.getStartupIptvChannel();
     final lastLive = await StorageService.getIptvLastLiveChannel();
     final trackCw = await StorageService.getIptvTrackContinueWatching();
+    final iptvStyle = await StorageService.getIptvStyle();
     final engineSupported =
         !kIsWeb &&
         Platform.isAndroid &&
@@ -449,6 +467,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _startupChannel = startupChannel;
       _lastLiveChannel = lastLive;
       _trackContinueWatching = trackCw;
+      _iptvStyle = iptvStyle;
       _recordingSectionVisible = engineSupported || desktopSched;
       _engineToggleVisible = engineSupported;
       _recordingEngineOn = recordingEngineOn;
@@ -1152,9 +1171,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     return [
       for (var i = 0; i < sources.length; i++)
         ListTile(
-          focusNode: i < _hiddenFocusNodes.length
-              ? _hiddenFocusNodes[i]
-              : null,
+          focusNode: i < _hiddenFocusNodes.length ? _hiddenFocusNodes[i] : null,
           leading: Icon(
             (_hiddenCounts[sources[i].id] ?? 0) > 0
                 ? Icons.visibility_off_rounded
@@ -1169,14 +1186,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
-          subtitle: Text(
-            switch (_hiddenCounts[sources[i].id] ?? 0) {
-              0 => 'Nothing hidden',
-              1 => '1 category hidden',
-              final n => '$n categories hidden',
-            },
-            style: TextStyle(fontSize: 12, color: kSettingsDim),
-          ),
+          subtitle: Text(switch (_hiddenCounts[sources[i].id] ?? 0) {
+            0 => 'Nothing hidden',
+            1 => '1 category hidden',
+            final n => '$n categories hidden',
+          }, style: TextStyle(fontSize: 12, color: kSettingsDim)),
           trailing: Icon(Icons.chevron_right_rounded, color: kSettingsDim2),
           onTap: () => unawaited(_openHiddenCategories(sources[i])),
         ),
@@ -1684,8 +1698,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       onEdit: _editPlaylist,
       onDelete: _removePlaylist,
       onCreateList: _createList,
-      onManageHidden: (playlist) =>
-          unawaited(_openHiddenCategories(playlist)),
+      onManageHidden: (playlist) => unawaited(_openHiddenCategories(playlist)),
       hiddenCounts: _hiddenCounts,
       onFocusFirstFormField: () =>
           _focusAndReveal(switch (_tabController.index) {
@@ -1702,6 +1715,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       onPickStartupChannel: _pickStartupChannel,
       trackContinueWatching: _trackContinueWatching,
       onToggleTrackContinueWatching: _setTrackContinueWatching,
+      showAppearanceSection: _appearanceVisible,
+      iptvStyle: _iptvStyle,
+      onIptvStyleChanged: (v) => unawaited(_setIptvStyle(v)),
       showRecordingSection: _recordingSectionVisible,
       showEngineToggle: _engineToggleVisible,
       recordingEngineEnabled: _recordingEngineOn,
@@ -1926,6 +1942,56 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             ),
           ),
           const SizedBox(height: 24),
+
+          // Appearance — only where the cockpit renders (Android TV, desktop).
+          if (_appearanceVisible) ...[
+            const SettingsSectionLabel('Appearance'),
+            Text(
+              'How the IPTV page looks on TV and desktop. Phones keep the '
+              'classic list either way.',
+              style: TextStyle(fontSize: 12, color: kSettingsDim),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    title: const Text('Command Center'),
+                    subtitle: const Text(
+                      'The shipped cockpit — dense guide, gold focus',
+                    ),
+                    value: 'command',
+                    groupValue: _iptvStyle,
+                    onChanged: (v) =>
+                        v == null ? null : unawaited(_setIptvStyle(v)),
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('First Edition'),
+                    subtitle: const Text(
+                      'Editorial ink and serif headlines — hairline ledger, '
+                      'ivory focus',
+                    ),
+                    value: 'edition',
+                    groupValue: _iptvStyle,
+                    onChanged: (v) =>
+                        v == null ? null : unawaited(_setIptvStyle(v)),
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Master Control'),
+                    subtitle: const Text(
+                      'Broadcast console — pure black, mono numerals, amber '
+                      'playhead',
+                    ),
+                    value: 'console',
+                    groupValue: _iptvStyle,
+                    onChanged: (v) =>
+                        v == null ? null : unawaited(_setIptvStyle(v)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
 
           // Recording — only where the engine can actually run (Android 10+).
           if (_recordingSectionVisible) ...[

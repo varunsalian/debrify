@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_epg_service.dart';
 import '../../utils/tv_keys.dart';
+import 'styles/iptv_style.dart';
 import '../browse/brand_accent.dart';
 
 /// The Command Center stage's lower half: identity + now/next, an action row
@@ -49,17 +50,21 @@ class IptvStagePanel extends StatefulWidget {
 
   /// Schedule a future programme; resolves to a user-facing result message.
   final Future<String?> Function(IptvChannel channel, EpgProgramme programme)?
-      onScheduleProgramme;
+  onScheduleProgramme;
 
   /// Play an archived programme (Xtream catchup) — the existing page path.
   final void Function(IptvChannel channel, EpgProgramme programme)?
-      onPlayProgramme;
+  onPlayProgramme;
 
   /// LEFT anywhere in the panel returns focus to the guide — to the SAME row
   /// the stage was opened from (the caller knows it), so the preview never
   /// retunes on the way back. Geometric traversal would pick whichever row is
   /// nearest and reload the stream for it.
   final VoidCallback? onExitLeft;
+
+  /// Styled-look tokens ('edition'/'console'), null = the shipped paint.
+  /// Fetching, focus wiring and row semantics are identical in every style.
+  final IptvStyleTokens? tokens;
 
   const IptvStagePanel({
     super.key,
@@ -76,6 +81,7 @@ class IptvStagePanel extends StatefulWidget {
     this.onScheduleProgramme,
     this.onPlayProgramme,
     this.onExitLeft,
+    this.tokens,
   });
 
   @override
@@ -136,12 +142,14 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
       }
     }
     if (next == null) return;
-    _boundaryTimer = Timer(next.difference(now) + const Duration(seconds: 1),
-        () {
-      if (!mounted) return;
-      setState(() {});
-      _armBoundaryTimer();
-    });
+    _boundaryTimer = Timer(
+      next.difference(now) + const Duration(seconds: 1),
+      () {
+        if (!mounted) return;
+        setState(() {});
+        _armBoundaryTimer();
+      },
+    );
   }
 
   /// Focus-settle debounce: rapid DPAD travel re-arms the timer, so only the
@@ -175,7 +183,8 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
     var nowIndex = all.indexWhere((p) => p.airsAt(now));
     if (nowIndex < 0) {
       nowIndex = all.indexWhere((p) => p.start.isAfter(now));
-      if (nowIndex < 0) return all.length <= 6 ? all : all.sublist(all.length - 6);
+      if (nowIndex < 0)
+        return all.length <= 6 ? all : all.sublist(all.length - 6);
     }
     final start = (nowIndex - 1).clamp(0, all.length);
     return all.sublist(start, (start + 6).clamp(0, all.length));
@@ -186,14 +195,17 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
     final channel = widget.channel;
     final now = DateTime.now();
     final schedule = _schedule;
-    final window = schedule == null ? const <EpgProgramme>[] : _visibleWindow(schedule);
+    final window = schedule == null
+        ? const <EpgProgramme>[]
+        : _visibleWindow(schedule);
 
     // Which rows are focusable determines the containment edges: the LAST
     // actionable row swallows DOWN; with none, the button strip does.
     var lastActionableIndex = -1;
     for (var i = 0; i < window.length; i++) {
       final p = window[i];
-      final actionable = p.airsAt(now) ||
+      final actionable =
+          p.airsAt(now) ||
           (widget.onPlayProgramme != null &&
               !p.stop.isAfter(now) &&
               IptvEpgService.isCatchupAvailable(channel, p)) ||
@@ -209,6 +221,7 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
           child: _StageActions(
+            tokens: widget.tokens,
             isTelevision: widget.isTelevision,
             isFavorited: widget.isFavorited,
             canRecord: widget.canRecord && widget.onRecordNow != null,
@@ -238,12 +251,22 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Text(
                           'TODAY',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.35),
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.4,
-                          ),
+                          style: widget.tokens == null
+                              ? TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.35),
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.4,
+                                )
+                              : TextStyle(
+                                  color: widget.tokens!.fgFaint,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 2.4,
+                                  fontFamily: widget.tokens!.monoFamily.isEmpty
+                                      ? null
+                                      : widget.tokens!.monoFamily,
+                                ),
                         ),
                       ),
                       Expanded(
@@ -253,7 +276,9 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
                             ? Text(
                                 'No guide data',
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.30),
+                                  color:
+                                      widget.tokens?.fgFaint ??
+                                      Colors.white.withValues(alpha: 0.30),
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -265,12 +290,13 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
                                 children: [
                                   for (var i = 0; i < window.length; i++)
                                     _StageScheduleRow(
+                                      tokens: widget.tokens,
                                       programme: window[i],
                                       isNow: window[i].airsAt(now),
                                       isPast: !window[i].stop.isAfter(now),
                                       isTelevision: widget.isTelevision,
-                                      replayable: widget.onPlayProgramme !=
-                                              null &&
+                                      replayable:
+                                          widget.onPlayProgramme != null &&
                                           IptvEpgService.isCatchupAvailable(
                                             channel,
                                             window[i],
@@ -279,11 +305,11 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
                                       // "capture the rest, stop at its end" —
                                       // the schedule backend late-joins a
                                       // past start within seconds.
-                                      recordable: widget.canRecord &&
+                                      recordable:
+                                          widget.canRecord &&
                                           widget.onScheduleProgramme != null &&
                                           window[i].stop.isAfter(now),
-                                      isLastFocusable:
-                                          i == lastActionableIndex,
+                                      isLastFocusable: i == lastActionableIndex,
                                       onExitLeft: widget.onExitLeft,
                                       onActivate: () =>
                                           _onRowActivate(window[i], now),
@@ -301,14 +327,14 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
 
   void _onRowActivate(EpgProgramme p, DateTime now) {
     final channel = widget.channel;
-    final schedule =
-        widget.canRecord ? widget.onScheduleProgramme : null;
+    final schedule = widget.canRecord ? widget.onScheduleProgramme : null;
     void record() {
       unawaited(() async {
         final message = await schedule!(channel, p);
         if (message == null || !mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }());
     }
 
@@ -325,8 +351,7 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
       record();
       return;
     }
-    if (!p.stop.isAfter(now) &&
-        IptvEpgService.isCatchupAvailable(channel, p)) {
+    if (!p.stop.isAfter(now) && IptvEpgService.isCatchupAvailable(channel, p)) {
       widget.onPlayProgramme?.call(channel, p);
       return;
     }
@@ -337,6 +362,7 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
 // ── Actions row ─────────────────────────────────────────────────────────────
 
 class _StageActions extends StatelessWidget {
+  final IptvStyleTokens? tokens;
   final bool isTelevision;
   final bool isFavorited;
   final bool canRecord;
@@ -350,6 +376,7 @@ class _StageActions extends StatelessWidget {
   final VoidCallback? onExitLeft;
 
   const _StageActions({
+    required this.tokens,
     required this.isTelevision,
     required this.isFavorited,
     required this.canRecord,
@@ -365,55 +392,78 @@ class _StageActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final console = tokens != null && tokens!.monoFamily.isNotEmpty;
     // Content-sized buttons at one shared height, no stretching: an Expanded
-    // Watch next to icon squares read lopsided.
-    return Row(
-      children: [
-        _StageButton(
-          label: isSeries ? 'Open' : 'Watch',
-          icon: isSeries
-              ? Icons.video_library_rounded
-              : Icons.play_arrow_rounded,
-          primary: true,
-          onPressed: onWatch,
-          swallowDown: swallowDown,
-          onLeft: onExitLeft,
-        ),
-        if (canRecord && !isSeries) ...[
-          const SizedBox(width: 7),
-          _StageButton(
-            label: isRecordingThis ? 'Stop' : 'Record',
-            icon: isRecordingThis
-                ? Icons.stop_rounded
-                : Icons.fiber_manual_record_rounded,
-            iconColor: const Color(0xFFF43F5E),
-            emphasized: isRecordingThis,
-            onPressed: onRecordNow!,
-            swallowDown: swallowDown,
-            onLeft: onExitLeft,
-          ),
-        ],
-        if (onToggleFavorite != null) ...[
-          const SizedBox(width: 7),
-          _StageButton(
-            icon: isFavorited ? Icons.star_rounded : Icons.star_border_rounded,
-            iconColor:
-                isFavorited ? const Color(0xFFF5C042) : Colors.white70,
-            onPressed: onToggleFavorite!,
-            swallowDown: swallowDown,
-            onLeft: onExitLeft,
-          ),
-        ],
-        if (onOpenFullSchedule != null) ...[
-          const SizedBox(width: 7),
-          _StageButton(
-            icon: Icons.calendar_view_day_rounded,
-            onPressed: onOpenFullSchedule!,
-            swallowDown: swallowDown,
-            onLeft: onExitLeft,
-          ),
-        ],
-      ],
+    // Watch next to icon squares read lopsided. Styled buttons are wider
+    // than the shipped ones (pills, letterspacing), so below ~350px they
+    // switch to a compact cut — the stage can legitimately be 300px.
+    return LayoutBuilder(
+      builder: (context, c) {
+        final compact = tokens != null && c.maxWidth < 390;
+        final gap = SizedBox(width: compact ? 4 : 7);
+        return Row(
+          children: [
+            _StageButton(
+              tokens: tokens,
+              compact: compact,
+              label: isSeries ? 'Open' : 'Watch',
+              icon: isSeries
+                  ? Icons.video_library_rounded
+                  : Icons.play_arrow_rounded,
+              primary: true,
+              onPressed: onWatch,
+              swallowDown: swallowDown,
+              onLeft: onExitLeft,
+            ),
+            if (canRecord && !isSeries) ...[
+              gap,
+              _StageButton(
+                tokens: tokens,
+                compact: compact,
+                label: isRecordingThis ? 'Stop' : 'Record',
+                icon: isRecordingThis
+                    ? Icons.stop_rounded
+                    : Icons.fiber_manual_record_rounded,
+                iconColor: tokens?.rec ?? const Color(0xFFF43F5E),
+                emphasized: isRecordingThis,
+                onPressed: onRecordNow!,
+                swallowDown: swallowDown,
+                onLeft: onExitLeft,
+              ),
+            ],
+            if (onToggleFavorite != null) ...[
+              gap,
+              _StageButton(
+                tokens: tokens,
+                compact: compact,
+                // Master Control speaks in mono commands, not bare glyphs.
+                label: console && !compact ? 'Fav' : null,
+                icon: isFavorited
+                    ? Icons.star_rounded
+                    : Icons.star_border_rounded,
+                iconColor: tokens == null
+                    ? (isFavorited ? const Color(0xFFF5C042) : Colors.white70)
+                    : (isFavorited ? tokens!.accent : tokens!.fgMid),
+                onPressed: onToggleFavorite!,
+                swallowDown: swallowDown,
+                onLeft: onExitLeft,
+              ),
+            ],
+            if (onOpenFullSchedule != null) ...[
+              gap,
+              _StageButton(
+                tokens: tokens,
+                compact: compact,
+                label: console && !compact ? 'Guide' : null,
+                icon: Icons.calendar_view_day_rounded,
+                onPressed: onOpenFullSchedule!,
+                swallowDown: swallowDown,
+                onLeft: onExitLeft,
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -421,6 +471,10 @@ class _StageActions extends StatelessWidget {
 /// One focus-visible action. Custom rather than FilledButton so the TV focus
 /// ring matches the house gold outline instead of Material's subtle overlay.
 class _StageButton extends StatefulWidget {
+  final IptvStyleTokens? tokens;
+
+  /// Tight paddings/type for narrow styled stages. Legacy paint ignores it.
+  final bool compact;
   final String? label;
   final IconData icon;
   final Color? iconColor;
@@ -439,6 +493,8 @@ class _StageButton extends StatefulWidget {
   final VoidCallback? onLeft;
 
   const _StageButton({
+    this.tokens,
+    this.compact = false,
     this.label,
     required this.icon,
     this.iconColor,
@@ -459,53 +515,59 @@ class _StageButtonState extends State<_StageButton> {
   @override
   Widget build(BuildContext context) {
     const gold = Color(0xFFF5C042);
-    final body = Container(
-      height: 38,
-      padding: EdgeInsets.symmetric(horizontal: widget.label == null ? 10 : 13),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        gradient: widget.primary
-            ? const LinearGradient(
-                colors: [Color(0xFF4F74FF), Color(0xFF8A5CFF)],
-              )
-            : null,
-        color: widget.primary
-            ? null
-            : widget.emphasized
-            ? const Color(0xFFF43F5E).withValues(alpha: 0.14)
-            : Colors.white.withValues(alpha: 0.06),
-        border: Border.all(
-          color: _focused
-              ? gold
-              : widget.emphasized
-              ? const Color(0xFFF43F5E).withValues(alpha: 0.55)
-              : Colors.white.withValues(alpha: widget.primary ? 0.0 : 0.10),
-          width: _focused ? 2 : 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            widget.icon,
-            size: 17,
-            color: widget.iconColor ?? Colors.white,
-          ),
-          if (widget.label != null) ...[
-            const SizedBox(width: 6),
-            Text(
-              widget.label!,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
+    final body = widget.tokens != null
+        ? _styledBody(widget.tokens!)
+        : Container(
+            height: 38,
+            padding: EdgeInsets.symmetric(
+              horizontal: widget.label == null ? 10 : 13,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              gradient: widget.primary
+                  ? const LinearGradient(
+                      colors: [Color(0xFF4F74FF), Color(0xFF8A5CFF)],
+                    )
+                  : null,
+              color: widget.primary
+                  ? null
+                  : widget.emphasized
+                  ? const Color(0xFFF43F5E).withValues(alpha: 0.14)
+                  : Colors.white.withValues(alpha: 0.06),
+              border: Border.all(
+                color: _focused
+                    ? gold
+                    : widget.emphasized
+                    ? const Color(0xFFF43F5E).withValues(alpha: 0.55)
+                    : Colors.white.withValues(
+                        alpha: widget.primary ? 0.0 : 0.10,
+                      ),
+                width: _focused ? 2 : 1,
               ),
             ),
-          ],
-        ],
-      ),
-    );
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  widget.icon,
+                  size: 17,
+                  color: widget.iconColor ?? Colors.white,
+                ),
+                if (widget.label != null) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    widget.label!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
@@ -540,11 +602,89 @@ class _StageButtonState extends State<_StageButton> {
       ),
     );
   }
+
+  /// Styled (edition/console) button paint. Same height and behavior; the
+  /// focus cue is an OUTER ring separated by a hairline gap, so a paper-
+  /// filled primary can still show a paper ring. Edition = pills, console =
+  /// squared mono commands.
+  Widget _styledBody(IptvStyleTokens t) {
+    final console = t.monoFamily.isNotEmpty;
+    final radius = BorderRadius.circular(console ? 6 : 99);
+    final mono = console ? t.monoFamily : null;
+    final Color fill;
+    final Color fg;
+    final Border? border;
+    if (widget.primary) {
+      fill = t.fg;
+      fg = t.bg;
+      border = null;
+    } else if (widget.emphasized) {
+      fill = t.rec.withValues(alpha: 0.12);
+      fg = t.rec;
+      border = Border.all(color: t.rec.withValues(alpha: 0.5));
+    } else {
+      fill = Colors.transparent;
+      fg = t.fgMid;
+      border = Border.all(color: t.hairline2);
+    }
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(console ? 8 : 99),
+        border: Border.all(
+          color: _focused ? t.accent : Colors.transparent,
+          width: 2,
+        ),
+      ),
+      padding: const EdgeInsets.all(1.5),
+      child: Container(
+        height: 34,
+        padding: EdgeInsets.symmetric(
+          horizontal: widget.compact
+              ? (widget.label == null ? 7 : 10)
+              : (widget.label == null ? 9 : 14),
+        ),
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          color: fill,
+          border: border,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              widget.icon,
+              size: 16,
+              color: widget.primary
+                  ? t.bg
+                  : widget.emphasized
+                  ? t.rec
+                  : (widget.iconColor ?? fg),
+            ),
+            if (widget.label != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                console ? widget.label!.toUpperCase() : widget.label!,
+                style: TextStyle(
+                  color: fg,
+                  fontSize: widget.compact ? 10.5 : (console ? 11 : 12.5),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: widget.compact ? 0.8 : (console ? 1.6 : 0.3),
+                  fontFamily: mono,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Schedule rows ───────────────────────────────────────────────────────────
 
 class _StageScheduleRow extends StatefulWidget {
+  final IptvStyleTokens? tokens;
   final EpgProgramme programme;
   final bool isNow;
   final bool isPast;
@@ -559,6 +699,7 @@ class _StageScheduleRow extends StatefulWidget {
   final VoidCallback onActivate;
 
   const _StageScheduleRow({
+    this.tokens,
     required this.programme,
     required this.isNow,
     required this.isPast,
@@ -578,8 +719,8 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
   bool _focused = false;
 
   String _clock(BuildContext context, DateTime t) => MaterialLocalizations.of(
-        context,
-      ).formatTimeOfDay(TimeOfDay.fromDateTime(t), alwaysUse24HourFormat: true);
+    context,
+  ).formatTimeOfDay(TimeOfDay.fromDateTime(t), alwaysUse24HourFormat: true);
 
   @override
   Widget build(BuildContext context) {
@@ -589,35 +730,60 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
         ? (widget.replayable ? 0.7 : 0.35)
         : (widget.isNow ? 1.0 : 0.82);
 
+    final t = widget.tokens;
+    final mono = (t != null && t.monoFamily.isNotEmpty) ? t.monoFamily : null;
     final row = Container(
       height: 30,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(7),
-        color: _focused
-            ? const Color(0xFF1A1F35)
-            : widget.isNow
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent,
-        border: Border.all(
-          color: _focused ? const Color(0xFFF5C042) : Colors.transparent,
-          width: 1.5,
-        ),
-      ),
+      decoration: t == null
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(7),
+              color: _focused
+                  ? const Color(0xFF1A1F35)
+                  : widget.isNow
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.transparent,
+              border: Border.all(
+                color: _focused ? const Color(0xFFF5C042) : Colors.transparent,
+                width: 1.5,
+              ),
+            )
+          : BoxDecoration(
+              color: _focused ? t.focusTint : Colors.transparent,
+              border: Border(
+                left: BorderSide(
+                  color: _focused ? t.accent : Colors.transparent,
+                  width: 2,
+                ),
+                bottom: BorderSide(color: t.hairline),
+              ),
+            ),
       child: Row(
         children: [
           SizedBox(
             width: 42,
             child: Text(
               _clock(context, p.start),
-              style: TextStyle(
-                color: widget.isNow
-                    ? const Color(0xFFF5C042)
-                    : Colors.white.withValues(alpha: widget.isPast ? 0.3 : 0.5),
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+              style: t == null
+                  ? TextStyle(
+                      color: widget.isNow
+                          ? const Color(0xFFF5C042)
+                          : Colors.white.withValues(
+                              alpha: widget.isPast ? 0.3 : 0.5,
+                            ),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    )
+                  : TextStyle(
+                      color: widget.isNow
+                          ? (mono != null ? t.accent : t.fg)
+                          : (widget.isPast ? t.fgFaint : t.fgDim),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: mono,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
             ),
           ),
           Expanded(
@@ -625,22 +791,41 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
               p.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: titleAlpha),
-                fontSize: 12,
-                fontWeight: widget.isNow ? FontWeight.w700 : FontWeight.w500,
-              ),
+              style: t == null
+                  ? TextStyle(
+                      color: Colors.white.withValues(alpha: titleAlpha),
+                      fontSize: 12,
+                      fontWeight: widget.isNow
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    )
+                  : TextStyle(
+                      color: widget.isPast
+                          ? (widget.replayable ? t.fgDim : t.fgFaint)
+                          : (widget.isNow ? t.fg : t.fgMid),
+                      fontSize: 12,
+                      fontWeight: widget.isNow
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                    ),
             ),
           ),
-          if (widget.isNow) const _Tag('NOW', Color(0xFF22C55E)),
+          if (widget.isNow)
+            _Tag(
+              'NOW',
+              t == null
+                  ? const Color(0xFF22C55E)
+                  // Console's amber owns "now"; edition keeps its sage live.
+                  : (mono != null ? t.accent : t.live),
+            ),
           if (widget.replayable)
-            _Tag('REPLAY', Colors.white.withValues(alpha: 0.55)),
+            _Tag('REPLAY', t?.fgDim ?? Colors.white.withValues(alpha: 0.55)),
           // A chip that reads as the button it is — the old 8px "REC" text
           // looked like metadata, so nobody knew the rows record. On the
           // NOW row it sits beside the NOW tag: "record the rest".
           if (widget.recordable) ...[
             if (widget.isNow) const SizedBox(width: 5),
-            _RecordChip(emphasized: _focused),
+            _RecordChip(emphasized: _focused, recColor: t?.rec),
           ],
         ],
       ),
@@ -689,11 +874,14 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
 /// no animations (TV).
 class _RecordChip extends StatelessWidget {
   final bool emphasized;
-  const _RecordChip({required this.emphasized});
+
+  /// Styled looks pass their own signal red; null = the shipped color.
+  final Color? recColor;
+  const _RecordChip({required this.emphasized, this.recColor});
 
   @override
   Widget build(BuildContext context) {
-    const rec = Color(0xFFF43F5E);
+    final rec = recColor ?? const Color(0xFFF43F5E);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
       decoration: BoxDecoration(
@@ -709,16 +897,15 @@ class _RecordChip extends StatelessWidget {
           Container(
             width: 5,
             height: 5,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: rec,
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: rec),
           ),
           const SizedBox(width: 4),
           Text(
             'Record',
             style: TextStyle(
-              color: emphasized
+              color: recColor != null
+                  ? (emphasized ? Colors.white : recColor)
+                  : emphasized
                   ? const Color(0xFFFFD9E0)
                   : const Color(0xFFFF8CA3),
               fontSize: 8.5,
