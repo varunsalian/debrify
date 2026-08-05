@@ -4443,6 +4443,29 @@ class IptvResultsViewState extends State<IptvResultsView>
     final recordUrl = LiveRecordingService.engineRecordableUrl(channel.url);
     if (recordUrl == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    // Both recorders behind this button are raw HTTP byte-copiers, and this
+    // is the one Record surface with NO player to probe the format. A URL
+    // that carries no extension can still answer with an HLS playlist — the
+    // engine then kills the capture at its first bytes, long after this code
+    // has told the user it started. Ask the server first; only an
+    // affirmative playlist answer blocks (see [servesPlaylist]).
+    if (!LiveRecordingService.isSchedulableUrl(recordUrl) &&
+        await LiveRecordingService.servesPlaylist(
+          recordUrl,
+          headers: channel.playbackHeaders,
+        )) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            "${channel.name} can't be recorded — it's an adaptive (HLS) "
+            'stream. Recording works on progressive/TS channels.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
     if (!kIsWeb && Platform.isAndroid) {
       if (!await LiveRecordingService.ensureEngineReady()) {
         if (!mounted) return;

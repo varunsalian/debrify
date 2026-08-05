@@ -278,6 +278,54 @@ class LiveRecordingService {
     return _xtreamLiveAnyContainer.hasMatch(path);
   }
 
+  /// Does [url] actually serve a segmented PLAYLIST rather than a stream?
+  ///
+  /// [isSegmentedUrl] can only read the file extension, and plenty of live
+  /// URLs carry none (Samsung TV Plus's `jmp2.uk/stvp-…`, most redirectors) —
+  /// so a URL that merely *looks* progressive can still answer with HLS. The
+  /// engine catches that at its first bytes and fails the capture, but by
+  /// then the UI has already promised a recording; the surfaces that record
+  /// WITHOUT a player to probe (the stage's Record) ask this first instead.
+  ///
+  /// Deliberately fails OPEN: a probe that times out or errors returns false,
+  /// so a flaky network can never block a recording that would have worked.
+  /// Only an affirmative "this is a playlist" stops the capture.
+  static Future<bool> servesPlaylist(
+    String url, {
+    Map<String, String>? headers,
+  }) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 4);
+    try {
+      final request = await client.getUrl(Uri.parse(url));
+      headers?.forEach(request.headers.set);
+      // A byte range keeps this to one small read even on a live stream that
+      // would otherwise never end.
+      request.headers.set(HttpHeaders.rangeHeader, 'bytes=0-511');
+      final response = await request.close().timeout(
+        const Duration(seconds: 4),
+      );
+      final type = response.headers.contentType?.mimeType.toLowerCase() ?? '';
+      if (type.contains('mpegurl') || type.contains('dash+xml')) {
+        return true;
+      }
+      // Content-type is routinely wrong on IPTV panels, so read the opening
+      // bytes too — the same `#EXTM3U` signature the engine checks.
+      final head = await response
+          .take(1)
+          .timeout(const Duration(seconds: 4))
+          .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+      final text = String.fromCharCodes(
+        head.take(7),
+      ).trimLeft().toUpperCase();
+      return text.startsWith('#EXTM3U');
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   // ── Live captures ─────────────────────────────────────────────────────────
 
   static Future<RecordingCallResult> start({
