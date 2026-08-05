@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_epg_service.dart';
+import 'styles/iptv_style.dart';
 import '../home/home_theme.dart';
 import '../../utils/tv_keys.dart';
 
@@ -67,11 +68,16 @@ class IptvRailEpgCard extends StatefulWidget {
   /// is short. Programme descriptions remain visible.
   final bool dense;
 
+  /// Styled-look tokens: swaps the card's gold (NOW tag, progress fill) for
+  /// the style's accent. Null = the shipped paint, verbatim.
+  final IptvStyleTokens? tokens;
+
   const IptvRailEpgCard({
     super.key,
     required this.channel,
     this.stageOverlay = false,
     this.dense = false,
+    this.tokens,
   });
 
   @override
@@ -185,7 +191,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
         if (next == null) return const SizedBox.shrink();
         return Row(
           children: [
-            const _EpgTag('NEXT', dim: true),
+            _EpgTag('NEXT', dim: true, accent: widget.tokens?.accent),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -218,7 +224,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
         children: [
           Row(
             children: [
-              const _EpgTag('NOW'),
+              _EpgTag('NOW', accent: widget.tokens?.accent),
               const Spacer(),
               Text(
                 '${_clock(context, now.start)} – ${_clock(context, now.stop)}',
@@ -267,7 +273,10 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
               ),
           ],
           SizedBox(height: widget.dense ? 5 : 9),
-          _EpgProgressBar(progress: now.progressAt(at)),
+          _EpgProgressBar(
+            progress: now.progressAt(at),
+            accent: widget.tokens?.accent,
+          ),
         ],
       );
     }
@@ -279,7 +288,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
         if (now != null) ...[
           Row(
             children: [
-              const _EpgTag('NOW'),
+              _EpgTag('NOW', accent: widget.tokens?.accent),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -309,7 +318,10 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
             ),
           ),
           const SizedBox(height: 8),
-          _EpgProgressBar(progress: now.progressAt(at)),
+          _EpgProgressBar(
+            progress: now.progressAt(at),
+            accent: widget.tokens?.accent,
+          ),
           const SizedBox(height: 4),
           Text(
             _remainingLabel(now, at),
@@ -339,7 +351,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           if (now != null) const SizedBox(height: 10),
           Row(
             children: [
-              const _EpgTag('NEXT', dim: true),
+              _EpgTag('NEXT', dim: true, accent: widget.tokens?.accent),
               const SizedBox(width: 8),
               Text(
                 _clock(context, next.start),
@@ -517,18 +529,25 @@ class _EpgSkeleton extends StatelessWidget {
 /// as a button, brightening with the row's focus. Static styling only (TV).
 class _EpgRecordChip extends StatelessWidget {
   final bool emphasized;
-  const _EpgRecordChip({required this.emphasized});
+
+  /// Styled-look record color; null keeps the legacy pink family.
+  final Color? rec;
+
+  /// Styled-look emphasized-label color (the style's fg) — no literal white
+  /// in styled paint.
+  final Color? fgOn;
+  const _EpgRecordChip({required this.emphasized, this.rec, this.fgOn});
 
   @override
   Widget build(BuildContext context) {
-    const rec = Color(0xFFF43F5E);
+    final base = rec ?? const Color(0xFFF43F5E);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        color: rec.withValues(alpha: emphasized ? 0.30 : 0.12),
+        color: base.withValues(alpha: emphasized ? 0.30 : 0.12),
         border: Border.all(
-          color: rec.withValues(alpha: emphasized ? 0.9 : 0.45),
+          color: base.withValues(alpha: emphasized ? 0.9 : 0.45),
         ),
       ),
       child: Row(
@@ -537,18 +556,17 @@ class _EpgRecordChip extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: rec,
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: base),
           ),
           const SizedBox(width: 5),
           Text(
             'Record',
             style: TextStyle(
-              color: emphasized
-                  ? const Color(0xFFFFD9E0)
-                  : const Color(0xFFFF8CA3),
+              color: rec == null
+                  ? (emphasized
+                        ? const Color(0xFFFFD9E0)
+                        : const Color(0xFFFF8CA3))
+                  : (emphasized ? (fgOn ?? base) : base),
               fontSize: 9.5,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
@@ -563,13 +581,18 @@ class _EpgRecordChip extends StatelessWidget {
 class _EpgTag extends StatelessWidget {
   final String text;
   final bool dim;
-  const _EpgTag(this.text, {this.dim = false});
+  final Color? accent;
+
+  /// Styled-look override for the dim tone (REPLAY); null keeps the legacy
+  /// white 35%.
+  final Color? dimColor;
+  const _EpgTag(this.text, {this.dim = false, this.accent, this.dimColor});
 
   @override
   Widget build(BuildContext context) {
     final color = dim
-        ? Colors.white.withValues(alpha: 0.35)
-        : HomeTheme.focusGold;
+        ? (dimColor ?? Colors.white.withValues(alpha: 0.35))
+        : (accent ?? HomeTheme.focusGold);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
@@ -591,7 +614,12 @@ class _EpgTag extends StatelessWidget {
 
 class _EpgProgressBar extends StatelessWidget {
   final double progress;
-  const _EpgProgressBar({required this.progress});
+  final Color? accent;
+
+  /// Styled-look override for the remaining-time track; null keeps the
+  /// legacy white 12%.
+  final Color? track;
+  const _EpgProgressBar({required this.progress, this.accent, this.track});
 
   @override
   Widget build(BuildContext context) {
@@ -603,11 +631,13 @@ class _EpgProgressBar extends StatelessWidget {
           children: [
             Expanded(
               flex: (progress * 1000).round().clamp(0, 1000),
-              child: const ColoredBox(color: HomeTheme.focusGold),
+              child: ColoredBox(color: accent ?? HomeTheme.focusGold),
             ),
             Expanded(
               flex: 1000 - (progress * 1000).round().clamp(0, 1000),
-              child: ColoredBox(color: Colors.white.withValues(alpha: 0.12)),
+              child: ColoredBox(
+                color: track ?? Colors.white.withValues(alpha: 0.12),
+              ),
             ),
           ],
         ),
@@ -845,12 +875,18 @@ class EpgScheduleList extends StatefulWidget {
   /// engine being on, Android 10+, and the channel being engine-recordable.
   final void Function(EpgProgramme programme)? onRecordProgramme;
 
+  /// Styled-look tokens from the in-player guide (see
+  /// `PlayerGuideStyle`). Null — the IPTV page's two call sites and the
+  /// classic player look — keeps every legacy color literal below.
+  final IptvStyleTokens? tokens;
+
   const EpgScheduleList({
     super.key,
     required this.channel,
     required this.isTelevision,
     this.onPlayProgramme,
     this.onRecordProgramme,
+    this.tokens,
   });
 
   @override
@@ -937,13 +973,17 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
 
   @override
   Widget build(BuildContext context) {
+    final t = widget.tokens;
     if (_loading) {
       return _focusAnchor(
-        const Center(
+        Center(
           child: SizedBox(
             width: 26,
             height: 26,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: t?.accent,
+            ),
           ),
         ),
       );
@@ -958,13 +998,17 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
               Icon(
                 Icons.tv_off_rounded,
                 size: 42,
-                color: Colors.white.withValues(alpha: 0.25),
+                color: t == null
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : t.fgFaint,
               ),
               const SizedBox(height: 12),
               Text(
                 'No guide data for this channel',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.55),
+                  color: t == null
+                      ? Colors.white.withValues(alpha: 0.55)
+                      : t.fgDim,
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -997,7 +1041,9 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
                   child: Text(
                     item.label.toUpperCase(),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
+                      color: t == null
+                          ? Colors.white.withValues(alpha: 0.4)
+                          : t.fgDim,
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.1,
@@ -1026,6 +1072,7 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
                 (index == _nowIndex || (_nowIndex == -1 && index == 1)),
             onPlay: replayable ? () => onPlay(programme) : null,
             onRecord: recordable ? () => onRecord(programme) : null,
+            tokens: t,
           );
         },
       ),
@@ -1051,6 +1098,8 @@ class _ScheduleRow extends StatefulWidget {
   /// construction (replay is past, record is now/future).
   final VoidCallback? onRecord;
 
+  final IptvStyleTokens? tokens;
+
   const _ScheduleRow({
     required this.programme,
     required this.isNow,
@@ -1059,6 +1108,7 @@ class _ScheduleRow extends StatefulWidget {
     required this.autofocus,
     this.onPlay,
     this.onRecord,
+    this.tokens,
   });
 
   @override
@@ -1078,18 +1128,23 @@ class _ScheduleRowState extends State<_ScheduleRow> {
         ? (replayable ? 0.7 : 0.38)
         : (widget.isNow ? 1.0 : 0.85);
 
+    final t = widget.tokens;
     final row = Container(
       height: _EpgScheduleListState._rowExtent,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: _focused
-            ? const Color(0xFF141824)
+            ? (t == null ? const Color(0xFF141824) : t.focusTint)
             : (widget.isNow
-                  ? Colors.white.withValues(alpha: 0.04)
+                  ? (t == null
+                        ? Colors.white.withValues(alpha: 0.04)
+                        : t.selectedTint)
                   : Colors.transparent),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: _focused ? HomeTheme.focusGold : Colors.transparent,
+          color: _focused
+              ? (t == null ? HomeTheme.focusGold : t.accent)
+              : Colors.transparent,
           width: 2,
         ),
       ),
@@ -1101,10 +1156,17 @@ class _ScheduleRowState extends State<_ScheduleRow> {
               _clock(context, p.start),
               style: TextStyle(
                 color: widget.isNow
-                    ? HomeTheme.focusGold
-                    : Colors.white.withValues(alpha: widget.isPast ? 0.3 : 0.5),
+                    ? (t == null ? HomeTheme.focusGold : t.accent)
+                    : (t == null
+                          ? Colors.white.withValues(
+                              alpha: widget.isPast ? 0.3 : 0.5,
+                            )
+                          : (widget.isPast ? t.fgFaint : t.fgDim)),
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
+                fontFamily: t != null && t.monoFamily.isNotEmpty
+                    ? t.monoFamily
+                    : null,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -1119,7 +1181,9 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: titleAlpha),
+                    color: t == null
+                        ? Colors.white.withValues(alpha: titleAlpha)
+                        : t.fg.withValues(alpha: titleAlpha),
                     fontSize: 13.5,
                     fontWeight: widget.isNow
                         ? FontWeight.w700
@@ -1128,20 +1192,24 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                 ),
                 if (widget.isNow) ...[
                   const SizedBox(height: 5),
-                  _EpgProgressBar(progress: p.progressAt(DateTime.now())),
+                  _EpgProgressBar(
+                    progress: p.progressAt(DateTime.now()),
+                    accent: t?.accent,
+                    track: t?.hairline2,
+                  ),
                 ],
               ],
             ),
           ),
           if (widget.isNow)
-            const Padding(
-              padding: EdgeInsets.only(left: 8),
-              child: _EpgTag('NOW'),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: _EpgTag('NOW', accent: t?.accent),
             ),
           if (replayable)
-            const Padding(
-              padding: EdgeInsets.only(left: 8),
-              child: _EpgTag('REPLAY', dim: true),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: _EpgTag('REPLAY', dim: true, dimColor: t?.rec),
             ),
           // A chip that reads as the button it is (the dim "REC" text looked
           // like metadata). Sits beside NOW on the airing row: "record the
@@ -1149,7 +1217,11 @@ class _ScheduleRowState extends State<_ScheduleRow> {
           if (widget.onRecord != null)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: _EpgRecordChip(emphasized: _focused),
+              child: _EpgRecordChip(
+                emphasized: _focused,
+                rec: t?.rec,
+                fgOn: t?.fg,
+              ),
             ),
         ],
       ),

@@ -7,13 +7,16 @@ import '../../models/indexer_manager_config.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/webdav_item.dart';
 import '../../services/engine/local_engine_storage.dart';
+import '../../services/iptv_transfer_payload.dart';
+import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 
 /// One-click "Transfer Everything" flow. Pushes all configured services
-/// (debrid keys, Trakt session, search engines, PikPak, installed Stremio
+/// (debrid keys, Trakt/Simkl sessions, search engines, PikPak, WebDAV,
+/// Jackett/Prowlarr, IPTV providers + favorites + lists, and installed Stremio
 /// addons) from this device to the currently connected receiver.
 class RemoteTransferAll extends StatefulWidget {
   final VoidCallback onBack;
@@ -61,6 +64,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   List<StremioAddon> _addons = [];
   List<WebDavConfig> _webDavServers = [];
   List<IndexerManagerConfig> _indexerManagers = [];
+  List<Map<String, dynamic>> _iptvPlaylists = const [];
+  List<Map<String, dynamic>> _iptvFavorites = const [];
+  List<Map<String, dynamic>> _iptvLists = const [];
+  int _iptvFileImported = 0;
 
   final _pikpakPasswordController = TextEditingController();
   bool _showPikpakPassword = false;
@@ -140,6 +147,19 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         );
         _indexerManagers = [];
       }
+      try {
+        _iptvPlaylists = await IptvTransferPayload.buildPlaylists();
+        _iptvFavorites = await IptvTransferPayload.buildFavorites();
+        _iptvLists = await IptvTransferPayload.buildCustomLists();
+        _iptvFileImported =
+            (await IptvTransferPayload.countPlaylists()).fileImported;
+      } catch (e) {
+        debugPrint('RemoteTransferAll: Failed to load IPTV setup: $e');
+        _iptvPlaylists = const [];
+        _iptvFavorites = const [];
+        _iptvLists = const [];
+      }
+
       final hasWebDav = _webDavServers.isNotEmpty;
       final hasIndexers = _indexerManagers.isNotEmpty;
 
@@ -226,6 +246,33 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           label: 'Jackett/Prowlarr (${_indexerManagers.length})',
           icon: Icons.manage_search_rounded,
           color: const Color(0xFFEAB308),
+        ));
+      }
+      // IPTV in dependency order: a membership names the provider it came
+      // from, so the provider has to land first.
+      if (_iptvPlaylists.isNotEmpty) {
+        items.add(_TransferItem(
+          key: ConfigCommand.iptvPlaylists,
+          label: 'IPTV providers (${_iptvPlaylists.length})',
+          icon: Icons.live_tv_rounded,
+          color: const Color(0xFF14B8A6),
+        ));
+      }
+      if (_iptvFavorites.isNotEmpty) {
+        items.add(_TransferItem(
+          key: ConfigCommand.iptvFavorites,
+          label: 'IPTV favorites (${_iptvFavorites.length})',
+          icon: Icons.star_rounded,
+          color: const Color(0xFFF472B6),
+        ));
+      }
+      if (_iptvLists.isNotEmpty) {
+        items.add(_TransferItem(
+          key: ConfigCommand.iptvLists,
+          label: 'IPTV lists (${_iptvLists.length}, '
+              '${IptvTransferPayload.countListChannels(_iptvLists)} channels)',
+          icon: Icons.playlist_play_rounded,
+          color: const Color(0xFFA78BFA),
         ));
       }
       for (final addon in _addons) {
@@ -413,6 +460,32 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             _indexerManagers.map((c) => c.toJson()).toList(),
           ),
         );
+      // The IPTV payloads routinely outgrow a single datagram — a few hundred
+      // starred channels is tens of kilobytes — so they take the chunked path.
+      case ConfigCommand.iptvPlaylists:
+        return sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.iptvPlaylists,
+          targetIp,
+          jsonEncode(_iptvPlaylists),
+          label: 'IPTV providers',
+        );
+      case ConfigCommand.iptvFavorites:
+        return sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.iptvFavorites,
+          targetIp,
+          jsonEncode(_iptvFavorites),
+          label: 'IPTV favorites',
+        );
+      case ConfigCommand.iptvLists:
+        return sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.iptvLists,
+          targetIp,
+          jsonEncode(_iptvLists),
+          label: 'IPTV lists',
+        );
       default:
         return Future.value(false);
     }
@@ -476,11 +549,15 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               ),
             ),
           )
-        else if (_items.isEmpty)
-          _buildEmpty()
-        else ...[
+        else if (_items.isEmpty) ...[
+          _buildEmpty(),
+          // Nothing sendable, but if the reason is a file-only IPTV setup the
+          // user deserves to know that rather than "nothing configured".
+          if (_iptvFileImported > 0) _buildFileImportedNote(),
+        ] else ...[
           if (_hasPikpak) _buildPikpakPassword(),
           ..._items.map(_buildItemTile),
+          if (_iptvFileImported > 0) _buildFileImportedNote(),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -537,6 +614,22 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ],
         ],
       ],
+    );
+  }
+
+  Widget _buildFileImportedNote() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        '$_iptvFileImported IPTV playlist'
+        '${_iptvFileImported == 1 ? '' : 's'} imported from a file can\'t be '
+        'sent — import the file on the TV. Starred channels from them still '
+        'go across.',
+        style: TextStyle(
+          color: Colors.amber.withValues(alpha: 0.75),
+          fontSize: 12,
+        ),
+      ),
     );
   }
 

@@ -169,10 +169,27 @@ class StorageService {
   static const String _playerSystemAudioEffectsKey =
       'player_system_audio_effects';
   static const String _playerStartPortraitKey = 'player_start_portrait';
+  static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
   static const String _playerDefaultAudioLanguageKey =
       'player_default_audio_language';
+  static const String _skipSegmentsEnabledKey = 'skip_segments_enabled';
+  static const String _skipSegmentProviderKey = 'skip_segment_provider';
+
+  /// Stable provider identifier persisted by the Playback settings page.
+  /// Kept here rather than using a display label so future provider names can
+  /// change without migrating preferences.
+  static const String skipSegmentProviderAuto = 'auto';
+  static const String skipSegmentProviderSkipDb = 'skipdb';
+  static const String skipSegmentProviderIntroDb = 'introdb';
+  static const String skipSegmentProviderTheIntroDb = 'theintrodb';
+  static const Set<String> _supportedSkipSegmentProviders = <String>{
+    skipSegmentProviderAuto,
+    skipSegmentProviderSkipDb,
+    skipSegmentProviderIntroDb,
+    skipSegmentProviderTheIntroDb,
+  };
 
   // IPTV settings
   static const String _iptvPlaylistsKey = 'iptv_playlists';
@@ -643,6 +660,60 @@ class StorageService {
     await prefs.setString(
       _tvHomeStyleKey,
       style == 'classic' ? 'classic' : 'canvas',
+    );
+  }
+
+  static const String _iptvStyleKey = 'iptv_style';
+  static const Set<String> _iptvStyles = {'command', 'edition', 'console'};
+
+  /// IPTV cockpit look: 'command' (the shipped Command Center, the default),
+  /// 'edition' (First Edition — editorial ink/serif) or 'console' (Master
+  /// Control — black instrument). Only the TV/desktop cockpit reads it; the
+  /// phone classic layout and the touch-tablet two-pane never do. Unknown or
+  /// unset coerces to 'command' on BOTH read and write, so an old build
+  /// downgrading past a newer value can never pin a look the reader treats
+  /// as the exception.
+  static Future<String> getIptvStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_iptvStyleKey);
+    return _iptvStyles.contains(raw) ? raw! : 'command';
+  }
+
+  static Future<void> setIptvStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _iptvStyleKey,
+      _iptvStyles.contains(style) ? style : 'command',
+    );
+  }
+
+  static const String _iptvPlayerGuideStyleKey = 'iptv_player_guide_style';
+  static const Set<String> _iptvPlayerGuideStyles = {
+    'classic',
+    'glass',
+    'edition',
+    'console',
+  };
+
+  /// In-player IPTV guide look (zap banner, channel sheet, native guide
+  /// overlay + dock): 'classic' (today's look, the default), 'glass'
+  /// (Cinema Glass), 'edition' (Midnight Edition) or 'console' (Master
+  /// Control). Both players read it once at launch — the Dart player via
+  /// this getter, the native TV player via `flutter.iptv_player_guide_style`
+  /// in FlutterSharedPreferences. Unknown or unset coerces to 'classic' on
+  /// BOTH read and write, so an old build downgrading past a newer value can
+  /// never pin a look the reader treats as the exception.
+  static Future<String> getIptvPlayerGuideStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_iptvPlayerGuideStyleKey);
+    return _iptvPlayerGuideStyles.contains(raw) ? raw! : 'classic';
+  }
+
+  static Future<void> setIptvPlayerGuideStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _iptvPlayerGuideStyleKey,
+      _iptvPlayerGuideStyles.contains(style) ? style : 'classic',
     );
   }
 
@@ -4959,10 +5030,7 @@ class StorageService {
 
   static Future<void> setDefaultFilterDynamicRanges(List<String> ranges) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _defaultFilterDynamicRangesKey,
-      jsonEncode(ranges),
-    );
+    await prefs.setString(_defaultFilterDynamicRangesKey, jsonEncode(ranges));
   }
 
   // Debrify TV Filter Settings — scoped to Debrify TV only, deliberately
@@ -5462,6 +5530,37 @@ class StorageService {
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
   }
 
+  /// Whether the Debrify Player should request community timestamps and show
+  /// manual skip buttons. Manual buttons are enabled by default; this setting
+  /// never authorizes automatic seeking.
+  static Future<bool> getSkipSegmentsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_skipSegmentsEnabledKey) ?? true;
+  }
+
+  static Future<void> setSkipSegmentsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_skipSegmentsEnabledKey, enabled);
+  }
+
+  /// Timestamp source used by the Debrify Player. Unknown stored values fall
+  /// back safely so removing a provider cannot strand the feature.
+  static Future<String> getSkipSegmentProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    final provider = prefs.getString(_skipSegmentProviderKey);
+    return _supportedSkipSegmentProviders.contains(provider)
+        ? provider!
+        : skipSegmentProviderAuto;
+  }
+
+  static Future<void> setSkipSegmentProvider(String provider) async {
+    final prefs = await SharedPreferences.getInstance();
+    final supported = _supportedSkipSegmentProviders.contains(provider)
+        ? provider
+        : skipSegmentProviderAuto;
+    await prefs.setString(_skipSegmentProviderKey, supported);
+  }
+
   /// Whether the phone player OPENS upright instead of turning the handset
   /// landscape for you. Off by default — a video wants the long edge, and that
   /// is what the player has always done. On, it opens portrait and the
@@ -5487,6 +5586,23 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerStartPortraitKey, enabled);
     playerStartPortraitCached = enabled;
+  }
+
+  /// Whether the native TV player silently aligns addon subtitles to the
+  /// audio as playback runs (Settings → Playback, Android TV only). Read by
+  /// the NATIVE side as `flutter.subtitle_auto_sync_enabled` — a plain
+  /// SharedPreferences bool is exactly what FlutterSharedPreferences stores,
+  /// the same bridge the recording engine flag rides. OFF by default; the
+  /// toggle is the opt-in. The NATIVE read's default must stay in lock-step
+  /// or an untouched toggle would mean different things on the two sides.
+  static Future<bool> getSubtitleAutoSyncEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_subtitleAutoSyncKey) ?? false;
+  }
+
+  static Future<void> setSubtitleAutoSyncEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_subtitleAutoSyncKey, enabled);
   }
 
   /// Get default subtitle language code

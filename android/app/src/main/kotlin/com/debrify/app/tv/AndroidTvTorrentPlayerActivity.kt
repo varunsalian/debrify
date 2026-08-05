@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import androidx.core.content.ContextCompat
+import androidx.core.widget.TextViewCompat
 import com.debrify.app.recording.LiveRecordingService
 import com.debrify.app.recording.RecordingAlarmReceiver
 import com.debrify.app.recording.RecordingRegistry
@@ -52,6 +53,8 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -78,8 +81,11 @@ import com.debrify.app.subtitle.AddonSubtitleStatus
 import com.debrify.app.subtitle.StremioAddon
 import com.debrify.app.subtitle.StremioSubtitle
 import com.debrify.app.subtitle.StremioSubtitleService
+import com.debrify.app.util.AlignResult
+import com.debrify.app.util.CueSpan
 import com.debrify.app.util.LanguageMapper
 import com.debrify.app.util.OffsetRenderersFactory
+import com.debrify.app.util.SubtitleAligner
 import com.debrify.app.util.SubtitleCue
 import com.debrify.app.util.SubtitleCueCache
 import com.debrify.app.util.SubtitleFontManager
@@ -126,6 +132,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var upNextPoster: android.widget.ImageView
     private lateinit var upNextTitle: TextView
     private lateinit var upNextCountdown: TextView
+    private lateinit var skipSegmentButton: AppCompatButton
     private var upNextVisible = false
     private var upNextTargetIndex: Int? = null
     private var upNextDismissedForIndex = -1
@@ -185,6 +192,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitleListener: Player.Listener? = null
     private var offsetRenderersFactory: OffsetRenderersFactory? = null
 
+    // Subtitle auto-sync: taps the decoded PCM (created with the player, in
+    // setupPlayer) so the aligner has audio history the moment it's asked.
+    private var speechTap: SpeechFeatureTap? = null
+    private var autoSyncRunning = false
+
     // Seek feedback manager
     private lateinit var seekFeedbackManager: SeekFeedbackManager
 
@@ -215,6 +227,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** Opt-in (Settings → Player Settings): announce our audio session so system
      *  effect apps (Wavelet, OEM equalizers) can attach. Off by default. */
     private var systemAudioEffectsEnabled = false
+    private var skipSegmentsEnabled = true
+    private var skipSegmentProviderId = TvSkipSegmentClients.AUTO
     private var playlistMode: PlaylistMode = PlaylistMode.NONE
     private var playlistAdapter: PlaylistOverlayAdapter? = null
     private var seriesPlaylistAdapter: PlaylistAdapter? = null
@@ -427,6 +441,50 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var manualSubtitleDisplayLabel: String? = null
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    // Manual community skip actions for the native TV player. Requests are
+    // keyed by provider + episode + exact stream duration so source changes
+    // cannot reuse timestamps from a differently cut release.
+    private data class SkipSegmentRequest(
+        val providerId: String,
+        val imdbId: String,
+        val season: Int,
+        val episode: Int,
+        val durationSeconds: Long,
+        val key: String,
+    )
+    private val skipSegmentScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var skipSegmentFetchJob: kotlinx.coroutines.Job? = null
+    private var skipSegmentFetchGeneration = 0
+    private var loadedSkipSegmentKey: String? = null
+    private var loadingSkipSegmentKey: String? = null
+    private var skipSegments = TvSkipSegments.EMPTY
+    private var activeSkipSegment: TvSkipSegment? = null
+    private var skipFocusOfferedKey: String? = null
+    private val skipSegmentCache = mutableMapOf<String, TvSkipSegments>()
+
+    // ── Sleep timer ───────────────────────────────────────────────────────────
+    // Stops playback after a countdown, or at the end of the current item.
+    //
+    // The activity adds FLAG_KEEP_SCREEN_ON on create and never clears it, so
+    // pausing alone would leave the TV lit all night — the exact thing this
+    // feature exists to prevent. Firing therefore drops the flag as well, and
+    // any later playback re-arms it (see onIsPlayingChanged).
+    private enum class SleepTimerMode { OFF, COUNTDOWN, END_OF_ITEM }
+    private var sleepTimerMode = SleepTimerMode.OFF
+    private var sleepTimerDeadlineElapsedMs = 0L
+    private val sleepTimerHandler = Handler(Looper.getMainLooper())
+    private var sleepTimerRunnable: Runnable? = null
+    private val sleepTimerMinuteOptions = listOf(15, 30, 45, 60, 90)
+
+    /**
+     * Latched from a sleep-timer stop until the user explicitly starts playback
+     * again. Pausing alone is not enough to make the stop stick: `onStart()`
+     * calls `play()` unconditionally, so the next time this activity restarts
+     * it would resume and play through the night; a queued auto-advance would
+     * do the same. Every automatic start checks this.
+     */
+    private var sleepStopLatched = false
+
     // Side-loaded external subtitle rendering. External (Stremio) subtitles are
     // downloaded + parsed off-thread and fed straight to subtitleOverlay from a
     // position ticker — the player source is never rebuilt, so switching
@@ -441,6 +499,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var lastExternalCueText: String? = null
     private var statusPill: TextView? = null
     private val statusPillHideRunnable = Runnable { hideStatusPill() }
+
+    // Auto-sync's toast (bottom-right, quiet): out of the subtitles' way at
+    // bottom-center, and deliberately soft-spoken — sync happens by default
+    // now, so its feedback must never feel like an alert.
+    private var autoSyncCard: TextView? = null
+    private val autoSyncCardHideRunnable = Runnable { hideAutoSyncCard() }
+
+    /** Last auto-sync outcome, shown on the menu row while its subtitle is active. */
+    private var autoSyncResultLabel: String? = null
+    private var autoSyncResultUrl: String? = null
+
+    // Hands-free auto-sync (Settings → Playback, Android TV only): a ladder of
+    // attempts as audio accrues — narrow search needs ~20s, wider ones more —
+    // each silent unless it SUCCEEDS. Stops on success, on drift (retrying
+    // won't fix a framerate mismatch), when the user dials any manual offset,
+    // or when the rungs run out.
+    private val autoSyncLadderSec = intArrayOf(20, 45, 90, 180)
+    private var autoSyncLadderIdx = 0
+    private var autoSyncLadderDone = false
+    private var autoSyncLadderTick: Runnable? = null
+
+    // Verify mode: after an offset WE applied (auto, manual button, or a
+    // restored memory), periodically re-check the CURRENT region of the film
+    // against that offset — piecewise alignment delivered where the user is.
+    // The applied value doubles as the tamper flag: the moment the stored
+    // offset differs from it, the user has taken over and verification ends.
+    private var autoSyncAppliedOffsetMs: Long? = null
+    private var autoSyncVerifyTick: Runnable? = null
+    private var autoSyncVerifyMisses = 0
 
     // Focus navigation state - prevents focus recovery from interfering with active navigation
     private var isNavigating = false
@@ -632,6 +719,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     }
                     sendProgress(completed = true)
 
+                    // "Stop at the end of this episode". Playback has already
+                    // finished, so this only has to suppress every advance
+                    // below and let the screen go to sleep.
+                    if (sleepTimerMode == SleepTimerMode.END_OF_ITEM) {
+                        cancelSleepTimer()
+                        sleepStopLatched = true
+                        releaseScreenForSleep()
+                        Toast.makeText(
+                            this@AndroidTvTorrentPlayerActivity,
+                            "Sleep timer — stopping here",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return
+                    }
+
                     // IPTV episode list (series/VOD): auto-advance to the next
                     // episode, mirroring the Next button. Checked before the
                     // payload guard below because IPTV mode has no `payload`
@@ -684,6 +786,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             updatePauseButtonLabel()
+            // Re-arm the screen if a sleep-timer stop released it and the user
+            // started watching again. Idempotent, so it's harmless otherwise.
+            if (isPlaying) {
+                holdScreenForPlayback()
+            }
             // Startup-channel memory — armed by real playback only, never by a
             // tune, so a dead stream cannot become "the last channel watched".
             if (isPlaying) noteLiveChannelPlaying()
@@ -727,7 +834,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             reportDecoderFailure(error)
         }
 
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            // Auto-sync anchoring: every discontinuity (seek, transition) tells
+            // the PCM tap where its newest audio run sits on the media timeline.
+            speechTap?.notifyDiscontinuity(newPosition.positionMs)
+        }
+
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // A different media item means a different timeline AND usually a
+            // different release — audio features captured from the old one
+            // would mis-anchor (or mis-match) subtitle timing on the new one.
+            speechTap?.reset()
             // The player is reused across every content swap (next episode, IPTV
             // and Stremio channel/source switches, subtitle reloads), so the audio
             // session id stays the same and onAudioSessionIdChanged never fires.
@@ -1043,6 +1164,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         upNextPoster = findViewById(R.id.android_tv_upnext_poster)
         upNextTitle = findViewById(R.id.android_tv_upnext_title)
         upNextCountdown = findViewById(R.id.android_tv_upnext_countdown)
+        skipSegmentButton = findViewById(R.id.android_tv_skip_segment_button)
+        skipSegmentButton.setOnClickListener { skipActiveSegment() }
         seekbarOverlay = findViewById(R.id.seekbar_overlay)
         seekbarProgress = findViewById(R.id.seekbar_progress)
         seekbarHandle = findViewById(R.id.seekbar_handle)
@@ -1166,7 +1289,31 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         trackSelector?.parameters = paramsBuilder?.build()!!
 
-        val baseRenderersFactory = DefaultRenderersFactory(this)
+        // Subtitle auto-sync's PCM tap rides the audio sink as a user
+        // AudioProcessor: it sees every decoded sample the player plays, at
+        // media rate (user processors sit before the speed processors), for
+        // free. Created fresh per player build so a rebuild can't feed an old
+        // tap. Passthrough audio bypasses processors entirely — the tap then
+        // simply never fills and auto-sync declines instead of guessing.
+        val tap = SpeechFeatureTap(
+            mainPost = { action -> runOnUiThread(action) },
+            positionMs = { player?.currentPosition ?: 0L },
+        ).also { speechTap = it }
+        val baseRenderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessorChain(
+                        DefaultAudioSink.DefaultAudioProcessorChain(tap.processor)
+                    )
+                    .build()
+            }
+        }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
         val renderersFactory = OffsetRenderersFactory(baseRenderersFactory)
@@ -2101,6 +2248,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // must not let the per-episode tracker percent override it. The parameter
     // retains its legacy name because the payload field does too.
     private fun playItem(index: Int, suppressTrakt: Boolean = false) {
+        // A sleep stop wins over anything already queued: the auto-advance
+        // arms a 1.5s postDelayed before starting the next item, and a
+        // countdown expiring inside that window would otherwise be undone by
+        // its own handoff. Only automatic starts are gated — an explicit pick
+        // clears the latch first (isAutoAdvancing is set by the auto paths).
+        if (sleepStopLatched) {
+            if (isAutoAdvancing) {
+                android.util.Log.d("AndroidTvPlayer", "playItem suppressed by sleep timer")
+                isAutoAdvancing = false
+                return
+            }
+            // Picking something by hand means the viewer is awake.
+            sleepStopLatched = false
+        }
         val model = payload ?: return
         android.util.Log.d("AndroidTvPlayer", "playItem called - index: $index, total items: ${model.items.size}")
         if (index < 0 || index >= model.items.size) {
@@ -2120,6 +2281,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         lastRealPositionMs = 0L
         hideBufferingIndicator()
         hideUpNextCard()
+        resetSkipSegmentState()
 
         // Cancel any ongoing PikPak retry before starting new item
         cancelPikPakRetry()
@@ -2173,6 +2335,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun startPlayback(item: PlaybackItem) {
+        // Last gate before ExoPlayer actually starts. playItem's check happens
+        // before URL resolution, and that round trip can outlast the countdown
+        // — without rechecking here, a resolve that was already in flight would
+        // start the night up again and re-take both screen holds.
+        if (sleepStopLatched) {
+            android.util.Log.d("AndroidTvPlayer", "startPlayback suppressed by sleep timer")
+            return
+        }
+
         // Check if this is a PikPak provider - use retry logic for cold storage handling
         val isPikPak = PROVIDER_PIKPAK.equals(item.provider, ignoreCase = true) ||
             item.url.contains("mypikpak.com")
@@ -4083,6 +4254,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Center button - play/pause (or badge click)
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            // Let the focused manual skip button receive its normal click.
+            if (::skipSegmentButton.isInitialized && currentFocus == skipSegmentButton) {
+                return super.dispatchKeyEvent(event)
+            }
             // If focus is on stremio source badge, let click handler fire
             if (currentFocus == stremioSourceBadge) {
                 return super.dispatchKeyEvent(event)
@@ -4279,6 +4454,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (it.isPlaying) {
                 it.pause()
             } else {
+                // An explicit press is the one thing that clears a sleep stop.
+                sleepStopLatched = false
                 it.play()
             }
         }
@@ -4475,6 +4652,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // recognised and not scrobbled as a full watch (see maxStableDurationMs).
             if (duration > maxStableDurationMs) maxStableDurationMs = duration
             if (currentPosition in 0..duration) lastRealPositionMs = currentPosition
+            updateSkipSegmentState(currentPosition, duration)
 
             // Update Cinema Mode split time displays
             debrifyTimeCurrent?.text = formatTime(currentPosition)
@@ -4882,6 +5060,285 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             seekFeedbackManager.showSeekBackward(seekSeconds)
         }
+    }
+
+    private fun currentSkipSegmentRequest(durationMs: Long): SkipSegmentRequest? {
+        if (!skipSegmentsEnabled ||
+            !TvSkipSegmentClients.supports(skipSegmentProviderId) ||
+            isIptvMode ||
+            durationMs <= 0L ||
+            durationMs == C.TIME_UNSET
+        ) {
+            return null
+        }
+
+        val model = payload ?: return null
+        if (model.contentType.lowercase(Locale.US) != "series") return null
+        val imdbId = model.imdbId?.trim()?.takeIf { IMDB_ID_REGEX.matches(it) } ?: return null
+        val item = model.items.getOrNull(currentIndex) ?: return null
+        val season = item.season?.takeIf { it >= 0 } ?: return null
+        val episode = item.episode?.takeIf { it >= 1 } ?: return null
+        val durationSeconds = durationMs / 1_000L
+        if (durationSeconds <= 0L) return null
+
+        return SkipSegmentRequest(
+            providerId = skipSegmentProviderId,
+            imdbId = imdbId,
+            season = season,
+            episode = episode,
+            durationSeconds = durationSeconds,
+            key = "$skipSegmentProviderId:$imdbId:$season:$episode:$durationSeconds",
+        )
+    }
+
+    private fun updateSkipSegmentState(positionMs: Long, durationMs: Long) {
+        if (!::skipSegmentButton.isInitialized) return
+
+        // Between playlist items the player still reports the OUTGOING media's
+        // position and duration for a moment, while currentIndex already names
+        // the incoming episode. Judging the new episode against those makes the
+        // button flash on as soon as next-episode is pressed — the old position
+        // is usually deep in the outgoing episode, which lands inside a segment
+        // — and fetches its segments against a duration that isn't its own,
+        // which can select or validate the wrong release. Wait until the new
+        // media is prepared; resetSkipSegmentState() has already hidden the button.
+        if (!hasEverBeenReady) {
+            presentSkipSegment(null, null)
+            return
+        }
+
+        val request = currentSkipSegmentRequest(durationMs)
+        if (request == null) {
+            presentSkipSegment(null, null)
+            return
+        }
+
+        if (loadedSkipSegmentKey != request.key) {
+            ensureSkipSegments(request)
+            presentSkipSegment(null, request.key)
+            return
+        }
+
+        // The Up Next card owns the same end-of-episode action space. If it is
+        // present, prefer its richer next-episode action; dismissing it reveals
+        // Skip credits again if the outro is still active.
+        val segment = if (upNextVisible) null else skipSegments.segmentAt(positionMs)
+        presentSkipSegment(segment, request.key)
+    }
+
+    private fun ensureSkipSegments(request: SkipSegmentRequest) {
+        if (loadedSkipSegmentKey == request.key || loadingSkipSegmentKey == request.key) return
+
+        skipSegmentCache[request.key]?.let { cached ->
+            skipSegments = cached
+            loadedSkipSegmentKey = request.key
+            return
+        }
+
+        if (loadingSkipSegmentKey != null && loadingSkipSegmentKey != request.key) {
+            skipSegmentFetchGeneration++
+            skipSegmentFetchJob?.cancel()
+            skipSegmentFetchJob = null
+            loadingSkipSegmentKey = null
+        }
+
+        val generation = ++skipSegmentFetchGeneration
+        loadingSkipSegmentKey = request.key
+        skipSegmentFetchJob = skipSegmentScope.launch {
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    TvSkipSegmentClients.fetch(
+                        providerId = request.providerId,
+                        imdbId = request.imdbId,
+                        season = request.season,
+                        episode = request.episode,
+                        durationSeconds = request.durationSeconds,
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                // Skip data is optional and must never interrupt playback.
+                android.util.Log.w(
+                    "SkipSegments",
+                    "${request.providerId} request failed",
+                    error,
+                )
+                TvSkipSegments.EMPTY
+            }
+
+            if (generation != skipSegmentFetchGeneration) return@launch
+            val liveDuration = player?.duration ?: C.TIME_UNSET
+            if (currentSkipSegmentRequest(liveDuration)?.key != request.key) return@launch
+
+            if (skipSegmentCache.size >= MAX_SKIP_SEGMENT_CACHE_ENTRIES) {
+                skipSegmentCache.keys.firstOrNull()?.let { skipSegmentCache.remove(it) }
+            }
+            skipSegmentCache[request.key] = result
+            skipSegments = result
+            loadedSkipSegmentKey = request.key
+            loadingSkipSegmentKey = null
+            skipSegmentFetchJob = null
+            val p = player ?: return@launch
+            updateSkipSegmentState(p.currentPosition, p.duration)
+        }
+    }
+
+    private fun presentSkipSegment(segment: TvSkipSegment?, requestKey: String?) {
+        val button = skipSegmentButton
+        activeSkipSegment = segment
+        if (segment == null || requestKey == null) {
+            if (button.visibility != View.GONE) {
+                if (currentFocus == button) playerView.requestFocus()
+                button.animate().cancel()
+                button.visibility = View.GONE
+                button.alpha = 0f
+                button.translationY = 0f
+            }
+            return
+        }
+
+        button.text = when (segment.type) {
+            TvSkipSegmentType.INTRO -> "Skip intro »"
+            TvSkipSegmentType.OUTRO -> "Skip credits »"
+        }
+        if (button.visibility != View.VISIBLE) {
+            button.animate().cancel()
+            button.alpha = 0f
+            button.visibility = View.VISIBLE
+            button.animate().alpha(1f).setDuration(160L).start()
+        }
+
+        val targetTranslationY = if (controlsMenuVisible) {
+            -128f * resources.displayMetrics.density
+        } else {
+            0f
+        }
+        if (kotlin.math.abs(button.translationY - targetTranslationY) > 0.5f) {
+            button.animate().translationY(targetTranslationY).setDuration(180L).start()
+        }
+
+        val focusKey = "$requestKey:${segment.type}:${segment.startMs}"
+        val canOfferFocus = !controlsMenuVisible &&
+            !playlistVisible &&
+            !seekbarVisible &&
+            !upNextVisible &&
+            subtitlePanel?.isVisible != true &&
+            unifiedMenu?.isVisible != true &&
+            syncOverlay?.isVisible != true &&
+            linePickerOverlay?.isVisible != true
+        if (canOfferFocus && skipFocusOfferedKey != focusKey) {
+            skipFocusOfferedKey = focusKey
+            button.post { if (button.visibility == View.VISIBLE) button.requestFocus() }
+        }
+    }
+
+    private fun skipActiveSegment() {
+        val p = player ?: return
+        val segment = activeSkipSegment ?: return
+        val position = p.currentPosition
+        if (!segment.contains(position)) {
+            updateSkipSegmentState(position, p.duration)
+            return
+        }
+        val target = if (p.duration > 0L && p.duration != C.TIME_UNSET) {
+            segment.endMs.coerceAtMost(p.duration)
+        } else {
+            segment.endMs
+        }
+        if (target <= position) return
+
+        p.seekTo(target)
+        if (::seekFeedbackManager.isInitialized) {
+            val seconds = ((target - position) / 1_000L).coerceAtLeast(1L)
+            seekFeedbackManager.showSeekForward("${seconds}s")
+        }
+        presentSkipSegment(null, null)
+    }
+
+    // ── Sleep timer ───────────────────────────────────────────────────────────
+
+    /** Whole minutes left, rounded up so a fresh 30-minute timer reads "30". */
+    private fun sleepTimerMinutesLeft(): Int {
+        if (sleepTimerMode != SleepTimerMode.COUNTDOWN) return 0
+        val remaining = sleepTimerDeadlineElapsedMs - android.os.SystemClock.elapsedRealtime()
+        return kotlin.math.ceil(remaining / 60_000.0).toInt().coerceAtLeast(0)
+    }
+
+    private fun sleepTimerValueLabel(): String = when (sleepTimerMode) {
+        SleepTimerMode.OFF -> "Off"
+        SleepTimerMode.END_OF_ITEM -> "End of episode"
+        SleepTimerMode.COUNTDOWN -> "${sleepTimerMinutesLeft()} min"
+    }
+
+    private fun startSleepCountdown(minutes: Int) {
+        cancelSleepTimer()
+        val durationMs = minutes * 60_000L
+        sleepTimerMode = SleepTimerMode.COUNTDOWN
+        // elapsedRealtime, not currentTimeMillis: the countdown must survive a
+        // clock adjustment and keep counting while the box is dozing.
+        sleepTimerDeadlineElapsedMs = android.os.SystemClock.elapsedRealtime() + durationMs
+        val runnable = Runnable { fireSleepTimer() }
+        sleepTimerRunnable = runnable
+        sleepTimerHandler.postDelayed(runnable, durationMs)
+        Toast.makeText(this, "Sleep timer set for $minutes minutes", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun armSleepAtEndOfItem() {
+        cancelSleepTimer()
+        sleepTimerMode = SleepTimerMode.END_OF_ITEM
+        Toast.makeText(this, "Sleep timer: stopping at the end of this episode", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun cancelSleepTimer(announce: Boolean = false) {
+        sleepTimerRunnable?.let { sleepTimerHandler.removeCallbacks(it) }
+        sleepTimerRunnable = null
+        sleepTimerMode = SleepTimerMode.OFF
+        sleepTimerDeadlineElapsedMs = 0L
+        if (announce) Toast.makeText(this, "Sleep timer off", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Stop for the night: persist the position first (losing someone's place
+     * overnight is exactly the moment this feature is supposed to be helping),
+     * pause, then release the screen so the TV can sleep on its own.
+     */
+    private fun fireSleepTimer() {
+        cancelSleepTimer()
+        sleepStopLatched = true
+        sendProgress(completed = false)
+        player?.pause()
+        releaseScreenForSleep()
+        Toast.makeText(this, "Sleep timer ended — paused", Toast.LENGTH_LONG).show()
+    }
+
+    /**
+     * Let the screen go dark. BOTH holds have to go: the activity adds
+     * FLAG_KEEP_SCREEN_ON on create, and the layout independently sets
+     * `android:keepScreenOn="true"` on the PlayerView — a view holding it
+     * re-applies the window flag, so clearing only one keeps the TV lit.
+     */
+    private fun releaseScreenForSleep() {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (::playerView.isInitialized) playerView.keepScreenOn = false
+    }
+
+    /** Re-take both holds when playback resumes. Idempotent. */
+    private fun holdScreenForPlayback() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (::playerView.isInitialized) playerView.keepScreenOn = true
+    }
+
+    private fun resetSkipSegmentState() {
+        skipSegmentFetchGeneration++
+        skipSegmentFetchJob?.cancel()
+        skipSegmentFetchJob = null
+        loadingSkipSegmentKey = null
+        loadedSkipSegmentKey = null
+        skipSegments = TvSkipSegments.EMPTY
+        activeSkipSegment = null
+        skipFocusOfferedKey = null
+        if (::skipSegmentButton.isInitialized) presentSkipSegment(null, null)
     }
 
     // Playlist
@@ -5553,28 +6010,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
 
-        playerView.findViewById<View>(R.id.debrify_controls_buttons)
-            ?.setBackgroundResource(R.drawable.iptv_premium_panel_bg)
-
-        val buttons = listOfNotNull(
-            audioButton,
-            subtitleButton,
-            aspectButton,
-            pauseButton,
-            speedButton,
-            nightModeButton,
-            iptvPrevButton,
-            iptvNextButton,
-            iptvJumpButton,
-            iptvRecordButton,
-            playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
-        )
-        buttons.forEach {
-            it.setBackgroundResource(R.drawable.iptv_premium_button_bg)
-            it.setTextColor(
-                ContextCompat.getColorStateList(this, R.color.iptv_premium_button_text)
-            )
-        }
+        applyLiveIptvControlStyle()
 
         iptvRecordButton?.setOnClickListener {
             hideControlsMenu()
@@ -5596,6 +6032,101 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
+    }
+
+    /** The live dock buttons that restyle for live IPTV — the same set the
+     *  original setup loop touched, so classic stays verbatim. */
+    private fun liveIptvDockButtons(): List<AppCompatButton> = listOfNotNull(
+        audioButton,
+        subtitleButton,
+        aspectButton,
+        pauseButton,
+        speedButton,
+        nightModeButton,
+        iptvPrevButton,
+        iptvNextButton,
+        iptvJumpButton,
+        iptvRecordButton,
+        playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
+    )
+
+    /** Cinema compound-drawable tints + typefaces captured before the first
+     *  styled live swap, so a styled live→VOD transition can put them back —
+     *  [restoreCinemaIptvControlStyle] only restores backgrounds/text. */
+    private val cinemaIconTints = HashMap<View, android.content.res.ColorStateList?>()
+    private val cinemaButtonTypefaces = HashMap<View, Typeface?>()
+
+    /**
+     * The live-IPTV dock skin. Extracted from `setupIptvControls` so the
+     * VOD→live transition can re-apply it (`restoreCinemaIptvControlStyle`
+     * overwrites every drawable on the way to VOD, and the return trip only
+     * reordered children). Classic keeps its original swap verbatim AND its
+     * original call graph — only styled launches call this from
+     * `updateIptvControlPresentation`.
+     */
+    private fun applyLiveIptvControlStyle() {
+        val t = guideTokens
+        if (t == null) {
+            playerView.findViewById<View>(R.id.debrify_controls_buttons)
+                ?.setBackgroundResource(R.drawable.iptv_premium_panel_bg)
+
+            val buttons = liveIptvDockButtons()
+            buttons.forEach {
+                it.setBackgroundResource(R.drawable.iptv_premium_button_bg)
+                it.setTextColor(
+                    ContextCompat.getColorStateList(this, R.color.iptv_premium_button_text)
+                )
+            }
+            return
+        }
+
+        val radius = when (guideStyle) {
+            GuideStyle.GLASS -> dp(22).toFloat()
+            GuideStyle.EDITION -> dp(8).toFloat()
+            else -> dp(4).toFloat()
+        }
+        playerView.findViewById<View>(R.id.debrify_controls_buttons)?.background =
+            t.panelDrawable(radius, dp(1))
+        val buttonRadius = when (guideStyle) {
+            GuideStyle.GLASS -> dp(16).toFloat()
+            GuideStyle.EDITION -> dp(6).toFloat()
+            else -> dp(3).toFloat()
+        }
+        liveIptvDockButtons().forEach { button ->
+            if (!cinemaIconTints.containsKey(button)) {
+                // TextViewCompat throughout: the direct getter/setter is
+                // API 23 and this app ships to minSdk 21.
+                cinemaIconTints[button] =
+                    TextViewCompat.getCompoundDrawableTintList(button)
+                cinemaButtonTypefaces[button] = button.typeface
+            }
+            button.background = t.buttonBackground(buttonRadius)
+            val colors = t.buttonTextColors()
+            button.setTextColor(colors)
+            TextViewCompat.setCompoundDrawableTintList(button, colors)
+            if (guideStyle == GuideStyle.CONSOLE) {
+                button.typeface = guideTypeface(t.monoFont) ?: button.typeface
+            }
+        }
+    }
+
+    /** Styled-only tail after [restoreCinemaIptvControlStyle]: put back the
+     *  cinema icon tints AND typefaces the styled live skin replaced.
+     *  Classic never runs this (its restore function is untouched and
+     *  sufficient). */
+    private fun restoreCinemaDockIconTints() {
+        if (cinemaIconTints.isEmpty()) return
+        liveIptvDockButtons().forEach { button ->
+            if (cinemaIconTints.containsKey(button)) {
+                TextViewCompat.setCompoundDrawableTintList(
+                    button,
+                    cinemaIconTints[button],
+                )
+            }
+            if (cinemaButtonTypefaces.containsKey(button)) {
+                button.typeface = cinemaButtonTypefaces[button]
+            }
+        }
     }
 
     // ── IPTV recording ──────────────────────────────────────────────────────
@@ -5997,8 +6528,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val vodVisibility = if (live) View.GONE else View.VISIBLE
         if (live) {
             arrangeLiveIptvControlDock()
+            // Styled only: a VOD trip restored every cinema drawable, and
+            // reordering alone doesn't bring the live skin back. Classic
+            // keeps its original call graph (and its original quirk).
+            if (guideTokens != null) applyLiveIptvControlStyle()
         } else {
             restoreCinemaIptvControlStyle()
+            if (guideTokens != null) restoreCinemaDockIconTints()
         }
         cinemaProgressContainer?.visibility = vodVisibility
         debrifyTimeCurrent?.visibility = vodVisibility
@@ -6150,6 +6686,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             },
             onEpgNeeded = { entry -> ensureIptvChannelEpg(entry) },
+            tokens = guideTokens,
+            style = guideStyle,
+            nameTypeface = guideTokens?.let { guideTypeface(it.nameFont) },
+            monoTypeface = guideTokens?.let { guideTypeface(it.monoFont) },
+            headlineTypeface = guideTokens?.let { guideTypeface(it.headlineFont) },
+            captionTypeface = guideTokens?.let { guideTypeface(it.captionFont) },
+            rowRadiusPx = when (guideStyle) {
+                GuideStyle.GLASS -> dp(14).toFloat()
+                GuideStyle.EDITION -> dp(8).toFloat()
+                else -> dp(3).toFloat()
+            },
+            rowStrokePx = dp(2),
         )
         guideList.adapter = iptvChannelAdapter
         guideList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -6179,6 +6727,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             onRecordFuture = { program ->
                 iptvEpgEntry?.let { entry -> promptScheduleRecording(entry, program) }
             },
+            tokens = guideTokens,
+            style = guideStyle,
+            monoTypeface = guideTokens?.let { guideTypeface(it.monoFont) },
+            headlineTypeface = guideTokens?.let { guideTypeface(it.headlineFont) },
+            rowRadiusPx = when (guideStyle) {
+                GuideStyle.GLASS -> dp(14).toFloat()
+                GuideStyle.EDITION -> dp(8).toFloat()
+                else -> dp(3).toFloat()
+            },
+            rowStrokePx = dp(2),
         )
         iptvEpgList?.adapter = iptvEpgAdapter
 
@@ -6289,6 +6847,152 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         refreshIptvBrowserChrome()
         updateIptvGuideCurrentName()
+        // AFTER the premiumButtonIds loop above, so the legacy tinting can
+        // never overwrite the styled pass.
+        applyGuideStyle()
+    }
+
+    /**
+     * The styled looks' one-shot re-tint of the guide overlay. Classic
+     * returns immediately — the XML keeps every legacy value, and this runs
+     * once from [setupIptvOverlay] (no per-frame or per-bind work).
+     */
+    private fun applyGuideStyle() {
+        val t = guideTokens ?: return
+        val style = guideStyle
+        val panelRadius = when (style) {
+            GuideStyle.GLASS -> dp(18).toFloat()
+            GuideStyle.EDITION -> dp(10).toFloat()
+            else -> dp(4).toFloat()
+        }
+        val controlRadius = when (style) {
+            GuideStyle.GLASS -> dp(12).toFloat()
+            GuideStyle.EDITION -> dp(8).toFloat()
+            else -> dp(3).toFloat()
+        }
+        val serif = guideTypeface(t.headlineFont)
+        val serifItalic = guideTypeface(t.captionFont)
+        val grotesk = guideTypeface(t.nameFont)
+        val mono = guideTypeface(t.monoFont)
+        val buttonColors = t.buttonTextColors()
+
+        fun styleButton(id: Int) {
+            findViewById<AppCompatButton>(id)?.let { button ->
+                button.background = t.buttonBackground(controlRadius)
+                button.setTextColor(buttonColors)
+                TextViewCompat.setCompoundDrawableTintList(button, buttonColors)
+                if (style == GuideStyle.CONSOLE) {
+                    button.typeface = mono ?: button.typeface
+                }
+            }
+        }
+
+        // Panels + rail.
+        findViewById<View>(R.id.iptv_guide_panel)?.background =
+            t.panelDrawable(panelRadius, dp(1))
+        findViewById<View>(R.id.iptv_epg_panel)?.background =
+            t.panelDrawable(panelRadius, dp(1))
+        findViewById<View>(R.id.iptv_guide_now_playing)?.background =
+            t.panelDrawable(panelRadius, dp(1))
+        findViewById<View>(R.id.iptv_nav_rail)?.setBackgroundColor(t.bg)
+        findViewById<View>(R.id.iptv_rail_divider)?.setBackgroundColor(t.hairline)
+        findViewById<TextView>(R.id.iptv_nav_logo)?.let { d ->
+            d.setBackgroundColor(t.fg)
+            d.setTextColor(t.bg or 0xFF000000.toInt())
+        }
+        findViewById<View>(R.id.iptv_mode_tabs)?.setBackgroundColor(t.bg)
+        findViewById<View>(R.id.iptv_epg_day_tabs)?.setBackgroundColor(t.bg)
+
+        // Buttons — nav rail, source/category, mode, day tabs.
+        intArrayOf(
+            R.id.iptv_nav_browse,
+            R.id.iptv_nav_search,
+            R.id.iptv_nav_favorites,
+            R.id.iptv_nav_sources,
+            R.id.iptv_nav_close,
+            R.id.iptv_source_button,
+            R.id.iptv_category_button,
+            R.id.iptv_mode_live,
+            R.id.iptv_epg_day_today,
+            R.id.iptv_epg_day_tomorrow,
+            R.id.iptv_epg_day_later,
+        ).forEach { styleButton(it) }
+
+        // Kickers: the one place each style stamps its voice.
+        val kickerColor = when (style) {
+            GuideStyle.EDITION -> t.fgDim
+            else -> t.accent
+        }
+        intArrayOf(R.id.iptv_guide_kicker, R.id.iptv_epg_kicker).forEach { id ->
+            findViewById<TextView>(id)?.let { kicker ->
+                kicker.setTextColor(kickerColor)
+                when (style) {
+                    GuideStyle.EDITION -> kicker.typeface =
+                        serifItalic?.let { Typeface.create(it, Typeface.ITALIC) }
+                            ?: kicker.typeface
+                    GuideStyle.CONSOLE -> kicker.typeface = mono ?: kicker.typeface
+                    else -> {}
+                }
+            }
+        }
+
+        // Titles + secondary text.
+        findViewById<TextView>(R.id.iptv_guide_title)?.let { title ->
+            title.setTextColor(t.fg)
+            when (style) {
+                GuideStyle.EDITION -> title.typeface = serif ?: title.typeface
+                GuideStyle.CONSOLE -> title.typeface = grotesk ?: title.typeface
+                else -> {}
+            }
+        }
+        findViewById<TextView>(R.id.iptv_epg_channel_name)?.let { name ->
+            name.setTextColor(t.fg)
+            when (style) {
+                GuideStyle.EDITION -> name.typeface = serif ?: name.typeface
+                GuideStyle.CONSOLE -> name.typeface = grotesk ?: name.typeface
+                else -> {}
+            }
+        }
+        findViewById<TextView>(R.id.iptv_guide_count)?.setTextColor(t.fgFaint)
+        findViewById<TextView>(R.id.iptv_epg_channel_group)?.setTextColor(t.fgFaint)
+        findViewById<TextView>(R.id.iptv_epg_date)?.setTextColor(t.fgMid)
+        findViewById<TextView>(R.id.iptv_epg_empty)?.setTextColor(t.fgDim)
+        intArrayOf(
+            R.id.iptv_footer_play,
+            R.id.iptv_footer_schedule,
+            R.id.iptv_footer_favorite,
+            R.id.iptv_epg_footer_channels,
+            R.id.iptv_epg_footer_replay,
+        ).forEach { findViewById<TextView>(it)?.setTextColor(t.fgFaint) }
+
+        // Search field.
+        iptvGuideSearch?.let { search ->
+            search.background = t.searchDrawable(controlRadius)
+            search.setTextColor(t.fg)
+            search.setHintTextColor(t.fgFaint)
+            TextViewCompat.setCompoundDrawableTintList(
+                search,
+                android.content.res.ColorStateList.valueOf(t.fgFaint),
+            )
+            if (style == GuideStyle.CONSOLE) search.typeface = mono ?: search.typeface
+        }
+
+        // Spinners + logo tiles + the now-playing card texts.
+        val accentTint = android.content.res.ColorStateList.valueOf(t.accent)
+        findViewById<ProgressBar>(R.id.iptv_browse_loading)?.indeterminateTintList =
+            accentTint
+        findViewById<ProgressBar>(R.id.iptv_epg_loading)?.indeterminateTintList =
+            accentTint
+        val tileRadius = if (style == GuideStyle.EDITION) dp(24).toFloat() else controlRadius
+        intArrayOf(R.id.iptv_epg_logo_tile, R.id.iptv_guide_now_logo_tile).forEach { id ->
+            findViewById<View>(id)?.background = t.tileDrawable(tileRadius, dp(1))
+        }
+        intArrayOf(R.id.iptv_epg_letter, R.id.iptv_guide_now_letter).forEach { id ->
+            findViewById<TextView>(id)?.setTextColor(t.fg)
+        }
+        findViewById<TextView>(R.id.iptv_guide_current_epg)?.setTextColor(t.live)
+        findViewById<TextView>(R.id.iptv_guide_current_name)?.setTextColor(t.fg)
+        findViewById<TextView>(R.id.iptv_guide_current_group)?.setTextColor(t.fgFaint)
     }
 
     private fun isIptvSeriesSentinel(entry: IptvChannelEntry): Boolean =
@@ -6528,24 +7232,37 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(8), dp(24), 0)
         }
+        val pickerTokens = guideTokens
         val searchInput = EditText(this).apply {
             id = View.generateViewId()
             setSingleLine(true)
             hint = "Search categories"
             inputType = InputType.TYPE_CLASS_TEXT
             imeOptions = EditorInfo.IME_ACTION_DONE
-            setTextColor(Color.WHITE)
-            setHintTextColor(0x80FFFFFF.toInt())
-            setBackgroundResource(R.drawable.iptv_guide_search_bg)
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
-            compoundDrawablePadding = dp(10)
-            compoundDrawableTintList =
-                android.content.res.ColorStateList.valueOf(0xB3FFFFFF.toInt())
+            if (pickerTokens == null) {
+                setTextColor(Color.WHITE)
+                setHintTextColor(0x80FFFFFF.toInt())
+                setBackgroundResource(R.drawable.iptv_guide_search_bg)
+                setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
+                compoundDrawablePadding = dp(10)
+                compoundDrawableTintList =
+                    android.content.res.ColorStateList.valueOf(0xB3FFFFFF.toInt())
+            } else {
+                setTextColor(pickerTokens.fg)
+                setHintTextColor(pickerTokens.fgFaint)
+                background = pickerTokens.searchDrawable(dp(10).toFloat())
+                setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
+                compoundDrawablePadding = dp(10)
+                TextViewCompat.setCompoundDrawableTintList(
+                    this,
+                    android.content.res.ColorStateList.valueOf(pickerTokens.fgFaint),
+                )
+            }
             setPadding(dp(16), 0, dp(16), 0)
         }
         val statusText = TextView(this).apply {
             setPadding(dp(2), dp(12), dp(2), dp(8))
-            setTextColor(0xB3FFFFFF.toInt())
+            setTextColor(pickerTokens?.fgDim ?: 0xB3FFFFFF.toInt())
             textSize = 13f
         }
         val categoryList = RecyclerView(this).apply {
@@ -6586,6 +7303,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val adapter = IptvCategoryAdapter(
             selectedCategory = iptvSelectedCategory,
             searchViewId = searchInput.id,
+            tokens = pickerTokens,
+            rowRadiusPx = dp(8).toFloat(),
         ) { category ->
             dialog.dismiss()
             commitIptvAllCategorySearch()
@@ -6669,6 +7388,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setView(container)
             .setNegativeButton("Cancel", null)
             .create()
+        // Styled looks give the dialog their own (flattened-opaque) panel.
+        pickerTokens?.let { t ->
+            dialog.window?.setBackgroundDrawable(
+                GradientDrawable().apply {
+                    cornerRadius = dp(18).toFloat()
+                    setColor(t.panelOpaque)
+                    setStroke(dp(1), t.hairline2)
+                },
+            )
+        }
         dialog.setOnShowListener {
             searchInput.requestFocus()
             dialog.window?.setSoftInputMode(
@@ -6681,6 +7410,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private class IptvCategoryAdapter(
         private val selectedCategory: String?,
         private val searchViewId: Int,
+        private val tokens: GuideTokens? = null,
+        private val rowRadiusPx: Float = 0f,
         private val onSelected: (String) -> Unit,
     ) : RecyclerView.Adapter<IptvCategoryAdapter.ViewHolder>() {
         private val categories = mutableListOf<String>()
@@ -6701,13 +7432,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 isClickable = true
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(px(16), 0, px(16), 0)
-                setBackgroundResource(R.drawable.iptv_premium_button_bg)
-                setTextColor(
-                    ContextCompat.getColorStateList(
-                        context,
-                        R.color.iptv_premium_button_text,
-                    ),
-                )
+                if (tokens == null) {
+                    setBackgroundResource(R.drawable.iptv_premium_button_bg)
+                    setTextColor(
+                        ContextCompat.getColorStateList(
+                            context,
+                            R.color.iptv_premium_button_text,
+                        ),
+                    )
+                } else {
+                    background = tokens.buttonBackground(rowRadiusPx)
+                    setTextColor(tokens.buttonTextColors())
+                }
                 textSize = 15f
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -6765,9 +7501,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(8), dp(24), 0)
         }
+        val pickerTokens = guideTokens
         val statusText = TextView(this).apply {
             setPadding(dp(2), dp(4), dp(2), dp(8))
-            setTextColor(0xB3FFFFFF.toInt())
+            setTextColor(pickerTokens?.fgDim ?: 0xB3FFFFFF.toInt())
             textSize = 13f
             text = "Loading lists…"
         }
@@ -6797,7 +7534,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
 
         val membership = mutableSetOf<String>()
-        val adapter = IptvListPickerAdapter(iptvLists, membership) { list ->
+        val adapter = IptvListPickerAdapter(
+            iptvLists,
+            membership,
+            tokens = pickerTokens,
+            rowRadiusPx = dp(8).toFloat(),
+        ) { list ->
             val nowIn = !membership.contains(list.id)
             if (nowIn) membership.add(list.id) else membership.remove(list.id)
             // Favorites drives the star badge in the guide, so keep the row in
@@ -6840,6 +7582,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setView(container)
             .setNegativeButton("Done", null)
             .create()
+        pickerTokens?.let { t ->
+            dialog.window?.setBackgroundDrawable(
+                GradientDrawable().apply {
+                    cornerRadius = dp(18).toFloat()
+                    setColor(t.panelOpaque)
+                    setStroke(dp(1), t.hairline2)
+                },
+            )
+        }
         dialog.show()
 
         channel.invokeMethod(
@@ -6894,6 +7645,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private class IptvListPickerAdapter(
         private val lists: List<IptvListEntry>,
         private val membership: Set<String>,
+        private val tokens: GuideTokens? = null,
+        private val rowRadiusPx: Float = 0f,
         private val onToggle: (IptvListEntry) -> Unit,
     ) : RecyclerView.Adapter<IptvListPickerAdapter.ViewHolder>() {
         // No rows until the channel's real membership has landed — see the
@@ -6922,13 +7675,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 isClickable = true
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(px(16), 0, px(16), 0)
-                setBackgroundResource(R.drawable.iptv_premium_button_bg)
-                setTextColor(
-                    ContextCompat.getColorStateList(
-                        context,
-                        R.color.iptv_premium_button_text,
-                    ),
-                )
+                if (tokens == null) {
+                    setBackgroundResource(R.drawable.iptv_premium_button_bg)
+                    setTextColor(
+                        ContextCompat.getColorStateList(
+                            context,
+                            R.color.iptv_premium_button_text,
+                        ),
+                    )
+                } else {
+                    background = tokens.buttonBackground(rowRadiusPx)
+                    setTextColor(tokens.buttonTextColors())
+                }
                 textSize = 15f
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -8549,6 +9307,43 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private val iptvZapAccent = Color.parseColor("#00E5FF")
 
+    // ── In-player guide style (see IptvGuideStyle.kt) ──────────────────────
+    // Read once per launch, like recordingEngineEnabled: the Dart side owns
+    // the pref; changing it applies to the next playback session. CLASSIC
+    // (null tokens) keeps every legacy paint path verbatim.
+    private val guideStyle: GuideStyle by lazy {
+        GuideStyle.fromPref(
+            getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                .getString("flutter.iptv_player_guide_style", "classic"),
+        )
+    }
+    private val guideTokens: GuideTokens? by lazy { GuideTokens.of(guideStyle) }
+
+    /** Typefaces for the styled looks, loaded from the Flutter asset bundle.
+     *  Failures are memoized too (containsKey, not getOrPut) so a missing
+     *  asset is never retried per repaint — it just falls back to default. */
+    private val guideTypefaces = HashMap<String, Typeface?>()
+
+    private fun guideTypeface(file: String?): Typeface? {
+        if (file == null) return null
+        if (guideTypefaces.containsKey(file)) return guideTypefaces[file]
+        val loaded = try {
+            Typeface.createFromAsset(assets, "flutter_assets/assets/fonts/$file")
+        } catch (e: Exception) {
+            android.util.Log.w("AndroidTvPlayer", "Guide style font missing: $file")
+            null
+        }
+        guideTypefaces[file] = loaded
+        return loaded
+    }
+
+    /** One truth for "is THIS channel being recorded right now" — the same
+     *  combination the Record button paints from. The styled zap banner's
+     *  REC tag reads it on show and on every 1s repaint. */
+    private fun isRecordingCurrentIptvChannel(): Boolean =
+        (recordingEngineEnabled && engineTaskIdForCurrentChannel() != null) ||
+            iptvRecordingController.isActive
+
     private fun zapText(
         size: Float,
         alpha: Int,
@@ -8606,6 +9401,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun ensureIptvZapBanner(): FrameLayout {
         iptvZapBanner?.let { return it }
+        guideTokens?.let { return buildStyledIptvZapBanner(it) }
 
         val match = ViewGroup.LayoutParams.MATCH_PARENT
         val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -8807,6 +9603,504 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return banner
     }
 
+    // ── Styled zap banner (GLASS / EDITION / CONSOLE) ──────────────────────
+    // Its own builder + painters, per the style contract: the classic tree
+    // above never changes, and the styled tree owns every color, typeface,
+    // and drawable it paints. The shared BEHAVIORAL fns (show/hide, ticker,
+    // position text, hint gating) work on both trees through the same field
+    // refs.
+
+    private var iptvZapStyledScrim: View? = null
+    private var iptvZapStyledCard: LinearLayout? = null
+    private var iptvZapGlassCardWidth = 0
+    private var iptvZapStyledRule: View? = null
+    private var iptvZapStyledLive: TextView? = null
+    private var iptvZapStyledRec: TextView? = null
+    private var iptvZapStyledEnd: TextView? = null
+    private var iptvZapStyledMeterRow: LinearLayout? = null
+
+    private fun styledZapText(
+        t: GuideTokens,
+        size: Float,
+        color: Int,
+        font: String? = null,
+        bold: Boolean = false,
+        italic: Boolean = false,
+    ) = TextView(this).apply {
+        textSize = size
+        setTextColor(color)
+        val base = guideTypeface(font)
+        typeface = when {
+            base != null && italic -> Typeface.create(base, Typeface.ITALIC)
+            base != null && bold -> Typeface.create(base, Typeface.BOLD)
+            base != null -> base
+            bold && italic -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC)
+            bold -> Typeface.DEFAULT_BOLD
+            italic -> Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            else -> Typeface.DEFAULT
+        }
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+    }
+
+    /** One styled rail entry: keycaps + label, token colors only. */
+    private fun styledZapHint(t: GuideTokens, caps: List<String>, label: String): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        caps.forEach { cap ->
+            row.addView(
+                styledZapText(t, 10f, t.fgMid, font = t.monoFont).apply {
+                    text = cap
+                    setPadding(dp(5), 0, dp(5), dp(1))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(3).toFloat()
+                        setColor(Color.TRANSPARENT)
+                        setStroke(dp(1), t.hairline2)
+                    }
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { rightMargin = dp(4) },
+            )
+        }
+        row.addView(
+            styledZapText(t, 10.5f, t.fgFaint).apply {
+                text = label
+                isAllCaps = true
+                letterSpacing = 0.1f
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = dp(3) },
+        )
+        return row
+    }
+
+    private fun buildStyledIptvZapBanner(t: GuideTokens): FrameLayout {
+        val match = ViewGroup.LayoutParams.MATCH_PARENT
+        val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+        val style = guideStyle
+
+        val banner = FrameLayout(this).apply {
+            visibility = View.GONE
+            elevation = dp(8).toFloat()
+        }
+
+        // Scrim: glass keeps the video visible; edition/console fade to their
+        // own ink/black. Hidden entirely while docked (the dock is the panel).
+        val scrim = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                when (style) {
+                    GuideStyle.GLASS -> intArrayOf(0x000A0C12, 0x730A0C12)
+                    GuideStyle.EDITION -> intArrayOf(0x000D0B09, t.bg)
+                    else -> intArrayOf(0x00050505, t.bg)
+                },
+            )
+        }
+        banner.addView(scrim, FrameLayout.LayoutParams(match, match))
+
+        // Shared-role views. The behavioral painters write text into these no
+        // matter which styled tree they sit in (or, for the logo pair in
+        // edition/console, don't sit in at all).
+        val logo = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            visibility = View.GONE
+        }
+        val letter = styledZapText(t, 24f, t.fg, bold = true).apply {
+            gravity = Gravity.CENTER
+        }
+        val number: TextView
+        val name: TextView
+        val now: TextView
+        val times: TextView
+        val next: TextView
+        val meta: TextView
+        val liveTag: TextView
+        val recTag = styledZapText(t, 10.5f, t.rec, bold = true).apply {
+            text = "● REC"
+            letterSpacing = 0.12f
+            visibility = View.GONE
+        }
+
+        when (style) {
+            GuideStyle.EDITION -> {
+                // Editorial: the PROGRAMME is the headline, the channel is
+                // the byline. Kicker caps in the italic serif above it.
+                number = styledZapText(t, 11f, t.fgDim, font = t.captionFont, italic = true)
+                liveTag = styledZapText(t, 11f, t.live, font = t.captionFont, italic = true).apply {
+                    text = "· LIVE"
+                }
+                meta = styledZapText(t, 11f, t.fgFaint, font = t.captionFont, italic = true).apply {
+                    isAllCaps = true
+                    letterSpacing = 0.09f
+                }
+                now = styledZapText(t, 26f, t.fg, font = t.headlineFont)
+                name = styledZapText(t, 12.5f, t.fgDim)
+                times = styledZapText(t, 12.5f, t.fgDim)
+                next = styledZapText(t, 12f, t.fgFaint, font = t.captionFont, italic = true)
+            }
+            GuideStyle.CONSOLE -> {
+                number = styledZapText(t, 18f, t.accent, font = t.monoFont, bold = true)
+                name = styledZapText(t, 19f, t.fg, font = t.nameFont, bold = true)
+                liveTag = styledZapText(t, 10.5f, t.live, font = t.monoFont, bold = true).apply {
+                    text = "● LIVE"
+                    letterSpacing = 0.12f
+                }
+                meta = styledZapText(t, 10.5f, t.fgFaint, font = t.monoFont).apply {
+                    isAllCaps = true
+                    letterSpacing = 0.09f
+                }
+                now = styledZapText(t, 15f, t.fg, bold = true)
+                times = styledZapText(t, 11f, t.fgDim, font = t.monoFont)
+                next = styledZapText(t, 10.5f, t.fgFaint, font = t.monoFont).apply {
+                    isAllCaps = true
+                }
+            }
+            else -> { // GLASS
+                number = styledZapText(t, 20f, t.fg, bold = true)
+                name = styledZapText(t, 22f, t.fg, bold = true)
+                liveTag = styledZapText(t, 11f, t.live, bold = true).apply {
+                    text = "● LIVE"
+                    letterSpacing = 0.12f
+                }
+                meta = styledZapText(t, 11f, t.fgDim).apply {
+                    isAllCaps = true
+                    letterSpacing = 0.09f
+                }
+                now = styledZapText(t, 15f, t.fgMid, bold = true)
+                times = styledZapText(t, 11.5f, t.fgDim)
+                next = styledZapText(t, 11.5f, t.fgFaint)
+            }
+        }
+
+        // Elapsed rule. Glass/edition use a plain bar; console pairs it with
+        // the programme's end time, instrument style.
+        val bar = ProgressBar(
+            this, null, android.R.attr.progressBarStyleHorizontal
+        ).apply {
+            max = 1000
+            progressTintList = android.content.res.ColorStateList.valueOf(
+                if (style == GuideStyle.EDITION) t.fg else t.accent,
+            )
+            progressBackgroundTintList =
+                android.content.res.ColorStateList.valueOf(t.hairline2)
+        }
+        val endTime = styledZapText(t, 10.5f, t.fgDim, font = t.monoFont).apply {
+            visibility = View.GONE
+        }
+
+        val hintChannel = styledZapHint(t, listOf("◀", "▶"), "Channel")
+        val hintGuide = styledZapHint(t, listOf("▲"), "Guide")
+        val hintJump = styledZapHint(t, listOf("HOLD ▲"), "Channel number")
+        val rail = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        rail.addView(
+            hintChannel,
+            LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(20) },
+        )
+        rail.addView(hintGuide, LinearLayout.LayoutParams(wrap, wrap))
+        rail.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+        rail.addView(hintJump, LinearLayout.LayoutParams(wrap, wrap))
+
+        val body: LinearLayout
+        when (style) {
+            GuideStyle.GLASS -> {
+                // Island card, bottom-left, like a broadcast bug.
+                val tile = FrameLayout(this).apply {
+                    background = t.tileDrawable(dp(14).toFloat(), dp(1))
+                    setPadding(dp(6), dp(6), dp(6), dp(6))
+                }
+                tile.addView(logo, FrameLayout.LayoutParams(match, match))
+                tile.addView(letter, FrameLayout.LayoutParams(match, match))
+
+                val nameRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                nameRow.addView(
+                    number,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(10) },
+                )
+                nameRow.addView(name, LinearLayout.LayoutParams(0, wrap, 1f))
+                nameRow.addView(
+                    liveTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(12) },
+                )
+                nameRow.addView(
+                    recTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(10) },
+                )
+
+                val ident = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                ident.addView(nameRow, LinearLayout.LayoutParams(match, wrap))
+                ident.addView(
+                    now,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(6) },
+                )
+                ident.addView(
+                    times,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(3) },
+                )
+                ident.addView(
+                    meta,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(3) },
+                )
+                ident.addView(
+                    next,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(3) },
+                )
+
+                val contentRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(20), dp(18), dp(20), dp(14))
+                }
+                contentRow.addView(tile, LinearLayout.LayoutParams(dp(60), dp(60)))
+                contentRow.addView(
+                    ident,
+                    LinearLayout.LayoutParams(0, wrap, 1f).apply { leftMargin = dp(16) },
+                )
+
+                val card = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = t.panelDrawable(dp(22).toFloat(), dp(1))
+                    clipToOutline = true
+                }
+                card.addView(contentRow, LinearLayout.LayoutParams(match, wrap))
+                card.addView(
+                    bar,
+                    LinearLayout.LayoutParams(match, dp(3)).apply {
+                        leftMargin = dp(20)
+                        rightMargin = dp(20)
+                        bottomMargin = dp(16)
+                    },
+                )
+
+                val cardWidth = minOf(
+                    dp(620),
+                    resources.displayMetrics.widthPixels - dp(56),
+                ).coerceAtLeast(dp(220))
+                iptvZapGlassCardWidth = cardWidth
+                banner.addView(
+                    card,
+                    FrameLayout.LayoutParams(cardWidth, wrap, Gravity.BOTTOM or Gravity.START)
+                        .apply {
+                            leftMargin = dp(28)
+                            bottomMargin = dp(58)
+                        },
+                )
+                iptvZapStyledCard = card
+                body = card
+            }
+            GuideStyle.EDITION -> {
+                val rule = View(this).apply { setBackgroundColor(t.hairline2) }
+                val kickerRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                kickerRow.addView(
+                    number,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(6) },
+                )
+                kickerRow.addView(
+                    liveTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(6) },
+                )
+                kickerRow.addView(
+                    recTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(6) },
+                )
+                kickerRow.addView(meta, LinearLayout.LayoutParams(0, wrap, 1f))
+
+                val bylineRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                bylineRow.addView(name, LinearLayout.LayoutParams(0, wrap, 1f))
+                bylineRow.addView(
+                    times,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(14) },
+                )
+
+                val column = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                column.addView(rule, LinearLayout.LayoutParams(match, dp(1)))
+                column.addView(
+                    kickerRow,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(12) },
+                )
+                column.addView(
+                    now,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(7) },
+                )
+                column.addView(
+                    bylineRow,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(6) },
+                )
+                column.addView(
+                    next,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(4) },
+                )
+
+                banner.addView(
+                    column,
+                    FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+                        leftMargin = dp(48)
+                        rightMargin = dp(48)
+                        bottomMargin = dp(58)
+                    },
+                )
+                banner.addView(bar, FrameLayout.LayoutParams(match, dp(2), Gravity.BOTTOM))
+                iptvZapStyledRule = rule
+                body = column
+            }
+            else -> { // CONSOLE
+                val nameRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                nameRow.addView(
+                    number,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(12) },
+                )
+                nameRow.addView(name, LinearLayout.LayoutParams(0, wrap, 1f))
+                nameRow.addView(
+                    liveTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(12) },
+                )
+                nameRow.addView(
+                    recTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(10) },
+                )
+
+                val nowLabel = styledZapText(t, 10f, t.fgFaint, font = t.monoFont, bold = true)
+                    .apply {
+                        text = "NOW"
+                        letterSpacing = 0.2f
+                    }
+                val nowRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                nowRow.addView(
+                    nowLabel,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(10) },
+                )
+                nowRow.addView(now, LinearLayout.LayoutParams(0, wrap, 1f))
+                nowRow.addView(
+                    times,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(14) },
+                )
+
+                val content = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                content.addView(nameRow, LinearLayout.LayoutParams(match, wrap))
+                content.addView(
+                    nowRow,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(7) },
+                )
+                content.addView(
+                    meta,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(4) },
+                )
+                content.addView(
+                    next,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(4) },
+                )
+
+                // The amber rule rides the content block as a left rule.
+                val ruled = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                }
+                val rule = View(this).apply { setBackgroundColor(t.accent) }
+                ruled.addView(rule, LinearLayout.LayoutParams(dp(3), match))
+                ruled.addView(
+                    content,
+                    LinearLayout.LayoutParams(0, wrap, 1f).apply { leftMargin = dp(16) },
+                )
+
+                val meterRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                meterRow.addView(bar, LinearLayout.LayoutParams(0, dp(5), 1f))
+                meterRow.addView(
+                    endTime,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(10) },
+                )
+
+                val column = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                column.addView(ruled, LinearLayout.LayoutParams(match, wrap))
+                column.addView(
+                    meterRow,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(12) },
+                )
+
+                banner.addView(
+                    column,
+                    FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+                        leftMargin = dp(48)
+                        rightMargin = dp(48)
+                        bottomMargin = dp(58)
+                    },
+                )
+                iptvZapStyledRule = rule
+                iptvZapStyledMeterRow = meterRow
+                body = column
+            }
+        }
+
+        banner.addView(
+            rail,
+            FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+                leftMargin = dp(48)
+                rightMargin = dp(48)
+                bottomMargin = dp(16)
+            },
+        )
+
+        val root = findViewById<ViewGroup>(android.R.id.content)
+        root.addView(
+            banner,
+            FrameLayout.LayoutParams(match, dp(250)).apply {
+                gravity = Gravity.BOTTOM
+            },
+        )
+
+        iptvZapBanner = banner
+        iptvZapBannerLogo = logo
+        iptvZapBannerLetter = letter
+        iptvZapBannerNumber = number
+        iptvZapBannerName = name
+        iptvZapBannerMeta = meta
+        iptvZapBannerNow = now
+        iptvZapBannerTimes = times
+        iptvZapBannerNext = next
+        iptvZapBannerProgress = bar
+        iptvZapBannerHintChannel = hintChannel
+        iptvZapBannerHintJump = hintJump
+        iptvZapBannerBody = body
+        iptvZapBannerRail = rail
+        iptvZapStyledScrim = scrim
+        iptvZapStyledLive = liveTag
+        iptvZapStyledRec = recTag
+        iptvZapStyledEnd = endTime
+        return banner
+    }
+
     /**
      * Present [entry]'s channel panel.
      *
@@ -8894,6 +10188,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * at the wrong offset.
      */
     private fun applyIptvZapBannerMode(docked: Boolean) {
+        guideTokens?.let { applyStyledZapBannerMode(docked, it); return }
         val banner = iptvZapBanner ?: return
         val dock = controlsOverlay
         val dockHeight = if (docked) (dock?.height ?: 0) else 0
@@ -8958,8 +10253,78 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }.start()
     }
 
+    /** The styled counterpart of [applyIptvZapBannerMode]: same margin/dock
+     *  bookkeeping, plus the styled chrome that changes between homes (scrim
+     *  off while docked; the glass card hands its surface to the dock). */
+    private fun applyStyledZapBannerMode(docked: Boolean, t: GuideTokens) {
+        val banner = iptvZapBanner ?: return
+        val dock = controlsOverlay
+        val dockHeight = if (docked) (dock?.height ?: 0) else 0
+        (banner.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            if (lp.bottomMargin != dockHeight) {
+                lp.bottomMargin = dockHeight
+                banner.layoutParams = lp
+            }
+        }
+        iptvZapStyledScrim?.visibility = if (docked) View.GONE else View.VISIBLE
+        iptvZapBannerRail?.visibility = if (docked) View.GONE else View.VISIBLE
+        // Edition's top hairline reads wrong pressed against the dock edge.
+        if (guideStyle == GuideStyle.EDITION) {
+            iptvZapStyledRule?.visibility = if (docked) View.INVISIBLE else View.VISIBLE
+        }
+        if (guideStyle == GuideStyle.GLASS) {
+            // Docked, the island hands its surface AND its island geometry to
+            // the dock: full-width flush band, full-width progress pill.
+            val card = iptvZapStyledCard
+            card?.background =
+                if (docked) null else t.panelDrawable(dp(22).toFloat(), dp(1))
+            (card?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+                val width = if (docked) {
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                } else {
+                    iptvZapGlassCardWidth
+                }
+                val left = if (docked) dp(20) else dp(28)
+                val right = if (docked) dp(20) else 0
+                if (lp.width != width || lp.leftMargin != left ||
+                    lp.rightMargin != right
+                ) {
+                    lp.width = width
+                    lp.leftMargin = left
+                    lp.rightMargin = right
+                    card.layoutParams = lp
+                }
+            }
+            (iptvZapBannerProgress?.layoutParams as? LinearLayout.LayoutParams)
+                ?.let { lp ->
+                    val side = if (docked) 0 else dp(20)
+                    val bottom = if (docked) dp(4) else dp(16)
+                    if (lp.leftMargin != side || lp.bottomMargin != bottom) {
+                        lp.leftMargin = side
+                        lp.rightMargin = side
+                        lp.bottomMargin = bottom
+                        iptvZapBannerProgress?.layoutParams = lp
+                    }
+                }
+        }
+        (iptvZapBannerBody?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            val margin = if (docked) dp(16) else dp(58)
+            if (lp.bottomMargin != margin) {
+                lp.bottomMargin = margin
+                iptvZapBannerBody?.layoutParams = lp
+            }
+        }
+        if (docked && dock != null && !iptvDockLayoutListenerAttached) {
+            iptvDockLayoutListenerAttached = true
+            dock.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                if (iptvZapBannerDocked) applyIptvZapBannerMode(true)
+            }
+        }
+    }
+
     /** Logo, channel number and name — the parts that only change on a zap. */
     private fun paintIptvZapBannerIdentity(entry: IptvChannelEntry) {
+        guideTokens?.let { paintStyledZapBannerIdentity(entry, it); return }
         val letter = iptvZapBannerLetter ?: return
         val logo = iptvZapBannerLogo ?: return
 
@@ -9053,8 +10418,147 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (canZap && activeSource?.isFavorites != true) View.VISIBLE else View.GONE
     }
 
+    /** The styled identity paint: same Glide dance for the glass tile, no
+     *  logo at all for edition/console (the number IS the identity there),
+     *  per-style number formatting. Ends on the shared position painter. */
+    private fun paintStyledZapBannerIdentity(entry: IptvChannelEntry, t: GuideTokens) {
+        if (guideStyle == GuideStyle.GLASS) {
+            val letter = iptvZapBannerLetter
+            val logo = iptvZapBannerLogo
+            if (letter != null && logo != null) {
+                val firstLetter = entry.name.firstOrNull()?.uppercase() ?: "?"
+                com.bumptech.glide.Glide.with(this).clear(logo)
+                logo.setImageDrawable(null)
+                if (entry.logoUrl.isNullOrEmpty()) {
+                    logo.visibility = View.GONE
+                    letter.text = firstLetter
+                    letter.visibility = View.VISIBLE
+                } else {
+                    letter.text = firstLetter
+                    letter.visibility = View.VISIBLE
+                    logo.visibility = View.VISIBLE
+                    com.bumptech.glide.Glide.with(this)
+                        .load(entry.logoUrl)
+                        .centerInside()
+                        .listener(object :
+                            com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                            override fun onLoadFailed(
+                                e: com.bumptech.glide.load.engine.GlideException?,
+                                model: Any?,
+                                target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                                isFirstResource: Boolean,
+                            ): Boolean {
+                                logo.visibility = View.GONE
+                                letter.text = firstLetter
+                                letter.visibility = View.VISIBLE
+                                return true
+                            }
+
+                            override fun onResourceReady(
+                                resource: android.graphics.drawable.Drawable,
+                                model: Any,
+                                target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                                dataSource: com.bumptech.glide.load.DataSource,
+                                isFirstResource: Boolean,
+                            ): Boolean {
+                                letter.visibility = View.GONE
+                                return false
+                            }
+                        })
+                        .into(logo)
+                }
+            }
+        }
+
+        val displayNumber = (entry.channelNumber ?: (entry.index + 1)).toString()
+        iptvZapBannerNumber?.text = when (guideStyle) {
+            GuideStyle.CONSOLE -> displayNumber.padStart(3, '0')
+            GuideStyle.EDITION -> "CH $displayNumber"
+            else -> displayNumber
+        }
+        iptvZapBannerName?.text = entry.name
+        paintIptvZapBannerPosition(entry)
+    }
+
+    /** The styled now/next paint. Owns its colors outright — the classic
+     *  painter resets typefaces/colors per call and must never run on a
+     *  styled tree. Also the REC tag's only writer (show + 1s tick). */
+    private fun paintStyledZapBannerEpg(entry: IptvChannelEntry, t: GuideTokens) {
+        val nowView = iptvZapBannerNow ?: return
+        val timesView = iptvZapBannerTimes ?: return
+        val nextView = iptvZapBannerNext ?: return
+        val bar = iptvZapBannerProgress ?: return
+
+        val nowTitle = entry.epgNowTitle
+        if (guideStyle == GuideStyle.EDITION) {
+            // Editorial hierarchy: the headline slot carries the programme;
+            // a guideless channel promotes its name there and the byline
+            // names the silence.
+            if (nowTitle != null) {
+                nowView.text = nowTitle
+                iptvZapBannerName?.text = entry.name
+                iptvZapBannerName?.setTextColor(t.fgDim)
+            } else {
+                nowView.text = entry.name
+                iptvZapBannerName?.text =
+                    if (entry.epgLoading) "Loading guide…" else "No guide data"
+                iptvZapBannerName?.setTextColor(t.fgFaint)
+            }
+        } else {
+            if (nowTitle != null) {
+                nowView.text = nowTitle
+                nowView.setTextColor(
+                    if (guideStyle == GuideStyle.CONSOLE) t.fg else t.fgMid,
+                )
+            } else {
+                nowView.text =
+                    if (entry.epgLoading) "Loading guide…" else "No guide data"
+                nowView.setTextColor(t.fgFaint)
+            }
+        }
+
+        val start = entry.epgNowStartMs
+        val stop = entry.epgNowStopMs
+        val runtime = stop - start
+        if (nowTitle != null && runtime > 0) {
+            val nowMs = System.currentTimeMillis()
+            val remaining = stop - nowMs
+            val tail =
+                if (remaining > 60_000L) "  ·  ${formatIptvRemaining(remaining)} left"
+                else ""
+            timesView.text =
+                "${formatEpgTime(start)} – ${formatEpgTime(stop)}$tail"
+            timesView.visibility = View.VISIBLE
+            val elapsed = (nowMs - start).coerceIn(0L, runtime)
+            bar.progress = ((elapsed.toDouble() / runtime) * 1000).toInt()
+            iptvZapStyledEnd?.let {
+                it.text = formatEpgTime(stop)
+                it.visibility = View.VISIBLE
+            }
+        } else {
+            timesView.visibility = View.GONE
+            bar.progress = 0
+            iptvZapStyledEnd?.visibility = View.GONE
+        }
+
+        val nextTitle = entry.epgNextTitle
+        if (nowTitle != null && nextTitle != null) {
+            val at =
+                if (entry.epgNextStartMs > 0) "${formatEpgTime(entry.epgNextStartMs)}  ·  "
+                else ""
+            nextView.text = "Next  $at$nextTitle"
+            nextView.visibility = View.VISIBLE
+        } else {
+            nextView.visibility = View.GONE
+        }
+
+        iptvZapStyledRec?.visibility =
+            if (isRecordingCurrentIptvChannel()) View.VISIBLE else View.GONE
+    }
+
     /** Paint the banner's now/next lines from [entry]'s EPG fields. */
     private fun paintIptvZapBannerEpg(entry: IptvChannelEntry) {
+        guideTokens?.let { paintStyledZapBannerEpg(entry, it); return }
         val nowView = iptvZapBannerNow ?: return
         val timesView = iptvZapBannerTimes ?: return
         val nextView = iptvZapBannerNext ?: return
@@ -9979,12 +11483,360 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Single launcher — the overlay itself owns reset (OK on the slider /
         // hold-OK on the picker), which also clears the picker's remembered line.
         return listOf(
+            // Listens to the played audio it has already seen (the PCM tap) and
+            // cross-correlates it against the subtitle's cue schedule — answers
+            // in under a second, applies only on a confident match. Addon subs
+            // only: their cue timelines are in hand, and they're the ones that
+            // arrive mistimed; embedded tracks are authored against this video.
+            mrow(
+                "Auto-sync from audio",
+                value = when {
+                    !externalSubtitleActive -> "needs an addon subtitle"
+                    autoSyncRunning -> "listening…"
+                    // Last outcome, only while the subtitle it was computed
+                    // against is still the one on screen.
+                    autoSyncResultUrl == activeExternalSubtitleUrl -> autoSyncResultLabel
+                    else -> null
+                },
+                accent = true,
+                enabled = externalSubtitleActive && !autoSyncRunning,
+                onOk = { unifiedMenu?.hide(); runSubtitleAutoSync() },
+            ),
             mrow("Adjust timing  ▸", value = SubtitleSettings.formatSyncOffset(ms),
                 swatch = SubtitleSettings.getSyncOffsetColor(ms), accent = true, onOk = {
                     unifiedMenu?.hide(); showSyncOverlay()
                 })
         )
     }
+
+    /**
+     * Run the audio↔subtitle aligner over whatever anchored PCM history the
+     * tap holds and apply the offset through the exact pathway the manual
+     * slider and line picker use — one offset store, three ways to fill it.
+     *
+     * Every failure mode gets its own honest message; nothing is ever applied
+     * below the aligner's confidence gate. The v1 lesson, kept on purpose: a
+     * wrong auto-sync reads as "broken feature", a declined one as a miss.
+     */
+    private fun runSubtitleAutoSync(auto: Boolean = false) {
+        if (autoSyncRunning) return
+        val tap = speechTap
+        val url = activeExternalSubtitleUrl
+        val rawCues = url?.let { SubtitleCueCache.get(it) }
+        if (tap == null || rawCues.isNullOrEmpty()) {
+            if (!auto) showSyncToast(
+                "✕", AutoSyncColors.FAIL,
+                "Pick an addon subtitle first",
+                autoHideMs = 3_500,
+            )
+            return
+        }
+        val segments = tap.snapshot()
+        val heardSec = (segments.sumOf { it.durationMs } / 1000.0).toInt()
+        val anchoredSec =
+            (segments.filter { it.anchorMs != Long.MIN_VALUE }.sumOf { it.durationMs } / 1000.0).toInt()
+        android.util.Log.d(
+            "AutoSync",
+            "run: heard=${heardSec}s anchored=${anchoredSec}s segments=${segments.size} cues=${rawCues.size}"
+        )
+        if (anchoredSec < 1 && player?.isPlaying == true && !tap.hasRecentAudio(8_000)) {
+            // Playing, yet no PCM ever reached the tap: passthrough/tunneled
+            // audio, or a format the sink won't route through processors.
+            if (auto) return
+            showSyncToast(
+                "✕", AutoSyncColors.FAIL,
+                "Can't analyze this stream's audio",
+                autoHideMs = 4_000,
+            )
+            return
+        }
+        autoSyncRunning = true
+        if (!auto) showSyncToast(
+            "●", AutoSyncColors.BUSY,
+            "Syncing subtitles…",
+            autoHideMs = null,
+        )
+        subtitleScope.launch {
+            val result = try {
+                val cues = rawCues.map { CueSpan(it.startMs, it.endMs, it.text) }
+                withContext(Dispatchers.Default) { SubtitleAligner.alignTiered(segments, cues) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // activity teardown — let the scope die quietly
+            } catch (e: Exception) {
+                // Pure math should never throw; if it somehow does, the player
+                // must not die for a subtitle convenience feature.
+                android.util.Log.e("AutoSync", "aligner failed", e)
+                AlignResult.NoMatch(0)
+            } finally {
+                autoSyncRunning = false
+            }
+            android.util.Log.d("AutoSync", "result: $result")
+            // The user may have switched subtitles during the analysis — the
+            // computed offset belongs to the cue timeline it was computed FROM.
+            if (activeExternalSubtitleUrl != url) {
+                if (!auto) showSyncToast(
+                    "●", AutoSyncColors.BUSY,
+                    "Subtitle changed — try again",
+                    autoHideMs = 3_000,
+                )
+                return@launch
+            }
+            fun remember(label: String) {
+                autoSyncResultLabel = label
+                autoSyncResultUrl = url
+            }
+            when (result) {
+                is AlignResult.Synced -> {
+                    autoSyncLadderDone = true
+                    SubtitleSettings.setSyncOffsetMs(this@AndroidTvTorrentPlayerActivity, result.offsetMs)
+                    applySubtitleSettings()
+                    autoSyncAppliedOffsetMs = result.offsetMs
+                    scheduleAutoSyncVerify()
+                    val fmt = SubtitleSettings.formatSyncOffset(result.offsetMs)
+                    remember("✓ $fmt")
+                    // Shown in BOTH modes — an offset changing under the user
+                    // must always announce itself, however quietly.
+                    showSyncToast(
+                        "✓", AutoSyncColors.OK,
+                        "Subtitles synced  $fmt",
+                        autoHideMs = 3_000,
+                    )
+                }
+                is AlignResult.Drift -> {
+                    autoSyncLadderDone = true // a longer listen can't fix drift
+                    remember("drifting")
+                    // Worth a word in both modes: drift means THIS subtitle
+                    // file can never be fixed by an offset — switching is the
+                    // only cure, so say so.
+                    showSyncToast(
+                        "✕", AutoSyncColors.FAIL,
+                        "Subs drift on this file",
+                        hint = "Try another subtitle",
+                        autoHideMs = 4_500,
+                    )
+                }
+                is AlignResult.NoMatch -> {
+                    remember("no match")
+                    if (auto) {
+                        // Intermediate rungs stay silent; only the LAST rung's
+                        // failure earns a (gentle) word, so the user knows the
+                        // hand-off is theirs now.
+                        if (autoSyncLadderIdx >= autoSyncLadderSec.size) {
+                            showSyncToast(
+                                "✕", AutoSyncColors.FAIL,
+                                "Couldn't sync automatically",
+                                hint = "Switch subs, or adjust in Subtitles → Timing",
+                                autoHideMs = 5_000,
+                            )
+                        }
+                        return@launch
+                    }
+                    showSyncToast(
+                        "✕", AutoSyncColors.FAIL,
+                        "No confident match",
+                        hint = "Adjust in Subtitles → Timing",
+                        autoHideMs = 4_500,
+                    )
+                }
+                is AlignResult.NotEnoughAudio -> {
+                    remember("${result.analyzedSec}s heard")
+                    if (auto) {
+                        if (autoSyncLadderIdx >= autoSyncLadderSec.size) {
+                            showSyncToast(
+                                "✕", AutoSyncColors.FAIL,
+                                "Couldn't sync automatically",
+                                hint = "Switch subs, or adjust in Subtitles → Timing",
+                                autoHideMs = 5_000,
+                            )
+                        }
+                        return@launch
+                    }
+                    showSyncToast(
+                        "●", AutoSyncColors.BUSY,
+                        "Keep watching a little, then try again",
+                        autoHideMs = 3_500,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Arm the hands-free ladder for a freshly loaded addon subtitle. Each tick
+     * asks the tap how much ANCHORED audio exists and fires the next attempt
+     * when a rung's worth is on hand — so the first attempt (narrow search)
+     * lands ~20s in, without the user touching anything. Skips entirely while
+     * a manual offset is dialed in: the user's hand beats the machine's.
+     */
+    private fun startAutoSyncLadder() {
+        cancelAutoSyncLadder()
+        if (!isAutoSyncPrefEnabled()) return
+        // The one up-front word (the user asked for exactly this): syncing is
+        // underway, and here's the escape hatch if it doesn't come through.
+        // Skipped when a remembered offset just restored — that toast already
+        // said everything.
+        if (SubtitleSettings.getSyncOffsetMs(this) == 0L) {
+            showSyncToast(
+                "●", AutoSyncColors.BUSY,
+                "Trying to sync subs…",
+                hint = "Still off in a minute? Switch subs or adjust timing.",
+                autoHideMs = 5_500,
+            )
+        }
+        autoSyncLadderIdx = 0
+        autoSyncLadderDone = false
+        val tick = object : Runnable {
+            override fun run() {
+                if (autoSyncLadderDone || !externalSubtitleActive) return
+                val tap = speechTap
+                if (tap != null && !autoSyncRunning &&
+                    SubtitleSettings.getSyncOffsetMs(this@AndroidTvTorrentPlayerActivity) == 0L &&
+                    autoSyncLadderIdx < autoSyncLadderSec.size &&
+                    tap.anchoredDurationMs() >= autoSyncLadderSec[autoSyncLadderIdx] * 1000.0
+                ) {
+                    autoSyncLadderIdx++
+                    android.util.Log.d("AutoSync", "ladder attempt ${autoSyncLadderIdx}/${autoSyncLadderSec.size}")
+                    runSubtitleAutoSync(auto = true)
+                }
+                if (!autoSyncLadderDone && autoSyncLadderIdx < autoSyncLadderSec.size) {
+                    externalSubtitleHandler.postDelayed(this, 8_000)
+                }
+            }
+        }
+        autoSyncLadderTick = tick
+        externalSubtitleHandler.postDelayed(tick, 8_000)
+    }
+
+    private fun cancelAutoSyncLadder() {
+        autoSyncLadderTick?.let { externalSubtitleHandler.removeCallbacks(it) }
+        autoSyncLadderTick = null
+        autoSyncLadderDone = true
+    }
+
+    private fun scheduleAutoSyncVerify() {
+        cancelAutoSyncVerify()
+        if (!isAutoSyncPrefEnabled()) return
+        val tick = object : Runnable {
+            override fun run() {
+                maybeRunAutoSyncVerify()
+                if (autoSyncVerifyTick === this) {
+                    externalSubtitleHandler.postDelayed(this, 120_000)
+                }
+            }
+        }
+        autoSyncVerifyTick = tick
+        externalSubtitleHandler.postDelayed(tick, 90_000)
+    }
+
+    private fun cancelAutoSyncVerify() {
+        autoSyncVerifyTick?.let { externalSubtitleHandler.removeCallbacks(it) }
+        autoSyncVerifyTick = null
+        autoSyncVerifyMisses = 0
+    }
+
+    /**
+     * Re-check the region the user is CURRENTLY watching against the offset
+     * we applied. Cues ride in pre-shifted by that offset, so a still-correct
+     * sync correlates at lag 0 and any confident peak IS the residual to add.
+     * Two confident-audio misses escalate the residual search from ±10s to
+     * the full width over the same recent window — the ad-break/cut case,
+     * where timing jumps too far for the narrow check to see.
+     */
+    private fun maybeRunAutoSyncVerify() {
+        val applied = autoSyncAppliedOffsetMs ?: return
+        if (!externalSubtitleActive || autoSyncRunning) return
+        if (player?.isPlaying != true) return
+        if (SubtitleSettings.getSyncOffsetMs(this) != applied) {
+            // The user dialed something since — their hand wins, permanently.
+            cancelAutoSyncVerify()
+            return
+        }
+        val tap = speechTap ?: return
+        val url = activeExternalSubtitleUrl ?: return
+        val rawCues = SubtitleCueCache.get(url) ?: return
+        val pos = player?.currentPosition ?: return
+        val windowStart = pos - 360_000
+        val segments = tap.snapshot().filter {
+            it.anchorMs != Long.MIN_VALUE &&
+                it.anchorMs + it.durationMs >= windowStart &&
+                it.anchorMs <= pos + 10_000
+        }
+        if (segments.sumOf { it.durationMs } < 30_000.0) return
+        autoSyncRunning = true
+        subtitleScope.launch {
+            val escalated = autoSyncVerifyMisses >= 2
+            val result = try {
+                val centered = rawCues.map {
+                    CueSpan(it.startMs + applied, it.endMs + applied, it.text)
+                }
+                withContext(Dispatchers.Default) {
+                    if (escalated) {
+                        SubtitleAligner.align(segments, centered)
+                    } else {
+                        SubtitleAligner.align(
+                            segments, centered,
+                            searchMs = 10_000.0,
+                            minAudioMs = 25_000.0,
+                            minCueOverlapFrames = SubtitleAligner.Tuning.NARROW_MIN_CUE_OVERLAP_FRAMES,
+                            minCues = SubtitleAligner.Tuning.NARROW_MIN_CUES,
+                            minZPeak = SubtitleAligner.Tuning.NARROW_MIN_ZPEAK,
+                            minPsr = SubtitleAligner.Tuning.NARROW_MIN_PSR,
+                            scales = doubleArrayOf(1.0),
+                        )
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("AutoSync", "verify failed", e)
+                AlignResult.NoMatch(0)
+            } finally {
+                autoSyncRunning = false
+            }
+            if (activeExternalSubtitleUrl != url || autoSyncAppliedOffsetMs != applied) return@launch
+            when (result) {
+                is AlignResult.Synced -> {
+                    autoSyncVerifyMisses = 0
+                    if (kotlin.math.abs(result.offsetMs) > 400) {
+                        val newOffset = applied + result.offsetMs
+                        SubtitleSettings.setSyncOffsetMs(this@AndroidTvTorrentPlayerActivity, newOffset)
+                        applySubtitleSettings()
+                        autoSyncAppliedOffsetMs = newOffset
+                        autoSyncResultLabel = "✓ ${SubtitleSettings.formatSyncOffset(newOffset)}"
+                        autoSyncResultUrl = url
+                        android.util.Log.d("AutoSync", "verify re-synced $applied -> $newOffset (escalated=$escalated)")
+                        showSyncToast(
+                            "↻", AutoSyncColors.OK,
+                            "Re-synced  ${SubtitleSettings.formatSyncOffset(newOffset)}",
+                            autoHideMs = 3_000,
+                        )
+                    } else {
+                        android.util.Log.d("AutoSync", "verify confirmed $applied (residual ${result.offsetMs}ms)")
+                    }
+                }
+                is AlignResult.NoMatch -> {
+                    autoSyncVerifyMisses++
+                    android.util.Log.d("AutoSync", "verify miss ${autoSyncVerifyMisses}: $result")
+                }
+                else -> {
+                    // NotEnoughAudio / Drift: wait for more playback; a miss
+                    // count here would escalate on silence, not on evidence.
+                    android.util.Log.d("AutoSync", "verify skipped: $result")
+                }
+            }
+        }
+    }
+
+    /**
+     * Settings → Playback → "Auto-sync addon subtitles" (Flutter-side pref).
+     *
+     * OFF by default. Must stay in lock-step with the Dart default in
+     * StorageService.getSubtitleAutoSyncEnabled, or an untouched toggle would
+     * mean different things on the two sides.
+     */
+    private fun isAutoSyncPrefEnabled(): Boolean =
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .getBoolean("flutter.subtitle_auto_sync_enabled", false)
 
     private fun umSearchRows(): List<UnifiedMenuController.Row> {
         if (pendingSeriesResult != null) {
@@ -10152,10 +12004,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun umPlaybackModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
         val col2 = listOf(
             mrow("Playback speed", value = playbackSpeedLabels.getOrNull(playbackSpeedIndex), tag = "speed"),
+            mrow("Sleep timer", value = sleepTimerValueLabel(), tag = "sleep"),
             mrow("Shuffle & autoplay", tag = "shuffle")
         )
         val tag = col2.getOrNull(col2Index)?.tag
-        val (title, col3) = if (tag == "shuffle") {
+        val (title, col3) = if (tag == "sleep") {
+            "Sleep timer" to buildList {
+                add(
+                    mrow("Off", selected = sleepTimerMode == SleepTimerMode.OFF, onOk = {
+                        cancelSleepTimer(announce = true)
+                    })
+                )
+                sleepTimerMinuteOptions.forEach { minutes ->
+                    add(mrow("$minutes minutes", onOk = { startSleepCountdown(minutes) }))
+                }
+                // A live channel has no end to stop at, so only the countdown
+                // applies there — which is the case people actually want it for.
+                if (iptvChannels.getOrNull(currentIptvIndex)?.isLive != true) {
+                    add(
+                        mrow(
+                            "End of episode",
+                            selected = sleepTimerMode == SleepTimerMode.END_OF_ITEM,
+                            onOk = { armSleepAtEndOfItem() }
+                        )
+                    )
+                }
+            }
+        } else if (tag == "shuffle") {
             "Shuffle & autoplay" to listOf(
                 mrow("Play random once", accent = true, onOk = {
                     continuousShuffleEnabled = false; shuffleBag.clear(); playRandom(); unifiedMenu?.hide()
@@ -10586,12 +12461,39 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // freeze on screen until the next external cue.
         if (::subtitleOverlay.isInitialized) subtitleOverlay.setCues(emptyList())
         startExternalSubtitleTicker()
+        // Remembered sync for this exact content+subtitle (keyed by the same
+        // identity that scopes the live offset): restore BEFORE the ladder
+        // arms — a non-zero recall parks the ladder via its own offset==0
+        // gate. Announced: an offset appearing out of nowhere must say why.
+        val recalledIdentity = currentSubtitleIdentity()
+        val recalled = recalledIdentity?.let { SubtitleSettings.recallSyncOffset(this, it) }
+        if (recalled != null) {
+            SubtitleSettings.setSyncOffsetMs(this, recalled)
+            // Same initialized-guard the overlay clear above uses: the side
+            // ticker reads the offset at lookup time anyway, so on a very
+            // early load the apply can be safely skipped rather than touch a
+            // lateinit view.
+            if (::subtitleOverlay.isInitialized) applySubtitleSettings()
+            autoSyncResultLabel = "↻ ${SubtitleSettings.formatSyncOffset(recalled)}"
+            autoSyncResultUrl = subtitle.url
+            autoSyncAppliedOffsetMs = recalled
+            scheduleAutoSyncVerify()
+            showSyncToast(
+                "↻", AutoSyncColors.OK,
+                "Sync restored  ${SubtitleSettings.formatSyncOffset(recalled)}",
+                autoHideMs = 3_000,
+            )
+        }
+        startAutoSyncLadder()
         showStatusPillTransient("✓ ${subtitle.displayName}")
         android.util.Log.d("StremioSubs", "Side-rendering ${cues.size} cues from ${subtitle.displayName}")
     }
 
     /** Stop side-rendering and give the overlay back to the player's onCues. */
     private fun stopExternalSubtitleRendering() {
+        cancelAutoSyncLadder()
+        cancelAutoSyncVerify()
+        autoSyncAppliedOffsetMs = null
         externalSubtitleLoadToken++
         externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
         externalSubtitleTicker = null
@@ -10722,6 +12624,110 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pill.animate().cancel()
         pill.animate().alpha(0f).setDuration(220).withEndAction {
             pill.visibility = View.GONE
+        }.start()
+    }
+
+    // ── Auto-sync feedback card ──────────────────────────────────────────────
+    // Auto-sync's outcomes need to be READ, not glimpsed: the status pill is
+    // 13sp for 1.4s at bottom-center — over the very subtitles being synced.
+    // This card sits top-center, color-codes the state, carries a detail line
+    // of the actual numbers (seconds heard, cues, confidence), and pulses
+    // while the aligner is listening.
+
+    private object AutoSyncColors {
+        const val OK = 0xFF34D399.toInt() // emerald — matches the app's live dot
+        const val FAIL = 0xFFF87171.toInt() // muted red, never alarming
+        const val BUSY = 0xFFE8C468.toInt() // soft amber working-dot
+    }
+
+    private fun ensureAutoSyncCard(): TextView {
+        autoSyncCard?.let { return it }
+        val card = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setLineSpacing(0f, 1.12f)
+            gravity = Gravity.END
+            maxWidth = dp(400)
+            background = GradientDrawable().apply {
+                setColor(0xCC0F0F14.toInt())
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), 0x24FFFFFF)
+            }
+            setPadding(dp(14), dp(9), dp(14), dp(9))
+            elevation = dp(240).toFloat()
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.END
+            ).also {
+                it.bottomMargin = dp(34)
+                it.rightMargin = dp(28)
+            }
+        }
+        findViewById<ViewGroup>(android.R.id.content).addView(card)
+        autoSyncCard = card
+        return card
+    }
+
+    /**
+     * Bottom-right sync toast: a colored glyph, one quiet line, an optional
+     * dimmer hint underneath. Deliberately understated — dark glass, hairline
+     * border, a small rise-in — because sync feedback should read like the
+     * player talking under its breath, not an alert. [autoHideMs] null keeps
+     * it up until the next toast replaces it (the manual "syncing…" state).
+     */
+    private fun showSyncToast(
+        glyph: String,
+        accent: Int,
+        title: String,
+        hint: String? = null,
+        autoHideMs: Long?,
+    ) {
+        externalSubtitleHandler.removeCallbacks(autoSyncCardHideRunnable)
+        val card = ensureAutoSyncCard()
+        val sb = android.text.SpannableStringBuilder()
+        sb.append(glyph).append("  ").append(title)
+        sb.setSpan(
+            android.text.style.ForegroundColorSpan(accent),
+            0, glyph.length,
+            android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        if (hint != null) {
+            val start = sb.length
+            sb.append("\n").append(hint)
+            sb.setSpan(
+                android.text.style.ForegroundColorSpan(0x8AFFFFFF.toInt()),
+                start, sb.length,
+                android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+            sb.setSpan(
+                android.text.style.AbsoluteSizeSpan(11, true),
+                start, sb.length,
+                android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+        card.text = sb
+        card.animate().cancel()
+        if (card.visibility != View.VISIBLE) {
+            card.alpha = 0f
+            card.translationY = dp(8).toFloat()
+            card.visibility = View.VISIBLE
+        }
+        card.animate().alpha(1f).translationY(0f).setDuration(220).start()
+        if (autoHideMs != null) {
+            externalSubtitleHandler.postDelayed(autoSyncCardHideRunnable, autoHideMs)
+        }
+    }
+
+    private fun hideAutoSyncCard() {
+        externalSubtitleHandler.removeCallbacks(autoSyncCardHideRunnable)
+        val card = autoSyncCard ?: return
+        if (card.visibility != View.VISIBLE) return
+        card.animate().cancel()
+        card.animate().alpha(0f).translationY(dp(6).toFloat()).setDuration(240).withEndAction {
+            card.visibility = View.GONE
         }.start()
     }
 
@@ -10859,7 +12865,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // Announce our audio session to system effect apps (default: off)
             systemAudioEffectsEnabled = prefs.getBoolean("flutter.player_system_audio_effects", false)
 
-            android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled")
+            // Manual community intro/outro buttons. These are the same keys the
+            // Flutter Playback settings page writes; enabled never means auto-seek.
+            skipSegmentsEnabled = prefs.getBoolean("flutter.skip_segments_enabled", true)
+            val storedSkipSegmentProvider = prefs.getString(
+                "flutter.skip_segment_provider",
+                TvSkipSegmentClients.AUTO,
+            ) ?: TvSkipSegmentClients.AUTO
+            skipSegmentProviderId = if (TvSkipSegmentClients.supports(storedSkipSegmentProvider)) {
+                storedSkipSegmentProvider
+            } else {
+                TvSkipSegmentClients.AUTO
+            }
+
+            android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled, skipSegments=$skipSegmentsEnabled, skipProvider=$skipSegmentProviderId")
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Error loading player defaults", e)
             // Keep default values
@@ -11792,7 +13811,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        player?.play()
+        // Never undo a sleep-timer stop — this runs every time the activity
+        // comes back, including after the screen has slept.
+        if (!sleepStopLatched) player?.play()
         // Resume the side-rendered subtitle ticker paused in onStop.
         if (externalSubtitleActive) startExternalSubtitleTicker()
     }
@@ -11911,6 +13932,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         RecordingRegistry.removeListener(recordingRegistryListener)
+        // The sleep timer belongs to this playback session — a pending one must
+        // not outlive the player and fire against a dead surface.
+        cancelSleepTimer()
         // Finalize any in-progress TEE recording so its MediaStore row isn't
         // left pending (invisible) when the player is torn down. Engine
         // captures deliberately ignore player teardown.
@@ -11957,6 +13981,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         stremioSubtitles.clear()
         stremioSubtitleService = null
 
+        // Cancel optional skip-provider work; late network responses must not retain
+        // or update a destroyed TV player.
+        skipSegmentFetchGeneration++
+        skipSegmentFetchJob?.cancel()
+        skipSegmentFetchJob = null
+        skipSegmentScope.cancel()
+        skipSegmentCache.clear()
+
         // Clear all handlers
         progressHandler.removeCallbacksAndMessages(null)
         controlsHandler.removeCallbacksAndMessages(null)
@@ -11980,6 +14012,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleListener = null
         trackSelector = null
         offsetRenderersFactory = null
+        speechTap = null
         syncOverlay = null
         linePickerOverlay?.hide()
         linePickerOverlay = null
@@ -12703,6 +14736,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val SUBTITLE_LOADING_LABEL = "⏳ Loading external subtitles..."
         private const val EXTERNAL_SUBTITLE_TICK_MS = 250L
         private const val EXTERNAL_SUBTITLE_PREFIX = "⬇"
+        private const val MAX_SKIP_SEGMENT_CACHE_ENTRIES = 64
+        private val IMDB_ID_REGEX = Regex("^tt\\d+$")
 
         // PikPak cold storage retry constants
         private const val PROVIDER_PIKPAK = "pikpak"
@@ -13784,6 +15819,18 @@ private class IptvChannelAdapter(
     // fetches over the bridge and answers with notifyEpgFor. Bind-driven, so
     // only rows that actually come on screen ever cost a request.
     private val onEpgNeeded: ((IptvChannelEntry) -> Unit)? = null,
+    // Styled-look inputs (see IptvGuideStyle.kt); null tokens = classic, and
+    // every styled branch below is skipped outright. Invariant styling is
+    // applied ONCE per holder in onCreateViewHolder — bind only writes
+    // entry-dependent colors/text/visibility.
+    private val tokens: GuideTokens? = null,
+    private val style: GuideStyle = GuideStyle.CLASSIC,
+    private val nameTypeface: Typeface? = null,
+    private val monoTypeface: Typeface? = null,
+    private val headlineTypeface: Typeface? = null,
+    private val captionTypeface: Typeface? = null,
+    private val rowRadiusPx: Float = 0f,
+    private val rowStrokePx: Int = 0,
 ) : RecyclerView.Adapter<IptvChannelAdapter.ViewHolder>() {
 
     companion object {
@@ -13794,6 +15841,7 @@ private class IptvChannelAdapter(
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val number: TextView = view.findViewById(R.id.iptv_channel_number)
+        val logoTile: FrameLayout = view.findViewById(R.id.iptv_channel_logo_tile)
         val logo: android.widget.ImageView = view.findViewById(R.id.iptv_channel_logo)
         val letter: TextView = view.findViewById(R.id.iptv_channel_letter)
         val name: TextView = view.findViewById(R.id.iptv_channel_name)
@@ -13801,13 +15849,67 @@ private class IptvChannelAdapter(
         val epg: TextView = view.findViewById(R.id.iptv_channel_epg)
         val favorite: TextView = view.findViewById(R.id.iptv_channel_favorite)
         val liveBadge: View = view.findViewById(R.id.iptv_channel_live_badge)
+        val liveDot: View = view.findViewById(R.id.iptv_channel_live_dot)
+        val liveLabel: TextView = view.findViewById(R.id.iptv_channel_live_label)
         val nowBadge: TextView = view.findViewById(R.id.iptv_channel_now_badge)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = android.view.LayoutInflater.from(parent.context)
             .inflate(R.layout.item_iptv_channel, parent, false)
-        return ViewHolder(view)
+        val holder = ViewHolder(view)
+        val t = tokens ?: return holder
+        // Invariant styled chrome — never re-done on bind/scroll.
+        view.background = t.rowBackground(rowRadiusPx, rowStrokePx)
+        holder.logoTile.background = if (style == GuideStyle.EDITION) {
+            t.tileDrawable(view.resources.displayMetrics.density * 21f, 1)
+        } else {
+            t.tileDrawable(rowRadiusPx, 1)
+        }
+        holder.letter.setBackgroundColor(Color.TRANSPARENT)
+        holder.letter.setTextColor(t.fg)
+        holder.group.setTextColor(t.fgFaint)
+        holder.epg.setTextColor(t.fgDim)
+        holder.favorite.setTextColor(
+            if (style == GuideStyle.EDITION) t.fg else t.accent,
+        )
+        holder.liveBadge.setBackgroundColor(Color.TRANSPARENT)
+        holder.liveDot.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(t.live)
+        }
+        holder.liveLabel.setTextColor(t.live)
+        if (style == GuideStyle.EDITION) {
+            // Edition's NOW is small-caps cream text, no pill.
+            holder.nowBadge.background = null
+            holder.nowBadge.setTextColor(t.fg)
+        } else {
+            holder.nowBadge.background = GradientDrawable().apply {
+                cornerRadius = if (style == GuideStyle.CONSOLE) {
+                    view.resources.displayMetrics.density * 2f
+                } else {
+                    view.resources.displayMetrics.density * 5f
+                }
+                setColor(t.accent)
+            }
+            holder.nowBadge.setTextColor(t.bg or 0xFF000000.toInt())
+        }
+        when (style) {
+            GuideStyle.CONSOLE -> {
+                holder.number.typeface = monoTypeface ?: holder.number.typeface
+                holder.name.typeface = nameTypeface ?: holder.name.typeface
+                holder.epg.typeface = monoTypeface ?: holder.epg.typeface
+                holder.liveLabel.typeface = monoTypeface ?: holder.liveLabel.typeface
+            }
+            GuideStyle.EDITION -> {
+                holder.name.typeface = headlineTypeface ?: holder.name.typeface
+                holder.epg.typeface = captionTypeface?.let {
+                    Typeface.create(it, Typeface.ITALIC)
+                } ?: holder.epg.typeface
+            }
+            else -> {}
+        }
+        return holder
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
@@ -13828,16 +15930,39 @@ private class IptvChannelAdapter(
         holder.itemView.scaleY = 1.0f
 
         // Channel number
-        holder.number.text = (entry.channelNumber ?: (entry.index + 1)).toString()
+        val t = tokens
+        val displayNumber = (entry.channelNumber ?: (entry.index + 1)).toString()
+        holder.number.text =
+            if (t != null && style == GuideStyle.CONSOLE) {
+                displayNumber.padStart(3, '0')
+            } else {
+                displayNumber
+            }
         holder.number.setTextColor(
-            if (entry.isCurrent) Color.argb(204, 0, 229, 255) // accent 80%
-            else Color.argb(46, 255, 255, 255) // 18%
+            if (t == null) {
+                if (entry.isCurrent) Color.argb(204, 0, 229, 255) // accent 80%
+                else Color.argb(46, 255, 255, 255) // 18%
+            } else {
+                if (entry.isCurrent) {
+                    if (style == GuideStyle.EDITION) t.fg else t.accent
+                } else {
+                    t.fgFaint
+                }
+            }
         )
 
         // Name
         holder.name.text = entry.name
         holder.name.setTextColor(
-            if (entry.isCurrent) ACCENT else Color.argb(217, 255, 255, 255)
+            if (t == null) {
+                if (entry.isCurrent) ACCENT else Color.argb(217, 255, 255, 255)
+            } else {
+                if (entry.isCurrent) {
+                    if (style == GuideStyle.EDITION) t.fg else t.accent
+                } else {
+                    t.fgMid
+                }
+            }
         )
 
         // Group
@@ -14035,6 +16160,14 @@ private class IptvEpgAdapter(
     private var programs: List<IptvEpgProgram>,
     private val onReplay: (IptvEpgProgram) -> Unit,
     private val onRecordFuture: (IptvEpgProgram) -> Unit,
+    // Styled-look inputs; null tokens = classic. Invariant styling happens
+    // once per holder in onCreateViewHolder.
+    private val tokens: GuideTokens? = null,
+    private val style: GuideStyle = GuideStyle.CLASSIC,
+    private val monoTypeface: Typeface? = null,
+    private val headlineTypeface: Typeface? = null,
+    private val rowRadiusPx: Float = 0f,
+    private val rowStrokePx: Int = 0,
 ) : RecyclerView.Adapter<IptvEpgAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -14048,7 +16181,39 @@ private class IptvEpgAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = android.view.LayoutInflater.from(parent.context)
             .inflate(R.layout.item_iptv_epg_program, parent, false)
-        return ViewHolder(view)
+        val holder = ViewHolder(view)
+        val t = tokens ?: return holder
+        view.background = t.rowBackground(rowRadiusPx, rowStrokePx)
+        holder.time.setTextColor(t.fgDim)
+        holder.title.setTextColor(t.fg)
+        holder.description.setTextColor(t.fgFaint)
+        holder.progress.progressTintList =
+            android.content.res.ColorStateList.valueOf(t.accent)
+        holder.progress.progressBackgroundTintList =
+            android.content.res.ColorStateList.valueOf(t.hairline2)
+        // NOW/REPLAY chip: an outlined token tag (the text flips per bind,
+        // the chrome doesn't).
+        holder.now.background = GradientDrawable().apply {
+            cornerRadius = if (style == GuideStyle.CONSOLE) {
+                view.resources.displayMetrics.density * 2f
+            } else {
+                view.resources.displayMetrics.density * 4f
+            }
+            setColor(Color.TRANSPARENT)
+            setStroke(1, t.accent)
+        }
+        holder.now.setTextColor(t.accent)
+        when (style) {
+            GuideStyle.CONSOLE -> {
+                holder.time.typeface = monoTypeface ?: holder.time.typeface
+                holder.now.typeface = monoTypeface ?: holder.now.typeface
+            }
+            GuideStyle.EDITION -> {
+                holder.title.typeface = headlineTypeface ?: holder.title.typeface
+            }
+            else -> {}
+        }
+        return holder
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -14068,6 +16233,9 @@ private class IptvEpgAdapter(
             if (program.description.isNullOrBlank()) View.GONE else View.VISIBLE
         holder.now.text = if (airing) "NOW" else "REPLAY"
         holder.now.visibility = if (airing || replayable) View.VISIBLE else View.GONE
+        // Styled only: the airing row wears the quiet selected tint (and a
+        // recycled holder explicitly clears it). Classic never sets it.
+        if (tokens != null) holder.itemView.isSelected = airing
         holder.progress.visibility = if (airing) View.VISIBLE else View.GONE
         holder.progress.progress =
             ((elapsed.coerceIn(0L, duration) * 1000L) / duration).toInt()

@@ -21,6 +21,7 @@ import '../utils/platform_util.dart';
 import '../services/analytics_service.dart';
 import '../services/account_service.dart';
 import '../services/backup_restore_service.dart';
+import '../services/iptv_transfer_payload.dart';
 import '../services/download_service.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../services/simkl/simkl_service.dart';
@@ -41,6 +42,8 @@ import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
 import 'settings/settings_search.dart';
 import 'settings/discover_layout_page.dart';
+import 'settings/iptv_style_page.dart';
+import 'settings/player_guide_style_page.dart';
 import 'settings/tv_home_style_page.dart';
 import 'settings/tv_screen_size_page.dart';
 import 'settings/recordings_page.dart';
@@ -94,6 +97,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// (no portrait to open in) and on desktop (the orientation call is a no-op
   /// there) — see ExternalPlayerSettingsPage.
   bool get _isPhone => PlatformUtil.isPhone;
+
+  /// The IPTV Appearance picker renders only where the cockpit does (Android
+  /// TV, desktop) — the SAME gate IptvSettingsPage uses for its section
+  /// (PlatformUtil's cache, not this screen's own `_isAndroidTv`, which
+  /// handles probe failures differently and could disagree).
+  bool get _iptvAppearanceSearchable =>
+      PlatformUtil.isAndroidTvCached ||
+      (!kIsWeb && (Platform.isMacOS || Platform.isLinux || Platform.isWindows));
 
   /// Custom launch command (macOS/Linux/Windows) or custom URL scheme (iOS).
   /// Android's external-player branch offers neither — it only explains the
@@ -166,6 +177,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _tvHomeStyle = 'canvas';
   String _discoverLayout = 'stage';
   String _tvSidebarStyle = 'ghost';
+  String _iptvStyle = 'command';
+  String _playerGuideStyle = 'classic';
+  String _phoneNavStyle = 'classic';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
@@ -235,6 +249,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTvHomeStyle(),
       StorageService.getTvSidebarStyle(),
       StorageService.getDiscoverLayout(),
+      StorageService.getIptvStyle(),
+      StorageService.getIptvPlayerGuideStyle(),
+      StorageService.getPhoneNavStyle(),
     ]);
 
     if (!mounted) return;
@@ -262,6 +279,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvHomeStyle = results[20] as String;
     final tvSidebarStyle = results[21] as String;
     final discoverLayout = results[22] as String;
+    final iptvStyle = results[23] as String;
+    final playerGuideStyle = results[24] as String;
+    final phoneNavStyle = results[25] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -398,6 +418,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _tvHomeStyle = tvHomeStyle;
     _tvSidebarStyle = tvSidebarStyle;
     _discoverLayout = discoverLayout;
+    _iptvStyle = iptvStyle;
+    _playerGuideStyle = playerGuideStyle;
+    _phoneNavStyle = phoneNavStyle;
 
     setState(() {});
 
@@ -689,6 +712,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTvSidebarStyle: _openTvSidebarStyle,
       discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
       onOpenDiscoverLayout: _openDiscoverLayout,
+      tvHomeStyleLabel: tvHomeStyleLabel(_tvHomeStyle),
+      onOpenTvHomeStyle: _openTvHomeStyle,
+      iptvStyleLabel: iptvStyleLabel(_iptvStyle),
+      onOpenIptvStyle: _openIptvStylePage,
+      playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
+      onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
       onOpenRecordings: _openRecordings,
       onOpenIptvSettings: _openIptvSettings,
       showSupportDonation: _supportDonation.hasProviders,
@@ -750,12 +779,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenSupportDonation: _openSupportDonation,
       onOpenRecordings: _openRecordings,
       onOpenIptvSettings: _openIptvSettings,
-      tvUiScalePercent: _tvUiScalePercent,
-      onOpenTvScreenSize: _openTvScreenSize,
-      tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
-      onOpenTvSidebarStyle: _openTvSidebarStyle,
-      discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
-      onOpenDiscoverLayout: _openDiscoverLayout,
+      showIptvAppearance: _iptvAppearanceSearchable,
+      iptvStyleLabel: iptvStyleLabel(_iptvStyle),
+      onOpenIptvStyle: _openIptvStylePage,
+      playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
+      onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
+      phoneNavStyleLabel: _phoneNavStyle == 'floating'
+          ? 'Floating button'
+          : 'Classic bar',
     );
   }
 
@@ -920,6 +951,174 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _openHomePageSettings,
         keywords: const ['default view', 'startup', 'landing', 'tab'],
       ),
+
+      // Appearance — one contiguous block so the category groups directly
+      // after Home & Display (results group by FIRST appearance). The old
+      // category strings ride along as keywords: the category text is part
+      // of the match haystack, and matching splits on whitespace only, so
+      // dropping 'Home & Display'/'Live TV & DVR' from these entries would
+      // break exact old-category searches.
+      // Android TV only — the size factor is applied natively in
+      // MainActivity, so the row would be inert anywhere else.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvScreenSize,
+          'Appearance',
+          _openTvScreenSize,
+          subtitle: tvUiScaleLabel(_tvUiScalePercent),
+          keywords: const [
+            'zoom',
+            'zoomed in',
+            'scale',
+            'ui size',
+            'text size',
+            'font size',
+            'bigger',
+            'smaller',
+            'density',
+            'dpi',
+            'resolution',
+            'compact',
+            'fit more',
+            'display',
+            'home & display',
+          ],
+        ),
+      // Android TV only — the layout branch only exists on the TV home board.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvHomeStyle,
+          'Appearance',
+          _openTvHomeStyle,
+          subtitle: tvHomeStyleLabel(_tvHomeStyle),
+          keywords: const [
+            'home',
+            'layout',
+            'home screen',
+            'canvas',
+            'shelf',
+            'classic',
+            'rows',
+            'redesign',
+            'view',
+            'display',
+            'home & display',
+          ],
+        ),
+      // Android TV only — the stage layout is a TV-canvas design; phones and
+      // desktop always browse Discover as a grid.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.discoverLayout,
+          'Appearance',
+          _openDiscoverLayout,
+          subtitle: discoverLayoutLabel(_discoverLayout),
+          keywords: const [
+            'discover',
+            'layout',
+            'stage',
+            'grid',
+            'browse',
+            'shelf',
+            'catalog',
+            'view',
+            'posters',
+            'display',
+            'home & display',
+          ],
+        ),
+      // Android TV only — the rail is TV chrome.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvSidebarStyle,
+          'Appearance',
+          _openTvSidebarStyle,
+          subtitle: tvSidebarStyleLabel(_tvSidebarStyle),
+          keywords: const [
+            'sidebar',
+            'nav',
+            'navigation',
+            'rail',
+            'menu',
+            'ghost',
+            'island',
+            'marquee',
+            'badge',
+            'dock',
+            'display',
+            'home & display',
+          ],
+        ),
+      // Gated like the IPTV section itself: the picker only matters where
+      // the cockpit renders (Android TV, desktop). Lands on the picker.
+      if (_iptvAppearanceSearchable)
+        nav(
+          SettingsRows.iptvAppearance,
+          'Appearance',
+          _openIptvStylePage,
+          subtitle: iptvStyleLabel(_iptvStyle),
+          keywords: const [
+            'iptv',
+            'style',
+            'theme',
+            'look',
+            'skin',
+            'appearance',
+            'command center',
+            'first edition',
+            'master control',
+            'cockpit',
+            'premium',
+            'live tv',
+            'dvr',
+            'live tv & dvr',
+          ],
+        ),
+      // Ungated: every platform has a player — phones use the Dart player,
+      // Android TV the native one, and both read the pref. Lands on the
+      // picker.
+      nav(
+        SettingsRows.playerGuideStyle,
+        'Appearance',
+        _openPlayerGuideStylePage,
+        subtitle: playerGuideStyleLabel(_playerGuideStyle),
+        keywords: const [
+          'iptv',
+          'player',
+          'guide',
+          'zap',
+          'banner',
+          'style',
+          'theme',
+          'look',
+          'skin',
+          'cinema glass',
+          'midnight edition',
+          'master control',
+          'classic',
+          'live tv',
+          'dvr',
+          'live tv & dvr',
+        ],
+      ),
+      if (!PlatformUtil.isAndroidTvCached)
+        nav(
+          SettingsRows.navigationStyle,
+          'Appearance',
+          _openNavigationSettings,
+          keywords: const [
+            'navigation',
+            'nav',
+            'bottom bar',
+            'tabs',
+            'floating',
+            'classic',
+            'menu',
+            'display',
+            'home & display',
+          ],
+        ),
+
       nav(
         SettingsRows.player,
         'Playback',
@@ -933,6 +1132,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'subtitle',
           'subtitles',
           'audio track',
+          'skip intro',
+          'skip credits',
+          'outro',
+          'auto provider',
+          'skipdb',
+          'introdb',
+          'theintrodb',
         ],
       ),
       nav(
@@ -948,22 +1154,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'setup',
         ],
       ),
-      if (!PlatformUtil.isAndroidTvCached)
-        nav(
-          SettingsRows.navigationStyle,
-          'Home & Display',
-          _openNavigationSettings,
-          keywords: const [
-            'navigation',
-            'nav',
-            'bottom bar',
-            'tabs',
-            'floating',
-            'classic',
-            'menu',
-          ],
-        ),
-
       // Search
       nav(
         SettingsRows.searchSettings,
@@ -1113,89 +1303,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         toggleValue: () => _tvKeyboardEnabled,
         onToggle: _toggleTvKeyboard,
       ),
-      // Android TV only — the size factor is applied natively in MainActivity,
-      // so the row would be inert anywhere else.
-      if (_isAndroidTv)
-        nav(
-          SettingsRows.tvScreenSize,
-          'Home & Display',
-          _openTvScreenSize,
-          subtitle: tvUiScaleLabel(_tvUiScalePercent),
-          keywords: const [
-            'zoom',
-            'zoomed in',
-            'scale',
-            'ui size',
-            'text size',
-            'font size',
-            'bigger',
-            'smaller',
-            'density',
-            'dpi',
-            'resolution',
-            'compact',
-            'fit more',
-          ],
-        ),
-      // Android TV only — the layout branch only exists on the TV home board.
-      if (_isAndroidTv)
-        nav(
-          SettingsRows.tvHomeStyle,
-          'Home & Display',
-          _openTvHomeStyle,
-          subtitle: tvHomeStyleLabel(_tvHomeStyle),
-          keywords: const [
-            'home',
-            'layout',
-            'home screen',
-            'canvas',
-            'shelf',
-            'classic',
-            'rows',
-            'redesign',
-            'view',
-          ],
-        ),
-      // Android TV only — the stage layout is a TV-canvas design; phones and
-      // desktop always browse Discover as a grid.
-      if (_isAndroidTv)
-        nav(
-          SettingsRows.discoverLayout,
-          'Home & Display',
-          _openDiscoverLayout,
-          subtitle: discoverLayoutLabel(_discoverLayout),
-          keywords: const [
-            'discover',
-            'layout',
-            'stage',
-            'grid',
-            'browse',
-            'shelf',
-            'catalog',
-            'view',
-            'posters',
-          ],
-        ),
-      // Android TV only — the rail is TV chrome.
-      if (_isAndroidTv)
-        nav(
-          SettingsRows.tvSidebarStyle,
-          'Home & Display',
-          _openTvSidebarStyle,
-          subtitle: tvSidebarStyleLabel(_tvSidebarStyle),
-          keywords: const [
-            'sidebar',
-            'nav',
-            'navigation',
-            'rail',
-            'menu',
-            'ghost',
-            'island',
-            'marquee',
-            'badge',
-            'dock',
-          ],
-        ),
 
       // Downloads
       if (_downloadLocationSupported)
@@ -1574,12 +1681,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Default audio-language filter',
         const ['language', 'audio', 'english', 'hindi', 'multi-audio'],
       ),
-      leaf(
-        'Filters',
-        'Size filter',
-        'Default file/pack size filter',
-        const ['size', 'gb', 'mb', 'file size'],
-      ),
+      leaf('Filters', 'Size filter', 'Default file/pack size filter', const [
+        'size',
+        'gb',
+        'mb',
+        'file size',
+      ]),
       leaf(
         'Filters',
         'Apply filters to Quick Play',
@@ -1627,12 +1734,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
 
       // Home Page
-      leaf('Home Screen', 'Home Rows', 'Choose which rows appear on Home', const [
-        'home rows',
-        'rows',
-        'catalogs',
-        'customize',
-      ]),
+      leaf(
+        'Home Screen',
+        'Home Rows',
+        'Choose which rows appear on Home',
+        const ['home rows', 'rows', 'catalogs', 'customize'],
+      ),
       leaf(
         'Home Screen',
         'Continue Watching',
@@ -1703,12 +1810,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
 
       // Player Settings
-      leaf(
-        'Playback',
-        'Default Player',
-        'Which player plays videos',
-        const ['default player', 'debrify player', 'external', 'deovr'],
-      ),
+      leaf('Playback', 'Default Player', 'Which player plays videos', const [
+        'default player',
+        'debrify player',
+        'external',
+        'deovr',
+      ]),
       leaf(
         'Playback',
         'Default Subtitle language',
@@ -1745,10 +1852,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Playback',
+        'Skip intros & credits',
+        'Show manual skip buttons when timestamps are available',
+        const [
+          'skip intro',
+          'skip credits',
+          'outro',
+          'opening',
+          'ending',
+          'skip segment',
+        ],
+      ),
+      leaf(
+        'Playback',
+        'Timestamp provider',
+        'Choose the source for intro and outro timestamps',
+        const [
+          'auto',
+          'skipdb',
+          'introdb',
+          'theintrodb',
+          'provider',
+          'timestamp',
+          'segments',
+        ],
+      ),
+      leaf(
+        'Playback',
         'Allow system audio effects',
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
       ),
+      if (_isAndroid && PlatformUtil.isAndroidTvCached)
+        leaf(
+          'Playback',
+          'Auto-sync addon subtitles',
+          'Align downloaded subtitles to the audio automatically',
+          const ['subtitle', 'sync', 'auto', 'align', 'timing', 'offset'],
+        ),
       if (_isPhone)
         leaf(
           'Playback',
@@ -2126,7 +2267,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
-
   Future<void> _openPikPakSettings() async {
     final loggedOut = await pushSettingsPage<bool>(
       context,
@@ -2168,12 +2308,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openNavigationSettings() async {
     final current = await StorageService.getPhoneNavStyle();
     if (!mounted) return;
-    Future<void> choose(String style) async {
-      await StorageService.setPhoneNavStyle(style);
-      MainPageBridge.navPrefsChanged?.call();
-    }
 
-    await showDialog<void>(
+    // The dialog RETURNS the choice; the write is awaited here before the
+    // bridge fires. Popping first and writing unawaited (the old shape)
+    // let an immediate pref re-read race the write.
+    final chosen = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
         Widget option({
@@ -2198,10 +2337,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: selected
                 ? const Icon(Icons.check_rounded, color: Color(0xFFC7BFFF))
                 : null,
-            onTap: () {
-              Navigator.of(dialogContext).pop();
-              unawaited(choose(value));
-            },
+            onTap: () => Navigator.of(dialogContext).pop(value),
           );
         }
 
@@ -2230,12 +2366,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
+    if (chosen == null || chosen == current || !mounted) return;
+    await StorageService.setPhoneNavStyle(chosen);
+    if (!mounted) return;
+    setState(() => _phoneNavStyle = chosen);
+    MainPageBridge.navPrefsChanged?.call();
   }
 
   Future<void> _openIptvSettings() async {
     await pushSettingsPage(context, const IptvSettingsPage());
     if (!mounted) return;
-    setState(() {});
+    // IPTV settings hosts its own Appearance/Player guide sections — keep
+    // the Appearance row captions honest.
+    await _reloadAppearanceSummaries();
   }
 
   /// IPTV settings landing on the add-source form — what a search for "add
@@ -2247,7 +2390,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const IptvSettingsPage(openAddSource: true),
     );
     if (!mounted) return;
-    setState(() {});
+    // The two-pane reached from here still exposes the Appearance/Player
+    // guide sections — keep the Appearance row captions honest.
+    await _reloadAppearanceSummaries();
   }
 
   /// Live TV & DVR › Recordings — the same page IPTV settings and the
@@ -2259,7 +2404,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openHomePageSettings() async {
     await pushSettingsPage(context, const HomePageSettingsPage());
     if (!mounted) return;
-    setState(() {});
+    // The Home Screen page hosts its own TV home layout row — keep the
+    // Appearance row caption honest.
+    await _reloadAppearanceSummaries();
   }
 
   Future<void> _openExternalPlayerSettings() async {
@@ -2374,6 +2521,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    // File-imported IPTV playlists are left out of the payload on purpose —
+    // say so rather than let the user discover it after a restore.
+    final iptvProviders = await IptvTransferPayload.countPlaylists();
+
     if (!mounted) return;
     final confirmed = await showSettingsDialog<bool>(
       context: context,
@@ -2386,6 +2537,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Text('The backup will include:'),
             const SizedBox(height: 8),
             ..._backupSummaryLines(summary).map((line) => Text('• $line')),
+            if (iptvProviders.fileImported > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${iptvProviders.fileImported} IPTV playlist'
+                  '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
+                  'a file won\'t be included — re-import the file on the other '
+                  'device. Starred channels from them still travel.',
+                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                ),
+              ),
             const SizedBox(height: 12),
             const Text(
               'Credentials are stored in plain text. Keep this file private '
@@ -2571,8 +2733,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             const Text(
               'Saved credentials (Real-Debrid, Torbox, Premiumize, AllDebrid, PikPak, Trakt, Simkl) will '
-              'be overwritten. Addons, search engines, WebDAV servers, and '
-              'indexer managers you already have are kept as-is.',
+              'be overwritten. Addons, search engines, WebDAV servers, '
+              'indexer managers, and IPTV providers you already have are kept '
+              'as-is. IPTV favorites and lists merge into what\'s here — '
+              'nothing is removed.',
               style: TextStyle(fontSize: 12),
             ),
             if (summary.addonCount > 0 || summary.searchEngineCount > 0)
@@ -2696,6 +2860,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (s.indexerManagerCount > 0) {
       lines.add('Jackett/Prowlarr (${s.indexerManagerCount})');
     }
+    if (s.iptvPlaylistCount > 0) {
+      lines.add('IPTV providers (${s.iptvPlaylistCount})');
+    }
+    if (s.iptvFavoriteCount > 0) {
+      lines.add('IPTV favorites (${s.iptvFavoriteCount} channels)');
+    }
+    if (s.iptvListCount > 0) {
+      lines.add(
+        'IPTV lists (${s.iptvListCount}, '
+        '${s.iptvListChannelCount} channels)',
+      );
+    }
     return lines;
   }
 
@@ -2719,6 +2895,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     if (r.indexerManagersImported > 0) {
       parts.add('${r.indexerManagersImported} indexer manager(s)');
+    }
+    if (r.iptvPlaylistsImported > 0) {
+      parts.add('${r.iptvPlaylistsImported} IPTV provider(s)');
+    }
+    if (r.iptvFavoritesImported > 0) {
+      parts.add('${r.iptvFavoritesImported} favorite channel(s)');
+    }
+    if (r.iptvListsCreated > 0) {
+      parts.add('${r.iptvListsCreated} IPTV list(s)');
+    }
+    if (r.iptvListChannelsImported > 0) {
+      parts.add('${r.iptvListChannelsImported} list channel(s)');
     }
 
     if (parts.isEmpty && !r.hasAnyFailure) {
@@ -2744,6 +2932,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         '${r.indexerManagersAlreadyPresent} indexer manager(s) already present',
       );
     }
+    if (r.iptvPlaylistsAlreadyPresent > 0) {
+      notes.add(
+        '${r.iptvPlaylistsAlreadyPresent} IPTV provider(s) already present',
+      );
+    }
+    if (r.iptvFavoritesAlreadyPresent > 0) {
+      notes.add('${r.iptvFavoritesAlreadyPresent} favorite(s) already present');
+    }
+    if (r.iptvListsMerged > 0) {
+      notes.add('${r.iptvListsMerged} existing list(s) topped up');
+    }
     final withNotes = notes.isEmpty ? base : '$base (${notes.join(', ')})';
 
     if (!r.hasAnyFailure) return withNotes;
@@ -2762,6 +2961,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     if (r.indexerManagersFailed > 0) {
       failed.add('${r.indexerManagersFailed} indexer manager(s)');
+    }
+    if (r.iptvPlaylistsFailed > 0) {
+      failed.add('${r.iptvPlaylistsFailed} IPTV provider(s)');
+    }
+    if (r.iptvFavoritesFailed > 0) {
+      failed.add('${r.iptvFavoritesFailed} favorite(s)');
+    }
+    if (r.iptvListsFailed > 0) {
+      failed.add('${r.iptvListsFailed} IPTV list entr(ies)');
     }
     failed.addAll(r.errors);
     return '$withNotes — failed: ${failed.join(', ')}';
@@ -3368,6 +3576,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract as [_openTvHomeStyle], for the IPTV page look picker.
+  Future<void> _openIptvStylePage() async {
+    await pushSettingsPage(context, const IptvStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getIptvStyle();
+    if (!mounted) return;
+    setState(() {
+      _iptvStyle = style;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the in-player guide picker.
+  Future<void> _openPlayerGuideStylePage() async {
+    await pushSettingsPage(context, const PlayerGuideStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getIptvPlayerGuideStyle();
+    if (!mounted) return;
+    setState(() {
+      _playerGuideStyle = style;
+    });
+  }
+
+  /// The Appearance rows quote live pref labels, but three of those prefs
+  /// also have feature-local editors (the Home Screen page's layout row, the
+  /// IPTV page's Appearance/Player guide sections). Re-read JUST those after
+  /// any route that can reach them, so the captions never go stale. Never
+  /// the full [_loadSummaries] — this is three pref reads, no network.
+  Future<void> _reloadAppearanceSummaries() async {
+    final tvHomeStyle = await StorageService.getTvHomeStyle();
+    final iptvStyle = await StorageService.getIptvStyle();
+    final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
+    if (!mounted) return;
+    setState(() {
+      _tvHomeStyle = tvHomeStyle;
+      _iptvStyle = iptvStyle;
+      _playerGuideStyle = playerGuideStyle;
+    });
+  }
+
   Future<void> _startAndroidUpdateDownload(AppRelease release) async {
     if (kIsWeb) {
       await _openReleasesPage(release.htmlUrl);
@@ -3558,13 +3805,15 @@ class _SettingsLayout extends StatelessWidget {
   // Live TV & DVR.
   final Future<void> Function() onOpenRecordings;
   final Future<void> Function() onOpenIptvSettings;
-  // TV display rows (shown only when [isAndroidTv]).
-  final int tvUiScalePercent;
-  final Future<void> Function() onOpenTvScreenSize;
-  final String tvSidebarStyleLabel;
-  final Future<void> Function() onOpenTvSidebarStyle;
-  final String discoverLayoutLabel;
-  final Future<void> Function() onOpenDiscoverLayout;
+  // Appearance rows. This layout is only built off-TV, so the TV-only
+  // pickers (home style, discover, sidebar, screen size) live solely in
+  // SettingsTvLayout's Appearance category.
+  final bool showIptvAppearance;
+  final String iptvStyleLabel;
+  final Future<void> Function() onOpenIptvStyle;
+  final String playerGuideStyleLabel;
+  final Future<void> Function() onOpenPlayerGuideStyle;
+  final String phoneNavStyleLabel;
 
   const _SettingsLayout({
     required this.connections,
@@ -3601,12 +3850,12 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenSupportDonation,
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
-    required this.tvUiScalePercent,
-    required this.onOpenTvScreenSize,
-    required this.tvSidebarStyleLabel,
-    required this.onOpenTvSidebarStyle,
-    required this.discoverLayoutLabel,
-    required this.onOpenDiscoverLayout,
+    required this.showIptvAppearance,
+    required this.iptvStyleLabel,
+    required this.onOpenIptvStyle,
+    required this.playerGuideStyleLabel,
+    required this.onOpenPlayerGuideStyle,
+    required this.phoneNavStyleLabel,
   });
 
   @override
@@ -3639,35 +3888,39 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.homePage,
                       onTap: onOpenHomePageSettings,
                     ),
-                    if (isAndroidTv) ...[
-                      SettingsTile.spec(
-                        SettingsRows.tvSidebarStyle,
-                        subtitle: tvSidebarStyleLabel,
-                        onTap: onOpenTvSidebarStyle,
-                      ),
-                      SettingsTile.spec(
-                        SettingsRows.discoverLayout,
-                        subtitle: discoverLayoutLabel,
-                        onTap: onOpenDiscoverLayout,
-                      ),
-                      SettingsTile.spec(
-                        SettingsRows.tvScreenSize,
-                        subtitle: tvUiScaleLabel(tvUiScalePercent),
-                        onTap: onOpenTvScreenSize,
-                      ),
+                    if (isAndroidTv)
                       SettingsToggleTile.spec(
                         SettingsRows.tvKeyboard,
                         value: tvKeyboardEnabled,
                         onChanged: onToggleTvKeyboard,
                       ),
-                    ],
-                    // Phone/small-window chrome only — TVs navigate by
-                    // sidebar and never read the style.
-                    if (!isAndroidTv)
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Every look/layout pref, one tap from the root. The TV-only
+                // pickers live in the TV layout's Appearance category — this
+                // layout never renders on Android TV.
+                SettingsSection(
+                  title: 'Appearance',
+                  children: [
+                    if (showIptvAppearance)
                       SettingsTile.spec(
-                        SettingsRows.navigationStyle,
-                        onTap: onOpenNavigationSettings,
+                        SettingsRows.iptvAppearance,
+                        subtitle: iptvStyleLabel,
+                        onTap: onOpenIptvStyle,
                       ),
+                    SettingsTile.spec(
+                      SettingsRows.playerGuideStyle,
+                      subtitle: playerGuideStyleLabel,
+                      onTap: onOpenPlayerGuideStyle,
+                    ),
+                    // Phone/small-window chrome — TVs navigate by sidebar
+                    // and never read the style.
+                    SettingsTile.spec(
+                      SettingsRows.navigationStyle,
+                      subtitle: phoneNavStyleLabel,
+                      onTap: onOpenNavigationSettings,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPTV Premium — Concept Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter+Tight:wght@300..800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--fg:#EDEDED;--dim:rgba(237,237,237,.55);--dim2:rgba(237,237,237,.32);--hair:rgba(255,255,255,.09)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#060606;color:var(--fg);font:14px/1.55 'Inter Tight',-apple-system,sans-serif;padding:56px 5vw 100px}
+  h1{font:400 34px/1.15 'Fraunces',Georgia,serif;letter-spacing:-.3px}
+  .sub{color:var(--dim);margin:12px 0 8px;max-width:820px;font-size:14px}
+  .why{color:var(--dim2);font-size:12.5px;max-width:820px;margin-bottom:44px;line-height:1.7}
+  .why b{color:var(--dim)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:22px;max-width:1400px}
+  a.card{display:block;text-decoration:none;color:var(--fg);border:1px solid var(--hair);border-radius:14px;
+         overflow:hidden;transition:border-color .2s}
+  a.card:hover{border-color:rgba(255,255,255,.3)}
+  .thumb{aspect-ratio:16/9;position:relative;overflow:hidden}
+  .meta{padding:16px 18px 18px}
+  .meta .k{font:600 9.5px 'JetBrains Mono',monospace;letter-spacing:2.2px;color:var(--dim2);text-transform:uppercase}
+  .meta h2{font-size:19px;font-weight:600;margin:5px 0 6px;letter-spacing:-.2px}
+  .meta h2 em{font:italic 400 19px 'Fraunces',serif}
+  .meta p{color:var(--dim);font-size:12.5px}
+  .meta .risk{color:var(--dim2);font-size:11.5px;margin-top:8px}
+
+  /* thumb 1 — first edition */
+  .t1{background:#0D0B09}
+  .t1 .rail{position:absolute;left:0;top:0;bottom:0;width:22%;border-right:1px solid rgba(243,238,227,.09)}
+  .t1 .rule{position:absolute;left:6%;width:2px;top:38%;height:6%;background:#F3EEE3}
+  .t1 .head{position:absolute;left:27%;top:16%;font:400 26px 'Fraunces',serif;color:#F3EEE3;letter-spacing:-.3px}
+  .t1 .kick{position:absolute;left:27%;top:9%;font:700 6.5px 'Inter Tight',sans-serif;letter-spacing:2px;color:rgba(243,238,227,.5)}
+  .t1 .ln{position:absolute;left:27%;right:32%;height:1px;background:rgba(243,238,227,.08)}
+  .t1 .pv{position:absolute;right:4%;top:12%;width:22%;aspect-ratio:16/9;border:1px solid rgba(243,238,227,.16);
+          background:radial-gradient(80% 120% at 70% 25%,rgba(96,74,44,.75),transparent 60%),#141110}
+  .t1 .prg{position:absolute;left:27%;top:40%;width:30%;height:2px;background:rgba(243,238,227,.1)}
+  .t1 .prg i{position:absolute;inset:0;right:38%;background:#F3EEE3}
+  /* thumb 2 — glasshouse */
+  .t2{background:
+      radial-gradient(90% 70% at 68% 26%,rgba(255,196,120,.34),transparent 55%),
+      radial-gradient(120% 80% at 50% 108%,rgba(28,84,52,.85),rgba(18,42,32,.9) 45%,transparent 78%),
+      linear-gradient(180deg,#0F1B2E,#13233A 38%,#0C1A16)}
+  .t2 .pane{position:absolute;border-radius:8px;background:rgba(14,17,22,.5);border:1px solid rgba(255,255,255,.12)}
+  .t2 .a{left:5%;top:12%;bottom:8%;width:34%}
+  .t2 .b{left:43%;right:5%;bottom:8%;height:26%}
+  .t2 .c{left:5%;top:12%;width:34%;height:8%;border-radius:99px;background:rgba(255,255,255,.16);transform:translateY(-130%)}
+  .t2 .t{position:absolute;left:47%;bottom:22%;font:600 13px 'Inter Tight',sans-serif;color:#fff}
+  /* thumb 3 — master control */
+  .t3{background:#050505}
+  .t3 .st{position:absolute;top:0;left:0;right:0;height:10%;border-bottom:1px solid rgba(255,255,255,.08)}
+  .t3 .tl{position:absolute;left:24%;right:30%;top:22%;height:16%;border:1px solid rgba(255,255,255,.12);border-radius:4px}
+  .t3 .tl i{position:absolute;left:38%;top:-8%;bottom:-8%;width:1.5px;background:#F2A93B;box-shadow:0 0 8px rgba(242,169,59,.5)}
+  .t3 .row{position:absolute;left:24%;right:30%;height:1px;background:rgba(255,255,255,.05)}
+  .t3 .fx{position:absolute;left:25%;top:52%;width:5px;height:12%;border:1px solid #F2A93B;border-right:none}
+  .t3 .fx2{position:absolute;right:31%;top:52%;width:5px;height:12%;border:1px solid #F2A93B;border-left:none}
+  .t3 .mon{position:absolute;right:4%;top:22%;width:22%;aspect-ratio:16/9;border:1px solid rgba(255,255,255,.25);
+           background:radial-gradient(80% 120% at 68% 25%,rgba(88,72,46,.8),transparent 60%),#0A0908}
+  .t3 .rl{position:absolute;left:0;top:10%;bottom:0;width:20%;border-right:1px solid rgba(255,255,255,.08)}
+</style></head><body>
+
+<h1>IPTV, three ways it could feel expensive</h1>
+<p class="sub">Same Command Center skeleton the app ships today — rail → guide → stage, every feature carried —
+three different ideas of what "premium" means. Pick a voice, not just a layout.</p>
+<p class="why"><b>What changed vs the old mocks (and the current page):</b> no emoji glyphs (stroke SVG only),
+no blue→purple gradients, no gold focus outlines, no filled chips, no boxed panels. Each concept commits to one
+material, at most one accent colour with a fixed meaning, and one signature element the others don't have.
+All three keep the shipped DPAD grammar: LEFT-cascade to rail then app sidebar, hold-OK pickers,
+RIGHT-to-schedule, submit-only search, Offstage schedule swap, focus-node + row-extent contracts.</p>
+
+<div class="grid">
+  <a class="card" href="p1_first_edition.html">
+    <div class="thumb t1">
+      <div class="rail"></div><div class="rule"></div>
+      <div class="kick">● ON AIR · CH 22 · SKY SPORT NEWS · UHD</div>
+      <div class="head">Manchester United<br>vs Brighton</div>
+      <div class="prg"><i></i></div>
+      <div class="ln" style="top:56%"></div><div class="ln" style="top:66%"></div>
+      <div class="ln" style="top:76%"></div><div class="ln" style="top:86%"></div>
+      <div class="pv"></div>
+    </div>
+    <div class="meta">
+      <div class="k">Concept P1 · Editorial</div>
+      <h2>First <em>Edition</em></h2>
+      <p>Warm ink, one serif headline for the programme on air, hairline ledger rows, ivory focus rule.
+      The luxury of a beautifully set newspaper that happens to be live.</p>
+      <div class="risk">Cheapest to ship — pure restyle of the existing cockpit. Needs two bundled fonts.</div>
+    </div>
+  </a>
+
+  <a class="card" href="p2_glasshouse.html">
+    <div class="thumb t2">
+      <div class="pane c"></div><div class="pane a"></div><div class="pane b"></div>
+      <div class="t">Manchester United vs Brighton</div>
+    </div>
+    <div class="meta">
+      <div class="k">Concept P2 · Ambient</div>
+      <h2>Glasshouse</h2>
+      <p>The stage box dies — the focused channel plays full-bleed behind everything, and the UI is four
+      floating tinted-glass panes lit by the broadcast. tvOS / Sky Glass energy.</p>
+      <div class="risk">Boldest. Needs the underlay full-bleed (already proven on Home); tint-not-blur on TV.</div>
+    </div>
+  </a>
+
+  <a class="card" href="p3_master_control.html">
+    <div class="thumb t3">
+      <div class="st"></div><div class="rl"></div>
+      <div class="tl"><i></i></div>
+      <div class="row" style="top:48%"></div><div class="row" style="top:58%"></div>
+      <div class="row" style="top:68%"></div><div class="row" style="top:78%"></div><div class="row" style="top:88%"></div>
+      <div class="fx"></div><div class="fx2"></div>
+      <div class="mon"></div>
+    </div>
+    <div class="meta">
+      <div class="k">Concept P3 · Instrument</div>
+      <h2>Master Control</h2>
+      <p>Pure black, monospaced numbers, ticked meters, amber playhead. A per-channel 6-hour timeline strip
+      replaces "what's on later?" — the page feels like a broadcast console.</p>
+      <div class="risk">Most distinctive identity. Timeline strip is the one new component; EPG data already exists.</div>
+    </div>
+  </a>
+</div>
+
+</body></html>

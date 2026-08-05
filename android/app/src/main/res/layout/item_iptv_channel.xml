@@ -30,6 +30,7 @@
 
     <!-- Channel Logo -->
     <FrameLayout
+        android:id="@+id/iptv_channel_logo_tile"
         android:layout_width="42dp"
         android:layout_height="42dp"
         android:layout_marginStart="8dp"
@@ -132,11 +133,13 @@
         tools:visibility="visible">
 
         <View
+            android:id="@+id/iptv_channel_live_dot"
             android:layout_width="5dp"
             android:layout_height="5dp"
             android:background="@drawable/iptv_live_dot" />
 
         <TextView
+            android:id="@+id/iptv_channel_live_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"

@@ -5,6 +5,7 @@ import '../../models/iptv_playlist.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../utils/tv_keys.dart';
 import 'iptv_stage_panel.dart' show IptvMonogram;
+import 'styles/iptv_style.dart';
 
 /// The Command Center's left rail: every destination on one column —
 /// LIBRARY (Favorites · Continue · Recordings), SOURCES (playlists with
@@ -14,7 +15,7 @@ import 'iptv_stage_panel.dart' show IptvMonogram;
 /// LEFT from the channel grid's first column lands here, LEFT from here has
 /// no candidate and bubbles to the shell's global action (the app sidebar,
 /// preserving the LEFT-only policy with zero interception code). UP/DOWN
-/// walk the column; OK/RIGHT select.
+/// walk the column, RIGHT walks into the guide, and OK selects.
 ///
 /// Perf: a static column — no per-frame work, counts are precomputed by the
 /// caller once per playlist load, and selection state is a plain rebuild.
@@ -41,6 +42,11 @@ class IptvCommandRail extends StatelessWidget {
   final VoidCallback onOpenScheduled;
   final VoidCallback onManageSources;
 
+  /// Styled-look tokens ('edition'/'console'), or null for the shipped
+  /// Command Center paint. Behavior — focus wiring, swallow flags, counts,
+  /// selection — is IDENTICAL in every style; only paint branches on this.
+  final IptvStyleTokens? tokens;
+
   const IptvCommandRail({
     super.key,
     required this.playlists,
@@ -54,32 +60,44 @@ class IptvCommandRail extends StatelessWidget {
     required this.onManageSources,
     this.showScheduled = true,
     this.recordingActive = false,
+    this.tokens,
   });
 
   @override
   Widget build(BuildContext context) {
     final favorites = playlists.where((p) => p.isFavorites).toList();
-    final continueWatching =
-        playlists.where((p) => p.isContinueWatching).toList();
+    final continueWatching = playlists
+        .where((p) => p.isContinueWatching)
+        .toList();
     final sources = playlists.where((p) => !p.isVirtual).toList();
     final addonSources = playlists.where((p) => p.isStremioAddon).toList();
     final listPlaylists = playlists.where((p) => p.isCustomList).toList();
 
+    final t = tokens;
     return Container(
       width: 196,
-      decoration: BoxDecoration(
-        color: const Color(0xFF080B18).withValues(alpha: 0.65),
-        border: Border(
-          right: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
-        ),
-      ),
+      decoration: t == null
+          ? BoxDecoration(
+              color: const Color(0xFF080B18).withValues(alpha: 0.65),
+              border: Border(
+                right: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+              ),
+            )
+          : BoxDecoration(
+              // Each pane paints its OWN background — a page-wide sheet would
+              // sit under the stage's punched underlay hole in an ancestor
+              // layer and block the live video (see _buildTvTwoPane).
+              color: t.bg,
+              border: Border(right: BorderSide(color: t.hairline)),
+            ),
       child: FocusTraversalGroup(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(8, 14, 8, 10),
           children: [
-            const _RailHeader('LIBRARY'),
+            _RailHeader('LIBRARY', tokens: t, first: true),
             for (final p in favorites)
               _RailItem(
+                tokens: t,
                 icon: Icons.star_rounded,
                 iconColor: const Color(0xFFF5C042),
                 label: 'Favorites',
@@ -92,6 +110,7 @@ class IptvCommandRail extends StatelessWidget {
               ),
             for (final p in continueWatching)
               _RailItem(
+                tokens: t,
                 icon: Icons.history_rounded,
                 label: 'Continue',
                 selected: selectedPlaylist?.id == p.id,
@@ -99,6 +118,7 @@ class IptvCommandRail extends StatelessWidget {
               ),
             if (showScheduled)
               _RailItem(
+                tokens: t,
                 icon: Icons.fiber_manual_record_rounded,
                 iconColor: const Color(0xFFF43F5E),
                 label: 'Recordings',
@@ -108,19 +128,21 @@ class IptvCommandRail extends StatelessWidget {
                 liveDot: recordingActive,
                 onSelect: onOpenScheduled,
               ),
-            const _RailHeader('SOURCES'),
+            _RailHeader('SOURCES', tokens: t),
             for (final p in sources)
               _RailItem(
-                mark: IptvMonogram(name: p.name, size: 24),
+                tokens: t,
+                mark: t == null ? IptvMonogram(name: p.name, size: 24) : null,
                 label: p.name,
                 count: sourceCounts[p.id],
                 selected: selectedPlaylist?.id == p.id,
                 onSelect: () => onSelectPlaylist(p),
               ),
             if (addonSources.isNotEmpty) ...[
-              const _RailHeader('ADDONS'),
+              _RailHeader('ADDONS', tokens: t),
               for (final p in addonSources)
                 _RailItem(
+                  tokens: t,
                   icon: Icons.extension_rounded,
                   label: p.name,
                   selected: selectedPlaylist?.id == p.id,
@@ -128,9 +150,10 @@ class IptvCommandRail extends StatelessWidget {
                 ),
             ],
             if (listPlaylists.isNotEmpty) ...[
-              const _RailHeader('LISTS'),
+              _RailHeader('LISTS', tokens: t),
               for (final p in listPlaylists)
                 _RailItem(
+                  tokens: t,
                   icon: Icons.bookmark_rounded,
                   label: p.name,
                   count: _listCount(p),
@@ -138,8 +161,15 @@ class IptvCommandRail extends StatelessWidget {
                   onSelect: () => onSelectPlaylist(p),
                 ),
             ],
-            const SizedBox(height: 10),
+            // The Manage footer is its own section too — rule it off from
+            // whatever list ends above it.
+            Container(
+              height: 1,
+              margin: const EdgeInsets.fromLTRB(10, 14, 10, 10),
+              color: t?.hairline ?? Colors.white.withValues(alpha: 0.08),
+            ),
             _RailItem(
+              tokens: t,
               icon: Icons.tune_rounded,
               label: 'Manage sources',
               selected: false,
@@ -162,23 +192,52 @@ class IptvCommandRail extends StatelessWidget {
   }
 }
 
+/// Section heading: a hairline rule (skipped on the first section) over a
+/// bold small-caps title, so the rail reads as titled groups rather than one
+/// undifferentiated list. Same treatment in every style, in each style's own
+/// palette (user-requested — this deliberately updates the command look too).
 class _RailHeader extends StatelessWidget {
   final String text;
-  const _RailHeader(this.text);
+  final IptvStyleTokens? tokens;
+
+  /// First section: no divider above (nothing to separate from).
+  final bool first;
+
+  const _RailHeader(this.text, {this.tokens, this.first = false});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 12, 10, 5),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.32),
-          fontSize: 9.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.5,
+    final t = tokens;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!first)
+          Container(
+            height: 1,
+            margin: const EdgeInsets.fromLTRB(10, 14, 10, 0),
+            color: t?.hairline ?? Colors.white.withValues(alpha: 0.08),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 12, 10, 6),
+          child: Text(
+            text,
+            style: t == null
+                ? TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.6,
+                  )
+                : TextStyle(
+                    color: t.fgDim,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.4,
+                    fontFamily: t.monoFamily.isEmpty ? null : t.monoFamily,
+                  ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -195,6 +254,7 @@ class _RailItem extends StatefulWidget {
   final bool swallowUp;
   final bool swallowDown;
   final VoidCallback onSelect;
+  final IptvStyleTokens? tokens;
 
   const _RailItem({
     this.icon,
@@ -208,6 +268,7 @@ class _RailItem extends StatefulWidget {
     this.swallowUp = false,
     this.swallowDown = false,
     required this.onSelect,
+    this.tokens,
   });
 
   @override
@@ -220,92 +281,94 @@ class _RailItemState extends State<_RailItem> {
   @override
   Widget build(BuildContext context) {
     const gold = Color(0xFFF5C042);
-    final row = Container(
-      height: 36,
-      margin: const EdgeInsets.symmetric(vertical: 1),
-      padding: const EdgeInsets.symmetric(horizontal: 9),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(9),
-        color: widget.selected
-            ? const Color(0xFF8A5CFF).withValues(alpha: 0.16)
-            : _focused
-            ? Colors.white.withValues(alpha: 0.05)
-            : Colors.transparent,
-        border: Border.all(
-          color: _focused ? gold : Colors.transparent,
-          width: 1.8,
-        ),
-      ),
-      child: Row(
-        children: [
-          if (widget.mark != null)
-            widget.mark!
-          else
-            Icon(
-              widget.icon,
-              size: 16,
-              color: widget.iconColor ??
-                  Colors.white.withValues(alpha: widget.selected ? 0.9 : 0.55),
-            ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              widget.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: widget.selected
-                    ? const Color(0xFFE4DCFF)
-                    : Colors.white.withValues(alpha: 0.72),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+    final row = widget.tokens != null
+        ? _styledRow(widget.tokens!)
+        : Container(
+            height: 36,
+            margin: const EdgeInsets.symmetric(vertical: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              color: widget.selected
+                  ? const Color(0xFF8A5CFF).withValues(alpha: 0.16)
+                  : _focused
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.transparent,
+              border: Border.all(
+                color: _focused ? gold : Colors.transparent,
+                width: 1.8,
               ),
             ),
-          ),
-          if (widget.liveDot)
-            Container(
-              width: 7,
-              height: 7,
-              margin: const EdgeInsets.only(left: 5),
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFF43F5E),
-              ),
-            )
-          else if (widget.count != null)
-            Text(
-              _fmtCount(widget.count!),
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.34),
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            )
-          else if (widget.chevron)
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 15,
-              color: Colors.white.withValues(alpha: 0.3),
+            child: Row(
+              children: [
+                if (widget.mark != null)
+                  widget.mark!
+                else
+                  Icon(
+                    widget.icon,
+                    size: 16,
+                    color:
+                        widget.iconColor ??
+                        Colors.white.withValues(
+                          alpha: widget.selected ? 0.9 : 0.55,
+                        ),
+                  ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: widget.selected
+                          ? const Color(0xFFE4DCFF)
+                          : Colors.white.withValues(alpha: 0.72),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (widget.liveDot)
+                  Container(
+                    width: 7,
+                    height: 7,
+                    margin: const EdgeInsets.only(left: 5),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFFF43F5E),
+                    ),
+                  )
+                else if (widget.count != null)
+                  Text(
+                    _fmtCount(widget.count!),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.34),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  )
+                else if (widget.chevron)
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 15,
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
+              ],
             ),
-        ],
-      ),
-    );
+          );
 
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
-        // RIGHT selects too (the documented contract): without this,
-        // traversal walks into the guide while it still shows the PREVIOUS
-        // source — a silently wrong screen.
-        if (event is KeyDownEvent &&
-            (isActivateOrSpaceKey(event.logicalKey) ||
-                event.logicalKey == LogicalKeyboardKey.arrowRight)) {
+        // OK selects; RIGHT does NOT. Arrows move, the centre button acts —
+        // the 10-foot contract everywhere else in the app. RIGHT used to
+        // select as the rail's only escape hatch (it swallowed the key, so
+        // traversal could never leave), which meant merely walking toward
+        // the guide silently switched source. Now it just walks: the guide
+        // it lands on is the one still selected, so nothing can mismatch.
+        if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onSelect();
-          return KeyEventResult.handled;
-        }
-        // Swallow RIGHT repeats so holding the key can't multi-trigger.
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
           return KeyEventResult.handled;
         }
         // Vertical containment at the rail's edges — never leak into the
@@ -324,6 +387,71 @@ class _RailItemState extends State<_RailItem> {
         onTap: widget.onSelect,
         behavior: HitTestBehavior.opaque,
         child: row,
+      ),
+    );
+  }
+
+  /// The styled (edition/console) row paint: text-first — no leading icons,
+  /// no filled selection pill, no gold ring. Focus = a 2px rule on the left
+  /// edge (paper for edition, amber for console) + a faint tint; selection =
+  /// full-strength text. Same height/behavior as the legacy row.
+  Widget _styledRow(IptvStyleTokens t) {
+    final mono = t.monoFamily.isEmpty ? null : t.monoFamily;
+    return Container(
+      height: 36,
+      margin: const EdgeInsets.symmetric(vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 11),
+      decoration: BoxDecoration(
+        color: _focused ? t.focusTint : Colors.transparent,
+        border: Border(
+          left: BorderSide(
+            color: _focused ? t.accent : Colors.transparent,
+            width: 2,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: (widget.selected || _focused) ? t.fg : t.fgDim,
+                fontSize: 12.5,
+                fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w500,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          if (widget.liveDot)
+            Container(
+              width: 7,
+              height: 7,
+              margin: const EdgeInsets.only(left: 5),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: t.rec,
+                boxShadow: [
+                  BoxShadow(color: t.rec.withValues(alpha: 0.6), blurRadius: 8),
+                ],
+              ),
+            )
+          else if (widget.count != null)
+            Text(
+              _fmtCount(widget.count!),
+              style: TextStyle(
+                color: t.fgFaint,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                fontFamily: mono,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            )
+          else if (widget.chevron)
+            Icon(Icons.chevron_right_rounded, size: 15, color: t.fgFaint),
+        ],
       ),
     );
   }

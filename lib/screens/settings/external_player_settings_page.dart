@@ -7,6 +7,7 @@ import '../../services/storage_service.dart';
 import '../../services/android_native_downloader.dart';
 import '../../services/subtitle_font_service.dart';
 import '../../services/analytics_service.dart';
+import '../../services/skip_segment_service.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
 import '../../utils/platform_util.dart';
@@ -81,6 +82,9 @@ class _ExternalPlayerSettingsPageState
   int _nightModeIndex = 0; // Off
   bool _systemAudioEffects = false; // Android only, opt-in
   bool _startPortrait = false; // Phone only, opt-in
+  bool _subtitleAutoSync = true; // Android TV only, ON by default (opt-out)
+  bool _skipSegmentsEnabled = true;
+  String _skipSegmentProvider = SkipSegmentProviders.auto;
   String?
   _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
   String?
@@ -104,6 +108,9 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
   final FocusNode _systemAudioEffectsFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
+  final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
+  final FocusNode _skipSegmentsEnabledFocusNode = FocusNode();
+  final FocusNode _skipSegmentProviderFocusNode = FocusNode();
   final FocusNode _subtitleSizeFocusNode = FocusNode();
   final FocusNode _subtitleStyleFocusNode = FocusNode();
   final FocusNode _subtitleColorFocusNode = FocusNode();
@@ -115,6 +122,9 @@ class _ExternalPlayerSettingsPageState
   bool _defaultSubtitleLangFocused = false;
   bool _systemAudioEffectsFocused = false;
   bool _startPortraitFocused = false;
+  bool _subtitleAutoSyncFocused = false;
+  bool _skipSegmentsEnabledFocused = false;
+  bool _skipSegmentProviderFocused = false;
   bool _subtitleSizeFocused = false;
   bool _subtitleStyleFocused = false;
   bool _subtitleColorFocused = false;
@@ -216,6 +226,24 @@ class _ExternalPlayerSettingsPageState
         _startPortraitFocused = _startPortraitFocusNode.hasFocus;
       });
     });
+    _subtitleAutoSyncFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _subtitleAutoSyncFocused = _subtitleAutoSyncFocusNode.hasFocus;
+      });
+    });
+    _skipSegmentsEnabledFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _skipSegmentsEnabledFocused = _skipSegmentsEnabledFocusNode.hasFocus;
+      });
+    });
+    _skipSegmentProviderFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _skipSegmentProviderFocused = _skipSegmentProviderFocusNode.hasFocus;
+      });
+    });
     _subtitleSizeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -275,6 +303,9 @@ class _ExternalPlayerSettingsPageState
     _defaultSubtitleLangFocusNode.dispose();
     _systemAudioEffectsFocusNode.dispose();
     _startPortraitFocusNode.dispose();
+    _subtitleAutoSyncFocusNode.dispose();
+    _skipSegmentsEnabledFocusNode.dispose();
+    _skipSegmentProviderFocusNode.dispose();
     _subtitleSizeFocusNode.dispose();
     _subtitleStyleFocusNode.dispose();
     _subtitleColorFocusNode.dispose();
@@ -380,6 +411,14 @@ class _ExternalPlayerSettingsPageState
       final systemAudioEffects =
           await StorageService.getPlayerSystemAudioEffects();
       final startPortrait = await StorageService.getPlayerStartPortrait();
+      final subtitleAutoSync = await StorageService.getSubtitleAutoSyncEnabled();
+      final skipSegmentsEnabled = await StorageService.getSkipSegmentsEnabled();
+      final storedSkipSegmentProvider =
+          await StorageService.getSkipSegmentProvider();
+      final skipSegmentProvider =
+          SkipSegmentProviders.isAvailable(storedSkipSegmentProvider)
+          ? storedSkipSegmentProvider
+          : SkipSegmentProviders.auto;
       final defaultSubtitleLanguage =
           await StorageService.getDefaultSubtitleLanguage();
       final defaultAudioLanguage =
@@ -423,6 +462,9 @@ class _ExternalPlayerSettingsPageState
         _nightModeIndex = nightModeIndex;
         _systemAudioEffects = systemAudioEffects;
         _startPortrait = startPortrait;
+        _subtitleAutoSync = subtitleAutoSync;
+        _skipSegmentsEnabled = skipSegmentsEnabled;
+        _skipSegmentProvider = skipSegmentProvider;
         _defaultSubtitleLanguage = defaultSubtitleLanguage;
         _defaultAudioLanguage = defaultAudioLanguage;
         _subtitleSizeIndex = subtitleSettings.sizeIndex;
@@ -881,6 +923,21 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setStartPortrait(bool enabled) async {
     setState(() => _startPortrait = enabled);
     await StorageService.setPlayerStartPortrait(enabled);
+  }
+
+  Future<void> _setSubtitleAutoSync(bool enabled) async {
+    setState(() => _subtitleAutoSync = enabled);
+    await StorageService.setSubtitleAutoSyncEnabled(enabled);
+  }
+
+  Future<void> _setSkipSegmentsEnabled(bool enabled) async {
+    setState(() => _skipSegmentsEnabled = enabled);
+    await StorageService.setSkipSegmentsEnabled(enabled);
+  }
+
+  Future<void> _setSkipSegmentProvider(String provider) async {
+    setState(() => _skipSegmentProvider = provider);
+    await StorageService.setSkipSegmentProvider(provider);
   }
 
   Future<void> _setDefaultSubtitleLanguage(String? languageCode) async {
@@ -1525,6 +1582,7 @@ class _ExternalPlayerSettingsPageState
     required Function(String) onChanged,
     FocusNode? focusNode,
     bool isFocused = false,
+    bool enabled = true,
   }) {
     final theme = Theme.of(context);
 
@@ -1554,7 +1612,12 @@ class _ExternalPlayerSettingsPageState
           children: [
             Expanded(
               flex: 2,
-              child: Text(label, style: theme.textTheme.bodyMedium),
+              child: Text(
+                label,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: enabled ? null : kSettingsDim2,
+                ),
+              ),
             ),
             Expanded(
               flex: 3,
@@ -1565,10 +1628,12 @@ class _ExternalPlayerSettingsPageState
                   color: kSettingsPanel2,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isFocused ? kSettingsAccent : kSettingsLine,
-                    width: isFocused ? 2 : 1,
+                    color: enabled && isFocused
+                        ? kSettingsAccent
+                        : kSettingsLine,
+                    width: enabled && isFocused ? 2 : 1,
                   ),
-                  boxShadow: isFocused
+                  boxShadow: enabled && isFocused
                       ? [
                           BoxShadow(
                             color: kSettingsAccent.withValues(alpha: 0.25),
@@ -1583,7 +1648,10 @@ class _ExternalPlayerSettingsPageState
                     value: value,
                     focusNode: focusNode,
                     isExpanded: true,
-                    icon: Icon(Icons.keyboard_arrow_down, color: kSettingsDim),
+                    icon: Icon(
+                      Icons.keyboard_arrow_down,
+                      color: enabled ? kSettingsDim : kSettingsDim2,
+                    ),
                     items: items.entries
                         .map(
                           (e) => DropdownMenuItem(
@@ -1595,9 +1663,11 @@ class _ExternalPlayerSettingsPageState
                           ),
                         )
                         .toList(),
-                    onChanged: (v) {
-                      if (v != null) onChanged(v);
-                    },
+                    onChanged: enabled
+                        ? (v) {
+                            if (v != null) onChanged(v);
+                          }
+                        : null,
                   ),
                 ),
               ),
@@ -1997,6 +2067,24 @@ class _ExternalPlayerSettingsPageState
                             ),
                           ],
 
+                          // Auto subtitle sync (Android TV only — the
+                          // native player is where the audio tap lives).
+                          if (Platform.isAndroid && _isAndroidTv) ...[
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Auto-sync addon subtitles',
+                              subtitle:
+                                  'Quietly align downloaded subtitles to the audio '
+                                  'as you watch. Applies only on a confident match; '
+                                  'manual timing always wins.',
+                              value: _subtitleAutoSync,
+                              onChanged: _setSubtitleAutoSync,
+                              focusNode: _subtitleAutoSyncFocusNode,
+                              isFocused: _subtitleAutoSyncFocused,
+                            ),
+                          ],
+
                           // System audio effects (Android only). Off by
                           // default because enabling it switches the audio
                           // output backend — see _attachAudioEffectSession in
@@ -2015,6 +2103,66 @@ class _ExternalPlayerSettingsPageState
                               isFocused: _systemAudioEffectsFocused,
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Community intro/outro timestamps. This belongs to the
+                  // built-in player because external players own their own UI
+                  // and cannot display Debrify's manual skip button.
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Skip Segments',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Show manual skip buttons when community timestamps are available',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kSettingsDim,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildCheckboxTile(
+                            context,
+                            title: 'Skip intros & credits',
+                            subtitle:
+                                'Show a button during supported intros and outros. Playback is never skipped automatically.',
+                            value: _skipSegmentsEnabled,
+                            onChanged: _setSkipSegmentsEnabled,
+                            focusNode: _skipSegmentsEnabledFocusNode,
+                            isFocused: _skipSegmentsEnabledFocused,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildDropdownSetting(
+                            context,
+                            label: 'Timestamp provider',
+                            value: _skipSegmentProvider,
+                            items: SkipSegmentProviders.availableLabels,
+                            onChanged: _setSkipSegmentProvider,
+                            focusNode: _skipSegmentProviderFocusNode,
+                            isFocused: _skipSegmentProviderFocused,
+                            enabled: _skipSegmentsEnabled,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            _skipSegmentProvider == SkipSegmentProviders.auto
+                                ? 'Checks every available source and prefers SkipDB, then TheIntroDB, then IntroDB.'
+                                : 'Coverage varies by series, episode, and video release.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kSettingsDim2,
+                            ),
+                          ),
                         ],
                       ),
                     ),

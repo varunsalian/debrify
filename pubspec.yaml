@@ -14,7 +14,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.6.8-alpha.1+25
+version: 0.6.9-alpha.1+26
 
 environment:
   sdk: ^3.8.1
@@ -172,6 +172,29 @@ flutter:
     - family: NotoSans
       fonts:
         - asset: assets/fonts/NotoSans-Regular.ttf
+
+  # Style fonts — the IPTV premium looks (plan/IPTV_PREMIUM_STYLES_PLAN.md).
+  # Static faces referenced by plain fontFamily strings; never via GoogleFonts.
+    - family: Fraunces72
+      fonts:
+        - asset: assets/fonts/Fraunces72pt-Regular.ttf
+        - asset: assets/fonts/Fraunces72pt-Italic.ttf
+          style: italic
+    - family: Fraunces9
+      fonts:
+        - asset: assets/fonts/Fraunces9pt-Italic.ttf
+          style: italic
+    - family: SpaceGrotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk-Bold.ttf
+          weight: 700
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -290,6 +290,74 @@ object SubtitleSettings {
     fun setSyncOffsetMs(context: Context, ms: Long) {
         syncOffsetOwnerIdentity = activeSubtitleIdentityProvider?.invoke()
         syncOffsetMs = ms.coerceIn(SYNC_OFFSET_MIN_MS, SYNC_OFFSET_MAX_MS)
+        // Persist per subtitle identity, INSIDE the one setter every writer
+        // uses (slider, line picker, auto-sync, verify) — so whoever dials a
+        // sync in, the same content+subtitle restores it next session. The
+        // session-scoped read semantics above are untouched: recall is an
+        // explicit, announced act at subtitle load, never an ambient read.
+        syncOffsetOwnerIdentity?.let { identity ->
+            if (syncOffsetMs == 0L) forgetRememberedSync(context, identity)
+            else rememberSync(context, identity, syncOffsetMs)
+        }
+    }
+
+    // ── Sync-offset memory ───────────────────────────────────────────────────
+    // A small most-recent-last list of [identity, offsetMs] pairs in the app's
+    // own prefs. The identity (content + subtitle URL, or content + "emb")
+    // already encodes exactly when a remembered offset is valid again.
+
+    private const val KEY_SYNC_MEMORY = "sync_offset_memory_v1"
+    private const val SYNC_MEMORY_MAX = 200
+
+    /** The remembered offset for [identity], or null. Does not touch session state. */
+    @JvmStatic
+    fun recallSyncOffset(context: Context, identity: String): Long? {
+        val arr = readSyncMemory(context)
+        for (i in arr.length() - 1 downTo 0) {
+            val pair = arr.optJSONArray(i) ?: continue
+            if (pair.optString(0) == identity) {
+                val ms = pair.optLong(1)
+                return if (ms == 0L) null else ms.coerceIn(SYNC_OFFSET_MIN_MS, SYNC_OFFSET_MAX_MS)
+            }
+        }
+        return null
+    }
+
+    private fun rememberSync(context: Context, identity: String, ms: Long) {
+        val arr = readSyncMemory(context)
+        val out = org.json.JSONArray()
+        for (i in 0 until arr.length()) {
+            val pair = arr.optJSONArray(i) ?: continue
+            if (pair.optString(0) != identity) out.put(pair)
+        }
+        out.put(org.json.JSONArray().put(identity).put(ms))
+        // Trim oldest (the list is most-recent-last).
+        val trimmed = if (out.length() <= SYNC_MEMORY_MAX) out else {
+            org.json.JSONArray().also { t ->
+                for (i in out.length() - SYNC_MEMORY_MAX until out.length()) t.put(out.get(i))
+            }
+        }
+        getPrefs(context).edit().putString(KEY_SYNC_MEMORY, trimmed.toString()).apply()
+    }
+
+    private fun forgetRememberedSync(context: Context, identity: String) {
+        val arr = readSyncMemory(context)
+        var changed = false
+        val out = org.json.JSONArray()
+        for (i in 0 until arr.length()) {
+            val pair = arr.optJSONArray(i) ?: continue
+            if (pair.optString(0) == identity) { changed = true; continue }
+            out.put(pair)
+        }
+        if (changed) {
+            getPrefs(context).edit().putString(KEY_SYNC_MEMORY, out.toString()).apply()
+        }
+    }
+
+    private fun readSyncMemory(context: Context): org.json.JSONArray = try {
+        org.json.JSONArray(getPrefs(context).getString(KEY_SYNC_MEMORY, "[]"))
+    } catch (e: Exception) {
+        org.json.JSONArray()
     }
 
     @JvmStatic

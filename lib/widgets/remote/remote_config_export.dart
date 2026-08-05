@@ -3,7 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/indexer_manager_config.dart';
+import '../../models/webdav_item.dart';
 import '../../services/storage_service.dart';
+import '../../services/iptv_transfer_payload.dart';
+import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/engine/local_engine_storage.dart';
@@ -47,6 +51,11 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _trakt;
   _ConfigItem? _simkl;
   _ConfigItem? _searchEngines;
+  _ConfigItem? _webDav;
+  _ConfigItem? _indexerManagers;
+  _ConfigItem? _iptvPlaylists;
+  _ConfigItem? _iptvFavorites;
+  _ConfigItem? _iptvLists;
 
   // API keys (loaded from storage)
   String? _realDebridApiKey;
@@ -72,6 +81,20 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
 
   // Search engine IDs
   List<String> _engineIds = [];
+
+  List<WebDavConfig> _webDavServers = const [];
+  List<IndexerManagerConfig> _indexerManagerConfigs = const [];
+
+  // IPTV setup, built once on load so the tiles can show real counts and the
+  // send path doesn't have to re-read the store.
+  List<Map<String, dynamic>> _iptvPlaylistPayload = const [];
+  List<Map<String, dynamic>> _iptvFavoritePayload = const [];
+  List<Map<String, dynamic>> _iptvListPayload = const [];
+
+  /// Playlists imported from a file, which can't be sent — their definition
+  /// is the raw M3U text. Surfaced so the screen says so instead of quietly
+  /// sending fewer providers than the user has.
+  int _iptvFileImported = 0;
 
   @override
   void initState() {
@@ -143,6 +166,36 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       _engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
       final hasEngines = _engineIds.isNotEmpty;
 
+      // WebDAV / indexer managers: the protocol and the TV have handled these
+      // since they were added to "Transfer Everything" — this screen just
+      // never offered them.
+      try {
+        _webDavServers = await StorageService.getWebDavServers();
+      } catch (e) {
+        debugPrint('RemoteConfigExport: Failed to read WebDAV servers: $e');
+        _webDavServers = const [];
+      }
+      try {
+        _indexerManagerConfigs =
+            await StorageService.getIndexerManagerConfigs();
+      } catch (e) {
+        debugPrint('RemoteConfigExport: Failed to read indexer managers: $e');
+        _indexerManagerConfigs = const [];
+      }
+
+      try {
+        _iptvPlaylistPayload = await IptvTransferPayload.buildPlaylists();
+        _iptvFavoritePayload = await IptvTransferPayload.buildFavorites();
+        _iptvListPayload = await IptvTransferPayload.buildCustomLists();
+        _iptvFileImported =
+            (await IptvTransferPayload.countPlaylists()).fileImported;
+      } catch (e) {
+        debugPrint('RemoteConfigExport: Failed to read IPTV setup: $e');
+        _iptvPlaylistPayload = const [];
+        _iptvFavoritePayload = const [];
+        _iptvListPayload = const [];
+      }
+
       setState(() {
         _realDebrid = _ConfigItem(
           id: ConfigCommand.realDebrid,
@@ -209,6 +262,46 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           selected: hasEngines,
         );
 
+        _webDav = _ConfigItem(
+          id: ConfigCommand.webDav,
+          name: 'WebDAV',
+          icon: 'wd',
+          isConfigured: _webDavServers.isNotEmpty,
+          selected: _webDavServers.isNotEmpty,
+        );
+
+        _indexerManagers = _ConfigItem(
+          id: ConfigCommand.indexerManagers,
+          name: 'Jackett/Prowlarr',
+          icon: 'im',
+          isConfigured: _indexerManagerConfigs.isNotEmpty,
+          selected: _indexerManagerConfigs.isNotEmpty,
+        );
+
+        _iptvPlaylists = _ConfigItem(
+          id: ConfigCommand.iptvPlaylists,
+          name: 'IPTV Providers',
+          icon: 'iptv',
+          isConfigured: _iptvPlaylistPayload.isNotEmpty,
+          selected: _iptvPlaylistPayload.isNotEmpty,
+        );
+
+        _iptvFavorites = _ConfigItem(
+          id: ConfigCommand.iptvFavorites,
+          name: 'IPTV Favorites',
+          icon: 'fav',
+          isConfigured: _iptvFavoritePayload.isNotEmpty,
+          selected: _iptvFavoritePayload.isNotEmpty,
+        );
+
+        _iptvLists = _ConfigItem(
+          id: ConfigCommand.iptvLists,
+          name: 'IPTV Lists',
+          icon: 'list',
+          isConfigured: _iptvListPayload.isNotEmpty,
+          selected: _iptvListPayload.isNotEmpty,
+        );
+
         _loading = false;
       });
     } catch (e) {
@@ -217,27 +310,34 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
     }
   }
 
-  bool get _hasAnyConfigured {
-    return (_realDebrid?.isConfigured ?? false) ||
-        (_torbox?.isConfigured ?? false) ||
-        (_premiumize?.isConfigured ?? false) ||
-        (_allDebrid?.isConfigured ?? false) ||
-        (_pikpak?.isConfigured ?? false) ||
-        (_trakt?.isConfigured ?? false) ||
-        (_simkl?.isConfigured ?? false) ||
-        (_searchEngines?.isConfigured ?? false);
-  }
+  /// Every tile this screen can show, in send order — providers before the
+  /// memberships that name them.
+  List<_ConfigItem> get _allItems => [
+    for (final item in [
+      _realDebrid,
+      _torbox,
+      _premiumize,
+      _allDebrid,
+      _pikpak,
+      _trakt,
+      _simkl,
+      _searchEngines,
+      _webDav,
+      _indexerManagers,
+      _iptvPlaylists,
+      _iptvFavorites,
+      _iptvLists,
+    ])
+      if (item != null) item,
+  ];
 
-  bool get _hasAnySelected {
-    return (_realDebrid?.selected ?? false) ||
-        (_torbox?.selected ?? false) ||
-        (_premiumize?.selected ?? false) ||
-        (_allDebrid?.selected ?? false) ||
-        (_pikpak?.selected ?? false) ||
-        (_trakt?.selected ?? false) ||
-        (_simkl?.selected ?? false) ||
-        (_searchEngines?.selected ?? false);
-  }
+  /// File-imported playlists aren't sendable, but a user whose only IPTV setup
+  /// is file-based must still be told why nothing about it is on offer —
+  /// otherwise the screen claims they have nothing configured at all.
+  bool get _hasAnyConfigured =>
+      _allItems.any((i) => i.isConfigured) || _iptvFileImported > 0;
+
+  bool get _hasAnySelected => _allItems.any((i) => i.selected);
 
   bool get _isPikpakPasswordValid {
     if (_pikpak?.selected != true) return true;
@@ -405,6 +505,92 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         }
       }
 
+      // Send WebDAV servers
+      if (_webDav?.selected == true && _webDavServers.isNotEmpty) {
+        final success = await state.sendConfigCommandToDevice(
+          ConfigCommand.webDav,
+          targetIp,
+          configData: jsonEncode(
+            [for (final s in _webDavServers) s.toJson()],
+          ),
+        );
+        if (success) {
+          successCount++;
+          results.add('WebDAV');
+        } else {
+          failCount++;
+        }
+      }
+
+      // Send indexer managers
+      if (_indexerManagers?.selected == true &&
+          _indexerManagerConfigs.isNotEmpty) {
+        final success = await state.sendConfigCommandToDevice(
+          ConfigCommand.indexerManagers,
+          targetIp,
+          configData: jsonEncode(
+            [for (final c in _indexerManagerConfigs) c.toJson()],
+          ),
+        );
+        if (success) {
+          successCount++;
+          results.add('Jackett/Prowlarr');
+        } else {
+          failCount++;
+        }
+      }
+
+      // IPTV, providers first: favorites and lists name the provider they
+      // came from, and all three can outgrow a single packet, so they go via
+      // the chunked path.
+      if (_iptvPlaylists?.selected == true && _iptvPlaylistPayload.isNotEmpty) {
+        final success = await sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.iptvPlaylists,
+          targetIp,
+          jsonEncode(_iptvPlaylistPayload),
+          label: 'IPTV providers',
+        );
+        if (success) {
+          successCount++;
+          results.add('IPTV Providers');
+        } else {
+          failCount++;
+        }
+      }
+
+      if (_iptvFavorites?.selected == true && _iptvFavoritePayload.isNotEmpty) {
+        final success = await sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.iptvFavorites,
+          targetIp,
+          jsonEncode(_iptvFavoritePayload),
+          label: 'IPTV favorites',
+        );
+        if (success) {
+          successCount++;
+          results.add('IPTV Favorites');
+        } else {
+          failCount++;
+        }
+      }
+
+      if (_iptvLists?.selected == true && _iptvListPayload.isNotEmpty) {
+        final success = await sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.iptvLists,
+          targetIp,
+          jsonEncode(_iptvListPayload),
+          label: 'IPTV lists',
+        );
+        if (success) {
+          successCount++;
+          results.add('IPTV Lists');
+        } else {
+          failCount++;
+        }
+      }
+
       // Send complete signal to trigger TV restart (only if at least one succeeded)
       if (successCount > 0) {
         // Small delay to ensure previous commands are processed
@@ -548,14 +734,79 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           ],
 
           // Search engines section
-          if (_searchEngines?.isConfigured == true) ...[
+          if (_searchEngines?.isConfigured == true ||
+              _indexerManagers?.isConfigured == true) ...[
             _buildSectionHeader('SEARCH'),
             const SizedBox(height: 8),
+            if (_searchEngines?.isConfigured == true)
+              _buildConfigTile(
+                _searchEngines!,
+                subtitle:
+                    '${_engineIds.length} engine${_engineIds.length != 1 ? 's' : ''}',
+              ),
+            if (_indexerManagers?.isConfigured == true)
+              _buildConfigTile(
+                _indexerManagers!,
+                subtitle: '${_indexerManagerConfigs.length} '
+                    'manager${_indexerManagerConfigs.length != 1 ? 's' : ''}',
+              ),
+            const SizedBox(height: 16),
+          ],
+
+          // WebDAV section
+          if (_webDav?.isConfigured == true) ...[
+            _buildSectionHeader('SERVERS'),
+            const SizedBox(height: 8),
             _buildConfigTile(
-              _searchEngines!,
-              subtitle:
-                  '${_engineIds.length} engine${_engineIds.length != 1 ? 's' : ''}',
+              _webDav!,
+              subtitle: '${_webDavServers.length} '
+                  'server${_webDavServers.length != 1 ? 's' : ''}',
             ),
+            const SizedBox(height: 16),
+          ],
+
+          // IPTV section. Rendered for a file-only setup too, so the note
+          // explaining why those playlists can't be sent has somewhere to go.
+          if (_iptvPlaylists?.isConfigured == true ||
+              _iptvFavorites?.isConfigured == true ||
+              _iptvLists?.isConfigured == true ||
+              _iptvFileImported > 0) ...[
+            _buildSectionHeader('IPTV'),
+            const SizedBox(height: 8),
+            if (_iptvPlaylists?.isConfigured == true)
+              _buildConfigTile(
+                _iptvPlaylists!,
+                subtitle: '${_iptvPlaylistPayload.length} '
+                    'provider${_iptvPlaylistPayload.length != 1 ? 's' : ''}',
+              ),
+            if (_iptvFavorites?.isConfigured == true)
+              _buildConfigTile(
+                _iptvFavorites!,
+                subtitle: '${_iptvFavoritePayload.length} '
+                    'channel${_iptvFavoritePayload.length != 1 ? 's' : ''}',
+              ),
+            if (_iptvLists?.isConfigured == true)
+              _buildConfigTile(
+                _iptvLists!,
+                subtitle: '${_iptvListPayload.length} '
+                    'list${_iptvListPayload.length != 1 ? 's' : ''} · '
+                    '${IptvTransferPayload.countListChannels(_iptvListPayload)} '
+                    'channels',
+              ),
+            if (_iptvFileImported > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: Text(
+                  '$_iptvFileImported playlist'
+                  '${_iptvFileImported == 1 ? '' : 's'} imported from a file '
+                  'can\'t be sent — import the file on the TV. Starred '
+                  'channels from them still go across.',
+                  style: TextStyle(
+                    color: Colors.amber.withValues(alpha: 0.75),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             const SizedBox(height: 16),
           ],
 
@@ -925,6 +1176,16 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return Icons.movie_filter_rounded;
       case ConfigCommand.searchEngines:
         return Icons.search;
+      case ConfigCommand.webDav:
+        return Icons.dns_rounded;
+      case ConfigCommand.indexerManagers:
+        return Icons.manage_search_rounded;
+      case ConfigCommand.iptvPlaylists:
+        return Icons.live_tv_rounded;
+      case ConfigCommand.iptvFavorites:
+        return Icons.star_rounded;
+      case ConfigCommand.iptvLists:
+        return Icons.playlist_play_rounded;
       default:
         return Icons.settings;
     }
@@ -948,6 +1209,16 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return const Color(0xFF22D3EE); // Simkl cyan
       case ConfigCommand.searchEngines:
         return const Color(0xFF8B5CF6); // Purple
+      case ConfigCommand.webDav:
+        return const Color(0xFF0EA5E9); // Sky
+      case ConfigCommand.indexerManagers:
+        return const Color(0xFFEAB308); // Yellow
+      case ConfigCommand.iptvPlaylists:
+        return const Color(0xFF14B8A6); // Teal
+      case ConfigCommand.iptvFavorites:
+        return const Color(0xFFF472B6); // Pink
+      case ConfigCommand.iptvLists:
+        return const Color(0xFFA78BFA); // Violet
       default:
         return Colors.white;
     }

@@ -278,6 +278,116 @@ class LiveRecordingService {
     return _xtreamLiveAnyContainer.hasMatch(path);
   }
 
+  /// Does [url] actually serve a segmented PLAYLIST rather than a stream?
+  ///
+  /// [isSegmentedUrl] can only read the file extension, and plenty of live
+  /// URLs carry none (Samsung TV Plus's `jmp2.uk/stvp-…`, most redirectors) —
+  /// so a URL that merely *looks* progressive can still answer with HLS. The
+  /// engine catches that at its first bytes and fails the capture, but by
+  /// then the UI has already promised a recording; the surfaces that record
+  /// WITHOUT a player to probe (the stage's Record) ask this first instead.
+  ///
+  /// Deliberately fails OPEN: a probe that times out or errors returns false,
+  /// so a flaky network can never block a recording that would have worked.
+  /// Only an affirmative "this is a playlist" stops the capture.
+  ///
+  /// Bounded by ONE overall deadline, not a timeout per step — three
+  /// four-second stages in a row would leave Record looking dead for twelve.
+  static Future<bool> servesPlaylist(
+    String url, {
+    Map<String, String>? headers,
+  }) {
+    if (_knownPlaylistUrls.contains(url)) return Future.value(true);
+    return _probePlaylist(url, headers).timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => false,
+    );
+  }
+
+  /// Affirmative answers only — a channel proven to serve a playlist stays
+  /// proven for the session, so pressing Record again is instant.
+  static final Set<String> _knownPlaylistUrls = <String>{};
+
+  static String _originOf(Uri u) => '${u.scheme}://${u.host}:${u.port}';
+
+  static Future<bool> _probePlaylist(
+    String url,
+    Map<String, String>? headers,
+  ) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 3);
+    try {
+      var target = Uri.parse(url);
+      final startOrigin = _originOf(target);
+      // Redirects are followed BY HAND so the channel's headers can be
+      // dropped when the chain leaves the origin they were configured for.
+      // Those headers come from #EXTHTTP and routinely carry credentials;
+      // the native recorder restricts them off-origin and so must this.
+      for (var hop = 0; hop <= 5; hop++) {
+        final request = await client.getUrl(target);
+        request.followRedirects = false;
+        if (_originOf(target) == startOrigin) {
+          headers?.forEach(request.headers.set);
+        }
+        final response = await request.close();
+        final code = response.statusCode;
+        if (code >= 300 && code < 400) {
+          final location = response.headers.value(HttpHeaders.locationHeader);
+          await response.drain<void>();
+          if (location == null || location.isEmpty) return false;
+          final next = target.resolve(location);
+          if (next.scheme != 'http' && next.scheme != 'https') return false;
+          target = next;
+          continue;
+        }
+        final type = response.headers.contentType?.mimeType.toLowerCase() ?? '';
+        if (type.contains('mpegurl') || type.contains('dash+xml')) {
+          _knownPlaylistUrls.add(url);
+          return true;
+        }
+        // Content-type is routinely wrong on IPTV panels, so read the opening
+        // bytes too — the same `#EXTM3U` signature the engine checks. Chunk
+        // boundaries are arbitrary, so accumulate rather than trusting the
+        // first event to carry the whole signature.
+        final head = <int>[];
+        await for (final chunk in response) {
+          head.addAll(chunk);
+          if (head.length >= 512) break;
+        }
+        final playlist = _looksLikePlaylist(head);
+        if (playlist) _knownPlaylistUrls.add(url);
+        return playlist;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// `#EXTM3U` past any UTF-8 BOM and leading whitespace — both of which real
+  /// playlists carry, and both of which a naive 7-byte compare would miss.
+  static bool _looksLikePlaylist(List<int> bytes) {
+    var i = 0;
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      i = 3;
+    }
+    while (i < bytes.length &&
+        (bytes[i] == 0x20 ||
+            bytes[i] == 0x09 ||
+            bytes[i] == 0x0A ||
+            bytes[i] == 0x0D)) {
+      i++;
+    }
+    if (bytes.length - i < 7) return false;
+    return String.fromCharCodes(bytes.sublist(i, i + 7)).toUpperCase() ==
+        '#EXTM3U';
+  }
+
   // ── Live captures ─────────────────────────────────────────────────────────
 
   static Future<RecordingCallResult> start({

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P1 · First Edition — IPTV Premium</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter+Tight:wght@300..800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0D0B09; --ink2:#141110;
+    --paper:#F3EEE3; --p80:rgba(243,238,227,.8); --p55:rgba(243,238,227,.55); --p35:rgba(243,238,227,.35);
+    --hair:rgba(243,238,227,.09); --hair2:rgba(243,238,227,.16);
+    --rec:#E5484D; --live:#B8C79B;
+    --serif:'Fraunces',Georgia,serif; --sans:'Inter Tight',-apple-system,'SF Pro Text',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#080706;color:var(--paper);font:14px/1.5 var(--sans);padding:40px 4vw 100px}
+  h1{font:500 30px/1.1 var(--serif);letter-spacing:.2px}
+  h1 em{font-style:italic;color:var(--p55)}
+  .sub{color:var(--p55);margin:10px 0 34px;max-width:860px;font-size:13.5px}
+  .lbl{font:700 10px/1 var(--sans);letter-spacing:2.2px;text-transform:uppercase;color:var(--p35);margin:46px 0 14px}
+  .note{color:var(--p55);font-size:12.5px;margin-top:14px;max-width:940px;line-height:1.65}
+  .note b{color:var(--p80);font-weight:600}
+  a{color:var(--p80)}
+  kbd{border:1px solid var(--hair2);border-radius:4px;padding:1px 6px;font:600 10px var(--sans);color:var(--p55)}
+
+  /* ---------- TV FRAME ---------- */
+  .tv{width:min(1500px,96vw);aspect-ratio:16/9;background:var(--ink);border-radius:10px;overflow:hidden;
+      position:relative;box-shadow:0 40px 120px rgba(0,0,0,.65);display:flex;font-size:13px}
+  /* faint life behind the ink — a blurred echo of the live frame */
+  .tv::before{content:"";position:absolute;inset:0;pointer-events:none;
+      background:radial-gradient(60% 80% at 82% 18%,rgba(84,64,38,.5),transparent 62%),
+                 radial-gradient(50% 70% at 70% 90%,rgba(28,38,30,.55),transparent 60%);
+      filter:blur(10px)}
+  .tv>*{position:relative}
+
+  /* app strip (always-present collapsed sidebar) */
+  .strip{width:56px;flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;
+         padding:20px 0;border-right:1px solid var(--hair)}
+  .strip .mark{font:600 15px var(--serif);color:var(--paper);margin-bottom:14px}
+  .strip .gi{width:38px;height:38px;display:grid;place-items:center;color:var(--p35)}
+  .strip .gi svg{width:17px;height:17px}
+  .strip .gi.on{color:var(--paper)}
+  .strip .gi.on::after{content:"";position:absolute;width:3px;height:3px;border-radius:50%;background:var(--paper);transform:translateY(13px)}
+  .strip .gi{position:relative}
+  .strip .push{margin-top:auto}
+
+  /* page rail */
+  .rail{width:216px;flex:none;border-right:1px solid var(--hair);padding:24px 0 18px;display:flex;flex-direction:column}
+  .rail .sec{font:700 9.5px var(--sans);letter-spacing:2.4px;text-transform:uppercase;color:var(--p35);padding:16px 22px 8px}
+  .ri{display:flex;align-items:baseline;gap:9px;padding:7px 22px;color:var(--p55);font-weight:500;font-size:13px;position:relative}
+  .ri .cnt{margin-left:auto;color:var(--p35);font-size:11px;font-variant-numeric:tabular-nums}
+  .ri.on{color:var(--paper);font-weight:600}
+  .ri.focus{color:var(--paper)}
+  .ri.focus::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--paper)}
+  .ri .recdot{width:6px;height:6px;border-radius:50%;background:var(--rec);align-self:center;box-shadow:0 0 10px rgba(229,72,77,.8)}
+  .rail .foot{margin-top:auto;padding:14px 22px;color:var(--p35);font-size:12px;border-top:1px solid var(--hair)}
+
+  /* main column */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;padding:0}
+  .mast{display:flex;align-items:baseline;gap:26px;padding:26px 34px 0}
+  .tab{font:600 12.5px var(--sans);letter-spacing:.6px;color:var(--p35);padding-bottom:10px}
+  .tab.on{color:var(--paper);border-bottom:1px solid var(--paper)}
+  .mast .search{margin-left:auto;display:flex;align-items:center;gap:9px;color:var(--p35);font-size:12.5px;
+                border-bottom:1px solid var(--hair2);padding:0 2px 9px;min-width:230px}
+  .mast .search svg{width:13px;height:13px}
+
+  /* editorial hero = the focused channel */
+  .hero{padding:30px 34px 24px;border-bottom:1px solid var(--hair)}
+  .kick{font:700 10px var(--sans);letter-spacing:2.6px;text-transform:uppercase;color:var(--p55);display:flex;gap:14px;align-items:center}
+  .kick .q{border:1px solid var(--hair2);border-radius:3px;padding:2px 5px;letter-spacing:1.6px;font-size:8.5px;color:var(--p55)}
+  .kick .livewrap{display:flex;align-items:center;gap:6px;color:var(--live)}
+  .kick .livewrap i{width:5px;height:5px;border-radius:50%;background:var(--live);box-shadow:0 0 8px var(--live)}
+  .hero h2{font:400 46px/1.04 var(--serif);letter-spacing:-.4px;margin:12px 0 8px;max-width:820px}
+  .hero .meta{color:var(--p55);font-size:13px;font-variant-numeric:tabular-nums}
+  .hero .meta b{color:var(--p80);font-weight:500}
+  .hprog{height:2px;background:var(--hair);margin:16px 0 18px;max-width:560px;position:relative}
+  .hprog i{position:absolute;inset:0;right:auto;background:var(--paper)}
+  .acts{display:flex;gap:10px;align-items:center}
+  .btn{font:600 12.5px var(--sans);letter-spacing:.4px;padding:10px 20px;border-radius:99px}
+  .btn.fill{background:var(--paper);color:var(--ink)}
+  .btn.line{border:1px solid var(--hair2);color:var(--p80);display:flex;gap:8px;align-items:center}
+  .btn.line .rd{width:7px;height:7px;border-radius:50%;background:var(--rec)}
+  .btn.ico{width:38px;height:38px;padding:0;display:grid;place-items:center;border:1px solid var(--hair2);color:var(--p80)}
+  .btn.ico svg{width:15px;height:15px}
+  .acts .hint{margin-left:12px;color:var(--p35);font-size:11.5px}
+
+  /* ledger */
+  .ledger{flex:1;overflow:hidden;padding:6px 0 0}
+  .lrow{display:flex;align-items:center;gap:16px;padding:11px 34px;border-bottom:1px solid rgba(243,238,227,.05);position:relative}
+  .lrow .no{width:34px;flex:none;color:var(--p35);font-size:11.5px;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+  .lrow .mk{width:30px;height:30px;flex:none;border-radius:50%;border:1px solid var(--hair2);display:grid;place-items:center;
+            font:600 10.5px var(--sans);letter-spacing:.5px;color:var(--p80);background:rgba(243,238,227,.03)}
+  .lrow .nm{width:210px;flex:none;font-weight:600;font-size:13px;letter-spacing:.2px;display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden}
+  .lrow .nm .q{border:1px solid var(--hair2);border-radius:3px;padding:1.5px 4px;font-size:8px;font-weight:700;letter-spacing:1.2px;color:var(--p55);flex:none}
+  .lrow .nm .st{color:var(--p55);font-size:11px;flex:none}
+  .lrow .now{flex:1;min-width:0;color:var(--p55);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lrow .now b{color:var(--p80);font-weight:500}
+  .lrow .now .rec{color:var(--rec);font-weight:700;font-size:9px;letter-spacing:1.4px;margin-right:8px}
+  .lrow .left{width:110px;flex:none;text-align:right;color:var(--p35);font-size:11px;font-variant-numeric:tabular-nums}
+  .lrow .p{width:64px;flex:none;height:1.5px;background:var(--hair)}
+  .lrow .p i{display:block;height:100%;background:var(--p55)}
+  .lrow.focus{background:rgba(243,238,227,.035)}
+  .lrow.focus::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;background:var(--paper)}
+  .lrow.focus .now,.lrow.focus .now b{color:var(--paper)}
+  .lrow.focus .p i{background:var(--paper)}
+
+  /* footer keycaps */
+  .keys{display:flex;gap:22px;padding:12px 34px;border-top:1px solid var(--hair);color:var(--p35);font-size:11px;align-items:center}
+  .keys .upd{margin-left:auto;color:var(--p35)}
+
+  /* stage */
+  .stage{width:29%;flex:none;border-left:1px solid var(--hair);display:flex;flex-direction:column;padding:26px 26px 18px}
+  .stage .cap{font:700 9.5px var(--sans);letter-spacing:2.4px;text-transform:uppercase;color:var(--p35);margin-bottom:12px;display:flex;gap:8px;align-items:center}
+  .stage .cap i{width:5px;height:5px;border-radius:50%;background:var(--live);box-shadow:0 0 8px var(--live)}
+  .pv{aspect-ratio:16/9;border:1px solid var(--hair2);position:relative;overflow:hidden;background:
+      radial-gradient(80% 120% at 70% 25%,rgba(96,74,44,.75),transparent 60%),
+      radial-gradient(60% 90% at 25% 85%,rgba(44,58,46,.7),transparent 55%),
+      linear-gradient(160deg,#1C1712,#0E0C09)}
+  .pv .id{position:absolute;left:12px;bottom:10px;right:12px;display:flex;justify-content:space-between;align-items:baseline}
+  .pv .id .n{font:600 12px var(--sans);letter-spacing:.4px}
+  .pv .id .c{color:var(--p55);font-size:10px;font-variant-numeric:tabular-nums}
+  .stage .caption{color:var(--p35);font-size:10.5px;margin:8px 2px 0;font-style:italic;font-family:var(--serif)}
+  .sched{margin-top:22px;flex:1;overflow:hidden}
+  .sit{display:flex;gap:14px;align-items:baseline;padding:8px 0;border-bottom:1px solid rgba(243,238,227,.05);font-size:12.5px}
+  .sit .t{width:42px;flex:none;color:var(--p35);font-size:11px;font-variant-numeric:tabular-nums}
+  .sit .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--p80)}
+  .sit.past .n{color:var(--p35)}
+  .sit .tag{font:700 8.5px var(--sans);letter-spacing:1.4px;flex:none}
+  .sit .tag.now{color:var(--live)}
+  .sit .tag.rec{color:var(--rec)}
+  .sit .tag.rep{color:var(--p35);border:1px solid var(--hair2);border-radius:3px;padding:1.5px 5px}
+  .sit.focus{position:relative}
+  .sit.focus::before{content:"";position:absolute;left:-26px;top:6px;bottom:6px;width:2px;background:var(--paper)}
+  .stage .more{margin-top:10px;color:var(--p35);font-size:11px}
+</style></head><body>
+
+<h1>Concept P1 · <em>First Edition</em></h1>
+<p class="sub">Typography does the luxury. Warm ink instead of navy, one serif voice for programme titles, hairline rules
+instead of boxes, and a single ivory focus rule instead of a gold ring. Nothing is filled, nothing glows — the page
+reads like the front section of a well-set newspaper that happens to be alive.</p>
+
+<div class="lbl">Android TV · 1080p frame</div>
+<div class="tv">
+  <div class="strip">
+    <div class="mark">D.</div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/></svg></div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5.5" width="18" height="12" rx="2"/><path d="M8.5 21h7"/></svg></div>
+    <div class="gi on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="m7 3.5 5 3.5 5-3.5"/></svg></div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 18a4.5 4.5 0 1 1 .8-8.9 6 6 0 0 1 11.6 1.6A3.7 3.7 0 0 1 18 18Z"/></svg></div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 4v11m0 0 4-4m-4 4-4-4"/><path d="M5 20h14"/></svg></div>
+    <div class="gi push"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="2.6"/><path d="M12 4.5v2m0 11v2m7.5-7.5h-2m-11 0h-2m12.8-5.3-1.4 1.4M8.1 15.9l-1.4 1.4m0-10.6 1.4 1.4m7.8 7.8 1.4 1.4"/></svg></div>
+  </div>
+
+  <div class="rail">
+    <div class="sec">Library</div>
+    <div class="ri">Favorites <span class="cnt">42</span></div>
+    <div class="ri">Continue <span class="cnt">6</span></div>
+    <div class="ri"><span class="recdot"></span> Recordings <span class="cnt">12</span></div>
+    <div class="ri">Scheduled <span class="cnt">3</span></div>
+    <div class="sec">Lists</div>
+    <div class="ri">Football <span class="cnt">18</span></div>
+    <div class="ri">Kids OK <span class="cnt">9</span></div>
+    <div class="sec">Sources</div>
+    <div class="ri on focus">8K Ultra <span class="cnt">55,340</span></div>
+    <div class="ri">Trex <span class="cnt">55,148</span></div>
+    <div class="ri">iptv-org <span class="cnt">13,512</span></div>
+    <div class="sec">Addons</div>
+    <div class="ri">Pluto TV <span class="cnt">380</span></div>
+    <div class="foot">Manage sources</div>
+  </div>
+
+  <div class="main">
+    <div class="mast">
+      <div class="tab on">Live</div><div class="tab">Movies</div><div class="tab">Series</div><div class="tab">Sports ▾</div>
+      <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg> Search 55,340 channels</div>
+    </div>
+
+    <div class="hero">
+      <div class="kick">
+        <span class="livewrap"><i></i> On Air</span>
+        <span>Ch 22 · Sky Sport News</span>
+        <span class="q">UHD</span>
+      </div>
+      <h2>Manchester United vs Brighton</h2>
+      <div class="meta"><b>09:30 – 11:30</b> · 44 minutes remaining · Premier League, Matchweek 8</div>
+      <div class="hprog"><i style="width:62%"></i></div>
+      <div class="acts">
+        <div class="btn fill">Watch</div>
+        <div class="btn line"><span class="rd"></span> Record</div>
+        <div class="btn ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20s-7.5-4.6-9.3-9A5.2 5.2 0 0 1 12 6.4 5.2 5.2 0 0 1 21.3 11c-1.8 4.4-9.3 9-9.3 9Z"/></svg></div>
+        <div class="hint">hold <kbd>OK</kbd> — favorites &amp; lists</div>
+      </div>
+    </div>
+
+    <div class="ledger">
+      <div class="lrow">
+        <div class="no">021</div><div class="mk">P1</div>
+        <div class="nm">HUB PREMIER 1 <span class="st">★</span></div>
+        <div class="now"><span class="rec">● REC</span><b>Arsenal vs Newcastle</b> — second half</div>
+        <div class="p"><i style="width:72%"></i></div><div class="left">28 min left</div>
+      </div>
+      <div class="lrow focus">
+        <div class="no">022</div><div class="mk">S2</div>
+        <div class="nm">SKY SPORT NEWS <span class="q">UHD</span> <span class="st">★</span></div>
+        <div class="now"><b>Man United vs Brighton</b> · next — Chelsea vs Sunderland</div>
+        <div class="p"><i style="width:62%"></i></div><div class="left">44 min left</div>
+      </div>
+      <div class="lrow">
+        <div class="no">040</div><div class="mk">F1</div>
+        <div class="nm">SKY F1 <span class="q">4K</span></div>
+        <div class="now"><b>Hungarian GP — Qualifying</b> · next — Ted Kravitz Notebook</div>
+        <div class="p"><i style="width:31%"></i></div><div class="left">1 h 12 min left</div>
+      </div>
+      <div class="lrow">
+        <div class="no">044</div><div class="mk">TN</div>
+        <div class="nm">TNT SPORTS 2</div>
+        <div class="now"><b>UFC Fight Night — Prelims</b> · next — Main card</div>
+        <div class="p"><i style="width:12%"></i></div><div class="left">2 h 41 min left</div>
+      </div>
+      <div class="lrow">
+        <div class="no">003</div><div class="mk">BB</div>
+        <div class="nm">BBC NEWS</div>
+        <div class="now"><b>Newsday</b> · next — Politics Live</div>
+        <div class="p"><i style="width:47%"></i></div><div class="left">16 min left</div>
+      </div>
+      <div class="lrow">
+        <div class="no">102</div><div class="mk">MX</div>
+        <div class="nm">MOVIES XTRA</div>
+        <div class="now"><b>Mad Max: Fury Road</b> · next — Sicario</div>
+        <div class="p"><i style="width:38%"></i></div><div class="left">1 h 04 min left</div>
+      </div>
+      <div class="lrow">
+        <div class="no">210</div><div class="mk">NG</div>
+        <div class="nm">NAT GEO <span class="q">HD</span></div>
+        <div class="now"><b>Free Solo</b> · next — Limitless with Chris Hemsworth</div>
+        <div class="p"><i style="width:81%"></i></div><div class="left">9 min left</div>
+      </div>
+    </div>
+
+    <div class="keys">
+      <span><kbd>OK</kbd> Watch</span><span><kbd>OK</kbd> hold Lists</span><span><kbd>▶</kbd> Schedule</span>
+      <span><kbd>◀</kbd> Rail</span><span><kbd>0–9</kbd> Channel</span>
+      <span class="upd">Updated 4 min ago</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="cap"><i></i> Live preview</div>
+    <div class="pv">
+      <div class="id"><div class="n">SKY SPORT NEWS</div><div class="c">CH 22</div></div>
+    </div>
+    <div class="caption">Old Trafford — second half under way.</div>
+    <div class="sched">
+      <div class="cap" style="margin:20px 0 6px">Today on this channel</div>
+      <div class="sit past"><div class="t">07:30</div><div class="n">Newcastle vs Arsenal (MW06)</div><span class="tag rep">Replay</span></div>
+      <div class="sit"><div class="t">09:30</div><div class="n">Man United vs Brighton</div><span class="tag now">Now</span></div>
+      <div class="sit focus"><div class="t">11:30</div><div class="n">Chelsea vs Sunderland</div><span class="tag rec">Rec</span></div>
+      <div class="sit"><div class="t">13:30</div><div class="n">Brentford vs Liverpool</div><span class="tag rec">Rec</span></div>
+      <div class="sit"><div class="t">15:30</div><div class="n">Forest vs Man United</div></div>
+      <div class="sit"><div class="t">17:30</div><div class="n">Match of the Day: Extra</div></div>
+    </div>
+    <div class="more"><kbd>OK</kbd> on a future programme — schedule recording · <kbd>OK</kbd> on a replay — catch-up</div>
+  </div>
+</div>
+
+<p class="note"><b>Why this reads premium.</b> One serif (Fraunces) reserved for exactly one thing — the programme
+title — so it lands like a headline. Warm ink (#0D0B09) instead of saturated navy. No filled chips, no gradients:
+category tabs are underlined text, badges are hairline-outlined micro-caps, buttons are one ivory pill + hairline
+ghosts. Focus is a 2px ivory rule on the left edge (rail, ledger, schedule all share it) — calm, unmistakable,
+never gold. The only colour on the page is semantic: sage for LIVE, signal red for REC.</p>
+<p class="note"><b>Feature carry.</b> Sources / Favorites / Continue / Recordings / Scheduled / custom lists with counts
+in the rail · Live–Movies–Series tabs + category picker · submit-only global search · EPG now/next + progress on
+every ledger row · time-remaining column (nobody else shows this — it's the most useful EPG number) · UHD/4K
+hairline badges · ★ favorites · REC state inline · hero = focused channel with Watch / Record / Favorite ·
+stage = live preview + full-day schedule with REPLAY (catchup) and REC affordances · "Updated 4 min ago" SWR chip
+relocated to the footer · keycap hints kept. Phone: the ledger + hero collapse into list + bottom sheet exactly as
+today; the serif headline moves into the sheet.</p>
+
+<p style="margin-top:44px"><a href="index.html">← All concepts</a></p>
+</body></html>

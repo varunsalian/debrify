@@ -13,6 +13,7 @@ import '../browse/brand_accent.dart';
 import '../home/home_theme.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+import 'styles/iptv_style.dart';
 
 /// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)".
 final RegExp _resExp = RegExp(r'\((\d{3,4}[pi])\)', caseSensitive: false);
@@ -119,6 +120,17 @@ class IptvChannelRow extends StatefulWidget {
   /// tall row extents.
   final bool twoLineName;
 
+  /// The cockpit's visual style. `command` (the default) takes the shipped
+  /// paint verbatim; `edition`/`console` branch to their own paint. Behavior —
+  /// focus, hold-OK, hit targets, extents — is identical in every style.
+  final IptvStyle style;
+
+  /// This row's tile width, computed by the parent grid's delegate math (a
+  /// row's own MediaQuery reports the window, not the tile). Console uses it
+  /// to drop its end-time/meter columns on narrow tiles; other styles ignore
+  /// it. Null = never drop.
+  final double? tileWidth;
+
   const IptvChannelRow({
     super.key,
     required this.channel,
@@ -140,6 +152,8 @@ class IptvChannelRow extends StatefulWidget {
     this.poster = false,
     this.epg = false,
     this.twoLineName = false,
+    this.style = IptvStyle.command,
+    this.tileWidth,
   });
 
   @override
@@ -225,7 +239,10 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   Widget build(BuildContext context) {
     final ch = widget.channel;
     final isLive = ch.isLive;
-    final brand = brandAccentFor(ch.name);
+    final tokens = IptvStyleTokens.of(widget.style);
+    // Styled looks never paint the brand color — skip the lookup entirely on
+    // the 50k-row hot path.
+    final brand = tokens == null ? brandAccentFor(ch.name) : Colors.transparent;
     final isNarrow =
         !widget.isTelevision && MediaQuery.sizeOf(context).width < 600;
 
@@ -252,138 +269,151 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         ? Duration.zero
         : const Duration(milliseconds: 150);
 
-    final row = AnimatedContainer(
-      duration: fx,
-      // Constant 2px border (transparent at rest) so focus never shifts layout.
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: _active
-            ? (_tabletPreviewActive
-                  ? const Color(0xFF17132E)
-                  : const Color(0xFF141824))
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _active ? _activeAccent : Colors.transparent,
-          width: 2,
-        ),
-        boxShadow: _active
-            ? [
-                BoxShadow(
-                  color: _activeAccent.withValues(alpha: 0.28),
-                  blurRadius: 20,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
-      ),
-      child: Row(
-        children: [
-          if (isLive && ch.channelNumber != null) ...[
-            SizedBox(
-              width: 45,
-              child: Text(
-                ch.channelNumber.toString(),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.fade,
-                style: TextStyle(
-                  color: _active
-                      ? _activeAccent
-                      : Colors.white.withValues(alpha: 0.42),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+    final row = tokens != null
+        ? _buildStyledRow(
+            tokens,
+            fx: fx,
+            displayName: displayName,
+            sub: sub,
+            group: group,
+            resolution: resolution,
+            isLive: isLive,
+            isNarrow: isNarrow,
+          )
+        : AnimatedContainer(
+            duration: fx,
+            // Constant 2px border (transparent at rest) so focus never shifts layout.
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(
+              color: _active
+                  ? (_tabletPreviewActive
+                        ? const Color(0xFF17132E)
+                        : const Color(0xFF141824))
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _active ? _activeAccent : Colors.transparent,
+                width: 2,
               ),
+              boxShadow: _active
+                  ? [
+                      BoxShadow(
+                        color: _activeAccent.withValues(alpha: 0.28),
+                        blurRadius: 20,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
             ),
-            const SizedBox(width: 5),
-          ],
-          _LogoChip(
-            logoUrl: ch.logoUrl,
-            name: displayName,
-            brand: brand,
-            // On-demand lists get posters: Xtream serves real cover art in
-            // `stream_icon` for VOD, and squeezing it into the live-channel
-            // logo square made it unreadable.
-            poster: widget.poster,
-            progress: widget.progress,
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    if (isLive) ...[
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: _liveDot,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: _liveDot.withValues(alpha: 0.6),
-                              blurRadius: 7,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
+                if (isLive && ch.channelNumber != null) ...[
+                  SizedBox(
+                    width: 45,
+                    child: Text(
+                      ch.channelNumber.toString(),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      style: TextStyle(
+                        color: _active
+                            ? _activeAccent
+                            : Colors.white.withValues(alpha: 0.42),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
-                      const SizedBox(width: 8),
-                    ],
-                    Flexible(
-                      child: Text(
-                        displayName,
-                        // Phone-width rows have enough height for a second
-                        // title line, and cockpit rows opt in explicitly
-                        // (their column is narrow; the tall extents carry the
-                        // room). Elsewhere one line keeps the denser rhythm.
-                        maxLines: (isNarrow || widget.twoLineName) ? 2 : 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(
-                            alpha: _active ? 1.0 : 0.94,
-                          ),
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (widget.epg)
-                  // The EPG block owns the space under the name. It renders
-                  // the classic sub-line itself while it has nothing better —
-                  // so a channel without guide data looks exactly like before,
-                  // just with more air.
-                  _RowEpg(channel: ch, fallback: sub)
-                else if (sub.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    sub,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.52),
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
+                  const SizedBox(width: 5),
                 ],
+                _LogoChip(
+                  logoUrl: ch.logoUrl,
+                  name: displayName,
+                  brand: brand,
+                  // On-demand lists get posters: Xtream serves real cover art in
+                  // `stream_icon` for VOD, and squeezing it into the live-channel
+                  // logo square made it unreadable.
+                  poster: widget.poster,
+                  progress: widget.progress,
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (isLive) ...[
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: _liveDot,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _liveDot.withValues(alpha: 0.6),
+                                    blurRadius: 7,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Flexible(
+                            child: Text(
+                              displayName,
+                              // Phone-width rows have enough height for a second
+                              // title line, and cockpit rows opt in explicitly
+                              // (their column is narrow; the tall extents carry the
+                              // room). Elsewhere one line keeps the denser rhythm.
+                              maxLines: (isNarrow || widget.twoLineName)
+                                  ? 2
+                                  : 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(
+                                  alpha: _active ? 1.0 : 0.94,
+                                ),
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (widget.epg)
+                        // The EPG block owns the space under the name. It renders
+                        // the classic sub-line itself while it has nothing better —
+                        // so a channel without guide data looks exactly like before,
+                        // just with more air.
+                        _RowEpg(channel: ch, fallback: sub)
+                      else if (sub.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          sub,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.52),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                _buildScheduleTrailing(),
+                _buildFavTrailing(),
               ],
             ),
-          ),
-          _buildScheduleTrailing(),
-          _buildFavTrailing(),
-        ],
-      ),
-    );
+          );
 
     return Focus(
       focusNode: widget.focusNode,
@@ -507,6 +537,187 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     );
   }
 
+  /// The styled (edition/console) row paint. Behavior is untouched — this is
+  /// only ever the `row` child handed to the same Focus/MouseRegion/gesture
+  /// wrapper the legacy paint uses. Focus = a 2px rule on the left edge +
+  /// faint tint (no gold ring, no glow); the hairline separator under each
+  /// row comes from the bottom border so the grid reads as a ledger.
+  Widget _buildStyledRow(
+    IptvStyleTokens t, {
+    required Duration fx,
+    required String displayName,
+    required String sub,
+    required String? group,
+    required String? resolution,
+    required bool isLive,
+    required bool isNarrow,
+  }) {
+    final ch = widget.channel;
+    final console = widget.style == IptvStyle.console;
+    final mono = t.monoFamily.isEmpty ? null : t.monoFamily;
+    final nameFamily = t.nameFamily.isEmpty ? null : t.nameFamily;
+    // Edition pulls the resolution out of the sub-line into a hairline
+    // micro-caps chip beside the name; console keeps it in the mono sub-line.
+    final editionSub = (group != null && group.isNotEmpty)
+        ? group
+        : (isLive ? 'Live' : '');
+    final lineSub = console ? sub : editionSub;
+
+    final body = AnimatedContainer(
+      duration: fx,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: _active ? t.focusTint : Colors.transparent,
+        border: Border(
+          // Console's focus cue is the corner brackets below; edition's is
+          // this ledger rule.
+          left: BorderSide(
+            color: _active && !console ? t.accent : Colors.transparent,
+            width: 2,
+          ),
+          bottom: BorderSide(color: t.hairline),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (isLive && ch.channelNumber != null) ...[
+            SizedBox(
+              width: 45,
+              child: Text(
+                console
+                    ? ch.channelNumber.toString().padLeft(3, '0')
+                    : ch.channelNumber.toString(),
+                textAlign: console ? TextAlign.left : TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                style: TextStyle(
+                  color: t.fgFaint,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: mono,
+                  letterSpacing: 0.5,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+          ],
+          _LogoChip(
+            logoUrl: ch.logoUrl,
+            name: displayName,
+            brand: Colors.transparent, // unused by styled paint
+            poster: widget.poster,
+            progress: widget.progress,
+            tokens: t,
+            // Edition's ledger mark is a hairline circle (posters keep their
+            // 2:3 frame); console keeps the squared plate.
+            circle: !console && !widget.poster,
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (isLive) ...[
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: t.live,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: t.live.withValues(alpha: 0.5),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Flexible(
+                      child: Text(
+                        displayName,
+                        maxLines: (isNarrow || widget.twoLineName) ? 2 : 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _active ? t.fg : t.fgMid,
+                          fontSize: console ? 13 : 13.5,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: nameFamily,
+                          letterSpacing: console ? 0.3 : 0.2,
+                        ),
+                      ),
+                    ),
+                    if (!console && resolution != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: t.hairline2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          resolution.toUpperCase(),
+                          style: TextStyle(
+                            color: t.fgDim,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (widget.epg)
+                  _RowEpg(
+                    channel: ch,
+                    fallback: lineSub,
+                    tokens: t,
+                    console: console,
+                    tileWidth: widget.tileWidth,
+                    resolution: resolution,
+                  )
+                else if (lineSub.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    lineSub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: t.fgDim,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: console ? mono : null,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          _buildScheduleTrailing(),
+          _buildFavTrailing(),
+        ],
+      ),
+    );
+
+    if (!console) return body;
+    // Corner brackets on the focused row only — everything else paints
+    // nothing extra (a CustomPaint with a null painter costs no layer).
+    return CustomPaint(
+      foregroundPainter: _active ? IptvFocusBracketsPainter(t.accent) : null,
+      child: body,
+    );
+  }
+
   /// Trailing schedule affordance for touch/desktop (TV opens the schedule
   /// with RIGHT instead — no icon there). Follows the favourite heart's
   /// visibility rules: always present on touch, hover-revealed on desktop.
@@ -561,6 +772,9 @@ class _IptvChannelRowState extends State<IptvChannelRow>
               favorited: widget.isFavorited,
               progress: _holdController.value,
               picksList: picksList,
+              // Styled looks recolor the hint's chrome to their own accent;
+              // the heart's favorited red stays semantic everywhere.
+              accent: IptvStyleTokens.of(widget.style)?.accent,
             ),
           ),
         );
@@ -658,7 +872,29 @@ class _RowEpg extends StatefulWidget {
   /// guide data (not capable, still loading, or the guide has a gap).
   final String fallback;
 
-  const _RowEpg({required this.channel, required this.fallback});
+  /// Styled-look tokens, or null for the shipped paint (taken verbatim).
+  final IptvStyleTokens? tokens;
+
+  /// Master Control: the now-line grows a ticked elapsed meter and a mono
+  /// end-time. Fetch/dwell/budget behavior is identical in every style.
+  final bool console;
+
+  /// Tile width from the parent grid math — console drops the end-time under
+  /// 640 px and the meter under 560 px. Null = never drop.
+  final double? tileWidth;
+
+  /// Console's resolution column value (the name-scraped '1080p' string),
+  /// rendered in the right-aligned cluster. Null/empty = no column.
+  final String? resolution;
+
+  const _RowEpg({
+    required this.channel,
+    required this.fallback,
+    this.tokens,
+    this.console = false,
+    this.tileWidth,
+    this.resolution,
+  });
 
   @override
   State<_RowEpg> createState() => _RowEpgState();
@@ -830,6 +1066,9 @@ class _RowEpgState extends State<_RowEpg> {
 
   @override
   Widget build(BuildContext context) {
+    final t = widget.tokens;
+    if (t != null) return _buildStyled(context, t);
+
     final now = _data?.now;
     final next = _data?.next;
     if (now == null && next == null) {
@@ -911,6 +1150,158 @@ class _RowEpgState extends State<_RowEpg> {
       ],
     );
   }
+
+  /// The styled EPG block. Edition: serif-calm ledger line — now-title, a
+  /// 1.5px hairline progress rule, a faint next line. Console: the now line
+  /// carries a ticked elapsed meter and a mono end-time (the table columns of
+  /// the mock, kept inside this block so no new data plumbing exists).
+  Widget _buildStyled(BuildContext context, IptvStyleTokens t) {
+    final mono = t.monoFamily.isEmpty ? null : t.monoFamily;
+    final now = _data?.now;
+    final next = _data?.next;
+    if (now == null && next == null) {
+      if (widget.fallback.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Text(
+          widget.fallback,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: t.fgDim,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            fontFamily: widget.console ? mono : null,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      );
+    }
+
+    final at = DateTime.now();
+    final width = widget.tileWidth;
+    final showEnd = widget.console && (width == null || width >= 640);
+    final showMeter = widget.console && (width == null || width >= 560);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (now != null) ...[
+          const SizedBox(height: 3),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  now.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: t.fgMid,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (widget.console &&
+                  widget.resolution != null &&
+                  widget.resolution!.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                Text(
+                  widget.resolution!.toUpperCase(),
+                  style: TextStyle(
+                    color: t.fgFaint,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    fontFamily: mono,
+                  ),
+                ),
+              ],
+              if (showMeter) ...[
+                const SizedBox(width: 10),
+                _TickMeter(progress: now.progressAt(at), tokens: t),
+              ],
+              if (showEnd) ...[
+                const SizedBox(width: 10),
+                Text(
+                  TimeOfDay.fromDateTime(now.stop).format(context),
+                  style: TextStyle(
+                    color: t.fgFaint,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: mono,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (!widget.console) ...[
+            const SizedBox(height: 5),
+            // The ledger's progress rule — hairline track, accent fill.
+            SizedBox(
+              height: 1.5,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: (now.progressAt(at) * 1000).round().clamp(0, 1000),
+                    child: ColoredBox(color: t.accent),
+                  ),
+                  Expanded(
+                    flex:
+                        1000 -
+                        (now.progressAt(at) * 1000).round().clamp(0, 1000),
+                    child: ColoredBox(color: t.hairline),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+        if (next != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            '${TimeOfDay.fromDateTime(next.start).format(context)}'
+            '  ·  ${next.title}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: t.fgFaint,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              fontFamily: widget.console ? mono : null,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Console's elapsed meter: ten fixed ticks, filled = elapsed. Plain
+/// containers — cheap enough for the 50k-row hot path, no painter needed.
+class _TickMeter extends StatelessWidget {
+  final double progress;
+  final IptvStyleTokens tokens;
+  const _TickMeter({required this.progress, required this.tokens});
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = (progress.clamp(0.0, 1.0) * 10).round();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < 10; i++)
+          Container(
+            width: 4,
+            height: 8,
+            margin: EdgeInsets.only(left: i == 0 ? 0 : 2),
+            color: i < filled ? tokens.fgDim : tokens.hairline,
+          ),
+      ],
+    );
+  }
 }
 
 /// TV favourite hint: an "HOLD OK" prompt plus a heart that fills over the hold
@@ -923,14 +1314,20 @@ class _FavHint extends StatelessWidget {
   /// Hold opens the list picker rather than toggling the favourite outright.
   final bool picksList;
 
+  /// Chrome color for the "HOLD OK" prompt and progress ring. Null = the
+  /// shipped gold. The heart's favorited red never restyles.
+  final Color? accent;
+
   const _FavHint({
     required this.favorited,
     required this.progress,
     this.picksList = false,
+    this.accent,
   });
 
   @override
   Widget build(BuildContext context) {
+    final chrome = accent ?? HomeTheme.focusGold;
     final holding = progress > 0.02 && progress < 1.0;
     final done = favorited || progress >= 1.0;
     final heartColor = done
@@ -950,7 +1347,7 @@ class _FavHint extends StatelessWidget {
             child: Text(
               'HOLD OK',
               style: TextStyle(
-                color: HomeTheme.focusGold.withValues(alpha: 0.95),
+                color: chrome.withValues(alpha: 0.95),
                 fontSize: 9,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.8,
@@ -970,7 +1367,7 @@ class _FavHint extends StatelessWidget {
                   child: CircularProgressIndicator(
                     value: progress,
                     strokeWidth: 2,
-                    color: HomeTheme.focusGold,
+                    color: chrome,
                     backgroundColor: Colors.white.withValues(alpha: 0.12),
                   ),
                 ),
@@ -984,7 +1381,7 @@ class _FavHint extends StatelessWidget {
                 color: picksList
                     ? Color.lerp(
                         Colors.white.withValues(alpha: 0.7),
-                        HomeTheme.focusGold,
+                        chrome,
                         progress,
                       )!
                     : heartColor,
@@ -1007,12 +1404,25 @@ class _LogoChip extends StatelessWidget {
   final Color brand;
   final bool poster;
   final double? progress;
+
+  /// Styled-look tokens: the brand-tinted gradient plate becomes a quiet
+  /// hairline frame (real logos stay — a hard requirement — the plate just
+  /// stops competing with them). Null = the shipped paint, verbatim.
+  final IptvStyleTokens? tokens;
+
+  /// Edition's ledger mark: a circular hairline frame (live logos only —
+  /// posters keep their 2:3 rectangle). Extra padding keeps wide station
+  /// logos clear of the circle's clip.
+  final bool circle;
+
   const _LogoChip({
     required this.logoUrl,
     required this.name,
     required this.brand,
     this.poster = false,
     this.progress,
+    this.tokens,
+    this.circle = false,
   });
 
   static const double _logoSize = 50;
@@ -1021,33 +1431,44 @@ class _LogoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = tokens;
     final hasArt = logoUrl != null && logoUrl!.isNotEmpty;
     return Container(
       width: poster ? _posterWidth : _logoSize,
       height: poster ? _posterHeight : _logoSize,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(poster ? 7 : 11),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color.alphaBlend(
-              brand.withValues(alpha: 0.16),
-              const Color(0xFF1E2030),
+      decoration: t != null
+          ? BoxDecoration(
+              shape: circle ? BoxShape.circle : BoxShape.rectangle,
+              borderRadius: circle
+                  ? null
+                  : BorderRadius.circular(poster ? 5 : 8),
+              border: Border.all(color: t.hairline2),
+              color: t.fg.withValues(alpha: 0.03),
+            )
+          : BoxDecoration(
+              borderRadius: BorderRadius.circular(poster ? 7 : 11),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.alphaBlend(
+                    brand.withValues(alpha: 0.16),
+                    const Color(0xFF1E2030),
+                  ),
+                  const Color(0xFF14141D),
+                ],
+              ),
             ),
-            const Color(0xFF14141D),
-          ],
-        ),
-      ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         fit: StackFit.expand,
         children: [
           Padding(
             // A poster is the art — it fills its frame. A logo is a mark on a
-            // plate and needs the breathing room.
-            padding: EdgeInsets.all(poster ? 0 : 7),
+            // plate and needs the breathing room (a bit more inside the
+            // circle, whose clip cuts corners).
+            padding: EdgeInsets.all(poster ? 0 : (circle ? 9 : 7)),
             child: hasArt
                 ? CachedNetworkImage(
                     imageUrl: logoUrl!,
@@ -1082,7 +1503,9 @@ class _LogoChip extends StatelessWidget {
       child: Icon(
         poster ? Icons.movie_rounded : Icons.live_tv_rounded,
         size: 22,
-        color: brand.withValues(alpha: 0.85),
+        // Styled looks keep their single-accent discipline — no per-brand
+        // color on the placeholder mark.
+        color: tokens?.fgDim ?? brand.withValues(alpha: 0.85),
       ),
     );
   }

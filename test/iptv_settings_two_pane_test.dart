@@ -325,15 +325,16 @@ void main() {
     key.currentState!.focusRail();
     await tester.pump();
     // Walk past the end: source, Add, Channel lists, Startup, Continue
-    // watching (last, with no recorder in this harness), then extra.
-    for (var i = 0; i < 8; i++) {
+    // watching, Player guide (last, with no recorder in this harness),
+    // then extra.
+    for (var i = 0; i < 9; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
     }
 
-    // Still on Continue watching — not flung sideways into the pane, where OK
-    // would have toggled its switch by accident.
-    expect(find.text('Track movies and series'), findsOneWidget);
+    // Still on Player guide — not flung sideways into the pane, where OK
+    // would have picked a style by accident.
+    expect(find.text('Cinema Glass'), findsOneWidget);
     expect(cwToggles, isEmpty);
     expect(startupToggles, isEmpty);
   });

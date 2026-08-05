@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P2 · Glasshouse — IPTV Premium</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@200..800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --w:rgba(255,255,255,1); --w85:rgba(255,255,255,.85); --w60:rgba(255,255,255,.6); --w38:rgba(255,255,255,.38);
+    --hair:rgba(255,255,255,.16); --hairsoft:rgba(255,255,255,.10);
+    --glass:rgba(14,17,22,.44); --glassdeep:rgba(10,12,16,.62);
+    --rec:#FF5C5C; --live:#7FE0A8;
+    --sans:'Inter Tight',-apple-system,'SF Pro Display',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#07080A;color:#fff;font:14px/1.5 var(--sans);padding:40px 4vw 100px}
+  h1{font-size:30px;font-weight:600;letter-spacing:-.3px}
+  h1 em{font-style:normal;font-weight:300;color:var(--w60)}
+  .sub{color:var(--w60);margin:10px 0 34px;max-width:860px;font-size:13.5px}
+  .lbl{font-weight:700;font-size:10px;letter-spacing:2.2px;text-transform:uppercase;color:var(--w38);margin:46px 0 14px}
+  .note{color:var(--w60);font-size:12.5px;margin-top:14px;max-width:940px;line-height:1.65}
+  .note b{color:var(--w85);font-weight:600}
+  a{color:var(--w85)}
+  kbd{border:1px solid var(--hair);border-radius:4px;padding:1px 6px;font:600 10px var(--sans);color:var(--w60)}
+
+  /* ---------- TV FRAME — the live channel IS the page ---------- */
+  .tv{width:min(1500px,96vw);aspect-ratio:16/9;border-radius:10px;overflow:hidden;position:relative;
+      box-shadow:0 40px 120px rgba(0,0,0,.7);font-size:13px;
+      /* simulated live frame: evening stadium */
+      background:
+        radial-gradient(90% 70% at 68% 26%,rgba(255,196,120,.34),transparent 55%),
+        radial-gradient(45% 45% at 30% 30%,rgba(120,180,255,.22),transparent 60%),
+        radial-gradient(120% 80% at 50% 108%,rgba(28,84,52,.85),rgba(18,42,32,.9) 45%,transparent 78%),
+        linear-gradient(180deg,#0F1B2E 0%,#13233A 38%,#0C1A16 100%)}
+  /* floodlights + crowd shimmer */
+  .tv::before{content:"";position:absolute;inset:0;
+      background:radial-gradient(3% 5% at 62% 17%,rgba(255,255,255,.9),transparent),
+                 radial-gradient(3% 5% at 78% 14%,rgba(255,255,255,.75),transparent),
+                 radial-gradient(60% 12% at 50% 58%,rgba(255,220,170,.14),transparent);
+      filter:blur(1px)}
+  /* legibility scrim: left column + bottom band, video stays clear top-right */
+  .tv::after{content:"";position:absolute;inset:0;
+      background:linear-gradient(90deg,rgba(5,7,10,.86) 0%,rgba(5,7,10,.62) 340px,rgba(5,7,10,.18) 640px,transparent 900px),
+                 linear-gradient(0deg,rgba(5,7,10,.82) 0%,rgba(5,7,10,.35) 180px,transparent 320px)}
+  .tv>*{position:relative;z-index:2}
+
+  .pane{background:var(--glass);border:1px solid var(--hairsoft);border-radius:18px;
+        backdrop-filter:blur(28px) saturate(150%);-webkit-backdrop-filter:blur(28px) saturate(150%);
+        box-shadow:0 24px 60px rgba(0,0,0,.35)}
+
+  /* app strip — glyphs float on glass */
+  .strip{position:absolute;left:18px;top:18px;bottom:18px;width:52px;display:flex;flex-direction:column;
+         align-items:center;gap:2px;padding:14px 0;border-radius:16px}
+  .strip .mark{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.92);color:#0B0D12;
+               display:grid;place-items:center;font-weight:800;font-size:13px;margin-bottom:10px}
+  .gi{width:36px;height:36px;display:grid;place-items:center;color:var(--w38);border-radius:10px;position:relative}
+  .gi svg{width:16px;height:16px}
+  .gi.on{color:#fff;background:rgba(255,255,255,.14)}
+  .strip .push{margin-top:auto}
+
+  /* source dock — horizontal glass pills along the top */
+  .dock{position:absolute;left:92px;top:22px;right:26px;display:flex;gap:8px;align-items:center}
+  .pill{display:flex;gap:8px;align-items:baseline;padding:9px 16px;border-radius:99px;font-weight:600;font-size:12.5px;
+        color:var(--w60);background:rgba(14,17,22,.38);border:1px solid var(--hairsoft);
+        backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+  .pill .cnt{color:var(--w38);font-size:10.5px;font-variant-numeric:tabular-nums}
+  .pill.on{color:#fff;background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.28)}
+  .pill.focus{outline:1.5px solid rgba(255,255,255,.9);outline-offset:2px}
+  .dock .flex{flex:1}
+  .iconb{width:36px;height:36px;border-radius:99px;display:grid;place-items:center;color:var(--w60);
+         background:rgba(14,17,22,.38);border:1px solid var(--hairsoft);backdrop-filter:blur(20px)}
+  .iconb svg{width:15px;height:15px}
+  .iconb.reccing{color:var(--rec);border-color:rgba(255,92,92,.4)}
+  .clock{color:var(--w85);font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;margin-left:6px}
+
+  /* channel pane — the browse surface */
+  .browse{position:absolute;left:92px;top:82px;bottom:26px;width:460px;display:flex;flex-direction:column;overflow:hidden}
+  .bhead{display:flex;gap:18px;align-items:center;padding:16px 20px 12px;border-bottom:1px solid var(--hairsoft)}
+  .btab{font-weight:600;font-size:12.5px;color:var(--w38)}
+  .btab.on{color:#fff}
+  .bhead .cat{margin-left:auto;display:flex;gap:6px;align-items:center;color:var(--w60);font-size:11.5px;font-weight:600}
+  .bhead .cat svg{width:12px;height:12px}
+  .bsearch{display:flex;gap:10px;align-items:center;margin:12px 20px 4px;padding:9px 14px;border-radius:12px;
+           background:rgba(255,255,255,.07);color:var(--w38);font-size:12px}
+  .bsearch svg{width:13px;height:13px}
+  .chl{flex:1;overflow:hidden;padding:8px 10px 6px}
+  .ch{display:flex;gap:12px;align-items:center;padding:9px 12px;border-radius:12px;position:relative}
+  .ch .lg{width:34px;height:34px;flex:none;border-radius:9px;background:rgba(255,255,255,.10);display:grid;place-items:center;
+          font-weight:700;font-size:11px;color:var(--w85)}
+  .ch .mid{flex:1;min-width:0}
+  .ch .nm{font-weight:600;font-size:12.5px;display:flex;gap:7px;align-items:center;white-space:nowrap;overflow:hidden}
+  .ch .nm .no{color:var(--w38);font-size:10px;font-weight:600;font-variant-numeric:tabular-nums}
+  .ch .nm .q{font-size:8px;font-weight:800;letter-spacing:1px;color:var(--w85);border:1px solid var(--hair);border-radius:3px;padding:1px 4px}
+  .ch .nm .fav{color:#fff;font-size:10px}
+  .ch .now{color:var(--w60);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .ch .now .rec{color:var(--rec);font-weight:800;font-size:8.5px;letter-spacing:1.2px;margin-right:6px}
+  .ch .pr{width:52px;flex:none;height:2px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden}
+  .ch .pr i{display:block;height:100%;background:rgba(255,255,255,.85)}
+  .ch.focus{background:rgba(255,255,255,.16);box-shadow:inset 0 0 0 1.2px rgba(255,255,255,.85), 0 12px 32px rgba(0,0,0,.35)}
+  .ch.focus .now{color:var(--w85)}
+  .bfoot{padding:10px 20px;border-top:1px solid var(--hairsoft);display:flex;gap:16px;color:var(--w38);font-size:10.5px;align-items:center}
+  .bfoot .upd{margin-left:auto}
+
+  /* now-playing band — bottom right, floats on the video */
+  .nowband{position:absolute;left:585px;right:26px;bottom:26px;padding:18px 22px 16px;display:flex;flex-direction:column;gap:10px}
+  .nb-top{display:flex;align-items:center;gap:12px}
+  .nb-top .lg{width:44px;height:44px;border-radius:11px;background:rgba(255,255,255,.12);display:grid;place-items:center;font-weight:700;font-size:13px}
+  .nb-id .k{display:flex;gap:10px;align-items:center;font-size:10px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--w60)}
+  .nb-id .k .lv{display:flex;gap:5px;align-items:center;color:var(--live)}
+  .nb-id .k .lv i{width:5px;height:5px;border-radius:50%;background:var(--live);box-shadow:0 0 8px var(--live)}
+  .nb-id .t{font-size:22px;font-weight:600;letter-spacing:-.2px;margin-top:2px}
+  .nb-meta{display:flex;gap:14px;align-items:center;color:var(--w60);font-size:12px;font-variant-numeric:tabular-nums}
+  .nb-prog{flex:1;max-width:380px;height:2.5px;border-radius:2px;background:rgba(255,255,255,.18);overflow:hidden}
+  .nb-prog i{display:block;height:100%;background:#fff}
+  .nb-next{color:var(--w38)}
+  .nb-acts{display:flex;gap:8px;align-items:center}
+  .gbtn{padding:9px 18px;border-radius:99px;font-weight:600;font-size:12px;background:rgba(255,255,255,.10);
+        border:1px solid var(--hairsoft);color:var(--w85);display:flex;gap:7px;align-items:center}
+  .gbtn.pri{background:rgba(255,255,255,.94);color:#0B0D12;border:none}
+  .gbtn .rd{width:7px;height:7px;border-radius:50%;background:var(--rec)}
+  .gbtn.focus{outline:1.5px solid rgba(255,255,255,.9);outline-offset:2px}
+  .nb-acts .hint{margin-left:auto;color:var(--w38);font-size:10.5px}
+
+  /* schedule flyout (RIGHT from a channel) */
+  .fly{position:absolute;right:26px;top:82px;width:300px;padding:16px 18px;display:flex;flex-direction:column;gap:2px}
+  .fly .h{font-size:9.5px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--w38);margin-bottom:8px}
+  .fit{display:flex;gap:10px;align-items:baseline;padding:6.5px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .fit .t{width:38px;flex:none;color:var(--w38);font-size:10.5px;font-variant-numeric:tabular-nums}
+  .fit .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--w85)}
+  .fit.past .n{color:var(--w38)}
+  .fit .tg{font-size:8px;font-weight:800;letter-spacing:1.2px;flex:none}
+  .fit .tg.now{color:var(--live)}
+  .fit .tg.rec{color:var(--rec)}
+  .fit .tg.rep{color:var(--w38);border:1px solid var(--hair);border-radius:3px;padding:1px 4px}
+</style></head><body>
+
+<h1>Concept P2 · <em>Glasshouse</em></h1>
+<p class="sub">The focused channel plays full-bleed — the page has no background, it has a broadcast. Every control is
+frosted glass floating over the picture, lit by it. This is the "expensive TV" trick Sky Glass and Apple's tvOS
+use: content is the luxury; chrome just borrows its light.</p>
+
+<div class="lbl">Android TV · the page IS the preview</div>
+<div class="tv">
+  <div class="strip pane">
+    <div class="mark">D</div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/></svg></div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5.5" width="18" height="12" rx="2"/><path d="M8.5 21h7"/></svg></div>
+    <div class="gi on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="m7 3.5 5 3.5 5-3.5"/></svg></div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 18a4.5 4.5 0 1 1 .8-8.9 6 6 0 0 1 11.6 1.6A3.7 3.7 0 0 1 18 18Z"/></svg></div>
+    <div class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 4v11m0 0 4-4m-4 4-4-4"/><path d="M5 20h14"/></svg></div>
+    <div class="gi push"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="2.6"/><path d="M12 4.5v2m0 11v2m7.5-7.5h-2m-11 0h-2m12.8-5.3-1.4 1.4M8.1 15.9l-1.4 1.4m0-10.6 1.4 1.4m7.8 7.8 1.4 1.4"/></svg></div>
+  </div>
+
+  <div class="dock">
+    <div class="pill on focus">8K Ultra <span class="cnt">55,340</span></div>
+    <div class="pill">Trex <span class="cnt">55,148</span></div>
+    <div class="pill">iptv-org <span class="cnt">13,512</span></div>
+    <div class="pill">Favorites <span class="cnt">42</span></div>
+    <div class="pill">Football <span class="cnt">18</span></div>
+    <div class="flex"></div>
+    <div class="iconb reccing" title="recording"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg></div>
+    <div class="iconb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></div>
+    <div class="iconb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="2.6"/><path d="M12 4.5v2m0 11v2m7.5-7.5h-2m-11 0h-2m12.8-5.3-1.4 1.4M8.1 15.9l-1.4 1.4m0-10.6 1.4 1.4m7.8 7.8 1.4 1.4"/></svg></div>
+    <div class="clock">10:46</div>
+  </div>
+
+  <div class="browse pane">
+    <div class="bhead">
+      <div class="btab on">Live</div><div class="btab">Movies</div><div class="btab">Series</div>
+      <div class="cat">Sports <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+    </div>
+    <div class="bsearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg> Search all 55,340 channels</div>
+    <div class="chl">
+      <div class="ch">
+        <div class="lg">P1</div>
+        <div class="mid"><div class="nm"><span class="no">021</span> HUB PREMIER 1 <span class="fav">★</span></div>
+          <div class="now"><span class="rec">● REC</span>Arsenal vs Newcastle</div></div>
+        <div class="pr"><i style="width:72%"></i></div>
+      </div>
+      <div class="ch focus">
+        <div class="lg">S2</div>
+        <div class="mid"><div class="nm"><span class="no">022</span> SKY SPORT NEWS <span class="q">UHD</span> <span class="fav">★</span></div>
+          <div class="now">Man United vs Brighton</div></div>
+        <div class="pr"><i style="width:62%"></i></div>
+      </div>
+      <div class="ch">
+        <div class="lg">F1</div>
+        <div class="mid"><div class="nm"><span class="no">040</span> SKY F1 <span class="q">4K</span></div>
+          <div class="now">Hungarian GP — Qualifying</div></div>
+        <div class="pr"><i style="width:31%"></i></div>
+      </div>
+      <div class="ch">
+        <div class="lg">TN</div>
+        <div class="mid"><div class="nm"><span class="no">044</span> TNT SPORTS 2</div>
+          <div class="now">UFC Fight Night — Prelims</div></div>
+        <div class="pr"><i style="width:12%"></i></div>
+      </div>
+      <div class="ch">
+        <div class="lg">BB</div>
+        <div class="mid"><div class="nm"><span class="no">003</span> BBC NEWS</div>
+          <div class="now">Newsday</div></div>
+        <div class="pr"><i style="width:47%"></i></div>
+      </div>
+      <div class="ch">
+        <div class="lg">MX</div>
+        <div class="mid"><div class="nm"><span class="no">102</span> MOVIES XTRA</div>
+          <div class="now">Mad Max: Fury Road</div></div>
+        <div class="pr"><i style="width:38%"></i></div>
+      </div>
+      <div class="ch">
+        <div class="lg">NG</div>
+        <div class="mid"><div class="nm"><span class="no">210</span> NAT GEO <span class="q">HD</span></div>
+          <div class="now">Free Solo</div></div>
+        <div class="pr"><i style="width:81%"></i></div>
+      </div>
+    </div>
+    <div class="bfoot">
+      <span><kbd>OK</kbd> Watch</span><span>hold <kbd>OK</kbd> Lists</span><span><kbd>▶</kbd> Schedule</span><span><kbd>◀</kbd> Sidebar</span>
+      <span class="upd">Updated 4 min ago</span>
+    </div>
+  </div>
+
+  <div class="fly pane">
+    <div class="h">Sky Sport News · Today</div>
+    <div class="fit past"><div class="t">07:30</div><div class="n">Newcastle vs Arsenal</div><span class="tg rep">REPLAY</span></div>
+    <div class="fit"><div class="t">09:30</div><div class="n">Man United vs Brighton</div><span class="tg now">NOW</span></div>
+    <div class="fit"><div class="t">11:30</div><div class="n">Chelsea vs Sunderland</div><span class="tg rec">REC</span></div>
+    <div class="fit"><div class="t">13:30</div><div class="n">Brentford vs Liverpool</div><span class="tg rec">REC</span></div>
+    <div class="fit"><div class="t">15:30</div><div class="n">Forest vs Man United</div></div>
+  </div>
+
+  <div class="nowband pane">
+    <div class="nb-top">
+      <div class="lg">S2</div>
+      <div class="nb-id">
+        <div class="k"><span class="lv"><i></i> Live</span><span>CH 022 · Sky Sport News · UHD</span></div>
+        <div class="t">Manchester United vs Brighton</div>
+      </div>
+    </div>
+    <div class="nb-meta">
+      <span>09:30 – 11:30</span>
+      <div class="nb-prog"><i style="width:62%"></i></div>
+      <span>44 min left</span>
+      <span class="nb-next">Next — Chelsea vs Sunderland</span>
+    </div>
+    <div class="nb-acts">
+      <div class="gbtn pri focus">Watch</div>
+      <div class="gbtn"><span class="rd"></span> Record</div>
+      <div class="gbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20s-7.5-4.6-9.3-9A5.2 5.2 0 0 1 12 6.4 5.2 5.2 0 0 1 21.3 11c-1.8 4.4-9.3 9-9.3 9Z"/></svg> Favorite</div>
+      <div class="hint">the backdrop is already tuned — <kbd>OK</kbd> just goes fullscreen</div>
+    </div>
+  </div>
+</div>
+
+<p class="note"><b>Why this reads premium.</b> Zero opaque surfaces — the four panes (nav strip, source dock,
+browser, now-playing band) are one consistent material: 28px blur, 10% hairline, soft drop. The stage box is gone;
+focusing a channel retunes the <i>entire backdrop</i> (this is exactly the serial preview-player ladder that already
+ships — same player, new canvas). Focus is a white inner ring + brighter glass, no colour. The palette is stolen
+from the broadcast itself, so a football match makes the page green-gold and a film noir makes it silver — the UI
+recolours itself by content, which is what makes tvOS feel rich.</p>
+<p class="note"><b>Feature carry.</b> Sources + Favorites + custom lists live in the top dock (LEFT/RIGHT along it,
+counts inline; overflow scrolls); Live/Movies/Series tabs + category dropdown + submit-only search in the browse
+pane; every row keeps number, logo, now + progress, 4K/UHD badge, ★, REC state; RIGHT on a row opens the day
+schedule flyout with NOW/REC/REPLAY (catch-up); the now-playing band is the focused channel's full EPG line +
+Watch/Record/Favorite; the red dot top-right pulses while the engine records (jump-to-Recordings); "Updated" SWR
+chip in the browser footer; hold-OK list picker unchanged. Startup-channel mode is literally this page with the
+panes faded out. Phone: the browse pane becomes the page, the now-band becomes the bottom sheet.</p>
+<p class="note"><b>Honest cost.</b> On Android TV the preview plays on the native SurfaceView <i>under</i> Flutter
+(punched hole), so a BackdropFilter cannot actually sample the video — true glass blur is off the table there.
+That's fine: ship the panes as translucent tint + hairline (exactly what the Home hero's blend/tint stage already
+does over the same underlay, and what this mock's scrim is doing most of the work with), and reserve real blur for
+the texture path on phone/desktop. The look survives; the invariants (no Opacity/saveLayer over the hole, no fades
+on TV) are respected.</p>
+
+<p style="margin-top:44px"><a href="index.html">← All concepts</a></p>
+</body></html>

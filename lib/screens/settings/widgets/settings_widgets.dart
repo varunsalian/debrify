@@ -78,7 +78,7 @@ abstract final class SettingsRows {
   static const player = SettingsRowContent(
     icon: Icons.play_circle_outline_rounded,
     title: 'Playback',
-    subtitle: 'Player, subtitles, audio & VR',
+    subtitle: 'Player, skip segments, subtitles, audio & VR',
   );
   static const remote = SettingsRowContent(
     icon: Icons.phonelink_rounded,
@@ -152,6 +152,18 @@ abstract final class SettingsRows {
   static const tvSidebarStyle = SettingsRowContent(
     icon: Icons.view_sidebar_rounded,
     title: 'Sidebar Style',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen style) — passed per call site.
+  static const iptvAppearance = SettingsRowContent(
+    icon: Icons.style_rounded,
+    title: 'IPTV Appearance',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen style) — passed per call site.
+  static const playerGuideStyle = SettingsRowContent(
+    icon: Icons.smart_display_rounded,
+    title: 'Player Guide',
     subtitle: '',
   );
   // Subtitle is dynamic (current folder) — passed per call site.

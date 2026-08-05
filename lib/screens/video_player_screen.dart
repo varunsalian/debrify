@@ -12,6 +12,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../services/skip_segment_service.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
@@ -71,11 +72,15 @@ import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/widgets/iptv_channel_sheet.dart';
 import 'video_player/widgets/iptv_zap_banner.dart';
+import 'video_player/widgets/player_guide_style.dart';
+import '../widgets/iptv/styles/iptv_style.dart';
 import 'video_player/widgets/source_sheet.dart';
 import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/widgets/subtitle_line_picker_overlay.dart';
+import 'video_player/widgets/skip_segment_button.dart';
+import 'video_player/widgets/sleep_timer_sheet.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
@@ -519,6 +524,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// right-hand one was painted from launch state a zap never refreshed.
   bool get _iptvZapBannerOwnsIdentity => _currentIptvChannel?.isLive == true;
 
+  /// The in-player IPTV guide look, read once at launch (see
+  /// [PlayerGuideStyle]). Classic keeps every legacy paint path verbatim.
+  PlayerGuideStyle _playerGuideStyle = PlayerGuideStyle.classic;
+
+  /// Tokens for [_playerGuideStyle], derived once with it — null for classic.
+  IptvStyleTokens? _playerGuideTokens;
+
   // ── IPTV recording (libmpv `stream-record`) ─────────────────────────────
   /// True once the player is confirmed to run on a native (libmpv) backend —
   /// recording is unavailable on the web backend.
@@ -716,6 +728,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? get _effectiveContentTitle =>
       _currentStremioTvContentTitle ?? widget.contentTitle;
 
+  // Community intro/outro markers for the currently playing series episode.
+  // The request key includes the stream duration because providers may use it
+  // to distinguish releases, and timestamps are always validated against it.
+  bool _skipSegmentSettingsLoaded = false;
+  bool _skipSegmentsEnabled = false;
+  String _skipSegmentProviderId = SkipSegmentProviders.auto;
+  SkipSegmentProvider? _skipSegmentProvider;
+  SkipSegments _skipSegments = SkipSegments.empty;
+  String? _loadedSkipSegmentsKey;
+  String? _loadingSkipSegmentsKey;
+  int _skipSegmentsFetchGeneration = 0;
+  final Map<String, SkipSegments> _skipSegmentsCache = <String, SkipSegments>{};
+
+  /// Whether _position/_duration describe the item currently selected, rather
+  /// than the one being switched away from. The native player's equivalent is
+  /// `hasEverBeenReady`.
+  ///
+  /// Cleared when a playlist switch starts and set again on the first real
+  /// duration for the incoming media. It cannot stick: media_kit's `open()`
+  /// pushes Duration.zero to the duration stream unconditionally, so a fresh
+  /// duration always follows — even when the new episode runs exactly as long
+  /// as the old one.
+  bool _skipSegmentsMediaReady = true;
+
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
 
@@ -794,6 +830,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Aspect / speed
   AspectMode _aspectMode = AspectMode.contain;
   double _playbackSpeed = 1.0;
+
+  // ── Sleep timer ───────────────────────────────────────────────────────────
+  // Stops playback after a countdown, or at the end of the current item. The
+  // wakelock already follows play state here, so pausing is enough to let the
+  // screen sleep — unlike the native players, which pin the screen on.
+  SleepTimerMode _sleepTimerMode = SleepTimerMode.off;
+
+  /// When the armed countdown fires. The label is derived from this rather
+  /// than from the duration picked, so it counts down instead of reading "30
+  /// min" right up to the moment it stops.
+  DateTime? _sleepTimerDeadline;
+
+  /// The preset originally picked, so the sheet can keep it checked while the
+  /// remaining time ticks away from it.
+  int _sleepTimerArmedMinutes = 0;
+  Timer? _sleepTimer;
+
+  /// Latched from a sleep-timer stop until the user explicitly starts playback
+  /// again. Advancing is asynchronous here (resolve the URL, then open), so a
+  /// countdown expiring mid-flight would otherwise be undone by the episode
+  /// that was already on its way.
+  bool _sleepStopLatched = false;
 
   // Press-and-hold for 2x speed
   double? _speedBeforeHold;
@@ -987,6 +1045,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // a previous video's offset can't leak in (mirrors the TV side's onCreate).
     SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
+    unawaited(_loadSkipSegmentSettings());
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
@@ -1032,6 +1091,188 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Check if Trakt scrobbling should be enabled for this playback
     _initTraktScrobble();
     _initSimklScrobble();
+  }
+
+  Future<void> _loadSkipSegmentSettings() async {
+    final values = await Future.wait<Object>([
+      StorageService.getSkipSegmentsEnabled(),
+      StorageService.getSkipSegmentProvider(),
+    ]);
+    if (!mounted) return;
+
+    final enabled = values[0] as bool;
+    final storedProvider = values[1] as String;
+    final providerId = SkipSegmentProviders.isAvailable(storedProvider)
+        ? storedProvider
+        : SkipSegmentProviders.auto;
+
+    _skipSegmentProvider?.close();
+    _skipSegmentProvider = enabled
+        ? SkipSegmentProviders.create(providerId)
+        : null;
+    _skipSegmentsEnabled = enabled;
+    _skipSegmentProviderId = providerId;
+    _skipSegmentSettingsLoaded = true;
+    _syncSkipSegmentsForCurrentContent();
+  }
+
+  ({String imdbId, int season, int episode, Duration duration, String key})?
+  _currentSkipSegmentRequest() {
+    // Two stale-media windows, both of which would judge the incoming item
+    // against the outgoing one's clock:
+    //
+    // * _skipSegmentsMediaReady covers a playlist switch. _loadPlaylistIndex
+    //   points _currentIndex at the new episode and only then saves resume and
+    //   resolves the stream URL — a network round trip for debrid/PikPak
+    //   links. Through all of that _position/_duration still describe the
+    //   outgoing episode, and that position is usually deep enough to land
+    //   inside a segment, so the button flashes on the moment next-episode is
+    //   pressed. It also asks the provider for the new episode at the old
+    //   episode's duration, which can select or validate the wrong release.
+    // * _isTransitioning covers an IPTV zap / source switch, where the key
+    //   flips before the incoming stream opens (the same window _saveResume
+    //   guards against).
+    if (!_skipSegmentSettingsLoaded ||
+        !_skipSegmentsEnabled ||
+        !_skipSegmentsMediaReady ||
+        _isTransitioning ||
+        _duration <= Duration.zero) {
+      return null;
+    }
+
+    final seriesPlaylist = _seriesPlaylist;
+    final isSeries =
+        _effectiveContentType == 'series' || seriesPlaylist?.isSeries == true;
+    if (!isSeries) return null;
+
+    var imdbId = _effectiveContentImdbId?.trim();
+    if (imdbId == null || !RegExp(r'^tt\d+$').hasMatch(imdbId)) {
+      imdbId = seriesPlaylist?.imdbId?.trim();
+    }
+    if (imdbId == null || !RegExp(r'^tt\d+$').hasMatch(imdbId)) return null;
+
+    int? season;
+    int? episode;
+    if (seriesPlaylist?.isSeries == true) {
+      final current = _findSeriesEpisodeForCurrentIndex(seriesPlaylist!);
+      season = current?.seriesInfo.season;
+      episode = current?.seriesInfo.episode;
+    }
+    season ??= _effectiveContentSeason;
+    episode ??= _effectiveContentEpisode;
+    if (season == null || episode == null) {
+      final parsed = _traktSeasonEpisode();
+      season ??= parsed.season;
+      episode ??= parsed.episode;
+    }
+    if (season == null || episode == null || season < 0 || episode < 1) {
+      return null;
+    }
+
+    final durationSeconds = _duration.inSeconds;
+    final key =
+        '$_skipSegmentProviderId:$imdbId:$season:$episode:$durationSeconds';
+    return (
+      imdbId: imdbId,
+      season: season,
+      episode: episode,
+      duration: _duration,
+      key: key,
+    );
+  }
+
+  void _syncSkipSegmentsForCurrentContent() {
+    final request = _currentSkipSegmentRequest();
+    final provider = _skipSegmentProvider;
+    if (request == null || provider == null) return;
+    if (_loadedSkipSegmentsKey == request.key ||
+        _loadingSkipSegmentsKey == request.key) {
+      return;
+    }
+
+    if (_skipSegmentsCache.containsKey(request.key)) {
+      final cached = _skipSegmentsCache[request.key]!;
+      if (mounted) {
+        setState(() {
+          _skipSegments = cached;
+          _loadedSkipSegmentsKey = request.key;
+        });
+      }
+      return;
+    }
+
+    final generation = ++_skipSegmentsFetchGeneration;
+    _loadingSkipSegmentsKey = request.key;
+    provider
+        .fetch(
+          imdbId: request.imdbId,
+          season: request.season,
+          episode: request.episode,
+          duration: request.duration,
+        )
+        .then((segments) {
+          _skipSegmentsCache[request.key] = segments;
+          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
+          if (_currentSkipSegmentRequest()?.key != request.key) return;
+          setState(() {
+            _skipSegments = segments;
+            _loadedSkipSegmentsKey = request.key;
+          });
+        })
+        .catchError((Object error) {
+          // Missing skip data must never affect playback. Cache the miss for
+          // this session so an offline API cannot be retried on every position
+          // tick.
+          _skipSegmentsCache[request.key] = SkipSegments.empty;
+          debugPrint(
+            'SkipSegments: ${provider.displayName} fetch failed: $error',
+          );
+          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
+          if (_currentSkipSegmentRequest()?.key != request.key) return;
+          setState(() {
+            _skipSegments = SkipSegments.empty;
+            _loadedSkipSegmentsKey = request.key;
+          });
+        })
+        .whenComplete(() {
+          if (_loadingSkipSegmentsKey == request.key) {
+            _loadingSkipSegmentsKey = null;
+          }
+        });
+  }
+
+  /// Forget the outgoing item's skip segments when switching playlist entries,
+  /// and stop reading its clock until the incoming one opens. The native TV
+  /// player does the same in playItem.
+  ///
+  /// The fetch cache survives on purpose: it's keyed per episode, so going
+  /// back to one already looked up is instant.
+  void _resetSkipSegmentState() {
+    _skipSegmentsFetchGeneration++;
+    _loadingSkipSegmentsKey = null;
+    _loadedSkipSegmentsKey = null;
+    _skipSegments = SkipSegments.empty;
+    _skipSegmentsMediaReady = false;
+  }
+
+  SkipSegment? get _activeSkipSegment {
+    final request = _currentSkipSegmentRequest();
+    if (request == null || request.key != _loadedSkipSegmentsKey) return null;
+    return _skipSegments.segmentAt(_position);
+  }
+
+  void _skipActiveSegment() {
+    final segment = _activeSkipSegment;
+    if (segment == null || !_playerCreated) return;
+    final target = _duration > Duration.zero && segment.end > _duration
+        ? _duration
+        : segment.end;
+    _position = target;
+    unawaited(_player.seek(target));
+    _traktScrobbleSeek(target);
+    _simklScrobbleSeek(target);
+    HapticFeedback.selectionClick();
+    if (mounted) setState(() {});
   }
 
   Future<void> _initTraktScrobble() async {
@@ -1863,6 +2104,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _posSub = _player.stream.position.listen((d) {
       _position = d;
+      _syncSkipSegmentsForCurrentContent();
       // throttle UI updates
       if (mounted) setState(() {});
       // Check if episode should be marked as finished (for manual seeking)
@@ -1870,6 +2112,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _durSub = _player.stream.duration.listen((d) {
       _duration = d;
+      // A real duration means the incoming media has opened, so the clock the
+      // skip lookup reads is finally the new item's.
+      if (d > Duration.zero) _skipSegmentsMediaReady = true;
+      _syncSkipSegmentsForCurrentContent();
       if (mounted) setState(() {});
     });
     _playSub = _player.stream.playing.listen((p) {
@@ -2092,6 +2338,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Mark the current episode as finished if it's a series
     await _markCurrentEpisodeAsFinished();
+
+    // "Stop at the end of this episode": suppress every advance below and let
+    // the screen sleep. Playback has already finished, so there is nothing
+    // left to pause.
+    if (_sleepTimerMode == SleepTimerMode.endOfItem) {
+      _cancelSleepTimer();
+      _sleepStopLatched = true;
+      _showSleepTimerToast('Sleep timer — stopping here');
+      return;
+    }
 
     // IPTV episode list (series/VOD): advance to the next episode in the
     // season, mirroring the Next button. Checked first because IPTV episodes
@@ -2881,6 +3137,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
     const aspects = AspectMode.values;
     _aspectMode = aspects[aspectIndex.clamp(0, aspects.length - 1)];
+
+    // In-player guide look. `_initializePlayer` awaits this before playback
+    // setup, so every IPTV surface that can actually appear (first tune,
+    // zap, guide) already has the real value.
+    _playerGuideStyle = PlayerGuideStyle.fromPref(
+      await StorageService.getIptvPlayerGuideStyle(),
+    );
+    _playerGuideTokens = PlayerGuideTokens.of(_playerGuideStyle);
 
     debugPrint('VideoPlayer: Loaded defaults - aspect=$_aspectMode');
   }
@@ -5835,6 +6099,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _rainbowController.stop();
     _transitionRunning = false;
     _rainbowActive = false;
+    // No new media will open, so the duration emit that normally re-arms the
+    // skip lookup never comes. Leaving it disarmed would silently cost the
+    // skip button for the rest of whatever is still playing.
+    _skipSegmentsMediaReady = true;
     if (mounted) {
       setState(() {
         _isTransitioning = false;
@@ -5859,6 +6127,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    // A sleep stop wins over anything already queued. Checked BEFORE any state
+    // moves: bailing out after _currentIndex has advanced would leave the
+    // playlist pointing at an episode that never opened, so resume and
+    // metadata would file against the wrong item. Only automatic advances are
+    // suppressed — picking something by hand means the viewer is awake, so it
+    // clears the latch instead.
+    if (_sleepStopLatched) {
+      if (autoplay && _isAutoAdvancing) {
+        _isAutoAdvancing = false;
+        _clearTransitionOnFailure();
+        return;
+      }
+      _sleepStopLatched = false;
+    }
+
     print(
       'PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay',
     );
@@ -5881,6 +6164,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Clear subtitle cache and selection when changing content
     _resetSubtitleState();
+    _resetSkipSegmentState();
 
     // For movie collections, prefetch movie metadata for the new index
     // This runs in background so subtitles are ready when user opens TracksSheet
@@ -6892,6 +7176,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // playing listener.
     _pausedByLifecycle = false;
     if (!_playerCreated || !mounted) return;
+    // Coming back from the background is not a request to un-stop the night:
+    // if the sleep timer fired while we were away, stay paused until someone
+    // presses play.
+    if (_sleepStopLatched) return;
     unawaited(_player.play());
   }
 
@@ -6916,6 +7204,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    // The sleep timer belongs to this playback session — a pending one must not
+    // outlive the player and fire against a disposed state.
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
     _lifecycle?.dispose();
     final revisionListener = _desktopRecordingRevisionListener;
     if (revisionListener != null) {
@@ -6993,6 +7285,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _pikPakRetryMessage = null;
 
     _cleanupTempSubtitleFilesSync();
+    _skipSegmentsFetchGeneration++;
+    _skipSegmentProvider?.close();
+    _skipSegmentProvider = null;
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
@@ -7890,6 +8185,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_isPlaying) {
       _player.pause();
     } else {
+      // An explicit press is the one thing that clears a sleep stop.
+      _sleepStopLatched = false;
       _player.play();
     }
     _scheduleAutoHide();
@@ -7986,6 +8283,105 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _scheduleAutoHide();
     _saveResume();
+  }
+
+  // ── Sleep timer ───────────────────────────────────────────────────────────
+
+  /// Whole minutes left, rounded up so a fresh 30-minute timer reads "30".
+  int get _sleepTimerMinutesLeft {
+    final deadline = _sleepTimerDeadline;
+    if (_sleepTimerMode != SleepTimerMode.countdown || deadline == null) {
+      return 0;
+    }
+    final remaining = deadline.difference(DateTime.now()).inMilliseconds;
+    if (remaining <= 0) return 0;
+    return (remaining / 60000).ceil();
+  }
+
+  /// Short label for the controls button, or null when nothing is armed.
+  String? get _sleepTimerButtonLabel => switch (_sleepTimerMode) {
+    SleepTimerMode.off => null,
+    SleepTimerMode.endOfItem => 'Episode',
+    SleepTimerMode.countdown => '$_sleepTimerMinutesLeft min',
+  };
+
+  Future<void> _showSleepTimerSheet() async {
+    _hideTimer?.cancel();
+    final picked = await SleepTimerSheet.show(
+      context,
+      current: _sleepTimerMode,
+      armedMinutes: _sleepTimerArmedMinutes,
+      minutesLeft: _sleepTimerMinutesLeft,
+      // A live channel has no end to stop at, so only the countdown applies —
+      // which is the case people actually want a sleep timer for.
+      allowEndOfItem: _currentIptvChannel?.isLive != true,
+    );
+    if (!mounted) return;
+    _scheduleAutoHide();
+    if (picked == null) return;
+
+    switch (picked.mode) {
+      case SleepTimerMode.off:
+        _cancelSleepTimer();
+        _showSleepTimerToast('Sleep timer off');
+      case SleepTimerMode.countdown:
+        _startSleepCountdown(picked.minutes);
+      case SleepTimerMode.endOfItem:
+        _cancelSleepTimer();
+        setState(() => _sleepTimerMode = SleepTimerMode.endOfItem);
+        _showSleepTimerToast('Stopping at the end of this episode');
+    }
+  }
+
+  void _startSleepCountdown(int minutes) {
+    _cancelSleepTimer();
+    final duration = Duration(minutes: minutes);
+    setState(() {
+      _sleepTimerMode = SleepTimerMode.countdown;
+      _sleepTimerDeadline = DateTime.now().add(duration);
+      _sleepTimerArmedMinutes = minutes;
+    });
+    _sleepTimer = Timer(duration, _fireSleepTimer);
+    _showSleepTimerToast('Sleep timer set for $minutes minutes');
+  }
+
+  void _cancelSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    if (_sleepTimerMode == SleepTimerMode.off) return;
+    if (mounted) {
+      setState(() {
+        _sleepTimerMode = SleepTimerMode.off;
+        _sleepTimerDeadline = null;
+        _sleepTimerArmedMinutes = 0;
+      });
+    } else {
+      _sleepTimerMode = SleepTimerMode.off;
+      _sleepTimerDeadline = null;
+    }
+  }
+
+  /// Stop for the night: persist the position first (losing someone's place
+  /// overnight is exactly the moment this feature is meant to be helping),
+  /// then pause — which releases the wakelock and lets the screen sleep.
+  Future<void> _fireSleepTimer() async {
+    _cancelSleepTimer();
+    _sleepStopLatched = true;
+    if (!_playerCreated) return;
+    await _saveResume();
+    await _player.pause();
+    _showSleepTimerToast('Sleep timer ended — paused');
+  }
+
+  void _showSleepTimerToast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _changeSpeed() {
@@ -8142,6 +8538,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Widget _buildTitleBadge(String title) => TitleBadge(title: title);
 
+  /// One truth for "is this playback being recorded right now", shared by
+  /// the dock's Record button and the styled zap banner's REC tag — the
+  /// three mechanisms are libmpv stream-record, the Android recording
+  /// engine, and the desktop capture process.
+  bool get _recordingActiveNow =>
+      _isRecording ||
+      _engineTaskId != null ||
+      _desktopCaptureForCurrent() != null;
+
   /// The live-IPTV panel, or null when this playback has no channel identity
   /// to present. [flush] embeds it in the controls dock; otherwise it floats.
   Widget? _buildIptvInfoPanel({required bool flush}) {
@@ -8153,6 +8558,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       epgLoading: _iptvZapEpgLoading,
       now: _iptvZapClock,
       flush: flush,
+      style: _playerGuideStyle,
+      tokens: _playerGuideTokens,
+      isRecording: _recordingActiveNow,
     );
   }
 
@@ -8181,6 +8589,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final isReady = _isReady;
     final duration = _duration;
     final pos = _position;
+    final activeSkipSegment = _activeSkipSegment;
     final String? channelBadgeText = _channelBadgeText;
     // In the PiP window, hide every interactive/decorative layer so only the
     // video texture (and the buffering spinner) shows. Restores on exit.
@@ -8732,6 +9141,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             onBack: () => Navigator.of(context).pop(),
                             onAspect: _cycleAspectMode,
                             onSpeed: _changeSpeed,
+                            onSleepTimer: _showSleepTimerSheet,
+                            sleepTimerLabel: _sleepTimerButtonLabel,
                             speed: _playbackSpeed,
                             aspectMode: _aspectMode,
                             isLandscape: _landscapeLocked,
@@ -8843,11 +9254,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             showPipButton: PipService.isOwner(this),
                             onPip: PipService.isOwner(this) ? _enterPip : null,
                             hasRecord: _canRecord,
-                            isRecording:
-                                _isRecording ||
-                                _engineTaskId != null ||
-                                _desktopCaptureForCurrent() != null,
+                            isRecording: _recordingActiveNow,
                             onRecord: _canRecord ? _toggleRecording : null,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                // Manual OTT-style skip action. It stays available even when
+                // the main controls are hidden, and lifts above the dock when
+                // they are visible so neither control intercepts the other.
+                if (activeSkipSegment != null && !inPip)
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _controlsVisible,
+                    builder: (context, controlsVisible, _) {
+                      return AnimatedPositioned(
+                        duration: const Duration(milliseconds: 150),
+                        curve: Curves.easeOut,
+                        right: 24,
+                        bottom: controlsVisible && !widget.hideOptions
+                            ? 160
+                            : 28,
+                        child: SafeArea(
+                          top: false,
+                          left: false,
+                          child: SkipSegmentButton(
+                            key: ValueKey(activeSkipSegment.type),
+                            type: activeSkipSegment.type,
+                            onPressed: _skipActiveSegment,
                           ),
                         ),
                       );
@@ -8966,6 +9400,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       sources: widget.iptvSources ?? const [],
                       browseProvider: widget.iptvBrowseProvider,
                       onContextChanged: _persistIptvGuideContext,
+                      style: _playerGuideStyle,
+                      tokens: _playerGuideTokens,
                     ),
                   ),
                 // Stremio source sheet overlay

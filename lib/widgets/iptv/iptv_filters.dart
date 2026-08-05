@@ -100,7 +100,8 @@ class IptvFiltersBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final bool hasCategories = categories.isNotEmpty && selectedPlaylist != null;
+    final bool hasCategories =
+        categories.isNotEmpty && selectedPlaylist != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -252,9 +253,7 @@ class _RecordingsButton extends StatelessWidget {
         child: Icon(
           Icons.fiber_manual_record_rounded,
           size: 20,
-          color: live
-              ? rec
-              : Theme.of(context).colorScheme.onSurfaceVariant,
+          color: live ? rec : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );
@@ -338,17 +337,20 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.onUpArrowPressed != null) {
           widget.onUpArrowPressed!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+            widget.onDownArrowPressed != null) {
           widget.onDownArrowPressed!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.onRightArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+            widget.onRightArrowPressed != null) {
           widget.onRightArrowPressed!();
           return KeyEventResult.handled;
         }
@@ -377,12 +379,12 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
                 widget.selectedPlaylist?.isFavorites == true
                     ? Icons.star_rounded
                     : widget.selectedPlaylist?.isCustomList == true
-                        ? Icons.bookmark_rounded
+                    ? Icons.bookmark_rounded
                     : widget.selectedPlaylist?.isXtreamCodes == true
-                        ? Icons.login
-                        : widget.selectedPlaylist?.isLocalFile == true
-                            ? Icons.folder
-                            : Icons.playlist_play,
+                    ? Icons.login
+                    : widget.selectedPlaylist?.isLocalFile == true
+                    ? Icons.folder
+                    : Icons.playlist_play,
                 size: 16,
                 color: kSeeAllAccent2,
               ),
@@ -497,22 +499,26 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.onUpArrowPressed != null) {
           widget.onUpArrowPressed!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+            widget.onDownArrowPressed != null) {
           widget.onDownArrowPressed!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftArrowPressed != null) {
           widget.onLeftArrowPressed!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.onRightArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+            widget.onRightArrowPressed != null) {
           widget.onRightArrowPressed!();
           return KeyEventResult.handled;
         }
@@ -671,22 +677,26 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.onUpArrowPressed != null) {
           widget.onUpArrowPressed!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+            widget.onDownArrowPressed != null) {
           widget.onDownArrowPressed!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftArrowPressed != null) {
           widget.onLeftArrowPressed!();
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.onRightArrowPressed != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+            widget.onRightArrowPressed != null) {
           widget.onRightArrowPressed!();
           return KeyEventResult.handled;
         }
@@ -713,12 +723,27 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _segment(theme, colorScheme,
-                  value: 'live', icon: Icons.live_tv, label: 'Live'),
-              _segment(theme, colorScheme,
-                  value: 'vod', icon: Icons.movie, label: 'Movies'),
-              _segment(theme, colorScheme,
-                  value: 'series', icon: Icons.video_library, label: 'Series'),
+              _segment(
+                theme,
+                colorScheme,
+                value: 'live',
+                icon: Icons.live_tv,
+                label: 'Live',
+              ),
+              _segment(
+                theme,
+                colorScheme,
+                value: 'vod',
+                icon: Icons.movie,
+                label: 'Movies',
+              ),
+              _segment(
+                theme,
+                colorScheme,
+                value: 'series',
+                icon: Icons.video_library,
+                label: 'Series',
+              ),
             ],
           ),
         ),
@@ -754,7 +779,8 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
 
   void _initFocusNodes() {
     // One for each playlist + one for "Add Playlist" button if present
-    final count = widget.playlists.length + (widget.onAddPlaylist != null ? 1 : 0);
+    final count =
+        widget.playlists.length + (widget.onAddPlaylist != null ? 1 : 0);
     for (int i = 0; i < count; i++) {
       _focusNodes.add(FocusNode(debugLabel: 'iptv-playlist-$i'));
     }
@@ -774,7 +800,12 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
     super.dispose();
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event, int index, VoidCallback onSelect) {
+  KeyEventResult _handleKeyEvent(
+    FocusNode node,
+    KeyEvent event,
+    int index,
+    VoidCallback onSelect,
+  ) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (isActivateKey(event.logicalKey)) {
@@ -794,7 +825,8 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
       return KeyEventResult.handled;
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown && index < _focusNodes.length - 1) {
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+        index < _focusNodes.length - 1) {
       _focusNodes[index + 1].requestFocus();
       return KeyEventResult.handled;
     }
@@ -869,28 +901,37 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
                 final isSelected = playlist == widget.selectedPlaylist;
 
                 return _FocusablePickerTile(
-                  focusNode: index < _focusNodes.length ? _focusNodes[index] : null,
+                  focusNode: index < _focusNodes.length
+                      ? _focusNodes[index]
+                      : null,
                   label: playlist.name,
                   subtitle: playlist.isFavorites
                       ? 'Your starred channels'
                       : playlist.isCustomList
-                          ? 'Your list'
-                          : playlist.isXtreamCodes
-                          ? 'Xtream Codes - ${playlist.serverUrl}'
-                          : playlist.isLocalFile ? 'Local file' : playlist.url,
+                      ? 'Your list'
+                      : playlist.isXtreamCodes
+                      ? 'Xtream Codes - ${playlist.serverUrl}'
+                      : playlist.isLocalFile
+                      ? 'Local file'
+                      : playlist.url,
                   icon: isSelected
                       ? Icons.check_circle
                       : playlist.isFavorites
-                          ? Icons.star_rounded
-                          : playlist.isCustomList
-                              ? Icons.bookmark_rounded
-                          : playlist.isXtreamCodes
-                              ? Icons.login
-                              : (playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
+                      ? Icons.star_rounded
+                      : playlist.isCustomList
+                      ? Icons.bookmark_rounded
+                      : playlist.isXtreamCodes
+                      ? Icons.login
+                      : (playlist.isLocalFile
+                            ? Icons.folder
+                            : Icons.playlist_play),
                   isSelected: isSelected,
                   onTap: () => Navigator.of(context).pop(playlist),
                   onKeyEvent: (node, event) => _handleKeyEvent(
-                    node, event, index, () => Navigator.of(context).pop(playlist),
+                    node,
+                    event,
+                    index,
+                    () => Navigator.of(context).pop(playlist),
                   ),
                 );
               }),
@@ -907,12 +948,11 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
                   Navigator.of(context).pop();
                   widget.onAddPlaylist!();
                 },
-                onKeyEvent: (node, event) => _handleKeyEvent(
-                  node, event, _focusNodes.length - 1, () {
-                    Navigator.of(context).pop();
-                    widget.onAddPlaylist!();
-                  },
-                ),
+                onKeyEvent: (node, event) =>
+                    _handleKeyEvent(node, event, _focusNodes.length - 1, () {
+                      Navigator.of(context).pop();
+                      widget.onAddPlaylist!();
+                    }),
               ),
             ],
 
@@ -965,9 +1005,9 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
   int get _optionCount => widget.categories.length + 1;
 
   FocusNode _nodeFor(int index) => _focusNodes.putIfAbsent(
-        index,
-        () => FocusNode(debugLabel: 'iptv-category-$index'),
-      );
+    index,
+    () => FocusNode(debugLabel: 'iptv-category-$index'),
+  );
 
   @override
   void initState() {
@@ -986,7 +1026,12 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
     super.dispose();
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event, int index, VoidCallback onSelect) {
+  KeyEventResult _handleKeyEvent(
+    FocusNode node,
+    KeyEvent event,
+    int index,
+    VoidCallback onSelect,
+  ) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (isActivateKey(event.logicalKey)) {
@@ -1006,7 +1051,8 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
       return KeyEventResult.handled;
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown && index < _optionCount - 1) {
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+        index < _optionCount - 1) {
       _nodeFor(index + 1).requestFocus();
       return KeyEventResult.handled;
     }
@@ -1083,9 +1129,8 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                 itemCount: _optionCount,
                 itemBuilder: (context, index) {
                   if (index == 0) {
-                    void pickAll() => Navigator.of(
-                      context,
-                    ).pop(const _CategoryChoice(''));
+                    void pickAll() =>
+                        Navigator.of(context).pop(const _CategoryChoice(''));
                     return _FocusablePickerTile(
                       focusNode: _nodeFor(0),
                       label: 'All Categories',
@@ -1103,17 +1148,22 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                   final count = widget.categoryCounts?[category];
                   void pick() =>
                       Navigator.of(context).pop(_CategoryChoice(category));
+                  void hide() => Navigator.of(
+                    context,
+                  ).pop(_CategoryChoice(category, hide: true));
                   return _FocusablePickerTile(
                     focusNode: _nodeFor(index),
                     label: count != null ? '$category  ($count)' : category,
-                    icon: isSelected ? Icons.check_circle : Icons.folder_outlined,
+                    icon: isSelected
+                        ? Icons.check_circle
+                        : Icons.folder_outlined,
                     isSelected: isSelected,
                     onTap: pick,
-                    onHold: widget.canHide
-                        ? () => Navigator.of(
-                            context,
-                          ).pop(_CategoryChoice(category, hide: true))
-                        : null,
+                    onHold: widget.canHide ? hide : null,
+                    // The eye makes hideability visible — the hold gesture
+                    // alone had no affordance on touch.
+                    onTrailingTap: widget.canHide ? hide : null,
+                    trailingTooltip: 'Hide category',
                     onKeyEvent: (node, event) =>
                         _handleKeyEvent(node, event, index, pick),
                   );
@@ -1121,6 +1171,32 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
               ),
             ),
 
+            if (widget.canHide)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.visibility_off_outlined,
+                      size: 14,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Tap the eye (or long-press) to hide a category',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 16),
           ],
         ),
@@ -1144,6 +1220,14 @@ class _FocusablePickerTile extends StatefulWidget {
   /// from a hold.
   final VoidCallback? onHold;
 
+  /// Explicit tap target for [onHold]'s action (the trailing eye on hideable
+  /// categories). The hold gesture has zero visual affordance on touch, so
+  /// hideability was invisible without it. Excluded from focus traversal —
+  /// DPAD users already have hold-OK, and a second stop per row would double
+  /// the list walk.
+  final VoidCallback? onTrailingTap;
+  final String? trailingTooltip;
+
   const _FocusablePickerTile({
     this.focusNode,
     required this.label,
@@ -1153,6 +1237,8 @@ class _FocusablePickerTile extends StatefulWidget {
     required this.onTap,
     this.onKeyEvent,
     this.onHold,
+    this.onTrailingTap,
+    this.trailingTooltip,
   });
 
   @override
@@ -1281,7 +1367,9 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
           decoration: BoxDecoration(
             color: _isFocused
                 ? colorScheme.primaryContainer
-                : (widget.isSelected ? colorScheme.surfaceContainerHighest : null),
+                : (widget.isSelected
+                      ? colorScheme.surfaceContainerHighest
+                      : null),
             borderRadius: BorderRadius.circular(8),
             border: _isFocused
                 ? Border.all(color: colorScheme.primary, width: 2)
@@ -1292,15 +1380,21 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
               widget.icon,
               color: _isFocused
                   ? colorScheme.onPrimaryContainer
-                  : (widget.isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant),
+                  : (widget.isSelected
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant),
             ),
             title: Text(
               widget.label,
               style: TextStyle(
-                fontWeight: widget.isSelected || _isFocused ? FontWeight.bold : FontWeight.normal,
+                fontWeight: widget.isSelected || _isFocused
+                    ? FontWeight.bold
+                    : FontWeight.normal,
                 color: _isFocused
                     ? colorScheme.onPrimaryContainer
-                    : (widget.isSelected ? colorScheme.primary : colorScheme.onSurface),
+                    : (widget.isSelected
+                          ? colorScheme.primary
+                          : colorScheme.onSurface),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1318,7 +1412,24 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
                     overflow: TextOverflow.ellipsis,
                   )
                 : null,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            trailing: widget.onTrailingTap != null
+                ? ExcludeFocus(
+                    child: IconButton(
+                      tooltip: widget.trailingTooltip,
+                      icon: Icon(
+                        Icons.visibility_off_outlined,
+                        size: 20,
+                        color: _isFocused
+                            ? colorScheme.onPrimaryContainer.withOpacity(0.7)
+                            : colorScheme.onSurfaceVariant,
+                      ),
+                      onPressed: widget.onTrailingTap,
+                    ),
+                  )
+                : null,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         ),
       ),
