@@ -5032,9 +5032,10 @@ class IptvResultsViewState extends State<IptvResultsView>
               sourceCounts: _sourceCounts,
               favoritesCount: _favoriteUrls.length,
               scheduledCount: _scheduledCount,
-              // focusContent: a rail selection must hand DPAD focus INTO the
-              // reloaded guide — without it, _RailItem keeps consuming RIGHT
-              // and a remote-only user is trapped on the rail forever.
+              // focusContent: OK is a decision, so it lands DPAD on the
+              // channels it just loaded. (Merely walking RIGHT does not
+              // select — it traverses into the guide, which still shows the
+              // selected source.)
               onSelectPlaylist: (p) =>
                   _onPlaylistChanged(p, focusContent: true),
               onOpenScheduled: _openScheduledRecordings,

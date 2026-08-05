@@ -15,7 +15,7 @@ import 'styles/iptv_style.dart';
 /// LEFT from the channel grid's first column lands here, LEFT from here has
 /// no candidate and bubbles to the shell's global action (the app sidebar,
 /// preserving the LEFT-only policy with zero interception code). UP/DOWN
-/// walk the column; OK/RIGHT select.
+/// walk the column, RIGHT walks into the guide, and OK selects.
 ///
 /// Perf: a static column — no per-frame work, counts are precomputed by the
 /// caller once per playlist load, and selection state is a plain rebuild.
@@ -361,17 +361,14 @@ class _RailItemState extends State<_RailItem> {
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
-        // RIGHT selects too (the documented contract): without this,
-        // traversal walks into the guide while it still shows the PREVIOUS
-        // source — a silently wrong screen.
-        if (event is KeyDownEvent &&
-            (isActivateOrSpaceKey(event.logicalKey) ||
-                event.logicalKey == LogicalKeyboardKey.arrowRight)) {
+        // OK selects; RIGHT does NOT. Arrows move, the centre button acts —
+        // the 10-foot contract everywhere else in the app. RIGHT used to
+        // select as the rail's only escape hatch (it swallowed the key, so
+        // traversal could never leave), which meant merely walking toward
+        // the guide silently switched source. Now it just walks: the guide
+        // it lands on is the one still selected, so nothing can mismatch.
+        if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onSelect();
-          return KeyEventResult.handled;
-        }
-        // Swallow RIGHT repeats so holding the key can't multi-trigger.
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
           return KeyEventResult.handled;
         }
         // Vertical containment at the rail's edges — never leak into the
