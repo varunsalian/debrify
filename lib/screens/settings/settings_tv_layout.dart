@@ -59,17 +59,21 @@ class SettingsTvLayout extends StatefulWidget {
   final ValueChanged<bool> onToggleAutoUpdateChecks;
   final bool tvKeyboardEnabled;
   final ValueChanged<bool> onToggleTvKeyboard;
+  // Appearance rows. Labels caption the rows; every picker is its own page.
   // Screen size: percentage of the panel's native density the UI is laid out
-  // at — 100 is the panel's own size, and smaller fits more on screen. Held
-  // here only to caption the row; the picker itself is its own page.
+  // at — 100 is the panel's own size, and smaller fits more on screen.
   final int tvUiScalePercent;
   final Future<void> Function() onOpenTvScreenSize;
-  // Sidebar chrome style. (The HOME layout picker moved inside the Home
-  // Screen settings page — everything about the home screen in one place.)
   final String tvSidebarStyleLabel;
   final Future<void> Function() onOpenTvSidebarStyle;
   final String discoverLayoutLabel;
   final Future<void> Function() onOpenDiscoverLayout;
+  final String tvHomeStyleLabel;
+  final Future<void> Function() onOpenTvHomeStyle;
+  final String iptvStyleLabel;
+  final Future<void> Function() onOpenIptvStyle;
+  final String playerGuideStyleLabel;
+  final Future<void> Function() onOpenPlayerGuideStyle;
   // Live TV & DVR.
   final Future<void> Function() onOpenRecordings;
   final Future<void> Function() onOpenIptvSettings;
@@ -113,6 +117,12 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenTvSidebarStyle,
     required this.discoverLayoutLabel,
     required this.onOpenDiscoverLayout,
+    required this.tvHomeStyleLabel,
+    required this.onOpenTvHomeStyle,
+    required this.iptvStyleLabel,
+    required this.onOpenIptvStyle,
+    required this.playerGuideStyleLabel,
+    required this.onOpenPlayerGuideStyle,
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showSupportDonation,
@@ -145,7 +155,12 @@ const List<_Category> _kCategories = [
   _Category(
     Icons.home_rounded,
     'Home & Display',
-    'Home, Discover, sidebar & screen size',
+    'Home screen rows & keyboard',
+  ),
+  _Category(
+    Icons.palette_rounded,
+    'Appearance',
+    'Home, sidebar, IPTV & player looks',
   ),
   _Category(
     Icons.play_circle_outline_rounded,
@@ -179,9 +194,9 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (About has up to
-  /// 6 with the conditional donation row; Data & Backup up to 5). Connections
-  /// and Trackers are sized from their own lists; see the pool computation in
-  /// [initState].
+  /// 6 with the conditional donation row; Appearance has exactly 6;
+  /// Data & Backup up to 5). Connections and Trackers are sized from their
+  /// own lists; see the pool computation in [initState].
   static const int _kMaxCategoryRows = 6;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
@@ -531,6 +546,8 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           ],
         ];
       case 2: // Home & Display
+        // Nodes stay CONTIGUOUS from 0 — the DPAD walker only advances to
+        // the immediately adjacent live node, so a gap strands Down.
         return [
           SettingsSection(
             title: '',
@@ -540,16 +557,36 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenHomePageSettings,
                 focusNode: _paneNodes[0],
               ),
-              SettingsTile.spec(
-                SettingsRows.tvSidebarStyle,
-                subtitle: widget.tvSidebarStyleLabel,
-                onTap: widget.onOpenTvSidebarStyle,
+              SettingsToggleTile.spec(
+                SettingsRows.tvKeyboard,
+                value: widget.tvKeyboardEnabled,
+                onChanged: widget.onToggleTvKeyboard,
                 focusNode: _paneNodes[1],
+              ),
+            ],
+          ),
+        ];
+      case 3: // Appearance — every look/layout pref, one place.
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.tvHomeStyle,
+                subtitle: widget.tvHomeStyleLabel,
+                onTap: widget.onOpenTvHomeStyle,
+                focusNode: _paneNodes[0],
               ),
               SettingsTile.spec(
                 SettingsRows.discoverLayout,
                 subtitle: widget.discoverLayoutLabel,
                 onTap: widget.onOpenDiscoverLayout,
+                focusNode: _paneNodes[1],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvSidebarStyle,
+                subtitle: widget.tvSidebarStyleLabel,
+                onTap: widget.onOpenTvSidebarStyle,
                 focusNode: _paneNodes[2],
               ),
               SettingsTile.spec(
@@ -558,16 +595,22 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenTvScreenSize,
                 focusNode: _paneNodes[3],
               ),
-              SettingsToggleTile.spec(
-                SettingsRows.tvKeyboard,
-                value: widget.tvKeyboardEnabled,
-                onChanged: widget.onToggleTvKeyboard,
+              SettingsTile.spec(
+                SettingsRows.iptvAppearance,
+                subtitle: widget.iptvStyleLabel,
+                onTap: widget.onOpenIptvStyle,
                 focusNode: _paneNodes[4],
+              ),
+              SettingsTile.spec(
+                SettingsRows.playerGuideStyle,
+                subtitle: widget.playerGuideStyleLabel,
+                onTap: widget.onOpenPlayerGuideStyle,
+                focusNode: _paneNodes[5],
               ),
             ],
           ),
         ];
-      case 3: // Playback
+      case 4: // Playback
         return [
           SettingsSection(
             title: '',
@@ -580,7 +623,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 4: // Search
+      case 5: // Search
         return [
           SettingsSection(
             title: '',
@@ -608,7 +651,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 5: // Live TV & DVR
+      case 6: // Live TV & DVR
         return [
           SettingsSection(
             title: '',
@@ -631,7 +674,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 6: // Devices
+      case 7: // Devices
         return [
           SettingsSection(
             title: '',
@@ -644,7 +687,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 7: // Data & Backup
+      case 8: // Data & Backup
         {
           // Focus nodes are claimed sequentially so the optional
           // download-location row doesn't shift hardcoded indices.
@@ -701,7 +744,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 8: // About (Updates + Support merged — matches the phone layout)
+      case 9: // About (Updates + Support merged — matches the phone layout)
         {
           // The donation row is conditional, so index the pane nodes off a
           // running counter to keep Up/Down wiring contiguous.
@@ -769,7 +812,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 9: // Danger Zone
+      case 10: // Danger Zone
         return [
           SettingsSection(
             title: '',

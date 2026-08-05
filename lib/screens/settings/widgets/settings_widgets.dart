@@ -154,6 +154,18 @@ abstract final class SettingsRows {
     title: 'Sidebar Style',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen style) — passed per call site.
+  static const iptvAppearance = SettingsRowContent(
+    icon: Icons.style_rounded,
+    title: 'IPTV Appearance',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen style) — passed per call site.
+  static const playerGuideStyle = SettingsRowContent(
+    icon: Icons.smart_display_rounded,
+    title: 'Player Guide',
+    subtitle: '',
+  );
   // Subtitle is dynamic (current folder) — passed per call site.
   static const downloadLocation = SettingsRowContent(
     icon: Icons.folder_rounded,
