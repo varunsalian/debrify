@@ -4449,21 +4449,33 @@ class IptvResultsViewState extends State<IptvResultsView>
     // engine then kills the capture at its first bytes, long after this code
     // has told the user it started. Ask the server first; only an
     // affirmative playlist answer blocks (see [servesPlaylist]).
-    if (!LiveRecordingService.isSchedulableUrl(recordUrl) &&
-        await LiveRecordingService.servesPlaylist(
-          recordUrl,
-          headers: channel.playbackHeaders,
-        )) {
-      if (!mounted) return;
+    if (!LiveRecordingService.isSchedulableUrl(recordUrl)) {
+      // The probe is capped at 3s but still long enough that a silent button
+      // reads as broken on a remote — say what's happening.
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            "${channel.name} can't be recorded — it's an adaptive (HLS) "
-            'stream. Recording works on progressive/TS channels.',
-          ),
+        const SnackBar(
+          content: Text('Checking channel…'),
+          duration: Duration(seconds: 3),
         ),
       );
-      return;
+      final playlist = await LiveRecordingService.servesPlaylist(
+        recordUrl,
+        headers: channel.playbackHeaders,
+      );
+      if (!mounted) return;
+      if (playlist) {
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              "${channel.name} can't be recorded — it's an adaptive (HLS) "
+              'stream. Recording works on progressive/TS channels.',
+            ),
+          ),
+        );
+        return;
+      }
+      messenger.hideCurrentSnackBar();
     }
     if (!mounted) return;
     if (!kIsWeb && Platform.isAndroid) {

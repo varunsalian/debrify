@@ -6239,16 +6239,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 return false
             }
             val url = currentIptvStreamUrl ?: return false
-            val recordable = engineRecordableUrl(url) ?: return false
-            // engineRecordableUrl can only read the URL's shape, and an
-            // extensionless one that turns out to be HLS would start a
-            // capture the engine kills at its first bytes — reported as
-            // "saved" by every Flutter-side message on the way there. The
-            // player has already LEARNED the real format (a forced-HLS retry
-            // records the URL), so trust that. A twin rescue is affirmative
-            // knowledge of its own — Xtream serves TS at the `.ts` twin — so
-            // it stays recordable regardless.
-            return recordable != url || !isCurrentIptvSegmented()
+            return engineRecordableUrl(url) != null
         }
         return IptvRecordingController.isSupported && !isCurrentIptvSegmented()
     }
