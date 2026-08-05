@@ -162,6 +162,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   // Android TV and desktop; a phone or touch tablet would be picking a look
   // it can never see.
   String _iptvStyle = 'command';
+
+  // In-player guide look (`iptv_player_guide_style`). Ungated: every
+  // platform has a player — phones/desktop the Dart one, Android TV the
+  // native one — and both read this pref at launch.
+  String _playerGuideStyle = 'classic';
   static final bool _isDesktopPlatform =
       !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
   bool get _appearanceVisible =>
@@ -405,6 +410,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (mounted) setState(() => _iptvStyle = style);
   }
 
+  Future<void> _setPlayerGuideStyle(String style) async {
+    // Same persist-before-setState contract as [_setIptvStyle]: the player
+    // reads the pref at launch, which can happen the moment this route pops.
+    await StorageService.setIptvPlayerGuideStyle(style);
+    if (mounted) setState(() => _playerGuideStyle = style);
+  }
+
   Future<void> _pickStartupChannel() async {
     final choice = await showIptvStartupChannelPicker(context);
     if (choice == null) return;
@@ -439,6 +451,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final lastLive = await StorageService.getIptvLastLiveChannel();
     final trackCw = await StorageService.getIptvTrackContinueWatching();
     final iptvStyle = await StorageService.getIptvStyle();
+    final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
     final engineSupported =
         !kIsWeb &&
         Platform.isAndroid &&
@@ -468,6 +481,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _lastLiveChannel = lastLive;
       _trackContinueWatching = trackCw;
       _iptvStyle = iptvStyle;
+      _playerGuideStyle = playerGuideStyle;
       _recordingSectionVisible = engineSupported || desktopSched;
       _engineToggleVisible = engineSupported;
       _recordingEngineOn = recordingEngineOn;
@@ -1718,6 +1732,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       showAppearanceSection: _appearanceVisible,
       iptvStyle: _iptvStyle,
       onIptvStyleChanged: (v) => unawaited(_setIptvStyle(v)),
+      playerGuideStyle: _playerGuideStyle,
+      onPlayerGuideStyleChanged: (v) => unawaited(_setPlayerGuideStyle(v)),
       showRecordingSection: _recordingSectionVisible,
       showEngineToggle: _engineToggleVisible,
       recordingEngineEnabled: _recordingEngineOn,
@@ -1992,6 +2008,61 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             ),
             const SizedBox(height: 24),
           ],
+
+          // Player guide — how the in-player guide surfaces look (zap
+          // banner, channel guide). Both players read it, so no gate.
+          const SettingsSectionLabel('Player guide'),
+          Text(
+            'How the channel banner and in-player guide look during live '
+            'TV — on this device and on Android TV.',
+            style: TextStyle(fontSize: 12, color: kSettingsDim),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Column(
+              children: [
+                RadioListTile<String>(
+                  title: const Text('Classic'),
+                  subtitle: const Text("Today's look"),
+                  value: 'classic',
+                  groupValue: _playerGuideStyle,
+                  onChanged: (v) =>
+                      v == null ? null : unawaited(_setPlayerGuideStyle(v)),
+                ),
+                RadioListTile<String>(
+                  title: const Text('Cinema Glass'),
+                  subtitle: const Text(
+                    'Translucent panels, one violet accent — modern streaming',
+                  ),
+                  value: 'glass',
+                  groupValue: _playerGuideStyle,
+                  onChanged: (v) =>
+                      v == null ? null : unawaited(_setPlayerGuideStyle(v)),
+                ),
+                RadioListTile<String>(
+                  title: const Text('Midnight Edition'),
+                  subtitle: const Text(
+                    'Ink panels and serif headlines — editorial',
+                  ),
+                  value: 'edition',
+                  groupValue: _playerGuideStyle,
+                  onChanged: (v) =>
+                      v == null ? null : unawaited(_setPlayerGuideStyle(v)),
+                ),
+                RadioListTile<String>(
+                  title: const Text('Master Control'),
+                  subtitle: const Text(
+                    'Black instrument — mono numerals, amber machinery',
+                  ),
+                  value: 'console',
+                  groupValue: _playerGuideStyle,
+                  onChanged: (v) =>
+                      v == null ? null : unawaited(_setPlayerGuideStyle(v)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
 
           // Recording — only where the engine can actually run (Android 10+).
           if (_recordingSectionVisible) ...[

@@ -15,7 +15,9 @@ import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/iptv_playlist.dart';
 import '../../../widgets/iptv/iptv_epg_panel.dart';
+import '../../../widgets/iptv/styles/iptv_style.dart';
 import '../../../widgets/tv_text_field.dart';
+import 'player_guide_style.dart';
 
 typedef IptvGuideChannelSelected =
     Future<void> Function(List<IptvChannel> channels, int index);
@@ -65,6 +67,11 @@ class IptvChannelSheet extends StatefulWidget {
   browseProvider;
   final ValueChanged<IptvGuideContext>? onContextChanged;
 
+  /// The in-player guide look + its tokens, resolved once by the owner.
+  /// Classic (null tokens) takes the untouched legacy paint everywhere.
+  final PlayerGuideStyle style;
+  final IptvStyleTokens? tokens;
+
   const IptvChannelSheet({
     super.key,
     required this.channels,
@@ -80,6 +87,8 @@ class IptvChannelSheet extends StatefulWidget {
     this.sources = const [],
     this.browseProvider,
     this.onContextChanged,
+    this.style = PlayerGuideStyle.classic,
+    this.tokens,
   });
 
   @override
@@ -139,6 +148,21 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   static const _accent = Color(0xFF00E5FF);
   static const _accentAlt = Color(0xFF00B8D4);
   static const _surfaceDark = Color(0xFF101016);
+
+  /// Styled-look tokens, or null on the classic path. Every restyled build
+  /// site branches on this FIRST and keeps its legacy expression verbatim
+  /// in the null branch.
+  IptvStyleTokens? get _t =>
+      widget.style == PlayerGuideStyle.classic ? null : widget.tokens;
+
+  /// Corner grammar per look: glass keeps the soft legacy radii, edition
+  /// squares off to a hairline-ledger 10, console to an instrument 4.
+  double get _styledRadius => switch (widget.style) {
+    PlayerGuideStyle.glass => 18,
+    PlayerGuideStyle.edition => 10,
+    PlayerGuideStyle.console => 4,
+    PlayerGuideStyle.classic => 14,
+  };
 
   @override
   void initState() {
@@ -680,12 +704,26 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           final height = compact
               ? math.min(constraints.maxHeight * 0.94, 760.0)
               : constraints.maxHeight;
-          final radius = compact
-              ? const BorderRadius.vertical(top: Radius.circular(24))
-              : const BorderRadius.only(
-                  topLeft: Radius.circular(26),
-                  bottomLeft: Radius.circular(26),
-                );
+          final t = _t;
+          final BorderRadius radius;
+          if (t == null) {
+            radius = compact
+                ? const BorderRadius.vertical(top: Radius.circular(24))
+                : const BorderRadius.only(
+                    topLeft: Radius.circular(26),
+                    bottomLeft: Radius.circular(26),
+                  );
+          } else {
+            final r = widget.style == PlayerGuideStyle.glass
+                ? 24.0
+                : _styledRadius;
+            radius = compact
+                ? BorderRadius.vertical(top: Radius.circular(r))
+                : BorderRadius.only(
+                    topLeft: Radius.circular(r),
+                    bottomLeft: Radius.circular(r),
+                  );
+          }
 
           return Stack(
             children: [
@@ -710,13 +748,19 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                         key: ValueKey(
                           wide ? 'iptv-guide-wide' : 'iptv-guide-compact',
                         ),
-                        decoration: BoxDecoration(
-                          color: _surfaceDark.withValues(alpha: 0.98),
-                          borderRadius: radius,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.07),
-                          ),
-                        ),
+                        decoration: t == null
+                            ? BoxDecoration(
+                                color: _surfaceDark.withValues(alpha: 0.98),
+                                borderRadius: radius,
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.07),
+                                ),
+                              )
+                            : BoxDecoration(
+                                color: t.panel,
+                                borderRadius: radius,
+                                border: Border.all(color: t.hairline),
+                              ),
                         child: _buildResponsivePanel(
                           compact: compact,
                           wide: wide,
@@ -744,7 +788,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 SizedBox(width: 430, child: _buildBrowserPane(compact: false)),
                 VerticalDivider(
                   width: 1,
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: _t == null
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : _t!.hairline,
                 ),
                 Expanded(child: _buildSchedulePane(compact: false)),
               ],
@@ -764,7 +810,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
               height: 4,
               margin: const EdgeInsets.only(top: 9),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.22),
+                color: _t == null
+                    ? Colors.white.withValues(alpha: 0.22)
+                    : _t!.hairline2,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -786,9 +834,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
         _buildSearchBar(),
         _buildFilterBar(),
         if (_browseLoading)
-          const LinearProgressIndicator(
+          LinearProgressIndicator(
             minHeight: 2,
-            color: _accent,
+            color: _t == null ? _accent : _t!.accent,
             backgroundColor: Colors.transparent,
           ),
         if (_browseError != null)
@@ -796,7 +844,10 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
             child: Text(
               _browseError!,
-              style: const TextStyle(color: Color(0xFFFF8A8A), fontSize: 11),
+              style: TextStyle(
+                color: _t == null ? const Color(0xFFFF8A8A) : _t!.rec,
+                fontSize: 11,
+              ),
             ),
           ),
         Expanded(child: _buildChannelList(compact: compact)),
@@ -807,6 +858,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   // ─── Header ─────────────────────────────────────────────────────────
 
   Widget _buildHeader({required bool compact}) {
+    final t = _t;
+    if (t != null) return _buildHeaderStyled(compact: compact, t: t);
     return Container(
       padding: EdgeInsets.fromLTRB(20, compact ? 10 : 16, 14, 10),
       child: Row(
@@ -902,12 +955,242 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     );
   }
 
+  /// The header line each styled look owns. The sub-line logic (schedule
+  /// channel name / press-enter prompt / count) is shared with classic —
+  /// it's state, not paint.
+  Widget _buildHeaderStyled({required bool compact, required IptvStyleTokens t}) {
+    final isSchedule = _compactPane == _CompactPane.schedule && compact;
+    final title = isSchedule ? 'Programme Guide' : 'Live TV Guide';
+    final subtitle = isSchedule
+        ? (_scheduleChannel?.name ?? 'Select a channel')
+        : (widget.browseProvider != null &&
+              _searchController.text.trim().isNotEmpty &&
+              _searchController.text.trim() != _submittedQuery)
+        ? 'Press enter to search all channels'
+        : '${_filteredChannels.length} of ${_channels.length} channels';
+    final style = widget.style;
+
+    final Widget identity;
+    if (style == PlayerGuideStyle.edition) {
+      // Editorial: a kicker over a serif title, no icon tile.
+      identity = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isSchedule ? 'PROGRAMME' : 'GUIDE',
+            style: TextStyle(
+              color: t.fgDim,
+              fontSize: 10,
+              fontFamily: t.captionFamily,
+              fontStyle: FontStyle.italic,
+              letterSpacing: 2.2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            isSchedule ? (_scheduleChannel?.name ?? title) : 'Live Television',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: t.fg,
+              fontSize: compact ? 19 : 22,
+              fontFamily: t.headlineFamily,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: t.fgFaint, fontSize: 11.5),
+          ),
+        ],
+      );
+    } else {
+      final console = style == PlayerGuideStyle.console;
+      identity = Row(
+        children: [
+          Container(
+            width: compact ? 34 : 40,
+            height: compact ? 34 : 40,
+            decoration: BoxDecoration(
+              color: t.selectedTint,
+              borderRadius: BorderRadius.circular(console ? 4 : 12),
+              border: Border.all(color: t.hairline2),
+            ),
+            child: Icon(Icons.live_tv_rounded, color: t.accent, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  console
+                      ? (isSchedule ? 'PROGRAMME GUIDE' : 'CHANNEL GUIDE')
+                      : title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: t.fg,
+                    fontSize: console ? (compact ? 15 : 17) : (compact ? 17 : 20),
+                    fontWeight: FontWeight.w700,
+                    fontFamily: console && t.nameFamily.isNotEmpty
+                        ? t.nameFamily
+                        : null,
+                    letterSpacing: console ? 1.2 : -0.5,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: t.fgFaint,
+                    fontSize: console ? 11 : 12,
+                    fontFamily: console && t.monoFamily.isNotEmpty
+                        ? t.monoFamily
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, compact ? 10 : 16, 14, 10),
+      child: Row(
+        children: [
+          Expanded(child: identity),
+          if (compact && _compactPane == _CompactPane.schedule)
+            IconButton(
+              tooltip: 'Back to channels',
+              onPressed: () =>
+                  setState(() => _compactPane = _CompactPane.channels),
+              icon: Icon(Icons.arrow_back_rounded, color: t.fgMid),
+            ),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: _handleClose,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: t.focusTint,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: t.hairline),
+                ),
+                child: Icon(Icons.close_rounded, color: t.fgDim, size: 18),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNowPlayingCard({required bool compact}) {
     if (widget.currentIndex < 0 ||
         widget.currentIndex >= widget.channels.length) {
       return const SizedBox.shrink();
     }
     final channel = widget.channels[widget.currentIndex];
+    final t = _t;
+    if (t != null) {
+      final console = widget.style == PlayerGuideStyle.console;
+      final edition = widget.style == PlayerGuideStyle.edition;
+      final radius = BorderRadius.circular(_styledRadius);
+      return Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, compact ? 8 : 10),
+        child: Material(
+          color: t.selectedTint,
+          borderRadius: radius,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: () => setState(() {
+              _scheduleChannel = channel;
+              _compactPane = _CompactPane.schedule;
+            }),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                border: edition || console
+                    ? Border(
+                        left: BorderSide(
+                          color: edition ? t.fg : t.accent,
+                          width: 2,
+                        ),
+                      )
+                    : Border.all(color: t.accent),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  _GuideLogo(
+                    channel: channel,
+                    size: compact ? 38 : 42,
+                    tokens: t,
+                    circle: edition,
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          channel.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: t.fg,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: console && t.nameFamily.isNotEmpty
+                                ? t.nameFamily
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        _TileSubLine(
+                          channel: channel,
+                          isFocused: true,
+                          tokens: t,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _StyledTag(
+                    label: 'NOW',
+                    color: edition ? t.fg : t.accent,
+                    onDark: t.bg,
+                    square: console,
+                    outline: edition,
+                    monoFamily: console ? t.monoFamily : '',
+                  ),
+                  if (compact) ...[
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.calendar_month_rounded,
+                      color: t.fgDim,
+                      size: 20,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, compact ? 8 : 10),
       child: Material(
@@ -968,25 +1251,37 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     final hasFocus = _focusZone == _FocusZone.search;
     final hasQuery = _searchController.text.isNotEmpty;
 
+    // Branch-first per expression: `t == null` keeps every legacy value
+    // verbatim; the styled side reads only tokens.
+    final t = _t;
+    final radius = t == null ? 14.0 : _styledRadius;
+    final console = t != null && widget.style == PlayerGuideStyle.console;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: hasFocus
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(radius),
+          color: t == null
+              ? (hasFocus
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.04))
+              : (hasFocus ? t.focusTint : t.selectedTint),
           border: Border.all(
-            color: hasFocus
-                ? _accent.withValues(alpha: 0.4)
-                : Colors.transparent,
+            color: t == null
+                ? (hasFocus
+                      ? _accent.withValues(alpha: 0.4)
+                      : Colors.transparent)
+                : (hasFocus ? t.accent : t.hairline),
             width: 1.5,
           ),
           boxShadow: hasFocus
               ? [
                   BoxShadow(
-                    color: _accent.withValues(alpha: 0.08),
+                    color: t == null
+                        ? _accent.withValues(alpha: 0.08)
+                        : t.focusTint,
                     blurRadius: 16,
                   ),
                 ]
@@ -995,15 +1290,20 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
         child: TvTextField(
           controller: _searchController,
           focusNode: _searchFocusNode,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: t == null ? Colors.white : t.fg,
             fontSize: 14,
             fontWeight: FontWeight.w400,
+            fontFamily: console && t.monoFamily.isNotEmpty
+                ? t.monoFamily
+                : null,
           ),
           decoration: InputDecoration(
             hintText: 'Search channels or categories...',
             hintStyle: TextStyle(
-              color: Colors.white.withValues(alpha: 0.25),
+              color: t == null
+                  ? Colors.white.withValues(alpha: 0.25)
+                  : t.fgFaint,
               fontSize: 13,
               fontWeight: FontWeight.w400,
             ),
@@ -1012,9 +1312,11 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
               child: Icon(
                 hasQuery ? Icons.filter_list_rounded : Icons.search_rounded,
                 key: ValueKey(hasQuery),
-                color: hasFocus
-                    ? _accent.withValues(alpha: 0.7)
-                    : Colors.white.withValues(alpha: 0.3),
+                color: t == null
+                    ? (hasFocus
+                          ? _accent.withValues(alpha: 0.7)
+                          : Colors.white.withValues(alpha: 0.3))
+                    : (hasFocus ? t.accent : t.fgFaint),
                 size: 20,
               ),
             ),
@@ -1028,7 +1330,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                       tooltip: 'Clear search',
                       icon: Icon(
                         Icons.clear_rounded,
-                        color: Colors.white.withValues(alpha: 0.4),
+                        color: t == null
+                            ? Colors.white.withValues(alpha: 0.4)
+                            : t.fgDim,
                         size: 18,
                       ),
                       onPressed: () => unawaited(_clearSearch()),
@@ -1037,7 +1341,11 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                     tooltip: 'Search full source',
                     icon: Icon(
                       Icons.arrow_forward_rounded,
-                      color: _accent.withValues(alpha: 0.75),
+                      color: t == null
+                          ? _accent.withValues(alpha: 0.75)
+                          : (widget.style == PlayerGuideStyle.edition
+                                ? t.fgMid
+                                : t.accent),
                       size: 19,
                     ),
                     onPressed: _submitSearch,
@@ -1055,11 +1363,11 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
               vertical: 13,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(radius),
               borderSide: BorderSide.none,
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(radius),
               borderSide: BorderSide.none,
             ),
           ),
@@ -1090,6 +1398,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       builder: (_) => _CategoryPickerDialog(
         categories: _categories,
         selected: _favoritesOnly ? null : _selectedCategory,
+        tokens: _t,
       ),
     );
     if (choice == null || !mounted) return;
@@ -1100,6 +1409,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     final categoryLabel = _favoritesOnly
         ? 'All'
         : (_selectedCategory ?? 'All');
+    // Console readouts are uppercase mono, per the instrument grammar.
+    final console = _t != null && widget.style == PlayerGuideStyle.console;
+    final labelFamily = console ? _t!.monoFamily : '';
     // Three fixed controls, so the row cannot overflow and nothing depends on
     // being able to scroll it.
     return Padding(
@@ -1120,6 +1432,10 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                     ),
                 ],
                 onSelected: (value) => unawaited(_selectSource(value)),
+                tokens: _t,
+                radius: _t == null ? 10 : _styledRadius,
+                labelFamily: labelFamily,
+                upperLabels: console,
               ),
             ),
             const SizedBox(width: 7),
@@ -1131,6 +1447,10 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 // as selected the way the old chip did.
                 selected: !_favoritesOnly && _selectedCategory != null,
                 onTap: () => unawaited(_openCategoryPicker()),
+                tokens: _t,
+                radius: _t == null ? 10 : _styledRadius,
+                labelFamily: labelFamily,
+                upperLabels: console,
               ),
             ),
             const SizedBox(width: 7),
@@ -1145,6 +1465,10 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 });
                 _applyFilters();
               },
+              tokens: _t,
+              radius: _t == null ? 10 : _styledRadius,
+              labelFamily: labelFamily,
+              upperLabels: console,
             ),
           ],
         ),
@@ -1153,15 +1477,21 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   }
 
   Widget _buildSchedulePane({required bool compact}) {
+    final t = _t;
     final channel = _scheduleChannel;
     if (channel == null) {
       return Center(
         child: Text(
           'Select a channel to view its schedule',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
+          style: TextStyle(
+            color: t == null ? Colors.white.withValues(alpha: 0.45) : t.fgDim,
+          ),
         ),
       );
     }
+    final edition = t != null && widget.style == PlayerGuideStyle.edition;
+    final console = t != null && widget.style == PlayerGuideStyle.console;
+    final favorited = _favoriteUrls.contains(channel.url);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1169,7 +1499,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           padding: EdgeInsets.fromLTRB(compact ? 18 : 24, 12, 18, 12),
           child: Row(
             children: [
-              _GuideLogo(channel: channel, size: 46),
+              _GuideLogo(channel: channel, size: 46, tokens: t, circle: edition),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1179,10 +1509,15 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                       channel.name,
                       maxLines: compact ? 2 : 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: t == null ? Colors.white : t.fg,
                         fontSize: 17,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: edition ? FontWeight.w400 : FontWeight.w800,
+                        fontFamily: edition
+                            ? t.headlineFamily
+                            : (console && t.nameFamily.isNotEmpty
+                                  ? t.nameFamily
+                                  : null),
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -1195,7 +1530,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.42),
+                        color: t == null
+                            ? Colors.white.withValues(alpha: 0.42)
+                            : t.fgFaint,
                         fontSize: 11.5,
                       ),
                     ),
@@ -1203,28 +1540,34 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 ),
               ),
               IconButton(
-                tooltip: _favoriteUrls.contains(channel.url)
-                    ? 'Remove favorite'
-                    : 'Add favorite',
+                tooltip: favorited ? 'Remove favorite' : 'Add favorite',
                 onPressed: () => unawaited(_toggleFavorite(channel)),
                 icon: Icon(
-                  _favoriteUrls.contains(channel.url)
+                  favorited
                       ? Icons.favorite_rounded
                       : Icons.favorite_border_rounded,
-                  color: _favoriteUrls.contains(channel.url)
-                      ? const Color(0xFFF43F5E)
-                      : Colors.white54,
+                  // Favorite mapping per the plan: glass/console accent when
+                  // active, edition cream; inactive always fgFaint.
+                  color: t == null
+                      ? (favorited ? const Color(0xFFF43F5E) : Colors.white54)
+                      : (favorited
+                            ? (edition ? t.fg : t.accent)
+                            : t.fgFaint),
                 ),
               ),
             ],
           ),
         ),
-        Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+        Divider(
+          height: 1,
+          color: t == null ? Colors.white.withValues(alpha: 0.08) : t.hairline,
+        ),
         Expanded(
           child: EpgScheduleList(
             key: ValueKey('schedule-${channel.url}'),
             channel: channel,
             isTelevision: PlatformUtil.isAndroidTvCached,
+            tokens: t,
             onPlayProgramme: widget.onPlayProgramme == null
                 ? null
                 : (programme) {
@@ -1360,21 +1703,24 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   }
 
   Widget _buildKeyboardHints() {
+    final t = _t;
     return Container(
       height: 42,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+          top: BorderSide(
+            color: t == null ? Colors.white.withValues(alpha: 0.06) : t.hairline,
+          ),
         ),
       ),
       child: Row(
         children: [
-          _KeyHint(keyLabel: 'Enter', action: 'Play'),
+          _KeyHint(keyLabel: 'Enter', action: 'Play', tokens: t),
           const SizedBox(width: 20),
-          _KeyHint(keyLabel: '→', action: 'Schedule'),
+          _KeyHint(keyLabel: '→', action: 'Schedule', tokens: t),
           const Spacer(),
-          _KeyHint(keyLabel: 'Esc', action: 'Close'),
+          _KeyHint(keyLabel: 'Esc', action: 'Close', tokens: t),
         ],
       ),
     );
@@ -1392,6 +1738,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           widget.browseProvider != null &&
           _searchController.text.trim().isNotEmpty &&
           _searchController.text.trim() != _submittedQuery;
+      final t = _t;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1400,14 +1747,18 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.03),
+                color: t == null
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : t.focusTint,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 pending
                     ? Icons.search_rounded
                     : Icons.satellite_alt_rounded,
-                color: Colors.white.withValues(alpha: 0.1),
+                color: t == null
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : t.fgFaint,
                 size: 32,
               ),
             ),
@@ -1415,7 +1766,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
             Text(
               pending ? 'Search all channels' : 'No channels found',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
+                color: t == null ? Colors.white.withValues(alpha: 0.4) : t.fgDim,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -1428,7 +1779,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                   : 'Try a different search term',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: t == null
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : t.fgFaint,
                 fontSize: 12,
               ),
             ),
@@ -1439,8 +1792,14 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 icon: const Icon(Icons.search_rounded, size: 17),
                 label: const Text('Search all channels'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF7C5CFF),
-                  foregroundColor: Colors.white,
+                  backgroundColor: t == null
+                      ? const Color(0xFF7C5CFF)
+                      : (widget.style == PlayerGuideStyle.edition
+                            ? t.fg
+                            : t.accent),
+                  foregroundColor: t == null
+                      ? Colors.white
+                      : t.bg.withAlpha(0xFF),
                   textStyle: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -1481,6 +1840,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           channelNumber: channel.channelNumber ?? (origIdx + 1),
           pulseAnim: _pulseAnim,
           isFavorited: _favoriteUrls.contains(channel.url),
+          tokens: _t,
+          guideStyle: widget.style,
           onTap: () {
             if (origIdx >= 0) {
               unawaited(widget.onChannelSelected(_channels, origIdx));
@@ -1508,54 +1869,74 @@ class _GuideMenuButton extends StatelessWidget {
   final String label;
   final List<_GuideMenuOption> options;
   final ValueChanged<Map<String, dynamic>> onSelected;
+  final IptvStyleTokens? tokens;
+  final double radius;
+  final String labelFamily;
+  final bool upperLabels;
 
   const _GuideMenuButton({
     required this.icon,
     required this.label,
     required this.options,
     required this.onSelected,
+    this.tokens,
+    this.radius = 10,
+    this.labelFamily = '',
+    this.upperLabels = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final t = tokens;
     return PopupMenuButton<Map<String, dynamic>>(
       enabled: options.isNotEmpty,
-      color: const Color(0xFF1A1A24),
+      // Menus need an opaque surface; the token panel carries over-video
+      // alpha, so it is flattened to full opacity here.
+      color: t == null ? const Color(0xFF1A1A24) : t.panel.withAlpha(0xFF),
       onSelected: onSelected,
       itemBuilder: (_) => [
         for (final option in options)
-          PopupMenuItem(value: option.value, child: Text(option.label)),
+          PopupMenuItem(
+            value: option.value,
+            child: Text(
+              option.label,
+              style: t == null ? null : TextStyle(color: t.fg),
+            ),
+          ),
       ],
       child: Container(
         constraints: const BoxConstraints(minWidth: 92, maxWidth: 170),
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          color: t == null ? Colors.white.withValues(alpha: 0.06) : t.focusTint,
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(
+            color: t == null ? Colors.white.withValues(alpha: 0.06) : t.hairline,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white54, size: 15),
+            Icon(icon, color: t == null ? Colors.white54 : t.fgDim, size: 15),
             const SizedBox(width: 7),
             Flexible(
               child: Text(
-                label,
+                upperLabels ? label.toUpperCase() : label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: t == null ? Colors.white70 : t.fgMid,
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
+                  fontFamily: labelFamily.isEmpty ? null : labelFamily,
                 ),
               ),
             ),
             if (options.isNotEmpty) ...[
               const SizedBox(width: 5),
-              const Icon(
+              Icon(
                 Icons.keyboard_arrow_down_rounded,
-                color: Colors.white38,
+                color: t == null ? Colors.white38 : t.fgFaint,
                 size: 16,
               ),
             ],
@@ -1582,33 +1963,48 @@ class _GuideDropdownButton extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final IptvStyleTokens? tokens;
+  final double radius;
+  final String labelFamily;
+  final bool upperLabels;
 
   const _GuideDropdownButton({
     required this.icon,
     required this.label,
     required this.selected,
     required this.onTap,
+    this.tokens,
+    this.radius = 10,
+    this.labelFamily = '',
+    this.upperLabels = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final t = tokens;
+    // Styled selected state: a quiet token tint + accent text instead of the
+    // legacy purple slab — each look keeps its single accent.
     return Material(
-      color: selected
-          ? const Color(0xFF7C5CFF)
-          : Colors.white.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(10),
+      color: t == null
+          ? (selected
+                ? const Color(0xFF7C5CFF)
+                : Colors.white.withValues(alpha: 0.06))
+          : (selected ? t.selectedTint : t.focusTint),
+      borderRadius: BorderRadius.circular(radius),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(radius),
         child: Container(
           constraints: const BoxConstraints(minWidth: 92, maxWidth: 190),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(radius),
             border: Border.all(
-              color: selected
-                  ? Colors.transparent
-                  : Colors.white.withValues(alpha: 0.06),
+              color: t == null
+                  ? (selected
+                        ? Colors.transparent
+                        : Colors.white.withValues(alpha: 0.06))
+                  : (selected ? t.accent : t.hairline),
             ),
           ),
           child: Row(
@@ -1616,26 +2012,33 @@ class _GuideDropdownButton extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                color: selected ? Colors.white : Colors.white54,
+                color: t == null
+                    ? (selected ? Colors.white : Colors.white54)
+                    : (selected ? t.accent : t.fgDim),
                 size: 15,
               ),
               const SizedBox(width: 7),
               Flexible(
                 child: Text(
-                  label,
+                  upperLabels ? label.toUpperCase() : label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: selected ? Colors.white : Colors.white70,
+                    color: t == null
+                        ? (selected ? Colors.white : Colors.white70)
+                        : (selected ? t.accent : t.fgMid),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
+                    fontFamily: labelFamily.isEmpty ? null : labelFamily,
                   ),
                 ),
               ),
               const SizedBox(width: 5),
               Icon(
                 Icons.keyboard_arrow_down_rounded,
-                color: selected ? Colors.white70 : Colors.white38,
+                color: t == null
+                    ? (selected ? Colors.white70 : Colors.white38)
+                    : (selected ? t.fgMid : t.fgFaint),
                 size: 16,
               ),
             ],
@@ -1659,10 +2062,12 @@ class _CategoryChoice {
 class _CategoryPickerDialog extends StatefulWidget {
   final List<String> categories;
   final String? selected;
+  final IptvStyleTokens? tokens;
 
   const _CategoryPickerDialog({
     required this.categories,
     required this.selected,
+    this.tokens,
   });
 
   @override
@@ -1697,10 +2102,18 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final matches = _matches;
+    final t = widget.tokens;
 
     return Dialog(
-      backgroundColor: const Color(0xFF14141C),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      // Dialogs need an opaque surface — the token panel's over-video alpha
+      // is flattened here.
+      backgroundColor: t == null
+          ? const Color(0xFF14141C)
+          : t.panel.withAlpha(0xFF),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: t == null ? BorderSide.none : BorderSide(color: t.hairline2),
+      ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -1715,17 +2128,17 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.category_rounded,
-                    color: Colors.white54,
+                    color: t == null ? Colors.white54 : t.fgDim,
                     size: 18,
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Category',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: t == null ? Colors.white : t.fg,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1734,7 +2147,9 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                   Text(
                     '${widget.categories.length}',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
+                      color: t == null
+                          ? Colors.white.withValues(alpha: 0.35)
+                          : t.fgFaint,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1746,8 +2161,11 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: t == null
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : t.focusTint,
                   borderRadius: BorderRadius.circular(12),
+                  border: t == null ? null : Border.all(color: t.hairline),
                 ),
                 // Deliberately not autofocused: on TV that would throw the
                 // in-app keyboard over the list before the user has looked
@@ -1755,16 +2173,23 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                 child: TvTextField(
                   controller: _controller,
                   focusNode: _focusNode,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(
+                    color: t == null ? Colors.white : t.fg,
+                    fontSize: 14,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Search categories…',
                     hintStyle: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.25),
+                      color: t == null
+                          ? Colors.white.withValues(alpha: 0.25)
+                          : t.fgFaint,
                       fontSize: 13,
                     ),
                     prefixIcon: Icon(
                       Icons.search_rounded,
-                      color: Colors.white.withValues(alpha: 0.3),
+                      color: t == null
+                          ? Colors.white.withValues(alpha: 0.3)
+                          : t.fgFaint,
                       size: 19,
                     ),
                     filled: false,
@@ -1788,7 +2213,9 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                       child: Text(
                         'No category matches "${_query.trim()}"',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
+                          color: t == null
+                              ? Colors.white.withValues(alpha: 0.4)
+                              : t.fgDim,
                           fontSize: 13,
                         ),
                       ),
@@ -1806,6 +2233,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                           onTap: () => Navigator.of(
                             context,
                           ).pop(_CategoryChoice(category)),
+                          tokens: t,
                         );
                       },
                     ),
@@ -1821,15 +2249,18 @@ class _CategoryPickerRow extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final IptvStyleTokens? tokens;
 
   const _CategoryPickerRow({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.tokens,
   });
 
   @override
   Widget build(BuildContext context) {
+    final t = tokens;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1837,7 +2268,9 @@ class _CategoryPickerRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           color: selected
-              ? const Color(0xFF7C5CFF).withValues(alpha: 0.16)
+              ? (t == null
+                    ? const Color(0xFF7C5CFF).withValues(alpha: 0.16)
+                    : t.selectedTint)
               : Colors.transparent,
           child: Row(
             children: [
@@ -1847,16 +2280,18 @@ class _CategoryPickerRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: selected ? Colors.white : Colors.white70,
+                    color: t == null
+                        ? (selected ? Colors.white : Colors.white70)
+                        : (selected ? t.fg : t.fgMid),
                     fontSize: 13.5,
                     fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
               ),
               if (selected)
-                const Icon(
+                Icon(
                   Icons.check_rounded,
-                  color: Color(0xFF7C5CFF),
+                  color: t == null ? const Color(0xFF7C5CFF) : t.accent,
                   size: 18,
                 ),
             ],
@@ -1872,25 +2307,44 @@ class _FilterChip extends StatelessWidget {
   final IconData? icon;
   final bool selected;
   final VoidCallback onTap;
+  final IptvStyleTokens? tokens;
+  final double radius;
+  final String labelFamily;
+  final bool upperLabels;
 
   const _FilterChip({
     required this.label,
     this.icon,
     required this.selected,
     required this.onTap,
+    this.tokens,
+    this.radius = 10,
+    this.labelFamily = '',
+    this.upperLabels = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final t = tokens;
     return Material(
-      color: selected
-          ? const Color(0xFF7C5CFF)
-          : Colors.white.withValues(alpha: 0.05),
-      borderRadius: BorderRadius.circular(10),
+      color: t == null
+          ? (selected
+                ? const Color(0xFF7C5CFF)
+                : Colors.white.withValues(alpha: 0.05))
+          : (selected ? t.selectedTint : t.focusTint),
+      borderRadius: BorderRadius.circular(radius),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
+        borderRadius: BorderRadius.circular(radius),
+        child: Container(
+          decoration: t == null
+              ? null
+              : BoxDecoration(
+                  borderRadius: BorderRadius.circular(radius),
+                  border: Border.all(
+                    color: selected ? t.accent : t.hairline,
+                  ),
+                ),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1899,16 +2353,21 @@ class _FilterChip extends StatelessWidget {
                 Icon(
                   icon,
                   size: 14,
-                  color: selected ? Colors.white : Colors.white54,
+                  color: t == null
+                      ? (selected ? Colors.white : Colors.white54)
+                      : (selected ? t.accent : t.fgDim),
                 ),
                 const SizedBox(width: 5),
               ],
               Text(
-                label,
+                upperLabels ? label.toUpperCase() : label,
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.white60,
+                  color: t == null
+                      ? (selected ? Colors.white : Colors.white60)
+                      : (selected ? t.accent : t.fgMid),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
+                  fontFamily: labelFamily.isEmpty ? null : labelFamily,
                 ),
               ),
             ],
@@ -1922,29 +2381,35 @@ class _FilterChip extends StatelessWidget {
 class _KeyHint extends StatelessWidget {
   final String keyLabel;
   final String action;
-  const _KeyHint({required this.keyLabel, required this.action});
+  final IptvStyleTokens? tokens;
+  const _KeyHint({required this.keyLabel, required this.action, this.tokens});
 
   @override
   Widget build(BuildContext context) {
+    final t = tokens;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
+            color: t == null ? Colors.white.withValues(alpha: 0.08) : t.focusTint,
             borderRadius: BorderRadius.circular(5),
+            border: t == null ? null : Border.all(color: t.hairline),
           ),
           child: Text(
             keyLabel,
-            style: const TextStyle(color: Colors.white70, fontSize: 9),
+            style: TextStyle(
+              color: t == null ? Colors.white70 : t.fgMid,
+              fontSize: 9,
+            ),
           ),
         ),
         const SizedBox(width: 6),
         Text(
           action,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4),
+            color: t == null ? Colors.white.withValues(alpha: 0.4) : t.fgFaint,
             fontSize: 10,
           ),
         ),
@@ -1956,18 +2421,31 @@ class _KeyHint extends StatelessWidget {
 class _GuideLogo extends StatelessWidget {
   final IptvChannel channel;
   final double size;
-  const _GuideLogo({required this.channel, required this.size});
+  final IptvStyleTokens? tokens;
+
+  /// Edition's grammar: channel marks are circles, not rounded squares.
+  final bool circle;
+  const _GuideLogo({
+    required this.channel,
+    required this.size,
+    this.tokens,
+    this.circle = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final t = tokens;
     final hasLogo = channel.logoUrl?.isNotEmpty == true;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        color: t == null ? Colors.white.withValues(alpha: 0.06) : t.selectedTint,
+        shape: circle ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: circle ? null : BorderRadius.circular(10),
+        border: Border.all(
+          color: t == null ? Colors.white.withValues(alpha: 0.06) : t.hairline,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: hasLogo
@@ -1982,11 +2460,12 @@ class _GuideLogo extends StatelessWidget {
   }
 
   Widget _letter() {
+    final t = tokens;
     return Center(
       child: Text(
         channel.name.isEmpty ? '?' : channel.name[0].toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white70,
+        style: TextStyle(
+          color: t == null ? Colors.white70 : t.fg,
           fontSize: 16,
           fontWeight: FontWeight.w800,
         ),
@@ -2014,6 +2493,66 @@ class _LivePill extends StatelessWidget {
           fontSize: 8,
           fontWeight: FontWeight.w900,
           letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+/// The styled looks' NOW/LIVE tag. Glass fills a rounded pill with [color];
+/// edition ([outline]) is bare small-caps cream text — no pill, no border,
+/// matching the native edition grammar; console squares the corners and
+/// sets the mono face — one widget, three grammars, token colors only.
+class _StyledTag extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  /// Text color when the tag is filled — the style's bg so the label
+  /// punches out of the fill.
+  final Color onDark;
+  final bool square;
+  final bool outline;
+  final String monoFamily;
+
+  const _StyledTag({
+    required this.label,
+    required this.color,
+    required this.onDark,
+    this.square = false,
+    this.outline = false,
+    this.monoFamily = '',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (outline) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 8,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.2,
+          ),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(square ? 2 : 5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: onDark.withAlpha(0xFF),
+          fontSize: 8,
+          fontWeight: FontWeight.w900,
+          letterSpacing: square ? 1.2 : 0.5,
+          fontFamily: monoFamily.isEmpty ? null : monoFamily,
         ),
       ),
     );
@@ -2060,6 +2599,8 @@ class _ChannelTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onFavorite;
   final VoidCallback onSchedule;
+  final IptvStyleTokens? tokens;
+  final PlayerGuideStyle guideStyle;
 
   static const _accent = Color(0xFF00E5FF);
   static const _accentAlt = Color(0xFF00B8D4);
@@ -2081,74 +2622,149 @@ class _ChannelTile extends StatelessWidget {
     required this.onTap,
     required this.onFavorite,
     required this.onSchedule,
+    this.tokens,
+    this.guideStyle = PlayerGuideStyle.classic,
   });
+
+  bool get _edition => tokens != null && guideStyle == PlayerGuideStyle.edition;
+  bool get _console => tokens != null && guideStyle == PlayerGuideStyle.console;
+
+  /// Row chrome per look. Classic keeps its verbatim gradient/border/glow;
+  /// glass swaps to a quiet token tint + accent ring; edition rules a ledger
+  /// (hairline under every row, cream left rule when focused); console is a
+  /// squared instrument row whose focus cue is the corner brackets painted
+  /// by [IptvFocusBracketsPainter] below.
+  BoxDecoration _decoration(IptvStyleTokens? t) {
+    if (t == null) {
+      return BoxDecoration(
+        gradient: isFocused
+            ? LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.12),
+                  Colors.white.withValues(alpha: 0.06),
+                ],
+              )
+            : isCurrent
+            ? LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  _accent.withValues(alpha: 0.08),
+                  _accent.withValues(alpha: 0.02),
+                ],
+              )
+            : null,
+        color: (!isFocused && !isCurrent) ? Colors.transparent : null,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isFocused
+              ? _accent.withValues(alpha: 0.5)
+              : isCurrent
+              ? _accent.withValues(alpha: 0.12)
+              : Colors.transparent,
+          width: isFocused ? 1.5 : 1,
+        ),
+        boxShadow: isFocused
+            ? [
+                BoxShadow(
+                  color: _accent.withValues(alpha: 0.1),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                ),
+              ]
+            : [],
+      );
+    }
+    if (_edition) {
+      return BoxDecoration(
+        color: isFocused
+            ? t.selectedTint
+            : isCurrent
+            ? t.focusTint
+            : Colors.transparent,
+        border: Border(
+          left: BorderSide(
+            color: isFocused ? t.fg : Colors.transparent,
+            width: 2,
+          ),
+          bottom: BorderSide(color: t.hairline),
+        ),
+      );
+    }
+    if (_console) {
+      return BoxDecoration(
+        color: isFocused
+            ? t.focusTint
+            : isCurrent
+            ? t.selectedTint
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+      );
+    }
+    // Glass.
+    return BoxDecoration(
+      color: isFocused
+          ? t.focusTint
+          : isCurrent
+          ? t.selectedTint
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(
+        color: isFocused
+            ? t.accent
+            : isCurrent
+            ? t.hairline2
+            : Colors.transparent,
+        width: isFocused ? 1.5 : 1,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final t = tokens;
     return GestureDetector(
       key: ValueKey('iptv-channel-${channel.url}'),
       onTap: onTap,
-      child: AnimatedContainer(
+      child: CustomPaint(
+        foregroundPainter: _console && isFocused
+            ? IptvFocusBracketsPainter(t!.accent)
+            : null,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
         margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          gradient: isFocused
-              ? LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.12),
-                    Colors.white.withValues(alpha: 0.06),
-                  ],
-                )
-              : isCurrent
-              ? LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    _accent.withValues(alpha: 0.08),
-                    _accent.withValues(alpha: 0.02),
-                  ],
-                )
-              : null,
-          color: (!isFocused && !isCurrent) ? Colors.transparent : null,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isFocused
-                ? _accent.withValues(alpha: 0.5)
-                : isCurrent
-                ? _accent.withValues(alpha: 0.12)
-                : Colors.transparent,
-            width: isFocused ? 1.5 : 1,
-          ),
-          boxShadow: isFocused
-              ? [
-                  BoxShadow(
-                    color: _accent.withValues(alpha: 0.1),
-                    blurRadius: 16,
-                    spreadRadius: 2,
-                  ),
-                ]
-              : [],
-        ),
+        decoration: _decoration(t),
         child: Row(
           children: [
             // Channel number
             SizedBox(
               width: 30,
               child: Text(
-                channelNumber.toString().padLeft(2, ' '),
+                _console
+                    ? channelNumber.toString().padLeft(3, '0')
+                    : channelNumber.toString().padLeft(2, ' '),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: isCurrent
-                      ? _accent.withValues(alpha: 0.8)
-                      : isFocused
-                      ? Colors.white.withValues(alpha: 0.5)
-                      : Colors.white.withValues(alpha: 0.18),
+                  color: t == null
+                      ? (isCurrent
+                            ? _accent.withValues(alpha: 0.8)
+                            : isFocused
+                            ? Colors.white.withValues(alpha: 0.5)
+                            : Colors.white.withValues(alpha: 0.18))
+                      : (isCurrent
+                            ? (_edition ? t.fg : t.accent)
+                            : isFocused
+                            ? t.fgDim
+                            : t.fgFaint),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
+                  fontFamily: _console && t!.monoFamily.isNotEmpty
+                      ? t.monoFamily
+                      : null,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
@@ -2168,21 +2784,34 @@ class _ChannelTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: isCurrent
-                          ? _accent
-                          : isFocused
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.85),
+                      color: t == null
+                          ? (isCurrent
+                                ? _accent
+                                : isFocused
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.85))
+                          : (isCurrent
+                                ? (_edition ? t.fg : t.accent)
+                                : isFocused
+                                ? t.fg
+                                : t.fgMid),
                       fontSize: 13.5,
                       fontWeight: isFocused || isCurrent
                           ? FontWeight.w600
                           : FontWeight.w400,
+                      fontFamily: _console && t!.nameFamily.isNotEmpty
+                          ? t.nameFamily
+                          : null,
                       letterSpacing: -0.2,
                     ),
                   ),
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: _TileSubLine(channel: channel, isFocused: isFocused),
+                    child: _TileSubLine(
+                      channel: channel,
+                      isFocused: isFocused,
+                      tokens: t,
+                    ),
                   ),
                 ],
               ),
@@ -2193,13 +2822,17 @@ class _ChannelTile extends StatelessWidget {
               icon: isFavorited
                   ? Icons.favorite_rounded
                   : Icons.favorite_border_rounded,
-              color: isFavorited ? const Color(0xFFF43F5E) : Colors.white38,
+              color: t == null
+                  ? (isFavorited ? const Color(0xFFF43F5E) : Colors.white38)
+                  : (isFavorited
+                        ? (_edition ? t.fg : t.accent)
+                        : t.fgFaint),
               onTap: onFavorite,
             ),
             _TileAction(
               tooltip: 'Programme guide',
               icon: Icons.calendar_month_rounded,
-              color: _accent.withValues(alpha: 0.75),
+              color: t == null ? _accent.withValues(alpha: 0.75) : t.fgDim,
               onTap: onSchedule,
             ),
             if (isCurrent)
@@ -2208,27 +2841,34 @@ class _ChannelTile extends StatelessWidget {
               _buildLiveBadge(),
           ],
         ),
+        ),
       ),
     );
   }
 
   Widget _buildLogo() {
+    final t = tokens;
     final hasLogo = channel.logoUrl != null && channel.logoUrl!.isNotEmpty;
 
     return Container(
       width: 42,
       height: 42,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: Colors.white.withValues(alpha: 0.05),
+        shape: _edition ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: _edition
+            ? null
+            : BorderRadius.circular(t == null ? 10 : (_console ? 4 : 10)),
+        color: t == null ? Colors.white.withValues(alpha: 0.05) : t.selectedTint,
         border: Border.all(
-          color: isCurrent
-              ? _accent.withValues(alpha: 0.15)
-              : isFocused
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.white.withValues(alpha: 0.03),
+          color: t == null
+              ? (isCurrent
+                    ? _accent.withValues(alpha: 0.15)
+                    : isFocused
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.03))
+              : t.hairline,
         ),
-        boxShadow: isCurrent
+        boxShadow: isCurrent && t == null
             ? [BoxShadow(color: _accent.withValues(alpha: 0.08), blurRadius: 8)]
             : [],
       ),
@@ -2246,9 +2886,25 @@ class _ChannelTile extends StatelessWidget {
   }
 
   Widget _buildLetterAvatar() {
+    final t = tokens;
     final letter = channel.name.isNotEmpty
         ? channel.name[0].toUpperCase()
         : '?';
+    if (t != null) {
+      // Styled looks drop the per-name HSL lottery for one calm tone —
+      // the tile bg already carries selectedTint, so just the letter.
+      return Container(
+        alignment: Alignment.center,
+        child: Text(
+          letter,
+          style: TextStyle(
+            color: t.fg,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
     final color = _avatarColor(channel.name);
 
     return Container(
@@ -2272,6 +2928,49 @@ class _ChannelTile extends StatelessWidget {
   }
 
   Widget _buildLiveBadge() {
+    final t = tokens;
+    if (t != null) {
+      if (_console) {
+        // Console LIVE is a square outlined tag, per the instrument grammar.
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(2),
+            border: Border.all(color: t.live, width: 1),
+          ),
+          child: Text(
+            'LIVE',
+            style: TextStyle(
+              color: t.live,
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.1,
+              fontFamily: t.monoFamily.isEmpty ? null : t.monoFamily,
+            ),
+          ),
+        );
+      }
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: t.live, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'LIVE',
+            style: TextStyle(
+              color: t.live,
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      );
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
@@ -2311,6 +3010,19 @@ class _ChannelTile extends StatelessWidget {
   }
 
   Widget _buildNowBadge() {
+    final t = tokens;
+    if (t != null) {
+      // Static tag — the styled looks don't pulse (nothing animates unless
+      // it must), and each keeps its single accent.
+      return _StyledTag(
+        label: 'NOW',
+        color: _edition ? t.fg : t.accent,
+        onDark: t.bg,
+        square: _console,
+        outline: _edition,
+        monoFamily: _console ? t.monoFamily : '',
+      );
+    }
     return AnimatedBuilder(
       animation: pulseAnim,
       builder: (context, child) {
@@ -2355,7 +3067,12 @@ class _ChannelTile extends StatelessWidget {
 class _TileSubLine extends StatefulWidget {
   final IptvChannel channel;
   final bool isFocused;
-  const _TileSubLine({required this.channel, required this.isFocused});
+  final IptvStyleTokens? tokens;
+  const _TileSubLine({
+    required this.channel,
+    required this.isFocused,
+    this.tokens,
+  });
 
   @override
   State<_TileSubLine> createState() => _TileSubLineState();
@@ -2425,16 +3142,23 @@ class _TileSubLineState extends State<_TileSubLine> {
     if (now == null && (group == null || group.isEmpty)) {
       return const SizedBox.shrink();
     }
+    final t = widget.tokens;
     return Text(
       now != null ? 'Now:  ${now.title}' : group!,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        color: now != null
-            ? const Color(
-                0xFF00E5FF,
-              ).withValues(alpha: widget.isFocused ? 0.75 : 0.5)
-            : Colors.white.withValues(alpha: widget.isFocused ? 0.4 : 0.22),
+        color: t == null
+            ? (now != null
+                  ? const Color(
+                      0xFF00E5FF,
+                    ).withValues(alpha: widget.isFocused ? 0.75 : 0.5)
+                  : Colors.white.withValues(
+                      alpha: widget.isFocused ? 0.4 : 0.22,
+                    ))
+            : (now != null
+                  ? (widget.isFocused ? t.fgMid : t.fgDim)
+                  : t.fgFaint),
         fontSize: 10.5,
         fontWeight: now != null ? FontWeight.w500 : FontWeight.w400,
       ),

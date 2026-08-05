@@ -687,6 +687,36 @@ class StorageService {
     );
   }
 
+  static const String _iptvPlayerGuideStyleKey = 'iptv_player_guide_style';
+  static const Set<String> _iptvPlayerGuideStyles = {
+    'classic',
+    'glass',
+    'edition',
+    'console',
+  };
+
+  /// In-player IPTV guide look (zap banner, channel sheet, native guide
+  /// overlay + dock): 'classic' (today's look, the default), 'glass'
+  /// (Cinema Glass), 'edition' (Midnight Edition) or 'console' (Master
+  /// Control). Both players read it once at launch — the Dart player via
+  /// this getter, the native TV player via `flutter.iptv_player_guide_style`
+  /// in FlutterSharedPreferences. Unknown or unset coerces to 'classic' on
+  /// BOTH read and write, so an old build downgrading past a newer value can
+  /// never pin a look the reader treats as the exception.
+  static Future<String> getIptvPlayerGuideStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_iptvPlayerGuideStyleKey);
+    return _iptvPlayerGuideStyles.contains(raw) ? raw! : 'classic';
+  }
+
+  static Future<void> setIptvPlayerGuideStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _iptvPlayerGuideStyleKey,
+      _iptvPlayerGuideStyles.contains(style) ? style : 'classic',
+    );
+  }
+
   static const String _discoverLayoutKey = 'discover_layout';
 
   /// TV Discover layout: 'stage' (the focused title full-bleed with one bottom

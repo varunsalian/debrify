@@ -65,6 +65,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
     this.showAppearanceSection = false,
     this.iptvStyle = 'command',
     this.onIptvStyleChanged,
+    this.playerGuideStyle = 'classic',
+    this.onPlayerGuideStyleChanged,
     this.showRecordingSection = false,
     this.showEngineToggle = true,
     this.recordingEngineEnabled = true,
@@ -169,6 +171,11 @@ class IptvSettingsTwoPane extends StatefulWidget {
   /// look it can never see.
   final bool showAppearanceSection;
 
+  /// In-player guide look (`iptv_player_guide_style`). ALWAYS present in the
+  /// rail — every platform has a player, unlike the cockpit Appearance.
+  final String playerGuideStyle;
+  final ValueChanged<String>? onPlayerGuideStyleChanged;
+
   /// Current `iptv_style` value ('command' / 'edition' / 'console'). Owned by
   /// the host page, which persists BEFORE reflecting the change back here.
   final String iptvStyle;
@@ -207,6 +214,10 @@ class _ContinueWatchingDest extends _Dest {
 
 class _AppearanceDest extends _Dest {
   const _AppearanceDest();
+}
+
+class _PlayerGuideDest extends _Dest {
+  const _PlayerGuideDest();
 }
 
 class _RecordingDest extends _Dest {
@@ -285,10 +296,11 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   }
 
   /// Rail entries: every source, then Add, Lists, Startup, Continue watching,
-  /// then the optional Appearance (TV/desktop only) and Recording entries.
+  /// then the optional Appearance (TV/desktop only), the always-present
+  /// Player guide, and the optional Recording entry.
   int get _railCount =>
       widget.playlists.length +
-      4 +
+      5 +
       (widget.showAppearanceSection ? 1 : 0) +
       (widget.showRecordingSection ? 1 : 0);
 
@@ -296,10 +308,14 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   /// [IptvSettingsTwoPane.showAppearanceSection] is true.
   int get _appearanceIndex => widget.playlists.length + 4;
 
-  /// Rail index of the Recording entry — shifts down one when Appearance is
-  /// present. Meaningful only while showRecordingSection is true.
-  int get _recordingIndex =>
+  /// Rail index of the (always present) Player guide entry — shifts down one
+  /// when Appearance is present.
+  int get _playerGuideIndex =>
       widget.playlists.length + 4 + (widget.showAppearanceSection ? 1 : 0);
+
+  /// Rail index of the Recording entry — directly under Player guide.
+  /// Meaningful only while showRecordingSection is true.
+  int get _recordingIndex => _playerGuideIndex + 1;
 
   /// Grow-only, deliberately. Shrinking would dispose a node while the
   /// *previous* tree still holds a [Focus] referencing it — didUpdateWidget
@@ -393,6 +409,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _StartupDest() => widget.playlists.length + 2,
       _ContinueWatchingDest() => widget.playlists.length + 3,
       _AppearanceDest() => _appearanceIndex,
+      _PlayerGuideDest() => _playerGuideIndex,
       _RecordingDest() => _recordingIndex,
     };
   }
@@ -409,15 +426,17 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       4 =>
         widget.showAppearanceSection
             ? const _AppearanceDest()
+            : const _PlayerGuideDest(),
+      5 =>
+        widget.showAppearanceSection
+            ? const _PlayerGuideDest()
             : widget.showRecordingSection
             ? const _RecordingDest()
-            : const _ContinueWatchingDest(),
+            : const _PlayerGuideDest(),
       _ =>
         widget.showRecordingSection
             ? const _RecordingDest()
-            : widget.showAppearanceSection
-            ? const _AppearanceDest()
-            : const _ContinueWatchingDest(),
+            : const _PlayerGuideDest(),
     };
   }
 
@@ -574,11 +593,11 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onFocused: () => _dest.value = const _ContinueWatchingDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(widget.playlists.length + 2),
-                onDown: widget.showAppearanceSection
-                    ? () => _focusRail(_appearanceIndex)
-                    : widget.showRecordingSection
-                    ? () => _focusRail(_recordingIndex)
-                    : null,
+                onDown: () => _focusRail(
+                  widget.showAppearanceSection
+                      ? _appearanceIndex
+                      : _playerGuideIndex,
+                ),
                 onRight: _enterPane,
               ),
               if (widget.showAppearanceSection)
@@ -596,11 +615,33 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   onFocused: () => _dest.value = const _AppearanceDest(),
                   onSelect: _enterPane,
                   onUp: () => _focusRail(widget.playlists.length + 3),
-                  onDown: widget.showRecordingSection
-                      ? () => _focusRail(_recordingIndex)
-                      : null,
+                  onDown: () => _focusRail(_playerGuideIndex),
                   onRight: _enterPane,
                 ),
+              _RailEntry(
+                focusNode: _railNodes[_playerGuideIndex],
+                icon: Icons.smart_display_rounded,
+                title: 'Player guide',
+                subtitle: switch (widget.playerGuideStyle) {
+                  'glass' => 'Cinema Glass',
+                  'edition' => 'Midnight Edition',
+                  'console' => 'Master Control',
+                  _ => 'Classic',
+                },
+                selected: selected == _playerGuideIndex,
+                chevron: true,
+                onFocused: () => _dest.value = const _PlayerGuideDest(),
+                onSelect: _enterPane,
+                onUp: () => _focusRail(
+                  widget.showAppearanceSection
+                      ? _appearanceIndex
+                      : widget.playlists.length + 3,
+                ),
+                onDown: widget.showRecordingSection
+                    ? () => _focusRail(_recordingIndex)
+                    : null,
+                onRight: _enterPane,
+              ),
               if (widget.showRecordingSection)
                 _RailEntry(
                   focusNode: _railNodes[_recordingIndex],
@@ -619,11 +660,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   chevron: true,
                   onFocused: () => _dest.value = const _RecordingDest(),
                   onSelect: _enterPane,
-                  onUp: () => _focusRail(
-                    widget.showAppearanceSection
-                        ? _appearanceIndex
-                        : widget.playlists.length + 3,
-                  ),
+                  onUp: () => _focusRail(_playerGuideIndex),
                   onDown: null,
                   onRight: _enterPane,
                 ),
@@ -666,6 +703,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _StartupDest() => _buildStartupPane(),
       _ContinueWatchingDest() => _buildContinueWatchingPane(),
       _AppearanceDest() => _buildAppearancePane(),
+      _PlayerGuideDest() => _buildPlayerGuidePane(),
       _RecordingDest() => _buildRecordingPane(),
     };
     // A key per destination gives each view its own scroll position, so
@@ -679,6 +717,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         _StartupDest() => 'startup',
         _ContinueWatchingDest() => 'continue-watching',
         _AppearanceDest() => 'appearance',
+        _PlayerGuideDest() => 'player_guide',
         _RecordingDest() => 'recording',
       }),
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 32),
@@ -1175,6 +1214,78 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               subtitle:
                   'Broadcast console — pure black, mono numerals, amber '
                   'playhead',
+              isLast: true,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlayerGuidePane() {
+    var row = 0;
+    Widget styleRow({
+      required IconData icon,
+      required String value,
+      required String title,
+      required String subtitle,
+      bool isLast = false,
+    }) {
+      return _PaneRow(
+        focusNode: _paneNode(row++),
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        trailing: Radio<String>(
+          value: value,
+          groupValue: widget.playerGuideStyle,
+          onChanged: (v) =>
+              v == null ? null : widget.onPlayerGuideStyleChanged?.call(v),
+        ),
+        onTap: () => widget.onPlayerGuideStyleChanged?.call(value),
+        onLeft: _returnToRail,
+        isLast: isLast,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _PaneHeader(
+          icon: Icons.smart_display_rounded,
+          title: 'Player guide',
+          meta:
+              'How the channel banner and in-player guide look during live '
+              'TV — the next playback session uses the new look.',
+          badges: [],
+        ),
+        const SizedBox(height: 20),
+        _RowGroup(
+          children: [
+            styleRow(
+              icon: Icons.play_circle_outline_rounded,
+              value: 'classic',
+              title: 'Classic',
+              subtitle: "Today's look",
+            ),
+            styleRow(
+              icon: Icons.blur_on_rounded,
+              value: 'glass',
+              title: 'Cinema Glass',
+              subtitle:
+                  'Translucent panels, one violet accent — modern streaming',
+            ),
+            styleRow(
+              icon: Icons.menu_book_rounded,
+              value: 'edition',
+              title: 'Midnight Edition',
+              subtitle: 'Ink panels and serif headlines — editorial',
+            ),
+            styleRow(
+              icon: Icons.tune_rounded,
+              value: 'console',
+              title: 'Master Control',
+              subtitle: 'Black instrument — mono numerals, amber machinery',
               isLast: true,
             ),
           ],

@@ -922,6 +922,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
           onTap: _openIptvSettings,
         ),
+      // Ungated, unlike Appearance: every platform has a player — phones
+      // use the Dart player, Android TV the native one, and both read the
+      // pref. Plain landing — opens IPTV settings, no scroll-to-section.
+      SettingsSearchEntry(
+        icon: Icons.smart_display_rounded,
+        title: 'IPTV player guide',
+        subtitle: 'Classic, Cinema Glass, Midnight Edition or Master Control',
+        category: 'Live TV & DVR',
+        keywords: const [
+          'iptv',
+          'player',
+          'guide',
+          'zap',
+          'banner',
+          'style',
+          'theme',
+          'look',
+          'skin',
+          'cinema glass',
+          'midnight edition',
+          'master control',
+          'classic',
+        ],
+        onTap: _openIptvSettings,
+      ),
       conn(_indexerManagersInfo, const [
         'indexer',
         'torznab',

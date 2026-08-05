@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import androidx.core.content.ContextCompat
+import androidx.core.widget.TextViewCompat
 import com.debrify.app.recording.LiveRecordingService
 import com.debrify.app.recording.RecordingAlarmReceiver
 import com.debrify.app.recording.RecordingRegistry
@@ -6009,28 +6010,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
 
-        playerView.findViewById<View>(R.id.debrify_controls_buttons)
-            ?.setBackgroundResource(R.drawable.iptv_premium_panel_bg)
-
-        val buttons = listOfNotNull(
-            audioButton,
-            subtitleButton,
-            aspectButton,
-            pauseButton,
-            speedButton,
-            nightModeButton,
-            iptvPrevButton,
-            iptvNextButton,
-            iptvJumpButton,
-            iptvRecordButton,
-            playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
-        )
-        buttons.forEach {
-            it.setBackgroundResource(R.drawable.iptv_premium_button_bg)
-            it.setTextColor(
-                ContextCompat.getColorStateList(this, R.color.iptv_premium_button_text)
-            )
-        }
+        applyLiveIptvControlStyle()
 
         iptvRecordButton?.setOnClickListener {
             hideControlsMenu()
@@ -6052,6 +6032,101 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
+    }
+
+    /** The live dock buttons that restyle for live IPTV — the same set the
+     *  original setup loop touched, so classic stays verbatim. */
+    private fun liveIptvDockButtons(): List<AppCompatButton> = listOfNotNull(
+        audioButton,
+        subtitleButton,
+        aspectButton,
+        pauseButton,
+        speedButton,
+        nightModeButton,
+        iptvPrevButton,
+        iptvNextButton,
+        iptvJumpButton,
+        iptvRecordButton,
+        playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
+    )
+
+    /** Cinema compound-drawable tints + typefaces captured before the first
+     *  styled live swap, so a styled live→VOD transition can put them back —
+     *  [restoreCinemaIptvControlStyle] only restores backgrounds/text. */
+    private val cinemaIconTints = HashMap<View, android.content.res.ColorStateList?>()
+    private val cinemaButtonTypefaces = HashMap<View, Typeface?>()
+
+    /**
+     * The live-IPTV dock skin. Extracted from `setupIptvControls` so the
+     * VOD→live transition can re-apply it (`restoreCinemaIptvControlStyle`
+     * overwrites every drawable on the way to VOD, and the return trip only
+     * reordered children). Classic keeps its original swap verbatim AND its
+     * original call graph — only styled launches call this from
+     * `updateIptvControlPresentation`.
+     */
+    private fun applyLiveIptvControlStyle() {
+        val t = guideTokens
+        if (t == null) {
+            playerView.findViewById<View>(R.id.debrify_controls_buttons)
+                ?.setBackgroundResource(R.drawable.iptv_premium_panel_bg)
+
+            val buttons = liveIptvDockButtons()
+            buttons.forEach {
+                it.setBackgroundResource(R.drawable.iptv_premium_button_bg)
+                it.setTextColor(
+                    ContextCompat.getColorStateList(this, R.color.iptv_premium_button_text)
+                )
+            }
+            return
+        }
+
+        val radius = when (guideStyle) {
+            GuideStyle.GLASS -> dp(22).toFloat()
+            GuideStyle.EDITION -> dp(8).toFloat()
+            else -> dp(4).toFloat()
+        }
+        playerView.findViewById<View>(R.id.debrify_controls_buttons)?.background =
+            t.panelDrawable(radius, dp(1))
+        val buttonRadius = when (guideStyle) {
+            GuideStyle.GLASS -> dp(16).toFloat()
+            GuideStyle.EDITION -> dp(6).toFloat()
+            else -> dp(3).toFloat()
+        }
+        liveIptvDockButtons().forEach { button ->
+            if (!cinemaIconTints.containsKey(button)) {
+                // TextViewCompat throughout: the direct getter/setter is
+                // API 23 and this app ships to minSdk 21.
+                cinemaIconTints[button] =
+                    TextViewCompat.getCompoundDrawableTintList(button)
+                cinemaButtonTypefaces[button] = button.typeface
+            }
+            button.background = t.buttonBackground(buttonRadius)
+            val colors = t.buttonTextColors()
+            button.setTextColor(colors)
+            TextViewCompat.setCompoundDrawableTintList(button, colors)
+            if (guideStyle == GuideStyle.CONSOLE) {
+                button.typeface = guideTypeface(t.monoFont) ?: button.typeface
+            }
+        }
+    }
+
+    /** Styled-only tail after [restoreCinemaIptvControlStyle]: put back the
+     *  cinema icon tints AND typefaces the styled live skin replaced.
+     *  Classic never runs this (its restore function is untouched and
+     *  sufficient). */
+    private fun restoreCinemaDockIconTints() {
+        if (cinemaIconTints.isEmpty()) return
+        liveIptvDockButtons().forEach { button ->
+            if (cinemaIconTints.containsKey(button)) {
+                TextViewCompat.setCompoundDrawableTintList(
+                    button,
+                    cinemaIconTints[button],
+                )
+            }
+            if (cinemaButtonTypefaces.containsKey(button)) {
+                button.typeface = cinemaButtonTypefaces[button]
+            }
+        }
     }
 
     // ── IPTV recording ──────────────────────────────────────────────────────
@@ -6453,8 +6528,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val vodVisibility = if (live) View.GONE else View.VISIBLE
         if (live) {
             arrangeLiveIptvControlDock()
+            // Styled only: a VOD trip restored every cinema drawable, and
+            // reordering alone doesn't bring the live skin back. Classic
+            // keeps its original call graph (and its original quirk).
+            if (guideTokens != null) applyLiveIptvControlStyle()
         } else {
             restoreCinemaIptvControlStyle()
+            if (guideTokens != null) restoreCinemaDockIconTints()
         }
         cinemaProgressContainer?.visibility = vodVisibility
         debrifyTimeCurrent?.visibility = vodVisibility
@@ -6606,6 +6686,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             },
             onEpgNeeded = { entry -> ensureIptvChannelEpg(entry) },
+            tokens = guideTokens,
+            style = guideStyle,
+            nameTypeface = guideTokens?.let { guideTypeface(it.nameFont) },
+            monoTypeface = guideTokens?.let { guideTypeface(it.monoFont) },
+            headlineTypeface = guideTokens?.let { guideTypeface(it.headlineFont) },
+            captionTypeface = guideTokens?.let { guideTypeface(it.captionFont) },
+            rowRadiusPx = when (guideStyle) {
+                GuideStyle.GLASS -> dp(14).toFloat()
+                GuideStyle.EDITION -> dp(8).toFloat()
+                else -> dp(3).toFloat()
+            },
+            rowStrokePx = dp(2),
         )
         guideList.adapter = iptvChannelAdapter
         guideList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -6635,6 +6727,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             onRecordFuture = { program ->
                 iptvEpgEntry?.let { entry -> promptScheduleRecording(entry, program) }
             },
+            tokens = guideTokens,
+            style = guideStyle,
+            monoTypeface = guideTokens?.let { guideTypeface(it.monoFont) },
+            headlineTypeface = guideTokens?.let { guideTypeface(it.headlineFont) },
+            rowRadiusPx = when (guideStyle) {
+                GuideStyle.GLASS -> dp(14).toFloat()
+                GuideStyle.EDITION -> dp(8).toFloat()
+                else -> dp(3).toFloat()
+            },
+            rowStrokePx = dp(2),
         )
         iptvEpgList?.adapter = iptvEpgAdapter
 
@@ -6745,6 +6847,152 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         refreshIptvBrowserChrome()
         updateIptvGuideCurrentName()
+        // AFTER the premiumButtonIds loop above, so the legacy tinting can
+        // never overwrite the styled pass.
+        applyGuideStyle()
+    }
+
+    /**
+     * The styled looks' one-shot re-tint of the guide overlay. Classic
+     * returns immediately — the XML keeps every legacy value, and this runs
+     * once from [setupIptvOverlay] (no per-frame or per-bind work).
+     */
+    private fun applyGuideStyle() {
+        val t = guideTokens ?: return
+        val style = guideStyle
+        val panelRadius = when (style) {
+            GuideStyle.GLASS -> dp(18).toFloat()
+            GuideStyle.EDITION -> dp(10).toFloat()
+            else -> dp(4).toFloat()
+        }
+        val controlRadius = when (style) {
+            GuideStyle.GLASS -> dp(12).toFloat()
+            GuideStyle.EDITION -> dp(8).toFloat()
+            else -> dp(3).toFloat()
+        }
+        val serif = guideTypeface(t.headlineFont)
+        val serifItalic = guideTypeface(t.captionFont)
+        val grotesk = guideTypeface(t.nameFont)
+        val mono = guideTypeface(t.monoFont)
+        val buttonColors = t.buttonTextColors()
+
+        fun styleButton(id: Int) {
+            findViewById<AppCompatButton>(id)?.let { button ->
+                button.background = t.buttonBackground(controlRadius)
+                button.setTextColor(buttonColors)
+                TextViewCompat.setCompoundDrawableTintList(button, buttonColors)
+                if (style == GuideStyle.CONSOLE) {
+                    button.typeface = mono ?: button.typeface
+                }
+            }
+        }
+
+        // Panels + rail.
+        findViewById<View>(R.id.iptv_guide_panel)?.background =
+            t.panelDrawable(panelRadius, dp(1))
+        findViewById<View>(R.id.iptv_epg_panel)?.background =
+            t.panelDrawable(panelRadius, dp(1))
+        findViewById<View>(R.id.iptv_guide_now_playing)?.background =
+            t.panelDrawable(panelRadius, dp(1))
+        findViewById<View>(R.id.iptv_nav_rail)?.setBackgroundColor(t.bg)
+        findViewById<View>(R.id.iptv_rail_divider)?.setBackgroundColor(t.hairline)
+        findViewById<TextView>(R.id.iptv_nav_logo)?.let { d ->
+            d.setBackgroundColor(t.fg)
+            d.setTextColor(t.bg or 0xFF000000.toInt())
+        }
+        findViewById<View>(R.id.iptv_mode_tabs)?.setBackgroundColor(t.bg)
+        findViewById<View>(R.id.iptv_epg_day_tabs)?.setBackgroundColor(t.bg)
+
+        // Buttons — nav rail, source/category, mode, day tabs.
+        intArrayOf(
+            R.id.iptv_nav_browse,
+            R.id.iptv_nav_search,
+            R.id.iptv_nav_favorites,
+            R.id.iptv_nav_sources,
+            R.id.iptv_nav_close,
+            R.id.iptv_source_button,
+            R.id.iptv_category_button,
+            R.id.iptv_mode_live,
+            R.id.iptv_epg_day_today,
+            R.id.iptv_epg_day_tomorrow,
+            R.id.iptv_epg_day_later,
+        ).forEach { styleButton(it) }
+
+        // Kickers: the one place each style stamps its voice.
+        val kickerColor = when (style) {
+            GuideStyle.EDITION -> t.fgDim
+            else -> t.accent
+        }
+        intArrayOf(R.id.iptv_guide_kicker, R.id.iptv_epg_kicker).forEach { id ->
+            findViewById<TextView>(id)?.let { kicker ->
+                kicker.setTextColor(kickerColor)
+                when (style) {
+                    GuideStyle.EDITION -> kicker.typeface =
+                        serifItalic?.let { Typeface.create(it, Typeface.ITALIC) }
+                            ?: kicker.typeface
+                    GuideStyle.CONSOLE -> kicker.typeface = mono ?: kicker.typeface
+                    else -> {}
+                }
+            }
+        }
+
+        // Titles + secondary text.
+        findViewById<TextView>(R.id.iptv_guide_title)?.let { title ->
+            title.setTextColor(t.fg)
+            when (style) {
+                GuideStyle.EDITION -> title.typeface = serif ?: title.typeface
+                GuideStyle.CONSOLE -> title.typeface = grotesk ?: title.typeface
+                else -> {}
+            }
+        }
+        findViewById<TextView>(R.id.iptv_epg_channel_name)?.let { name ->
+            name.setTextColor(t.fg)
+            when (style) {
+                GuideStyle.EDITION -> name.typeface = serif ?: name.typeface
+                GuideStyle.CONSOLE -> name.typeface = grotesk ?: name.typeface
+                else -> {}
+            }
+        }
+        findViewById<TextView>(R.id.iptv_guide_count)?.setTextColor(t.fgFaint)
+        findViewById<TextView>(R.id.iptv_epg_channel_group)?.setTextColor(t.fgFaint)
+        findViewById<TextView>(R.id.iptv_epg_date)?.setTextColor(t.fgMid)
+        findViewById<TextView>(R.id.iptv_epg_empty)?.setTextColor(t.fgDim)
+        intArrayOf(
+            R.id.iptv_footer_play,
+            R.id.iptv_footer_schedule,
+            R.id.iptv_footer_favorite,
+            R.id.iptv_epg_footer_channels,
+            R.id.iptv_epg_footer_replay,
+        ).forEach { findViewById<TextView>(it)?.setTextColor(t.fgFaint) }
+
+        // Search field.
+        iptvGuideSearch?.let { search ->
+            search.background = t.searchDrawable(controlRadius)
+            search.setTextColor(t.fg)
+            search.setHintTextColor(t.fgFaint)
+            TextViewCompat.setCompoundDrawableTintList(
+                search,
+                android.content.res.ColorStateList.valueOf(t.fgFaint),
+            )
+            if (style == GuideStyle.CONSOLE) search.typeface = mono ?: search.typeface
+        }
+
+        // Spinners + logo tiles + the now-playing card texts.
+        val accentTint = android.content.res.ColorStateList.valueOf(t.accent)
+        findViewById<ProgressBar>(R.id.iptv_browse_loading)?.indeterminateTintList =
+            accentTint
+        findViewById<ProgressBar>(R.id.iptv_epg_loading)?.indeterminateTintList =
+            accentTint
+        val tileRadius = if (style == GuideStyle.EDITION) dp(24).toFloat() else controlRadius
+        intArrayOf(R.id.iptv_epg_logo_tile, R.id.iptv_guide_now_logo_tile).forEach { id ->
+            findViewById<View>(id)?.background = t.tileDrawable(tileRadius, dp(1))
+        }
+        intArrayOf(R.id.iptv_epg_letter, R.id.iptv_guide_now_letter).forEach { id ->
+            findViewById<TextView>(id)?.setTextColor(t.fg)
+        }
+        findViewById<TextView>(R.id.iptv_guide_current_epg)?.setTextColor(t.live)
+        findViewById<TextView>(R.id.iptv_guide_current_name)?.setTextColor(t.fg)
+        findViewById<TextView>(R.id.iptv_guide_current_group)?.setTextColor(t.fgFaint)
     }
 
     private fun isIptvSeriesSentinel(entry: IptvChannelEntry): Boolean =
@@ -6984,24 +7232,37 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(8), dp(24), 0)
         }
+        val pickerTokens = guideTokens
         val searchInput = EditText(this).apply {
             id = View.generateViewId()
             setSingleLine(true)
             hint = "Search categories"
             inputType = InputType.TYPE_CLASS_TEXT
             imeOptions = EditorInfo.IME_ACTION_DONE
-            setTextColor(Color.WHITE)
-            setHintTextColor(0x80FFFFFF.toInt())
-            setBackgroundResource(R.drawable.iptv_guide_search_bg)
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
-            compoundDrawablePadding = dp(10)
-            compoundDrawableTintList =
-                android.content.res.ColorStateList.valueOf(0xB3FFFFFF.toInt())
+            if (pickerTokens == null) {
+                setTextColor(Color.WHITE)
+                setHintTextColor(0x80FFFFFF.toInt())
+                setBackgroundResource(R.drawable.iptv_guide_search_bg)
+                setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
+                compoundDrawablePadding = dp(10)
+                compoundDrawableTintList =
+                    android.content.res.ColorStateList.valueOf(0xB3FFFFFF.toInt())
+            } else {
+                setTextColor(pickerTokens.fg)
+                setHintTextColor(pickerTokens.fgFaint)
+                background = pickerTokens.searchDrawable(dp(10).toFloat())
+                setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
+                compoundDrawablePadding = dp(10)
+                TextViewCompat.setCompoundDrawableTintList(
+                    this,
+                    android.content.res.ColorStateList.valueOf(pickerTokens.fgFaint),
+                )
+            }
             setPadding(dp(16), 0, dp(16), 0)
         }
         val statusText = TextView(this).apply {
             setPadding(dp(2), dp(12), dp(2), dp(8))
-            setTextColor(0xB3FFFFFF.toInt())
+            setTextColor(pickerTokens?.fgDim ?: 0xB3FFFFFF.toInt())
             textSize = 13f
         }
         val categoryList = RecyclerView(this).apply {
@@ -7042,6 +7303,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val adapter = IptvCategoryAdapter(
             selectedCategory = iptvSelectedCategory,
             searchViewId = searchInput.id,
+            tokens = pickerTokens,
+            rowRadiusPx = dp(8).toFloat(),
         ) { category ->
             dialog.dismiss()
             commitIptvAllCategorySearch()
@@ -7125,6 +7388,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setView(container)
             .setNegativeButton("Cancel", null)
             .create()
+        // Styled looks give the dialog their own (flattened-opaque) panel.
+        pickerTokens?.let { t ->
+            dialog.window?.setBackgroundDrawable(
+                GradientDrawable().apply {
+                    cornerRadius = dp(18).toFloat()
+                    setColor(t.panelOpaque)
+                    setStroke(dp(1), t.hairline2)
+                },
+            )
+        }
         dialog.setOnShowListener {
             searchInput.requestFocus()
             dialog.window?.setSoftInputMode(
@@ -7137,6 +7410,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private class IptvCategoryAdapter(
         private val selectedCategory: String?,
         private val searchViewId: Int,
+        private val tokens: GuideTokens? = null,
+        private val rowRadiusPx: Float = 0f,
         private val onSelected: (String) -> Unit,
     ) : RecyclerView.Adapter<IptvCategoryAdapter.ViewHolder>() {
         private val categories = mutableListOf<String>()
@@ -7157,13 +7432,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 isClickable = true
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(px(16), 0, px(16), 0)
-                setBackgroundResource(R.drawable.iptv_premium_button_bg)
-                setTextColor(
-                    ContextCompat.getColorStateList(
-                        context,
-                        R.color.iptv_premium_button_text,
-                    ),
-                )
+                if (tokens == null) {
+                    setBackgroundResource(R.drawable.iptv_premium_button_bg)
+                    setTextColor(
+                        ContextCompat.getColorStateList(
+                            context,
+                            R.color.iptv_premium_button_text,
+                        ),
+                    )
+                } else {
+                    background = tokens.buttonBackground(rowRadiusPx)
+                    setTextColor(tokens.buttonTextColors())
+                }
                 textSize = 15f
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -7221,9 +7501,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(8), dp(24), 0)
         }
+        val pickerTokens = guideTokens
         val statusText = TextView(this).apply {
             setPadding(dp(2), dp(4), dp(2), dp(8))
-            setTextColor(0xB3FFFFFF.toInt())
+            setTextColor(pickerTokens?.fgDim ?: 0xB3FFFFFF.toInt())
             textSize = 13f
             text = "Loading lists…"
         }
@@ -7253,7 +7534,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
 
         val membership = mutableSetOf<String>()
-        val adapter = IptvListPickerAdapter(iptvLists, membership) { list ->
+        val adapter = IptvListPickerAdapter(
+            iptvLists,
+            membership,
+            tokens = pickerTokens,
+            rowRadiusPx = dp(8).toFloat(),
+        ) { list ->
             val nowIn = !membership.contains(list.id)
             if (nowIn) membership.add(list.id) else membership.remove(list.id)
             // Favorites drives the star badge in the guide, so keep the row in
@@ -7296,6 +7582,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setView(container)
             .setNegativeButton("Done", null)
             .create()
+        pickerTokens?.let { t ->
+            dialog.window?.setBackgroundDrawable(
+                GradientDrawable().apply {
+                    cornerRadius = dp(18).toFloat()
+                    setColor(t.panelOpaque)
+                    setStroke(dp(1), t.hairline2)
+                },
+            )
+        }
         dialog.show()
 
         channel.invokeMethod(
@@ -7350,6 +7645,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private class IptvListPickerAdapter(
         private val lists: List<IptvListEntry>,
         private val membership: Set<String>,
+        private val tokens: GuideTokens? = null,
+        private val rowRadiusPx: Float = 0f,
         private val onToggle: (IptvListEntry) -> Unit,
     ) : RecyclerView.Adapter<IptvListPickerAdapter.ViewHolder>() {
         // No rows until the channel's real membership has landed — see the
@@ -7378,13 +7675,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 isClickable = true
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(px(16), 0, px(16), 0)
-                setBackgroundResource(R.drawable.iptv_premium_button_bg)
-                setTextColor(
-                    ContextCompat.getColorStateList(
-                        context,
-                        R.color.iptv_premium_button_text,
-                    ),
-                )
+                if (tokens == null) {
+                    setBackgroundResource(R.drawable.iptv_premium_button_bg)
+                    setTextColor(
+                        ContextCompat.getColorStateList(
+                            context,
+                            R.color.iptv_premium_button_text,
+                        ),
+                    )
+                } else {
+                    background = tokens.buttonBackground(rowRadiusPx)
+                    setTextColor(tokens.buttonTextColors())
+                }
                 textSize = 15f
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -9005,6 +9307,43 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private val iptvZapAccent = Color.parseColor("#00E5FF")
 
+    // ── In-player guide style (see IptvGuideStyle.kt) ──────────────────────
+    // Read once per launch, like recordingEngineEnabled: the Dart side owns
+    // the pref; changing it applies to the next playback session. CLASSIC
+    // (null tokens) keeps every legacy paint path verbatim.
+    private val guideStyle: GuideStyle by lazy {
+        GuideStyle.fromPref(
+            getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                .getString("flutter.iptv_player_guide_style", "classic"),
+        )
+    }
+    private val guideTokens: GuideTokens? by lazy { GuideTokens.of(guideStyle) }
+
+    /** Typefaces for the styled looks, loaded from the Flutter asset bundle.
+     *  Failures are memoized too (containsKey, not getOrPut) so a missing
+     *  asset is never retried per repaint — it just falls back to default. */
+    private val guideTypefaces = HashMap<String, Typeface?>()
+
+    private fun guideTypeface(file: String?): Typeface? {
+        if (file == null) return null
+        if (guideTypefaces.containsKey(file)) return guideTypefaces[file]
+        val loaded = try {
+            Typeface.createFromAsset(assets, "flutter_assets/assets/fonts/$file")
+        } catch (e: Exception) {
+            android.util.Log.w("AndroidTvPlayer", "Guide style font missing: $file")
+            null
+        }
+        guideTypefaces[file] = loaded
+        return loaded
+    }
+
+    /** One truth for "is THIS channel being recorded right now" — the same
+     *  combination the Record button paints from. The styled zap banner's
+     *  REC tag reads it on show and on every 1s repaint. */
+    private fun isRecordingCurrentIptvChannel(): Boolean =
+        (recordingEngineEnabled && engineTaskIdForCurrentChannel() != null) ||
+            iptvRecordingController.isActive
+
     private fun zapText(
         size: Float,
         alpha: Int,
@@ -9062,6 +9401,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun ensureIptvZapBanner(): FrameLayout {
         iptvZapBanner?.let { return it }
+        guideTokens?.let { return buildStyledIptvZapBanner(it) }
 
         val match = ViewGroup.LayoutParams.MATCH_PARENT
         val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -9263,6 +9603,504 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return banner
     }
 
+    // ── Styled zap banner (GLASS / EDITION / CONSOLE) ──────────────────────
+    // Its own builder + painters, per the style contract: the classic tree
+    // above never changes, and the styled tree owns every color, typeface,
+    // and drawable it paints. The shared BEHAVIORAL fns (show/hide, ticker,
+    // position text, hint gating) work on both trees through the same field
+    // refs.
+
+    private var iptvZapStyledScrim: View? = null
+    private var iptvZapStyledCard: LinearLayout? = null
+    private var iptvZapGlassCardWidth = 0
+    private var iptvZapStyledRule: View? = null
+    private var iptvZapStyledLive: TextView? = null
+    private var iptvZapStyledRec: TextView? = null
+    private var iptvZapStyledEnd: TextView? = null
+    private var iptvZapStyledMeterRow: LinearLayout? = null
+
+    private fun styledZapText(
+        t: GuideTokens,
+        size: Float,
+        color: Int,
+        font: String? = null,
+        bold: Boolean = false,
+        italic: Boolean = false,
+    ) = TextView(this).apply {
+        textSize = size
+        setTextColor(color)
+        val base = guideTypeface(font)
+        typeface = when {
+            base != null && italic -> Typeface.create(base, Typeface.ITALIC)
+            base != null && bold -> Typeface.create(base, Typeface.BOLD)
+            base != null -> base
+            bold && italic -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC)
+            bold -> Typeface.DEFAULT_BOLD
+            italic -> Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            else -> Typeface.DEFAULT
+        }
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+    }
+
+    /** One styled rail entry: keycaps + label, token colors only. */
+    private fun styledZapHint(t: GuideTokens, caps: List<String>, label: String): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        caps.forEach { cap ->
+            row.addView(
+                styledZapText(t, 10f, t.fgMid, font = t.monoFont).apply {
+                    text = cap
+                    setPadding(dp(5), 0, dp(5), dp(1))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(3).toFloat()
+                        setColor(Color.TRANSPARENT)
+                        setStroke(dp(1), t.hairline2)
+                    }
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { rightMargin = dp(4) },
+            )
+        }
+        row.addView(
+            styledZapText(t, 10.5f, t.fgFaint).apply {
+                text = label
+                isAllCaps = true
+                letterSpacing = 0.1f
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = dp(3) },
+        )
+        return row
+    }
+
+    private fun buildStyledIptvZapBanner(t: GuideTokens): FrameLayout {
+        val match = ViewGroup.LayoutParams.MATCH_PARENT
+        val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+        val style = guideStyle
+
+        val banner = FrameLayout(this).apply {
+            visibility = View.GONE
+            elevation = dp(8).toFloat()
+        }
+
+        // Scrim: glass keeps the video visible; edition/console fade to their
+        // own ink/black. Hidden entirely while docked (the dock is the panel).
+        val scrim = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                when (style) {
+                    GuideStyle.GLASS -> intArrayOf(0x000A0C12, 0x730A0C12)
+                    GuideStyle.EDITION -> intArrayOf(0x000D0B09, t.bg)
+                    else -> intArrayOf(0x00050505, t.bg)
+                },
+            )
+        }
+        banner.addView(scrim, FrameLayout.LayoutParams(match, match))
+
+        // Shared-role views. The behavioral painters write text into these no
+        // matter which styled tree they sit in (or, for the logo pair in
+        // edition/console, don't sit in at all).
+        val logo = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            visibility = View.GONE
+        }
+        val letter = styledZapText(t, 24f, t.fg, bold = true).apply {
+            gravity = Gravity.CENTER
+        }
+        val number: TextView
+        val name: TextView
+        val now: TextView
+        val times: TextView
+        val next: TextView
+        val meta: TextView
+        val liveTag: TextView
+        val recTag = styledZapText(t, 10.5f, t.rec, bold = true).apply {
+            text = "● REC"
+            letterSpacing = 0.12f
+            visibility = View.GONE
+        }
+
+        when (style) {
+            GuideStyle.EDITION -> {
+                // Editorial: the PROGRAMME is the headline, the channel is
+                // the byline. Kicker caps in the italic serif above it.
+                number = styledZapText(t, 11f, t.fgDim, font = t.captionFont, italic = true)
+                liveTag = styledZapText(t, 11f, t.live, font = t.captionFont, italic = true).apply {
+                    text = "· LIVE"
+                }
+                meta = styledZapText(t, 11f, t.fgFaint, font = t.captionFont, italic = true).apply {
+                    isAllCaps = true
+                    letterSpacing = 0.09f
+                }
+                now = styledZapText(t, 26f, t.fg, font = t.headlineFont)
+                name = styledZapText(t, 12.5f, t.fgDim)
+                times = styledZapText(t, 12.5f, t.fgDim)
+                next = styledZapText(t, 12f, t.fgFaint, font = t.captionFont, italic = true)
+            }
+            GuideStyle.CONSOLE -> {
+                number = styledZapText(t, 18f, t.accent, font = t.monoFont, bold = true)
+                name = styledZapText(t, 19f, t.fg, font = t.nameFont, bold = true)
+                liveTag = styledZapText(t, 10.5f, t.live, font = t.monoFont, bold = true).apply {
+                    text = "● LIVE"
+                    letterSpacing = 0.12f
+                }
+                meta = styledZapText(t, 10.5f, t.fgFaint, font = t.monoFont).apply {
+                    isAllCaps = true
+                    letterSpacing = 0.09f
+                }
+                now = styledZapText(t, 15f, t.fg, bold = true)
+                times = styledZapText(t, 11f, t.fgDim, font = t.monoFont)
+                next = styledZapText(t, 10.5f, t.fgFaint, font = t.monoFont).apply {
+                    isAllCaps = true
+                }
+            }
+            else -> { // GLASS
+                number = styledZapText(t, 20f, t.fg, bold = true)
+                name = styledZapText(t, 22f, t.fg, bold = true)
+                liveTag = styledZapText(t, 11f, t.live, bold = true).apply {
+                    text = "● LIVE"
+                    letterSpacing = 0.12f
+                }
+                meta = styledZapText(t, 11f, t.fgDim).apply {
+                    isAllCaps = true
+                    letterSpacing = 0.09f
+                }
+                now = styledZapText(t, 15f, t.fgMid, bold = true)
+                times = styledZapText(t, 11.5f, t.fgDim)
+                next = styledZapText(t, 11.5f, t.fgFaint)
+            }
+        }
+
+        // Elapsed rule. Glass/edition use a plain bar; console pairs it with
+        // the programme's end time, instrument style.
+        val bar = ProgressBar(
+            this, null, android.R.attr.progressBarStyleHorizontal
+        ).apply {
+            max = 1000
+            progressTintList = android.content.res.ColorStateList.valueOf(
+                if (style == GuideStyle.EDITION) t.fg else t.accent,
+            )
+            progressBackgroundTintList =
+                android.content.res.ColorStateList.valueOf(t.hairline2)
+        }
+        val endTime = styledZapText(t, 10.5f, t.fgDim, font = t.monoFont).apply {
+            visibility = View.GONE
+        }
+
+        val hintChannel = styledZapHint(t, listOf("◀", "▶"), "Channel")
+        val hintGuide = styledZapHint(t, listOf("▲"), "Guide")
+        val hintJump = styledZapHint(t, listOf("HOLD ▲"), "Channel number")
+        val rail = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        rail.addView(
+            hintChannel,
+            LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(20) },
+        )
+        rail.addView(hintGuide, LinearLayout.LayoutParams(wrap, wrap))
+        rail.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+        rail.addView(hintJump, LinearLayout.LayoutParams(wrap, wrap))
+
+        val body: LinearLayout
+        when (style) {
+            GuideStyle.GLASS -> {
+                // Island card, bottom-left, like a broadcast bug.
+                val tile = FrameLayout(this).apply {
+                    background = t.tileDrawable(dp(14).toFloat(), dp(1))
+                    setPadding(dp(6), dp(6), dp(6), dp(6))
+                }
+                tile.addView(logo, FrameLayout.LayoutParams(match, match))
+                tile.addView(letter, FrameLayout.LayoutParams(match, match))
+
+                val nameRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                nameRow.addView(
+                    number,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(10) },
+                )
+                nameRow.addView(name, LinearLayout.LayoutParams(0, wrap, 1f))
+                nameRow.addView(
+                    liveTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(12) },
+                )
+                nameRow.addView(
+                    recTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(10) },
+                )
+
+                val ident = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                ident.addView(nameRow, LinearLayout.LayoutParams(match, wrap))
+                ident.addView(
+                    now,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(6) },
+                )
+                ident.addView(
+                    times,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(3) },
+                )
+                ident.addView(
+                    meta,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(3) },
+                )
+                ident.addView(
+                    next,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(3) },
+                )
+
+                val contentRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(20), dp(18), dp(20), dp(14))
+                }
+                contentRow.addView(tile, LinearLayout.LayoutParams(dp(60), dp(60)))
+                contentRow.addView(
+                    ident,
+                    LinearLayout.LayoutParams(0, wrap, 1f).apply { leftMargin = dp(16) },
+                )
+
+                val card = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = t.panelDrawable(dp(22).toFloat(), dp(1))
+                    clipToOutline = true
+                }
+                card.addView(contentRow, LinearLayout.LayoutParams(match, wrap))
+                card.addView(
+                    bar,
+                    LinearLayout.LayoutParams(match, dp(3)).apply {
+                        leftMargin = dp(20)
+                        rightMargin = dp(20)
+                        bottomMargin = dp(16)
+                    },
+                )
+
+                val cardWidth = minOf(
+                    dp(620),
+                    resources.displayMetrics.widthPixels - dp(56),
+                ).coerceAtLeast(dp(220))
+                iptvZapGlassCardWidth = cardWidth
+                banner.addView(
+                    card,
+                    FrameLayout.LayoutParams(cardWidth, wrap, Gravity.BOTTOM or Gravity.START)
+                        .apply {
+                            leftMargin = dp(28)
+                            bottomMargin = dp(58)
+                        },
+                )
+                iptvZapStyledCard = card
+                body = card
+            }
+            GuideStyle.EDITION -> {
+                val rule = View(this).apply { setBackgroundColor(t.hairline2) }
+                val kickerRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                kickerRow.addView(
+                    number,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(6) },
+                )
+                kickerRow.addView(
+                    liveTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(6) },
+                )
+                kickerRow.addView(
+                    recTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(6) },
+                )
+                kickerRow.addView(meta, LinearLayout.LayoutParams(0, wrap, 1f))
+
+                val bylineRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                bylineRow.addView(name, LinearLayout.LayoutParams(0, wrap, 1f))
+                bylineRow.addView(
+                    times,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(14) },
+                )
+
+                val column = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                column.addView(rule, LinearLayout.LayoutParams(match, dp(1)))
+                column.addView(
+                    kickerRow,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(12) },
+                )
+                column.addView(
+                    now,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(7) },
+                )
+                column.addView(
+                    bylineRow,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(6) },
+                )
+                column.addView(
+                    next,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(4) },
+                )
+
+                banner.addView(
+                    column,
+                    FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+                        leftMargin = dp(48)
+                        rightMargin = dp(48)
+                        bottomMargin = dp(58)
+                    },
+                )
+                banner.addView(bar, FrameLayout.LayoutParams(match, dp(2), Gravity.BOTTOM))
+                iptvZapStyledRule = rule
+                body = column
+            }
+            else -> { // CONSOLE
+                val nameRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                nameRow.addView(
+                    number,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(12) },
+                )
+                nameRow.addView(name, LinearLayout.LayoutParams(0, wrap, 1f))
+                nameRow.addView(
+                    liveTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(12) },
+                )
+                nameRow.addView(
+                    recTag,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(10) },
+                )
+
+                val nowLabel = styledZapText(t, 10f, t.fgFaint, font = t.monoFont, bold = true)
+                    .apply {
+                        text = "NOW"
+                        letterSpacing = 0.2f
+                    }
+                val nowRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                nowRow.addView(
+                    nowLabel,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { rightMargin = dp(10) },
+                )
+                nowRow.addView(now, LinearLayout.LayoutParams(0, wrap, 1f))
+                nowRow.addView(
+                    times,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(14) },
+                )
+
+                val content = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                content.addView(nameRow, LinearLayout.LayoutParams(match, wrap))
+                content.addView(
+                    nowRow,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(7) },
+                )
+                content.addView(
+                    meta,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(4) },
+                )
+                content.addView(
+                    next,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(4) },
+                )
+
+                // The amber rule rides the content block as a left rule.
+                val ruled = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                }
+                val rule = View(this).apply { setBackgroundColor(t.accent) }
+                ruled.addView(rule, LinearLayout.LayoutParams(dp(3), match))
+                ruled.addView(
+                    content,
+                    LinearLayout.LayoutParams(0, wrap, 1f).apply { leftMargin = dp(16) },
+                )
+
+                val meterRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                meterRow.addView(bar, LinearLayout.LayoutParams(0, dp(5), 1f))
+                meterRow.addView(
+                    endTime,
+                    LinearLayout.LayoutParams(wrap, wrap).apply { leftMargin = dp(10) },
+                )
+
+                val column = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                column.addView(ruled, LinearLayout.LayoutParams(match, wrap))
+                column.addView(
+                    meterRow,
+                    LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(12) },
+                )
+
+                banner.addView(
+                    column,
+                    FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+                        leftMargin = dp(48)
+                        rightMargin = dp(48)
+                        bottomMargin = dp(58)
+                    },
+                )
+                iptvZapStyledRule = rule
+                iptvZapStyledMeterRow = meterRow
+                body = column
+            }
+        }
+
+        banner.addView(
+            rail,
+            FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+                leftMargin = dp(48)
+                rightMargin = dp(48)
+                bottomMargin = dp(16)
+            },
+        )
+
+        val root = findViewById<ViewGroup>(android.R.id.content)
+        root.addView(
+            banner,
+            FrameLayout.LayoutParams(match, dp(250)).apply {
+                gravity = Gravity.BOTTOM
+            },
+        )
+
+        iptvZapBanner = banner
+        iptvZapBannerLogo = logo
+        iptvZapBannerLetter = letter
+        iptvZapBannerNumber = number
+        iptvZapBannerName = name
+        iptvZapBannerMeta = meta
+        iptvZapBannerNow = now
+        iptvZapBannerTimes = times
+        iptvZapBannerNext = next
+        iptvZapBannerProgress = bar
+        iptvZapBannerHintChannel = hintChannel
+        iptvZapBannerHintJump = hintJump
+        iptvZapBannerBody = body
+        iptvZapBannerRail = rail
+        iptvZapStyledScrim = scrim
+        iptvZapStyledLive = liveTag
+        iptvZapStyledRec = recTag
+        iptvZapStyledEnd = endTime
+        return banner
+    }
+
     /**
      * Present [entry]'s channel panel.
      *
@@ -9350,6 +10188,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * at the wrong offset.
      */
     private fun applyIptvZapBannerMode(docked: Boolean) {
+        guideTokens?.let { applyStyledZapBannerMode(docked, it); return }
         val banner = iptvZapBanner ?: return
         val dock = controlsOverlay
         val dockHeight = if (docked) (dock?.height ?: 0) else 0
@@ -9414,8 +10253,78 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }.start()
     }
 
+    /** The styled counterpart of [applyIptvZapBannerMode]: same margin/dock
+     *  bookkeeping, plus the styled chrome that changes between homes (scrim
+     *  off while docked; the glass card hands its surface to the dock). */
+    private fun applyStyledZapBannerMode(docked: Boolean, t: GuideTokens) {
+        val banner = iptvZapBanner ?: return
+        val dock = controlsOverlay
+        val dockHeight = if (docked) (dock?.height ?: 0) else 0
+        (banner.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            if (lp.bottomMargin != dockHeight) {
+                lp.bottomMargin = dockHeight
+                banner.layoutParams = lp
+            }
+        }
+        iptvZapStyledScrim?.visibility = if (docked) View.GONE else View.VISIBLE
+        iptvZapBannerRail?.visibility = if (docked) View.GONE else View.VISIBLE
+        // Edition's top hairline reads wrong pressed against the dock edge.
+        if (guideStyle == GuideStyle.EDITION) {
+            iptvZapStyledRule?.visibility = if (docked) View.INVISIBLE else View.VISIBLE
+        }
+        if (guideStyle == GuideStyle.GLASS) {
+            // Docked, the island hands its surface AND its island geometry to
+            // the dock: full-width flush band, full-width progress pill.
+            val card = iptvZapStyledCard
+            card?.background =
+                if (docked) null else t.panelDrawable(dp(22).toFloat(), dp(1))
+            (card?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+                val width = if (docked) {
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                } else {
+                    iptvZapGlassCardWidth
+                }
+                val left = if (docked) dp(20) else dp(28)
+                val right = if (docked) dp(20) else 0
+                if (lp.width != width || lp.leftMargin != left ||
+                    lp.rightMargin != right
+                ) {
+                    lp.width = width
+                    lp.leftMargin = left
+                    lp.rightMargin = right
+                    card.layoutParams = lp
+                }
+            }
+            (iptvZapBannerProgress?.layoutParams as? LinearLayout.LayoutParams)
+                ?.let { lp ->
+                    val side = if (docked) 0 else dp(20)
+                    val bottom = if (docked) dp(4) else dp(16)
+                    if (lp.leftMargin != side || lp.bottomMargin != bottom) {
+                        lp.leftMargin = side
+                        lp.rightMargin = side
+                        lp.bottomMargin = bottom
+                        iptvZapBannerProgress?.layoutParams = lp
+                    }
+                }
+        }
+        (iptvZapBannerBody?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+            val margin = if (docked) dp(16) else dp(58)
+            if (lp.bottomMargin != margin) {
+                lp.bottomMargin = margin
+                iptvZapBannerBody?.layoutParams = lp
+            }
+        }
+        if (docked && dock != null && !iptvDockLayoutListenerAttached) {
+            iptvDockLayoutListenerAttached = true
+            dock.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                if (iptvZapBannerDocked) applyIptvZapBannerMode(true)
+            }
+        }
+    }
+
     /** Logo, channel number and name — the parts that only change on a zap. */
     private fun paintIptvZapBannerIdentity(entry: IptvChannelEntry) {
+        guideTokens?.let { paintStyledZapBannerIdentity(entry, it); return }
         val letter = iptvZapBannerLetter ?: return
         val logo = iptvZapBannerLogo ?: return
 
@@ -9509,8 +10418,147 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (canZap && activeSource?.isFavorites != true) View.VISIBLE else View.GONE
     }
 
+    /** The styled identity paint: same Glide dance for the glass tile, no
+     *  logo at all for edition/console (the number IS the identity there),
+     *  per-style number formatting. Ends on the shared position painter. */
+    private fun paintStyledZapBannerIdentity(entry: IptvChannelEntry, t: GuideTokens) {
+        if (guideStyle == GuideStyle.GLASS) {
+            val letter = iptvZapBannerLetter
+            val logo = iptvZapBannerLogo
+            if (letter != null && logo != null) {
+                val firstLetter = entry.name.firstOrNull()?.uppercase() ?: "?"
+                com.bumptech.glide.Glide.with(this).clear(logo)
+                logo.setImageDrawable(null)
+                if (entry.logoUrl.isNullOrEmpty()) {
+                    logo.visibility = View.GONE
+                    letter.text = firstLetter
+                    letter.visibility = View.VISIBLE
+                } else {
+                    letter.text = firstLetter
+                    letter.visibility = View.VISIBLE
+                    logo.visibility = View.VISIBLE
+                    com.bumptech.glide.Glide.with(this)
+                        .load(entry.logoUrl)
+                        .centerInside()
+                        .listener(object :
+                            com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                            override fun onLoadFailed(
+                                e: com.bumptech.glide.load.engine.GlideException?,
+                                model: Any?,
+                                target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                                isFirstResource: Boolean,
+                            ): Boolean {
+                                logo.visibility = View.GONE
+                                letter.text = firstLetter
+                                letter.visibility = View.VISIBLE
+                                return true
+                            }
+
+                            override fun onResourceReady(
+                                resource: android.graphics.drawable.Drawable,
+                                model: Any,
+                                target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                                dataSource: com.bumptech.glide.load.DataSource,
+                                isFirstResource: Boolean,
+                            ): Boolean {
+                                letter.visibility = View.GONE
+                                return false
+                            }
+                        })
+                        .into(logo)
+                }
+            }
+        }
+
+        val displayNumber = (entry.channelNumber ?: (entry.index + 1)).toString()
+        iptvZapBannerNumber?.text = when (guideStyle) {
+            GuideStyle.CONSOLE -> displayNumber.padStart(3, '0')
+            GuideStyle.EDITION -> "CH $displayNumber"
+            else -> displayNumber
+        }
+        iptvZapBannerName?.text = entry.name
+        paintIptvZapBannerPosition(entry)
+    }
+
+    /** The styled now/next paint. Owns its colors outright — the classic
+     *  painter resets typefaces/colors per call and must never run on a
+     *  styled tree. Also the REC tag's only writer (show + 1s tick). */
+    private fun paintStyledZapBannerEpg(entry: IptvChannelEntry, t: GuideTokens) {
+        val nowView = iptvZapBannerNow ?: return
+        val timesView = iptvZapBannerTimes ?: return
+        val nextView = iptvZapBannerNext ?: return
+        val bar = iptvZapBannerProgress ?: return
+
+        val nowTitle = entry.epgNowTitle
+        if (guideStyle == GuideStyle.EDITION) {
+            // Editorial hierarchy: the headline slot carries the programme;
+            // a guideless channel promotes its name there and the byline
+            // names the silence.
+            if (nowTitle != null) {
+                nowView.text = nowTitle
+                iptvZapBannerName?.text = entry.name
+                iptvZapBannerName?.setTextColor(t.fgDim)
+            } else {
+                nowView.text = entry.name
+                iptvZapBannerName?.text =
+                    if (entry.epgLoading) "Loading guide…" else "No guide data"
+                iptvZapBannerName?.setTextColor(t.fgFaint)
+            }
+        } else {
+            if (nowTitle != null) {
+                nowView.text = nowTitle
+                nowView.setTextColor(
+                    if (guideStyle == GuideStyle.CONSOLE) t.fg else t.fgMid,
+                )
+            } else {
+                nowView.text =
+                    if (entry.epgLoading) "Loading guide…" else "No guide data"
+                nowView.setTextColor(t.fgFaint)
+            }
+        }
+
+        val start = entry.epgNowStartMs
+        val stop = entry.epgNowStopMs
+        val runtime = stop - start
+        if (nowTitle != null && runtime > 0) {
+            val nowMs = System.currentTimeMillis()
+            val remaining = stop - nowMs
+            val tail =
+                if (remaining > 60_000L) "  ·  ${formatIptvRemaining(remaining)} left"
+                else ""
+            timesView.text =
+                "${formatEpgTime(start)} – ${formatEpgTime(stop)}$tail"
+            timesView.visibility = View.VISIBLE
+            val elapsed = (nowMs - start).coerceIn(0L, runtime)
+            bar.progress = ((elapsed.toDouble() / runtime) * 1000).toInt()
+            iptvZapStyledEnd?.let {
+                it.text = formatEpgTime(stop)
+                it.visibility = View.VISIBLE
+            }
+        } else {
+            timesView.visibility = View.GONE
+            bar.progress = 0
+            iptvZapStyledEnd?.visibility = View.GONE
+        }
+
+        val nextTitle = entry.epgNextTitle
+        if (nowTitle != null && nextTitle != null) {
+            val at =
+                if (entry.epgNextStartMs > 0) "${formatEpgTime(entry.epgNextStartMs)}  ·  "
+                else ""
+            nextView.text = "Next  $at$nextTitle"
+            nextView.visibility = View.VISIBLE
+        } else {
+            nextView.visibility = View.GONE
+        }
+
+        iptvZapStyledRec?.visibility =
+            if (isRecordingCurrentIptvChannel()) View.VISIBLE else View.GONE
+    }
+
     /** Paint the banner's now/next lines from [entry]'s EPG fields. */
     private fun paintIptvZapBannerEpg(entry: IptvChannelEntry) {
+        guideTokens?.let { paintStyledZapBannerEpg(entry, it); return }
         val nowView = iptvZapBannerNow ?: return
         val timesView = iptvZapBannerTimes ?: return
         val nextView = iptvZapBannerNext ?: return
@@ -14771,6 +15819,18 @@ private class IptvChannelAdapter(
     // fetches over the bridge and answers with notifyEpgFor. Bind-driven, so
     // only rows that actually come on screen ever cost a request.
     private val onEpgNeeded: ((IptvChannelEntry) -> Unit)? = null,
+    // Styled-look inputs (see IptvGuideStyle.kt); null tokens = classic, and
+    // every styled branch below is skipped outright. Invariant styling is
+    // applied ONCE per holder in onCreateViewHolder — bind only writes
+    // entry-dependent colors/text/visibility.
+    private val tokens: GuideTokens? = null,
+    private val style: GuideStyle = GuideStyle.CLASSIC,
+    private val nameTypeface: Typeface? = null,
+    private val monoTypeface: Typeface? = null,
+    private val headlineTypeface: Typeface? = null,
+    private val captionTypeface: Typeface? = null,
+    private val rowRadiusPx: Float = 0f,
+    private val rowStrokePx: Int = 0,
 ) : RecyclerView.Adapter<IptvChannelAdapter.ViewHolder>() {
 
     companion object {
@@ -14781,6 +15841,7 @@ private class IptvChannelAdapter(
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val number: TextView = view.findViewById(R.id.iptv_channel_number)
+        val logoTile: FrameLayout = view.findViewById(R.id.iptv_channel_logo_tile)
         val logo: android.widget.ImageView = view.findViewById(R.id.iptv_channel_logo)
         val letter: TextView = view.findViewById(R.id.iptv_channel_letter)
         val name: TextView = view.findViewById(R.id.iptv_channel_name)
@@ -14788,13 +15849,67 @@ private class IptvChannelAdapter(
         val epg: TextView = view.findViewById(R.id.iptv_channel_epg)
         val favorite: TextView = view.findViewById(R.id.iptv_channel_favorite)
         val liveBadge: View = view.findViewById(R.id.iptv_channel_live_badge)
+        val liveDot: View = view.findViewById(R.id.iptv_channel_live_dot)
+        val liveLabel: TextView = view.findViewById(R.id.iptv_channel_live_label)
         val nowBadge: TextView = view.findViewById(R.id.iptv_channel_now_badge)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = android.view.LayoutInflater.from(parent.context)
             .inflate(R.layout.item_iptv_channel, parent, false)
-        return ViewHolder(view)
+        val holder = ViewHolder(view)
+        val t = tokens ?: return holder
+        // Invariant styled chrome — never re-done on bind/scroll.
+        view.background = t.rowBackground(rowRadiusPx, rowStrokePx)
+        holder.logoTile.background = if (style == GuideStyle.EDITION) {
+            t.tileDrawable(view.resources.displayMetrics.density * 21f, 1)
+        } else {
+            t.tileDrawable(rowRadiusPx, 1)
+        }
+        holder.letter.setBackgroundColor(Color.TRANSPARENT)
+        holder.letter.setTextColor(t.fg)
+        holder.group.setTextColor(t.fgFaint)
+        holder.epg.setTextColor(t.fgDim)
+        holder.favorite.setTextColor(
+            if (style == GuideStyle.EDITION) t.fg else t.accent,
+        )
+        holder.liveBadge.setBackgroundColor(Color.TRANSPARENT)
+        holder.liveDot.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(t.live)
+        }
+        holder.liveLabel.setTextColor(t.live)
+        if (style == GuideStyle.EDITION) {
+            // Edition's NOW is small-caps cream text, no pill.
+            holder.nowBadge.background = null
+            holder.nowBadge.setTextColor(t.fg)
+        } else {
+            holder.nowBadge.background = GradientDrawable().apply {
+                cornerRadius = if (style == GuideStyle.CONSOLE) {
+                    view.resources.displayMetrics.density * 2f
+                } else {
+                    view.resources.displayMetrics.density * 5f
+                }
+                setColor(t.accent)
+            }
+            holder.nowBadge.setTextColor(t.bg or 0xFF000000.toInt())
+        }
+        when (style) {
+            GuideStyle.CONSOLE -> {
+                holder.number.typeface = monoTypeface ?: holder.number.typeface
+                holder.name.typeface = nameTypeface ?: holder.name.typeface
+                holder.epg.typeface = monoTypeface ?: holder.epg.typeface
+                holder.liveLabel.typeface = monoTypeface ?: holder.liveLabel.typeface
+            }
+            GuideStyle.EDITION -> {
+                holder.name.typeface = headlineTypeface ?: holder.name.typeface
+                holder.epg.typeface = captionTypeface?.let {
+                    Typeface.create(it, Typeface.ITALIC)
+                } ?: holder.epg.typeface
+            }
+            else -> {}
+        }
+        return holder
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
@@ -14815,16 +15930,39 @@ private class IptvChannelAdapter(
         holder.itemView.scaleY = 1.0f
 
         // Channel number
-        holder.number.text = (entry.channelNumber ?: (entry.index + 1)).toString()
+        val t = tokens
+        val displayNumber = (entry.channelNumber ?: (entry.index + 1)).toString()
+        holder.number.text =
+            if (t != null && style == GuideStyle.CONSOLE) {
+                displayNumber.padStart(3, '0')
+            } else {
+                displayNumber
+            }
         holder.number.setTextColor(
-            if (entry.isCurrent) Color.argb(204, 0, 229, 255) // accent 80%
-            else Color.argb(46, 255, 255, 255) // 18%
+            if (t == null) {
+                if (entry.isCurrent) Color.argb(204, 0, 229, 255) // accent 80%
+                else Color.argb(46, 255, 255, 255) // 18%
+            } else {
+                if (entry.isCurrent) {
+                    if (style == GuideStyle.EDITION) t.fg else t.accent
+                } else {
+                    t.fgFaint
+                }
+            }
         )
 
         // Name
         holder.name.text = entry.name
         holder.name.setTextColor(
-            if (entry.isCurrent) ACCENT else Color.argb(217, 255, 255, 255)
+            if (t == null) {
+                if (entry.isCurrent) ACCENT else Color.argb(217, 255, 255, 255)
+            } else {
+                if (entry.isCurrent) {
+                    if (style == GuideStyle.EDITION) t.fg else t.accent
+                } else {
+                    t.fgMid
+                }
+            }
         )
 
         // Group
@@ -15022,6 +16160,14 @@ private class IptvEpgAdapter(
     private var programs: List<IptvEpgProgram>,
     private val onReplay: (IptvEpgProgram) -> Unit,
     private val onRecordFuture: (IptvEpgProgram) -> Unit,
+    // Styled-look inputs; null tokens = classic. Invariant styling happens
+    // once per holder in onCreateViewHolder.
+    private val tokens: GuideTokens? = null,
+    private val style: GuideStyle = GuideStyle.CLASSIC,
+    private val monoTypeface: Typeface? = null,
+    private val headlineTypeface: Typeface? = null,
+    private val rowRadiusPx: Float = 0f,
+    private val rowStrokePx: Int = 0,
 ) : RecyclerView.Adapter<IptvEpgAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -15035,7 +16181,39 @@ private class IptvEpgAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = android.view.LayoutInflater.from(parent.context)
             .inflate(R.layout.item_iptv_epg_program, parent, false)
-        return ViewHolder(view)
+        val holder = ViewHolder(view)
+        val t = tokens ?: return holder
+        view.background = t.rowBackground(rowRadiusPx, rowStrokePx)
+        holder.time.setTextColor(t.fgDim)
+        holder.title.setTextColor(t.fg)
+        holder.description.setTextColor(t.fgFaint)
+        holder.progress.progressTintList =
+            android.content.res.ColorStateList.valueOf(t.accent)
+        holder.progress.progressBackgroundTintList =
+            android.content.res.ColorStateList.valueOf(t.hairline2)
+        // NOW/REPLAY chip: an outlined token tag (the text flips per bind,
+        // the chrome doesn't).
+        holder.now.background = GradientDrawable().apply {
+            cornerRadius = if (style == GuideStyle.CONSOLE) {
+                view.resources.displayMetrics.density * 2f
+            } else {
+                view.resources.displayMetrics.density * 4f
+            }
+            setColor(Color.TRANSPARENT)
+            setStroke(1, t.accent)
+        }
+        holder.now.setTextColor(t.accent)
+        when (style) {
+            GuideStyle.CONSOLE -> {
+                holder.time.typeface = monoTypeface ?: holder.time.typeface
+                holder.now.typeface = monoTypeface ?: holder.now.typeface
+            }
+            GuideStyle.EDITION -> {
+                holder.title.typeface = headlineTypeface ?: holder.title.typeface
+            }
+            else -> {}
+        }
+        return holder
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -15055,6 +16233,9 @@ private class IptvEpgAdapter(
             if (program.description.isNullOrBlank()) View.GONE else View.VISIBLE
         holder.now.text = if (airing) "NOW" else "REPLAY"
         holder.now.visibility = if (airing || replayable) View.VISIBLE else View.GONE
+        // Styled only: the airing row wears the quiet selected tint (and a
+        // recycled holder explicitly clears it). Classic never sets it.
+        if (tokens != null) holder.itemView.isSelected = airing
         holder.progress.visibility = if (airing) View.VISIBLE else View.GONE
         holder.progress.progress =
             ((elapsed.coerceIn(0L, duration) * 1000L) / duration).toInt()

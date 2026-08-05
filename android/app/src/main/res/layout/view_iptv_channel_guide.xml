@@ -34,6 +34,7 @@
             app:layout_constraintWidth_max="600dp">
 
             <LinearLayout
+                android:id="@+id/iptv_nav_rail"
                 android:layout_width="68dp"
                 android:layout_height="match_parent"
                 android:background="#F5070A0C"
@@ -45,6 +46,7 @@
                 android:paddingBottom="18dp">
 
                 <TextView
+                    android:id="@+id/iptv_nav_logo"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:background="#FFF4F1E9"
@@ -134,6 +136,7 @@
             </LinearLayout>
 
             <View
+                android:id="@+id/iptv_rail_divider"
                 android:layout_width="1dp"
                 android:layout_height="match_parent"
                 android:background="#18FFFFFF" />
@@ -162,6 +165,7 @@
                         android:orientation="vertical">
 
                         <TextView
+                            android:id="@+id/iptv_guide_kicker"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="IPTV PLAYER"
@@ -210,6 +214,7 @@
                 </LinearLayout>
 
                 <LinearLayout
+                    android:id="@+id/iptv_mode_tabs"
                     android:layout_width="match_parent"
                     android:layout_height="42dp"
                     android:layout_marginTop="14dp"
@@ -298,12 +303,14 @@
                     android:paddingBottom="8dp" />
 
                 <LinearLayout
+                    android:id="@+id/iptv_guide_footer"
                     android:layout_width="match_parent"
                     android:layout_height="30dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
                     <TextView
+                        android:id="@+id/iptv_footer_play"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
@@ -312,6 +319,7 @@
                         android:textSize="9sp" />
 
                     <TextView
+                        android:id="@+id/iptv_footer_schedule"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="→  Schedule"
@@ -319,6 +327,7 @@
                         android:textSize="9sp" />
 
                     <TextView
+                        android:id="@+id/iptv_footer_favorite"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
@@ -354,6 +363,7 @@
                 android:orientation="horizontal">
 
                 <FrameLayout
+                    android:id="@+id/iptv_epg_logo_tile"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:background="@drawable/iptv_channel_logo_bg">
@@ -384,6 +394,7 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/iptv_epg_kicker"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="PROGRAMME GUIDE"
@@ -417,6 +428,7 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/iptv_epg_day_tabs"
                 android:layout_width="match_parent"
                 android:layout_height="42dp"
                 android:layout_marginTop="16dp"
@@ -504,12 +516,14 @@
                 android:paddingBottom="8dp" />
 
             <LinearLayout
+                android:id="@+id/iptv_epg_footer"
                 android:layout_width="match_parent"
                 android:layout_height="30dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <TextView
+                    android:id="@+id/iptv_epg_footer_channels"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -518,6 +532,7 @@
                     android:textSize="9sp" />
 
                 <TextView
+                    android:id="@+id/iptv_epg_footer_replay"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="OK  Replay when available"
@@ -542,6 +557,7 @@
         android:visibility="gone">
 
         <FrameLayout
+            android:id="@+id/iptv_guide_now_logo_tile"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="@drawable/iptv_channel_logo_bg">

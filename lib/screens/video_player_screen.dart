@@ -72,6 +72,8 @@ import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/widgets/iptv_channel_sheet.dart';
 import 'video_player/widgets/iptv_zap_banner.dart';
+import 'video_player/widgets/player_guide_style.dart';
+import '../widgets/iptv/styles/iptv_style.dart';
 import 'video_player/widgets/source_sheet.dart';
 import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
@@ -521,6 +523,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// title/channel badges stand down: they said the same thing twice, and the
   /// right-hand one was painted from launch state a zap never refreshed.
   bool get _iptvZapBannerOwnsIdentity => _currentIptvChannel?.isLive == true;
+
+  /// The in-player IPTV guide look, read once at launch (see
+  /// [PlayerGuideStyle]). Classic keeps every legacy paint path verbatim.
+  PlayerGuideStyle _playerGuideStyle = PlayerGuideStyle.classic;
+
+  /// Tokens for [_playerGuideStyle], derived once with it — null for classic.
+  IptvStyleTokens? _playerGuideTokens;
 
   // ── IPTV recording (libmpv `stream-record`) ─────────────────────────────
   /// True once the player is confirmed to run on a native (libmpv) backend —
@@ -3128,6 +3137,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
     const aspects = AspectMode.values;
     _aspectMode = aspects[aspectIndex.clamp(0, aspects.length - 1)];
+
+    // In-player guide look. `_initializePlayer` awaits this before playback
+    // setup, so every IPTV surface that can actually appear (first tune,
+    // zap, guide) already has the real value.
+    _playerGuideStyle = PlayerGuideStyle.fromPref(
+      await StorageService.getIptvPlayerGuideStyle(),
+    );
+    _playerGuideTokens = PlayerGuideTokens.of(_playerGuideStyle);
 
     debugPrint('VideoPlayer: Loaded defaults - aspect=$_aspectMode');
   }
@@ -8521,6 +8538,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Widget _buildTitleBadge(String title) => TitleBadge(title: title);
 
+  /// One truth for "is this playback being recorded right now", shared by
+  /// the dock's Record button and the styled zap banner's REC tag — the
+  /// three mechanisms are libmpv stream-record, the Android recording
+  /// engine, and the desktop capture process.
+  bool get _recordingActiveNow =>
+      _isRecording ||
+      _engineTaskId != null ||
+      _desktopCaptureForCurrent() != null;
+
   /// The live-IPTV panel, or null when this playback has no channel identity
   /// to present. [flush] embeds it in the controls dock; otherwise it floats.
   Widget? _buildIptvInfoPanel({required bool flush}) {
@@ -8532,6 +8558,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       epgLoading: _iptvZapEpgLoading,
       now: _iptvZapClock,
       flush: flush,
+      style: _playerGuideStyle,
+      tokens: _playerGuideTokens,
+      isRecording: _recordingActiveNow,
     );
   }
 
@@ -9225,10 +9254,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             showPipButton: PipService.isOwner(this),
                             onPip: PipService.isOwner(this) ? _enterPip : null,
                             hasRecord: _canRecord,
-                            isRecording:
-                                _isRecording ||
-                                _engineTaskId != null ||
-                                _desktopCaptureForCurrent() != null,
+                            isRecording: _recordingActiveNow,
                             onRecord: _canRecord ? _toggleRecording : null,
                           ),
                         ),
@@ -9374,6 +9400,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       sources: widget.iptvSources ?? const [],
                       browseProvider: widget.iptvBrowseProvider,
                       onContextChanged: _persistIptvGuideContext,
+                      style: _playerGuideStyle,
+                      tokens: _playerGuideTokens,
                     ),
                   ),
                 // Stremio source sheet overlay
