@@ -14,6 +14,14 @@ class Controls extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onAspect;
   final VoidCallback onSpeed;
+
+  /// Opens the sleep-timer picker. Its label doubles as the indicator — the
+  /// only place the armed state is visible once the picker closes.
+  final VoidCallback onSleepTimer;
+
+  /// Null when no timer is armed; otherwise the short form shown on the
+  /// button ("30 min", "Episode").
+  final String? sleepTimerLabel;
   final double speed;
   final AspectMode aspectMode;
   final bool isLandscape;
@@ -76,6 +84,8 @@ class Controls extends StatelessWidget {
     required this.onBack,
     required this.onAspect,
     required this.onSpeed,
+    required this.onSleepTimer,
+    this.sleepTimerLabel,
     required this.speed,
     required this.aspectMode,
     required this.isLandscape,
@@ -461,6 +471,16 @@ class Controls extends StatelessWidget {
                                     onPressed: onSpeed,
                                     isCompact: true,
                                   ),
+
+                                // Sleep timer — armed state shows in the label
+                                NetflixControlButton(
+                                  icon: sleepTimerLabel == null
+                                      ? Icons.bedtime_outlined
+                                      : Icons.bedtime_rounded,
+                                  label: sleepTimerLabel ?? 'Sleep',
+                                  onPressed: onSleepTimer,
+                                  isCompact: true,
+                                ),
 
                                 // Aspect ratio button
                                 NetflixControlButton(

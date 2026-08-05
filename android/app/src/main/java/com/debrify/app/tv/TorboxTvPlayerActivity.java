@@ -229,6 +229,29 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean seekbarVisible = false;
     private float currentSeekSpeed = 1.0f;
     private int playbackSpeedIndex = 2; // Default to 1.0x
+
+    // ── Sleep timer ──────────────────────────────────────────────────────────
+    // Stops playback after a countdown, or at the end of the current item.
+    //
+    // The player view is created with keepScreenOn, so pausing alone would
+    // leave the TV lit all night — the exact thing this exists to prevent.
+    // Firing releases it too, and later playback re-arms it.
+    private static final int SLEEP_OFF = 0;
+    private static final int SLEEP_COUNTDOWN = 1;
+    private static final int SLEEP_END_OF_ITEM = 2;
+    private static final int[] SLEEP_MINUTE_OPTIONS = {15, 30, 45, 60, 90};
+    private int sleepTimerMode = SLEEP_OFF;
+    private long sleepTimerDeadlineElapsedMs = 0L;
+    private final Handler sleepTimerHandler = new Handler(Looper.getMainLooper());
+    private Runnable sleepTimerRunnable = null;
+
+    /**
+     * Latched from a sleep-timer stop until the user explicitly starts playback
+     * again. A channel's next-stream handoff is asynchronous, so a countdown
+     * expiring mid-flight would otherwise be undone by the stream that was
+     * already on its way.
+     */
+    private boolean sleepStopLatched = false;
     private final float[] playbackSpeeds = new float[] {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
     private final String[] playbackSpeedLabels = new String[] {"0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x"};
     private final int[] nightModeGains = new int[] {0, 500, 1000, 1500, 2000, 2500, 3000, 5000};  // millibels
@@ -407,6 +430,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             } else if (playbackState == Player.STATE_ENDED) {
                 hideBufferingIndicator();
                 randomApplied = false;
+                // "Stop at the end of this episode": suppress the advance and
+                // let the screen sleep. Playback has already finished, so
+                // there is nothing left to pause.
+                if (sleepTimerMode == SLEEP_END_OF_ITEM) {
+                    cancelSleepTimer(false);
+                    sleepStopLatched = true;
+                    if (playerView != null) playerView.setKeepScreenOn(false);
+                    Toast.makeText(TorboxTvPlayerActivity.this,
+                            "Sleep timer — stopping here", Toast.LENGTH_LONG).show();
+                    return;
+                }
                 requestNextStream();
             }
             updatePauseButtonLabel();
@@ -424,6 +458,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         @Override
         public void onIsPlayingChanged(boolean isPlaying) {
             updatePauseButtonLabel();
+            // Re-arm the screen if a sleep-timer stop released it and the user
+            // started watching again. Idempotent, so it's harmless otherwise.
+            if (isPlaying && playerView != null) {
+                playerView.setKeepScreenOn(true);
+            }
         }
 
         @Override
@@ -2972,6 +3011,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private void requestNextStream() {
         android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: requestNextStream() called");
+        // A sleep stop wins over anything already queued: the handoff is
+        // asynchronous, so a countdown expiring mid-flight would otherwise be
+        // undone by the stream that was already on its way.
+        if (sleepStopLatched) {
+            android.util.Log.d("DebrifyTV", "requestNextStream suppressed by sleep timer");
+            return;
+        }
         hasEverBeenReady = false;
         hideBufferingIndicator();
 
@@ -3014,6 +3060,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 String nextUrl = safeString(payload.get("url"));
                 String nextTitle = safeString(payload.get("title"));
                 String nextProvider = safeString(payload.get("provider")); // Extract provider info
+
+                // The check at the top of requestNextStream happens before this
+                // round trip, which can outlast the countdown — without
+                // rechecking, a stream already on its way would start the night
+                // up again. Gated here rather than in playMedia so an explicit
+                // channel pick after a stop still works.
+                if (sleepStopLatched) {
+                    android.util.Log.d("DebrifyTV", "next stream suppressed by sleep timer");
+                    hideNextOverlay();
+                    return;
+                }
 
                 if (nextUrl == null || nextUrl.isEmpty()) {
                     handleNoMoreStreams();
@@ -3324,6 +3381,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (player.isPlaying()) {
             player.pause();
         } else {
+            // An explicit press is the one thing that clears a sleep stop.
+            sleepStopLatched = false;
             player.play();
         }
         updatePauseButtonLabel();
@@ -3835,8 +3894,31 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         int idx = Math.max(0, Math.min(playbackSpeedIndex, playbackSpeedLabels.length - 1));
         List<UnifiedMenuController.Row> col2 = new ArrayList<>();
         col2.add(UnifiedMenuController.row("Playback speed").value(playbackSpeedLabels[idx]).tag("speed").build());
+        col2.add(UnifiedMenuController.row("Sleep timer").value(sleepTimerValueLabel()).tag("sleep").build());
+
+        UnifiedMenuController.Row selectedCol2 =
+                (col2Index >= 0 && col2Index < col2.size()) ? col2.get(col2Index) : null;
+        String tag = selectedCol2 != null ? selectedCol2.getTag() : null;
 
         List<UnifiedMenuController.Row> col3 = new ArrayList<>();
+        if ("sleep".equals(tag)) {
+            col3.add(UnifiedMenuController.row("Off")
+                    .selected(sleepTimerMode == SLEEP_OFF)
+                    .onOk(() -> cancelSleepTimer(true))
+                    .build());
+            for (int i = 0; i < SLEEP_MINUTE_OPTIONS.length; i++) {
+                final int minutes = SLEEP_MINUTE_OPTIONS[i];
+                col3.add(UnifiedMenuController.row(minutes + " minutes")
+                        .onOk(() -> startSleepCountdown(minutes))
+                        .build());
+            }
+            col3.add(UnifiedMenuController.row("End of episode")
+                    .selected(sleepTimerMode == SLEEP_END_OF_ITEM)
+                    .onOk(this::armSleepAtEndOfItem)
+                    .build());
+            return new UnifiedMenuController.Model(col1, "PLAYBACK", col2, "Sleep timer", col3);
+        }
+
         for (int i = 0; i < playbackSpeedLabels.length; i++) {
             final int target = i;
             col3.add(UnifiedMenuController.row(playbackSpeedLabels[i])
@@ -3850,6 +3932,62 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     .build());
         }
         return new UnifiedMenuController.Model(col1, "PLAYBACK", col2, "Playback speed", col3);
+    }
+
+    // ── Sleep timer ──────────────────────────────────────────────────────────
+
+    /** Whole minutes left, rounded up so a fresh 30-minute timer reads "30". */
+    private int sleepTimerMinutesLeft() {
+        if (sleepTimerMode != SLEEP_COUNTDOWN) return 0;
+        long remaining = sleepTimerDeadlineElapsedMs - android.os.SystemClock.elapsedRealtime();
+        return (int) Math.max(0, Math.ceil(remaining / 60000.0));
+    }
+
+    private String sleepTimerValueLabel() {
+        if (sleepTimerMode == SLEEP_END_OF_ITEM) return "End of episode";
+        if (sleepTimerMode == SLEEP_COUNTDOWN) return sleepTimerMinutesLeft() + " min";
+        return "Off";
+    }
+
+    private void startSleepCountdown(int minutes) {
+        cancelSleepTimer(false);
+        long durationMs = minutes * 60000L;
+        sleepTimerMode = SLEEP_COUNTDOWN;
+        // elapsedRealtime, not currentTimeMillis: the countdown must survive a
+        // clock adjustment and keep counting while the box is dozing.
+        sleepTimerDeadlineElapsedMs = android.os.SystemClock.elapsedRealtime() + durationMs;
+        sleepTimerRunnable = this::fireSleepTimer;
+        sleepTimerHandler.postDelayed(sleepTimerRunnable, durationMs);
+        Toast.makeText(this, "Sleep timer set for " + minutes + " minutes", Toast.LENGTH_SHORT).show();
+    }
+
+    private void armSleepAtEndOfItem() {
+        cancelSleepTimer(false);
+        sleepTimerMode = SLEEP_END_OF_ITEM;
+        Toast.makeText(this, "Sleep timer: stopping at the end of this episode", Toast.LENGTH_SHORT).show();
+    }
+
+    private void cancelSleepTimer(boolean announce) {
+        if (sleepTimerRunnable != null) {
+            sleepTimerHandler.removeCallbacks(sleepTimerRunnable);
+            sleepTimerRunnable = null;
+        }
+        sleepTimerMode = SLEEP_OFF;
+        sleepTimerDeadlineElapsedMs = 0L;
+        if (announce) Toast.makeText(this, "Sleep timer off", Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Stop for the night: pause and release the screen so the TV can sleep on
+     * its own. Debrify TV plays a channel of separate items rather than one
+     * resumable title, so there is no position to persist here.
+     */
+    private void fireSleepTimer() {
+        cancelSleepTimer(false);
+        sleepStopLatched = true;
+        if (player != null) player.pause();
+        if (playerView != null) playerView.setKeepScreenOn(false);
+        Toast.makeText(this, "Sleep timer ended — paused", Toast.LENGTH_LONG).show();
     }
 
     /** Style the live subtitle-appearance preview from the current SubtitleSettings. */
@@ -5279,6 +5417,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     protected void onDestroy() {
+        // The sleep timer belongs to this playback session — a pending one must
+        // not outlive the player and fire against a dead surface.
+        cancelSleepTimer(false);
         // Clean up unified guide text watcher to prevent memory leak
         if (unifiedGuideSearch != null && unifiedGuideTextWatcher != null) {
             unifiedGuideSearch.removeTextChangedListener(unifiedGuideTextWatcher);

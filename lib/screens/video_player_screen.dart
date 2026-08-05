@@ -78,6 +78,7 @@ import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/widgets/subtitle_line_picker_overlay.dart';
 import 'video_player/widgets/skip_segment_button.dart';
+import 'video_player/widgets/sleep_timer_sheet.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
@@ -820,6 +821,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Aspect / speed
   AspectMode _aspectMode = AspectMode.contain;
   double _playbackSpeed = 1.0;
+
+  // ── Sleep timer ───────────────────────────────────────────────────────────
+  // Stops playback after a countdown, or at the end of the current item. The
+  // wakelock already follows play state here, so pausing is enough to let the
+  // screen sleep — unlike the native players, which pin the screen on.
+  SleepTimerMode _sleepTimerMode = SleepTimerMode.off;
+
+  /// When the armed countdown fires. The label is derived from this rather
+  /// than from the duration picked, so it counts down instead of reading "30
+  /// min" right up to the moment it stops.
+  DateTime? _sleepTimerDeadline;
+
+  /// The preset originally picked, so the sheet can keep it checked while the
+  /// remaining time ticks away from it.
+  int _sleepTimerArmedMinutes = 0;
+  Timer? _sleepTimer;
+
+  /// Latched from a sleep-timer stop until the user explicitly starts playback
+  /// again. Advancing is asynchronous here (resolve the URL, then open), so a
+  /// countdown expiring mid-flight would otherwise be undone by the episode
+  /// that was already on its way.
+  bool _sleepStopLatched = false;
 
   // Press-and-hold for 2x speed
   double? _speedBeforeHold;
@@ -2306,6 +2329,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Mark the current episode as finished if it's a series
     await _markCurrentEpisodeAsFinished();
+
+    // "Stop at the end of this episode": suppress every advance below and let
+    // the screen sleep. Playback has already finished, so there is nothing
+    // left to pause.
+    if (_sleepTimerMode == SleepTimerMode.endOfItem) {
+      _cancelSleepTimer();
+      _sleepStopLatched = true;
+      _showSleepTimerToast('Sleep timer — stopping here');
+      return;
+    }
 
     // IPTV episode list (series/VOD): advance to the next episode in the
     // season, mirroring the Next button. Checked first because IPTV episodes
@@ -6077,6 +6110,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    // A sleep stop wins over anything already queued. Checked BEFORE any state
+    // moves: bailing out after _currentIndex has advanced would leave the
+    // playlist pointing at an episode that never opened, so resume and
+    // metadata would file against the wrong item. Only automatic advances are
+    // suppressed — picking something by hand means the viewer is awake, so it
+    // clears the latch instead.
+    if (_sleepStopLatched) {
+      if (autoplay && _isAutoAdvancing) {
+        _isAutoAdvancing = false;
+        _clearTransitionOnFailure();
+        return;
+      }
+      _sleepStopLatched = false;
+    }
+
     print(
       'PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay',
     );
@@ -7111,6 +7159,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // playing listener.
     _pausedByLifecycle = false;
     if (!_playerCreated || !mounted) return;
+    // Coming back from the background is not a request to un-stop the night:
+    // if the sleep timer fired while we were away, stay paused until someone
+    // presses play.
+    if (_sleepStopLatched) return;
     unawaited(_player.play());
   }
 
@@ -7135,6 +7187,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    // The sleep timer belongs to this playback session — a pending one must not
+    // outlive the player and fire against a disposed state.
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
     _lifecycle?.dispose();
     final revisionListener = _desktopRecordingRevisionListener;
     if (revisionListener != null) {
@@ -8112,6 +8168,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_isPlaying) {
       _player.pause();
     } else {
+      // An explicit press is the one thing that clears a sleep stop.
+      _sleepStopLatched = false;
       _player.play();
     }
     _scheduleAutoHide();
@@ -8208,6 +8266,105 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _scheduleAutoHide();
     _saveResume();
+  }
+
+  // ── Sleep timer ───────────────────────────────────────────────────────────
+
+  /// Whole minutes left, rounded up so a fresh 30-minute timer reads "30".
+  int get _sleepTimerMinutesLeft {
+    final deadline = _sleepTimerDeadline;
+    if (_sleepTimerMode != SleepTimerMode.countdown || deadline == null) {
+      return 0;
+    }
+    final remaining = deadline.difference(DateTime.now()).inMilliseconds;
+    if (remaining <= 0) return 0;
+    return (remaining / 60000).ceil();
+  }
+
+  /// Short label for the controls button, or null when nothing is armed.
+  String? get _sleepTimerButtonLabel => switch (_sleepTimerMode) {
+    SleepTimerMode.off => null,
+    SleepTimerMode.endOfItem => 'Episode',
+    SleepTimerMode.countdown => '$_sleepTimerMinutesLeft min',
+  };
+
+  Future<void> _showSleepTimerSheet() async {
+    _hideTimer?.cancel();
+    final picked = await SleepTimerSheet.show(
+      context,
+      current: _sleepTimerMode,
+      armedMinutes: _sleepTimerArmedMinutes,
+      minutesLeft: _sleepTimerMinutesLeft,
+      // A live channel has no end to stop at, so only the countdown applies —
+      // which is the case people actually want a sleep timer for.
+      allowEndOfItem: _currentIptvChannel?.isLive != true,
+    );
+    if (!mounted) return;
+    _scheduleAutoHide();
+    if (picked == null) return;
+
+    switch (picked.mode) {
+      case SleepTimerMode.off:
+        _cancelSleepTimer();
+        _showSleepTimerToast('Sleep timer off');
+      case SleepTimerMode.countdown:
+        _startSleepCountdown(picked.minutes);
+      case SleepTimerMode.endOfItem:
+        _cancelSleepTimer();
+        setState(() => _sleepTimerMode = SleepTimerMode.endOfItem);
+        _showSleepTimerToast('Stopping at the end of this episode');
+    }
+  }
+
+  void _startSleepCountdown(int minutes) {
+    _cancelSleepTimer();
+    final duration = Duration(minutes: minutes);
+    setState(() {
+      _sleepTimerMode = SleepTimerMode.countdown;
+      _sleepTimerDeadline = DateTime.now().add(duration);
+      _sleepTimerArmedMinutes = minutes;
+    });
+    _sleepTimer = Timer(duration, _fireSleepTimer);
+    _showSleepTimerToast('Sleep timer set for $minutes minutes');
+  }
+
+  void _cancelSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    if (_sleepTimerMode == SleepTimerMode.off) return;
+    if (mounted) {
+      setState(() {
+        _sleepTimerMode = SleepTimerMode.off;
+        _sleepTimerDeadline = null;
+        _sleepTimerArmedMinutes = 0;
+      });
+    } else {
+      _sleepTimerMode = SleepTimerMode.off;
+      _sleepTimerDeadline = null;
+    }
+  }
+
+  /// Stop for the night: persist the position first (losing someone's place
+  /// overnight is exactly the moment this feature is meant to be helping),
+  /// then pause — which releases the wakelock and lets the screen sleep.
+  Future<void> _fireSleepTimer() async {
+    _cancelSleepTimer();
+    _sleepStopLatched = true;
+    if (!_playerCreated) return;
+    await _saveResume();
+    await _player.pause();
+    _showSleepTimerToast('Sleep timer ended — paused');
+  }
+
+  void _showSleepTimerToast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _changeSpeed() {
@@ -8955,6 +9112,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             onBack: () => Navigator.of(context).pop(),
                             onAspect: _cycleAspectMode,
                             onSpeed: _changeSpeed,
+                            onSleepTimer: _showSleepTimerSheet,
+                            sleepTimerLabel: _sleepTimerButtonLabel,
                             speed: _playbackSpeed,
                             aspectMode: _aspectMode,
                             isLandscape: _landscapeLocked,

@@ -460,6 +460,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var skipFocusOfferedKey: String? = null
     private val skipSegmentCache = mutableMapOf<String, TvSkipSegments>()
 
+    // ── Sleep timer ───────────────────────────────────────────────────────────
+    // Stops playback after a countdown, or at the end of the current item.
+    //
+    // The activity adds FLAG_KEEP_SCREEN_ON on create and never clears it, so
+    // pausing alone would leave the TV lit all night — the exact thing this
+    // feature exists to prevent. Firing therefore drops the flag as well, and
+    // any later playback re-arms it (see onIsPlayingChanged).
+    private enum class SleepTimerMode { OFF, COUNTDOWN, END_OF_ITEM }
+    private var sleepTimerMode = SleepTimerMode.OFF
+    private var sleepTimerDeadlineElapsedMs = 0L
+    private val sleepTimerHandler = Handler(Looper.getMainLooper())
+    private var sleepTimerRunnable: Runnable? = null
+    private val sleepTimerMinuteOptions = listOf(15, 30, 45, 60, 90)
+
+    /**
+     * Latched from a sleep-timer stop until the user explicitly starts playback
+     * again. Pausing alone is not enough to make the stop stick: `onStart()`
+     * calls `play()` unconditionally, so the next time this activity restarts
+     * it would resume and play through the night; a queued auto-advance would
+     * do the same. Every automatic start checks this.
+     */
+    private var sleepStopLatched = false
+
     // Side-loaded external subtitle rendering. External (Stremio) subtitles are
     // downloaded + parsed off-thread and fed straight to subtitleOverlay from a
     // position ticker — the player source is never rebuilt, so switching
@@ -694,6 +717,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     }
                     sendProgress(completed = true)
 
+                    // "Stop at the end of this episode". Playback has already
+                    // finished, so this only has to suppress every advance
+                    // below and let the screen go to sleep.
+                    if (sleepTimerMode == SleepTimerMode.END_OF_ITEM) {
+                        cancelSleepTimer()
+                        sleepStopLatched = true
+                        releaseScreenForSleep()
+                        Toast.makeText(
+                            this@AndroidTvTorrentPlayerActivity,
+                            "Sleep timer — stopping here",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return
+                    }
+
                     // IPTV episode list (series/VOD): auto-advance to the next
                     // episode, mirroring the Next button. Checked before the
                     // payload guard below because IPTV mode has no `payload`
@@ -746,6 +784,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             updatePauseButtonLabel()
+            // Re-arm the screen if a sleep-timer stop released it and the user
+            // started watching again. Idempotent, so it's harmless otherwise.
+            if (isPlaying) {
+                holdScreenForPlayback()
+            }
             // Startup-channel memory — armed by real playback only, never by a
             // tune, so a dead stream cannot become "the last channel watched".
             if (isPlaying) noteLiveChannelPlaying()
@@ -2203,6 +2246,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // must not let the per-episode tracker percent override it. The parameter
     // retains its legacy name because the payload field does too.
     private fun playItem(index: Int, suppressTrakt: Boolean = false) {
+        // A sleep stop wins over anything already queued: the auto-advance
+        // arms a 1.5s postDelayed before starting the next item, and a
+        // countdown expiring inside that window would otherwise be undone by
+        // its own handoff. Only automatic starts are gated — an explicit pick
+        // clears the latch first (isAutoAdvancing is set by the auto paths).
+        if (sleepStopLatched) {
+            if (isAutoAdvancing) {
+                android.util.Log.d("AndroidTvPlayer", "playItem suppressed by sleep timer")
+                isAutoAdvancing = false
+                return
+            }
+            // Picking something by hand means the viewer is awake.
+            sleepStopLatched = false
+        }
         val model = payload ?: return
         android.util.Log.d("AndroidTvPlayer", "playItem called - index: $index, total items: ${model.items.size}")
         if (index < 0 || index >= model.items.size) {
@@ -2276,6 +2333,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun startPlayback(item: PlaybackItem) {
+        // Last gate before ExoPlayer actually starts. playItem's check happens
+        // before URL resolution, and that round trip can outlast the countdown
+        // — without rechecking here, a resolve that was already in flight would
+        // start the night up again and re-take both screen holds.
+        if (sleepStopLatched) {
+            android.util.Log.d("AndroidTvPlayer", "startPlayback suppressed by sleep timer")
+            return
+        }
+
         // Check if this is a PikPak provider - use retry logic for cold storage handling
         val isPikPak = PROVIDER_PIKPAK.equals(item.provider, ignoreCase = true) ||
             item.url.contains("mypikpak.com")
@@ -4386,6 +4452,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (it.isPlaying) {
                 it.pause()
             } else {
+                // An explicit press is the one thing that clears a sleep stop.
+                sleepStopLatched = false
                 it.play()
             }
         }
@@ -5178,6 +5246,79 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             seekFeedbackManager.showSeekForward("${seconds}s")
         }
         presentSkipSegment(null, null)
+    }
+
+    // ── Sleep timer ───────────────────────────────────────────────────────────
+
+    /** Whole minutes left, rounded up so a fresh 30-minute timer reads "30". */
+    private fun sleepTimerMinutesLeft(): Int {
+        if (sleepTimerMode != SleepTimerMode.COUNTDOWN) return 0
+        val remaining = sleepTimerDeadlineElapsedMs - android.os.SystemClock.elapsedRealtime()
+        return kotlin.math.ceil(remaining / 60_000.0).toInt().coerceAtLeast(0)
+    }
+
+    private fun sleepTimerValueLabel(): String = when (sleepTimerMode) {
+        SleepTimerMode.OFF -> "Off"
+        SleepTimerMode.END_OF_ITEM -> "End of episode"
+        SleepTimerMode.COUNTDOWN -> "${sleepTimerMinutesLeft()} min"
+    }
+
+    private fun startSleepCountdown(minutes: Int) {
+        cancelSleepTimer()
+        val durationMs = minutes * 60_000L
+        sleepTimerMode = SleepTimerMode.COUNTDOWN
+        // elapsedRealtime, not currentTimeMillis: the countdown must survive a
+        // clock adjustment and keep counting while the box is dozing.
+        sleepTimerDeadlineElapsedMs = android.os.SystemClock.elapsedRealtime() + durationMs
+        val runnable = Runnable { fireSleepTimer() }
+        sleepTimerRunnable = runnable
+        sleepTimerHandler.postDelayed(runnable, durationMs)
+        Toast.makeText(this, "Sleep timer set for $minutes minutes", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun armSleepAtEndOfItem() {
+        cancelSleepTimer()
+        sleepTimerMode = SleepTimerMode.END_OF_ITEM
+        Toast.makeText(this, "Sleep timer: stopping at the end of this episode", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun cancelSleepTimer(announce: Boolean = false) {
+        sleepTimerRunnable?.let { sleepTimerHandler.removeCallbacks(it) }
+        sleepTimerRunnable = null
+        sleepTimerMode = SleepTimerMode.OFF
+        sleepTimerDeadlineElapsedMs = 0L
+        if (announce) Toast.makeText(this, "Sleep timer off", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Stop for the night: persist the position first (losing someone's place
+     * overnight is exactly the moment this feature is supposed to be helping),
+     * pause, then release the screen so the TV can sleep on its own.
+     */
+    private fun fireSleepTimer() {
+        cancelSleepTimer()
+        sleepStopLatched = true
+        sendProgress(completed = false)
+        player?.pause()
+        releaseScreenForSleep()
+        Toast.makeText(this, "Sleep timer ended — paused", Toast.LENGTH_LONG).show()
+    }
+
+    /**
+     * Let the screen go dark. BOTH holds have to go: the activity adds
+     * FLAG_KEEP_SCREEN_ON on create, and the layout independently sets
+     * `android:keepScreenOn="true"` on the PlayerView — a view holding it
+     * re-applies the window flag, so clearing only one keeps the TV lit.
+     */
+    private fun releaseScreenForSleep() {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (::playerView.isInitialized) playerView.keepScreenOn = false
+    }
+
+    /** Re-take both holds when playback resumes. Idempotent. */
+    private fun holdScreenForPlayback() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (::playerView.isInitialized) playerView.keepScreenOn = true
     }
 
     private fun resetSkipSegmentState() {
@@ -10808,10 +10949,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun umPlaybackModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
         val col2 = listOf(
             mrow("Playback speed", value = playbackSpeedLabels.getOrNull(playbackSpeedIndex), tag = "speed"),
+            mrow("Sleep timer", value = sleepTimerValueLabel(), tag = "sleep"),
             mrow("Shuffle & autoplay", tag = "shuffle")
         )
         val tag = col2.getOrNull(col2Index)?.tag
-        val (title, col3) = if (tag == "shuffle") {
+        val (title, col3) = if (tag == "sleep") {
+            "Sleep timer" to buildList {
+                add(
+                    mrow("Off", selected = sleepTimerMode == SleepTimerMode.OFF, onOk = {
+                        cancelSleepTimer(announce = true)
+                    })
+                )
+                sleepTimerMinuteOptions.forEach { minutes ->
+                    add(mrow("$minutes minutes", onOk = { startSleepCountdown(minutes) }))
+                }
+                // A live channel has no end to stop at, so only the countdown
+                // applies there — which is the case people actually want it for.
+                if (iptvChannels.getOrNull(currentIptvIndex)?.isLive != true) {
+                    add(
+                        mrow(
+                            "End of episode",
+                            selected = sleepTimerMode == SleepTimerMode.END_OF_ITEM,
+                            onOk = { armSleepAtEndOfItem() }
+                        )
+                    )
+                }
+            }
+        } else if (tag == "shuffle") {
             "Shuffle & autoplay" to listOf(
                 mrow("Play random once", accent = true, onOk = {
                     continuousShuffleEnabled = false; shuffleBag.clear(); playRandom(); unifiedMenu?.hide()
@@ -12587,7 +12751,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        player?.play()
+        // Never undo a sleep-timer stop — this runs every time the activity
+        // comes back, including after the screen has slept.
+        if (!sleepStopLatched) player?.play()
         // Resume the side-rendered subtitle ticker paused in onStop.
         if (externalSubtitleActive) startExternalSubtitleTicker()
     }
@@ -12706,6 +12872,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         RecordingRegistry.removeListener(recordingRegistryListener)
+        // The sleep timer belongs to this playback session — a pending one must
+        // not outlive the player and fire against a dead surface.
+        cancelSleepTimer()
         // Finalize any in-progress TEE recording so its MediaStore row isn't
         // left pending (invisible) when the player is torn down. Engine
         // captures deliberately ignore player teardown.
