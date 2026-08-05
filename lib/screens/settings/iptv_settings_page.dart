@@ -16,18 +16,34 @@ import '../../utils/m3u_parser.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../../utils/tv_reveal.dart';
-import '../../services/android_native_downloader.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/live_recording_service.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
 import 'iptv_hidden_categories_page.dart';
+import 'iptv_style_page.dart';
+import 'player_guide_style_page.dart';
 import 'recordings_page.dart';
 import '../../widgets/recording_limit_dialogs.dart';
 import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 import '../../widgets/tv_text_field.dart';
 import 'iptv_settings_two_pane.dart';
 import 'widgets/settings_widgets.dart';
+
+/// The narrow (phone / small-window) layout's destinations. The wide layout
+/// keeps its rail + pane; this is the phone-native equivalent — a hub page of
+/// section rows, each opening a focused sub-view inside the SAME route (back
+/// returns to the hub via PopScope, so section state and the add-form
+/// controllers survive the trip).
+enum _PhoneSection {
+  hub,
+  sources,
+  lists,
+  hidden,
+  startup,
+  continueWatching,
+  recording,
+}
 
 class IptvSettingsPage extends StatefulWidget {
   const IptvSettingsPage({super.key, this.openAddSource = false});
@@ -177,6 +193,42 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   // Ids of playlists currently being refreshed (re-fetched from source)
   final Set<String> _refreshingIds = {};
 
+  /// Where the narrow layout is (see [_PhoneSection]). The wide layout never
+  /// reads it and forces it back to [_PhoneSection.hub] so a resize can't
+  /// strand back-handling in a sub-view that no longer renders.
+  _PhoneSection _phoneSection = _PhoneSection.hub;
+
+  /// The hub's first row (Sources) — DOWN from the back button and the
+  /// narrow TV entry both land here, mirroring how the old single column
+  /// landed on the add-form tabs.
+  final FocusNode _hubSourcesFocusNode = FocusNode(
+    debugLabel: 'iptv-hub-sources',
+  );
+
+  /// Non-focusable marker around whichever narrow view is showing — the
+  /// picker pages' idiom: section transitions unmount the focused row, so
+  /// DPAD re-seeds on the new view's first traversal descendant.
+  final FocusNode _phoneViewMarker = FocusNode(
+    debugLabel: 'iptv-phone-view',
+    skipTraversal: true,
+    canRequestFocus: false,
+  );
+
+  /// Switch the narrow layout's view. On TV-class input the old view's
+  /// focused row is about to unmount, which would strand DPAD on the bare
+  /// FocusScope — hand it to the new view's first control instead. Touch
+  /// keeps its no-focus-ring behavior (the guard below never fires there).
+  void _enterPhoneSection(_PhoneSection section) {
+    setState(() => _phoneSection = section);
+    if (!PlatformUtil.isAndroidTvCached) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _twoPaneActive) return;
+      final primary = FocusManager.instance.primaryFocus;
+      if (primary != null && primary is! FocusScopeNode) return;
+      _phoneViewMarker.traversalDescendants.firstOrNull?.requestFocus();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -186,6 +238,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // Rebuild on tab change so the inactive tabs' ExcludeFocus updates —
     // otherwise DPAD traversal can wander into off-screen tab content.
     _tabController.addListener(_onTabChanged);
+    // An "Add playlist" deep-link lands on the Sources sub-view, where the
+    // add forms live — the hub would be an extra hop the user didn't ask for.
+    if (widget.openAddSource) _phoneSection = _PhoneSection.sources;
     _loadSettings();
   }
 
@@ -234,6 +289,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _urlController.dispose();
     _epgUrlController.dispose();
     _backButtonFocusNode.dispose();
+    _hubSourcesFocusNode.dispose();
+    _phoneViewMarker.dispose();
     _nameInputFocusNode.dispose();
     _urlInputFocusNode.dispose();
     _epgUrlInputFocusNode.dispose();
@@ -518,7 +575,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           }
           return;
         }
-        _urlTabFocusNode.requestFocus();
+        // Narrow: an add-source deep-link opened straight onto the Sources
+        // sub-view where the URL tab is mounted; a normal entry sits on the
+        // hub, whose first row is the landing.
+        if (_phoneSection == _PhoneSection.sources) {
+          _urlTabFocusNode.requestFocus();
+        } else {
+          _hubSourcesFocusNode.requestFocus();
+        }
       });
     }
   }
@@ -1638,41 +1702,81 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       );
     }
 
-    return SettingsPageScaffold(
-      title: 'IPTV Playlists',
-      leading: _TvFocusableBackButton(
-        focusNode: _backButtonFocusNode,
-        // Two-pane hands DOWN to the rail; the single column lands on the
-        // currently-selected tab, not always the first one.
-        onDownArrow: () {
-          if (_twoPaneActive) {
-            _twoPaneKey.currentState?.focusRail();
-            return;
-          }
-          _focusAndReveal(switch (_tabController.index) {
-            1 => _fileTabFocusNode,
-            2 => _xcTabFocusNode,
-            _ => _urlTabFocusNode,
-          });
+    return PopScope(
+      // Sub-views pop back to the hub, not off the page — both the system
+      // back and the AppBar back go through maybePop, so one gesture
+      // contract covers both. The wide layout always sits on `hub` (the
+      // LayoutBuilder below forces it), so it pops normally.
+      canPop: _phoneSection == _PhoneSection.hub,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !mounted) return;
+        _enterPhoneSection(_PhoneSection.hub);
+      },
+      child: SettingsPageScaffold(
+        title: switch (_phoneSection) {
+          _PhoneSection.hub => 'IPTV Playlists',
+          _PhoneSection.sources => 'Sources',
+          _PhoneSection.lists => 'Channel Lists',
+          _PhoneSection.hidden => 'Hidden Categories',
+          _PhoneSection.startup => 'Startup',
+          _PhoneSection.continueWatching => 'Continue Watching',
+          _PhoneSection.recording => 'Recording',
         },
-      ),
-      // TV and desktop get the rail + detail layout; phones and narrow
-      // windows keep the single column, which is the only thing that fits.
-      body: LayoutBuilder(
-        builder: (context, c) {
-          final twoPane = c.maxWidth >= 900 && c.maxHeight >= 420;
-          // Assigned synchronously, and it has to be: _buildSingleColumn
-          // reads this flag *in this same pass* to decide whether the add
-          // forms' DOWN key should hand off to the playlist tiles. Deferring
-          // it to a post-frame meant the just-narrowed layout was built with
-          // the wide layout's answer, and nothing scheduled a rebuild to
-          // correct it — so DOWN stayed broken until some unrelated
-          // setState. Safe because no rebuild is needed: the only other
-          // readers are key handlers, which run on user input, never during
-          // layout.
-          _twoPaneActive = twoPane;
-          return twoPane ? _buildTwoPane() : _buildSingleColumn();
-        },
+        leading: _TvFocusableBackButton(
+          focusNode: _backButtonFocusNode,
+          // Two-pane hands DOWN to the rail; the single column lands on the
+          // currently-selected tab, not always the first one — but only the
+          // Sources sub-view mounts the tabs at all; everywhere else default
+          // traversal owns DOWN.
+          onDownArrow: () {
+            if (_twoPaneActive) {
+              _twoPaneKey.currentState?.focusRail();
+              return;
+            }
+            if (_phoneSection != _PhoneSection.sources) {
+              // The back button swallows DOWN whenever a handler exists, so
+              // hand focus somewhere real: whichever view is up, its first
+              // focusable row (on the hub that's the Sources row).
+              _phoneViewMarker.traversalDescendants.firstOrNull?.requestFocus();
+              return;
+            }
+            _focusAndReveal(switch (_tabController.index) {
+              1 => _fileTabFocusNode,
+              2 => _xcTabFocusNode,
+              _ => _urlTabFocusNode,
+            });
+          },
+        ),
+        // TV and desktop get the rail + detail layout; phones and narrow
+        // windows keep the single column, which is the only thing that fits.
+        body: LayoutBuilder(
+          builder: (context, c) {
+            final twoPane = c.maxWidth >= 900 && c.maxHeight >= 420;
+            // Assigned synchronously, and it has to be: _buildSingleColumn
+            // reads this flag *in this same pass* to decide whether the add
+            // forms' DOWN key should hand off to the playlist tiles. Deferring
+            // it to a post-frame meant the just-narrowed layout was built with
+            // the wide layout's answer, and nothing scheduled a rebuild to
+            // correct it — so DOWN stayed broken until some unrelated
+            // setState. Safe because no rebuild is needed: the only other
+            // readers are key handlers, which run on user input, never during
+            // layout.
+            _twoPaneActive = twoPane;
+            // The wide layout renders no sub-views, so a resize mid-sub-view
+            // must land back on the hub. Unlike _twoPaneActive this one IS
+            // read by widgets built before this LayoutBuilder runs (the
+            // PopScope's canPop and the scaffold title), so a bare field
+            // assignment would leave them stale indefinitely — schedule a
+            // rebuild for them.
+            if (twoPane && _phoneSection != _PhoneSection.hub) {
+              _phoneSection = _PhoneSection.hub;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) setState(() {});
+              });
+            }
+            return twoPane ? _buildTwoPane() : _buildSingleColumn();
+          },
+        ),
       ),
     );
   }
@@ -1753,384 +1857,448 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Widget _buildSingleColumn() {
     return FocusTraversalGroup(
       policy: OrderedTraversalPolicy(),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const SettingsPageHeader(
-            icon: Icons.live_tv_rounded,
-            title: 'IPTV Playlists',
-            subtitle:
-                'Add M3U playlists from a URL, import from a file, or login with Xtream Codes.',
-          ),
-          const SizedBox(height: 24),
+      child: Focus(
+        focusNode: _phoneViewMarker,
+        canRequestFocus: false,
+        skipTraversal: true,
+        child: switch (_phoneSection) {
+          _PhoneSection.hub => _buildPhoneHub(),
+          _PhoneSection.sources => _buildSourcesView(),
+          _PhoneSection.lists => _buildListsView(),
+          _PhoneSection.hidden => _buildHiddenView(),
+          _PhoneSection.startup => _buildStartupView(),
+          _PhoneSection.continueWatching => _buildContinueWatchingView(),
+          _PhoneSection.recording => _buildRecordingView(),
+        },
+      ),
+    );
+  }
 
-          // Add Playlist section with Tabs
-          const SettingsSectionLabel('Add Playlist'),
-          const SizedBox(height: 6),
-
-          // Tab bar
-          _TvFocusableTabBar(
-            tabController: _tabController,
-            urlTabFocusNode: _urlTabFocusNode,
-            fileTabFocusNode: _fileTabFocusNode,
-            xcTabFocusNode: _xcTabFocusNode,
-            onUpArrow: () => _backButtonFocusNode.requestFocus(),
-            onDownArrowFromUrlTab: () =>
-                _focusContentAfterTabSwitch(_nameInputFocusNode),
-            onDownArrowFromFileTab: () =>
-                _focusContentAfterTabSwitch(_importFileButtonFocusNode),
-            onDownArrowFromXcTab: () =>
-                _focusContentAfterTabSwitch(_xcNameFocusNode),
-          ),
-          const SizedBox(height: 16),
-
-          // Tab content (fixed height container). Sized for the tallest
-          // tab — Xtream Login's four fields + button since the optional
-          // name field joined (From URL has three fields + button); at 260
-          // the button overflowed the box (painted-but-unclipped in release,
-          // overlapping the section below).
-          SizedBox(
-            height: 410,
-            child: TabBarView(
-              controller: _tabController,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                // Off-screen tab pages stay built by TabBarView, so exclude
-                // them from focus or DPAD traversal can land on invisible
-                // fields/buttons (a dead zone on TV).
-                ExcludeFocus(
-                  excluding: _tabController.index != 0,
-                  child: _buildUrlTabContent(),
-                ),
-                ExcludeFocus(
-                  excluding: _tabController.index != 1,
-                  child: _buildFileTabContent(),
-                ),
-                ExcludeFocus(
-                  excluding: _tabController.index != 2,
-                  child: _buildXcTabContent(),
-                ),
-              ],
+  /// The narrow layout's first screen: one row per destination, mirroring
+  /// the wide layout's rail. Every row quotes its live state so the hub
+  /// reads as a summary, not a menu.
+  Widget _buildPhoneHub() {
+    // Sum only sources that still exist — a deleted source's cached count
+    // must not haunt the subtitle.
+    final hideableIds = {for (final p in _hideableSources) p.id};
+    final hiddenTotal = _hiddenCounts.entries
+        .where((e) => hideableIds.contains(e.key))
+        .fold(0, (a, e) => a + e.value);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsPageHeader(
+          icon: Icons.live_tv_rounded,
+          title: 'IPTV Playlists',
+          subtitle:
+              'Sources, lists, startup and looks — everything IPTV in one '
+              'place.',
+        ),
+        const SizedBox(height: 24),
+        SettingsSection(
+          title: '',
+          children: [
+            SettingsTile(
+              focusNode: _hubSourcesFocusNode,
+              icon: Icons.playlist_play_rounded,
+              title: 'Sources',
+              subtitle: _playlists.isEmpty
+                  ? 'None yet — add your first playlist'
+                  : '${_playlists.length} '
+                        '${_playlists.length == 1 ? 'source' : 'sources'}',
+              onTap: () async => _enterPhoneSection(_PhoneSection.sources),
             ),
-          ),
-          const SizedBox(height: 24),
-
-          // Playlists list
-          const SettingsSectionLabel('Your Playlists'),
-          Text(
-            'Tap the star to set a default playlist.',
-            style: TextStyle(fontSize: 12, color: kSettingsDim),
-          ),
-          const SizedBox(height: 16),
-
-          if (_playlists.isEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Icon(Icons.playlist_add, size: 48, color: kSettingsDim2),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No playlists yet',
-                      style: TextStyle(fontSize: 14, color: kSettingsDim),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Add an M3U playlist URL above',
-                      style: TextStyle(fontSize: 12, color: kSettingsDim2),
-                    ),
-                  ],
-                ),
+            SettingsTile(
+              icon: Icons.video_library_rounded,
+              title: 'Channel lists',
+              subtitle: _customLists.isEmpty
+                  ? 'Favorites only'
+                  : 'Favorites + ${_customLists.length} '
+                        '${_customLists.length == 1 ? 'list' : 'lists'}',
+              onTap: () async => _enterPhoneSection(_PhoneSection.lists),
+            ),
+            if (_hideableSources.isNotEmpty)
+              SettingsTile(
+                icon: Icons.visibility_off_rounded,
+                title: 'Hidden categories',
+                subtitle: hiddenTotal == 0
+                    ? 'Nothing hidden'
+                    : '$hiddenTotal '
+                          '${hiddenTotal == 1 ? 'category' : 'categories'} '
+                          'hidden',
+                onTap: () async => _enterPhoneSection(_PhoneSection.hidden),
               ),
-            )
-          else
-            Card(child: Column(children: _buildPlaylistsList())),
-          const SizedBox(height: 24),
-
-          // Channel lists
-          const SettingsSectionLabel('Your Lists'),
-          Text(
-            'Hold OK (or long-press) any channel to add it to a list. '
-            'Deleting a list never deletes its channels.',
-            style: TextStyle(fontSize: 12, color: kSettingsDim),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Column(
-              children: [
-                ..._buildListsSection(),
-                _FocusableSettingsTile(
-                  focusNode: _createListFocusNode,
-                  icon: Icons.add_rounded,
-                  label: 'Create list',
-                  onTap: _createList,
-                ),
-              ],
+            SettingsTile(
+              icon: Icons.rocket_launch_rounded,
+              title: 'Startup',
+              subtitle: !_startupEnabled
+                  ? 'Off'
+                  : _startupMode == StorageService.startupIptvModeLast
+                  ? 'Last watched channel'
+                  : _startupChannelLabel,
+              onTap: () async => _enterPhoneSection(_PhoneSection.startup),
             ),
-          ),
-          const SizedBox(height: 24),
-
-          // Hidden categories — one row per source that stores a catalog.
-          if (_hideableSources.isNotEmpty) ...[
-            const SettingsSectionLabel('Hidden categories'),
-            Text(
-              'Hold OK (or long-press) a category on the IPTV page to hide '
-              'it. Nothing is deleted — bring it back here any time.',
-              style: TextStyle(fontSize: 12, color: kSettingsDim),
+            SettingsTile(
+              icon: Icons.history_toggle_off_rounded,
+              title: 'Continue watching',
+              subtitle: _trackContinueWatching
+                  ? 'Tracking movies and series'
+                  : 'Off',
+              onTap: () async =>
+                  _enterPhoneSection(_PhoneSection.continueWatching),
             ),
-            const SizedBox(height: 16),
-            Card(child: Column(children: _buildHiddenCategoriesSection())),
-            const SizedBox(height: 24),
+            // The looks land on the same standalone pickers the Appearance
+            // settings section uses — one implementation per pref.
+            if (_appearanceVisible)
+              SettingsTile(
+                icon: Icons.style_rounded,
+                title: 'Appearance',
+                subtitle: iptvStyleLabel(_iptvStyle),
+                onTap: () async => unawaited(_openIptvStylePicker()),
+              ),
+            SettingsTile(
+              icon: Icons.smart_display_rounded,
+              title: 'Player guide',
+              subtitle: playerGuideStyleLabel(_playerGuideStyle),
+              onTap: () async => unawaited(_openPlayerGuidePicker()),
+            ),
+            if (_recordingSectionVisible)
+              SettingsTile(
+                icon: Icons.fiber_manual_record_rounded,
+                title: 'Recording',
+                subtitle: !_engineToggleVisible
+                    ? (_scheduledCount == 0
+                          ? 'Recordings'
+                          : '$_scheduledCount scheduled')
+                    : _recordingEngineOn
+                    ? (_scheduledCount == 0
+                          ? 'Engine on'
+                          : 'Engine on · $_scheduledCount scheduled')
+                    : 'Player-tied',
+                onTap: () async => _enterPhoneSection(_PhoneSection.recording),
+              ),
           ],
+        ),
+        const SizedBox(height: 24),
+        if (_defaultPlaylistId != null)
+          const SettingsInfoBanner(
+            text:
+                'Your default playlist will load automatically when you select IPTV.',
+          ),
+      ],
+    );
+  }
 
-          // Startup channel
-          const SettingsSectionLabel('Startup'),
-          const SizedBox(height: 6),
+  /// Same persist-then-reflect contract as the root settings screen's
+  /// Appearance rows: the picker page owns the write; re-read on the way
+  /// back so the hub caption matches.
+  Future<void> _openIptvStylePicker() async {
+    await pushSettingsPage(context, const IptvStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getIptvStyle();
+    if (mounted) setState(() => _iptvStyle = style);
+  }
+
+  Future<void> _openPlayerGuidePicker() async {
+    await pushSettingsPage(context, const PlayerGuideStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getIptvPlayerGuideStyle();
+    if (mounted) setState(() => _playerGuideStyle = style);
+  }
+
+  Widget _buildSourcesView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Add Playlist section with Tabs
+        const SettingsSectionLabel('Add Playlist'),
+        const SizedBox(height: 6),
+
+        // Tab bar
+        _TvFocusableTabBar(
+          tabController: _tabController,
+          urlTabFocusNode: _urlTabFocusNode,
+          fileTabFocusNode: _fileTabFocusNode,
+          xcTabFocusNode: _xcTabFocusNode,
+          onUpArrow: () => _backButtonFocusNode.requestFocus(),
+          onDownArrowFromUrlTab: () =>
+              _focusContentAfterTabSwitch(_nameInputFocusNode),
+          onDownArrowFromFileTab: () =>
+              _focusContentAfterTabSwitch(_importFileButtonFocusNode),
+          onDownArrowFromXcTab: () =>
+              _focusContentAfterTabSwitch(_xcNameFocusNode),
+        ),
+        const SizedBox(height: 16),
+
+        // Tab content (fixed height container). Sized for the tallest
+        // tab — Xtream Login's four fields + button since the optional
+        // name field joined (From URL has three fields + button); at 260
+        // the button overflowed the box (painted-but-unclipped in release,
+        // overlapping the section below).
+        SizedBox(
+          height: 410,
+          child: TabBarView(
+            controller: _tabController,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              // Off-screen tab pages stay built by TabBarView, so exclude
+              // them from focus or DPAD traversal can land on invisible
+              // fields/buttons (a dead zone on TV).
+              ExcludeFocus(
+                excluding: _tabController.index != 0,
+                child: _buildUrlTabContent(),
+              ),
+              ExcludeFocus(
+                excluding: _tabController.index != 1,
+                child: _buildFileTabContent(),
+              ),
+              ExcludeFocus(
+                excluding: _tabController.index != 2,
+                child: _buildXcTabContent(),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Playlists list
+        const SettingsSectionLabel('Your Playlists'),
+        Text(
+          'Tap the star to set a default playlist.',
+          style: TextStyle(fontSize: 12, color: kSettingsDim),
+        ),
+        const SizedBox(height: 16),
+
+        if (_playlists.isEmpty)
           Card(
-            child: Column(
-              children: [
-                SwitchListTile(
-                  title: const Text('Start on a channel'),
-                  subtitle: const Text(
-                    'Open straight into a live channel when the app starts. '
-                    'Press BACK while it is tuning to stop.',
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Icon(Icons.playlist_add, size: 48, color: kSettingsDim2),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No playlists yet',
+                    style: TextStyle(fontSize: 14, color: kSettingsDim),
                   ),
-                  value: _startupEnabled,
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add an M3U playlist URL above',
+                    style: TextStyle(fontSize: 12, color: kSettingsDim2),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Card(child: Column(children: _buildPlaylistsList())),
+        const SizedBox(height: 24),
+        if (_defaultPlaylistId != null)
+          const SettingsInfoBanner(
+            text:
+                'Your default playlist will load automatically when you select IPTV.',
+          ),
+      ],
+    );
+  }
+
+  Widget _buildListsView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsSectionLabel('Your Lists'),
+        Text(
+          'Hold OK (or long-press) any channel to add it to a list. '
+          'Deleting a list never deletes its channels.',
+          style: TextStyle(fontSize: 12, color: kSettingsDim),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            children: [
+              ..._buildListsSection(),
+              _FocusableSettingsTile(
+                focusNode: _createListFocusNode,
+                icon: Icons.add_rounded,
+                label: 'Create list',
+                onTap: _createList,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // One row per source that stores a catalog. The hub hides its row when no
+  // source qualifies, so this view never renders empty.
+  Widget _buildHiddenView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsSectionLabel('Hidden categories'),
+        Text(
+          'Tap the eye (or long-press) on a category in the IPTV page\'s '
+          'category picker to hide it. Nothing is deleted — bring it '
+          'back here any time.',
+          style: TextStyle(fontSize: 12, color: kSettingsDim),
+        ),
+        const SizedBox(height: 16),
+        Card(child: Column(children: _buildHiddenCategoriesSection())),
+      ],
+    );
+  }
+
+  Widget _buildStartupView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsSectionLabel('Startup'),
+        const SizedBox(height: 6),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                title: const Text('Start on a channel'),
+                subtitle: const Text(
+                  'Open straight into a live channel when the app starts. '
+                  'Press BACK while it is tuning to stop.',
+                ),
+                value: _startupEnabled,
+                onChanged: (enabled) async {
+                  await StorageService.setStartupIptvEnabled(enabled);
+                  if (mounted) setState(() => _startupEnabled = enabled);
+                },
+              ),
+              if (_startupEnabled) ...[
+                const Divider(height: 1),
+                RadioListTile<String>(
+                  title: const Text('Last watched channel'),
+                  subtitle: Text(
+                    _lastLiveChannel == null
+                        // Honest about the bootstrap: the first boot after
+                        // enabling this has nothing to resume, and silently
+                        // doing nothing reads as broken.
+                        ? 'Nothing watched yet — starts on the first '
+                              'channel, then remembers what you watch.'
+                        : 'Currently: ${_lastLiveChannelLabel}',
+                  ),
+                  value: StorageService.startupIptvModeLast,
+                  groupValue: _startupMode,
+                  onChanged: _setStartupMode,
+                ),
+                RadioListTile<String>(
+                  title: const Text('A specific channel'),
+                  subtitle: Text(_startupChannelLabel),
+                  value: StorageService.startupIptvModePinned,
+                  groupValue: _startupMode,
+                  onChanged: _setStartupMode,
+                ),
+                if (_startupMode == StorageService.startupIptvModePinned)
+                  _FocusableSettingsTile(
+                    focusNode: _startupChannelFocusNode,
+                    icon: Icons.live_tv_rounded,
+                    label: _startupChannel == null
+                        ? 'Choose channel'
+                        : 'Change channel',
+                    onTap: _pickStartupChannel,
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContinueWatchingView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsSectionLabel('Continue watching'),
+        const SizedBox(height: 6),
+        Card(
+          child: SwitchListTile(
+            title: const Text('Track movies and series'),
+            subtitle: const Text(
+              'Keeps a Continue watching shelf of the on-demand items you '
+              'start, on Home and in IPTV. Off hides it and stops adding to '
+              'it — nothing is deleted, and playback still resumes where '
+              'you left off.',
+            ),
+            value: _trackContinueWatching,
+            onChanged: _setTrackContinueWatching,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // The Appearance and Player guide looks are NOT sub-views: their hub rows
+  // push the same standalone picker pages the root Appearance section uses,
+  // so each pref keeps exactly one narrow-layout picker implementation.
+
+  // Gated by the hub row (engine support / desktop scheduler), so this view
+  // never renders where recording can't run.
+  Widget _buildRecordingView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsSectionLabel('Recording'),
+        const SizedBox(height: 6),
+        Card(
+          child: Column(
+            children: [
+              if (_engineToggleVisible)
+                SwitchListTile(
+                  title: const Text('Background recording engine'),
+                  subtitle: const Text(
+                    'Recordings keep running when you zap or leave the '
+                    'app, and programmes can be scheduled from the TV '
+                    'guide. Off returns to player-tied recording. Uses an '
+                    'extra connection to your provider.',
+                  ),
+                  value: _recordingEngineOn,
                   onChanged: (enabled) async {
-                    await StorageService.setStartupIptvEnabled(enabled);
-                    if (mounted) setState(() => _startupEnabled = enabled);
+                    await LiveRecordingService.setEngineEnabled(enabled);
+                    if (mounted) {
+                      setState(() => _recordingEngineOn = enabled);
+                    }
                   },
                 ),
-                if (_startupEnabled) ...[
+              if (!_engineToggleVisible || _recordingEngineOn) ...[
+                if (_engineToggleVisible) const Divider(height: 1),
+                _FocusableSettingsTile(
+                  focusNode: _maxConcurrentFocusNode,
+                  icon: Icons.filter_none_rounded,
+                  label: 'Simultaneous recordings ($_maxConcurrent)',
+                  onTap: _pickMaxConcurrent,
+                ),
+                if (_batteryExempt != null) ...[
                   const Divider(height: 1),
-                  RadioListTile<String>(
-                    title: const Text('Last watched channel'),
-                    subtitle: Text(
-                      _lastLiveChannel == null
-                          // Honest about the bootstrap: the first boot after
-                          // enabling this has nothing to resume, and silently
-                          // doing nothing reads as broken.
-                          ? 'Nothing watched yet — starts on the first '
-                                'channel, then remembers what you watch.'
-                          : 'Currently: ${_lastLiveChannelLabel}',
-                    ),
-                    value: StorageService.startupIptvModeLast,
-                    groupValue: _startupMode,
-                    onChanged: _setStartupMode,
-                  ),
-                  RadioListTile<String>(
-                    title: const Text('A specific channel'),
-                    subtitle: Text(_startupChannelLabel),
-                    value: StorageService.startupIptvModePinned,
-                    groupValue: _startupMode,
-                    onChanged: _setStartupMode,
-                  ),
-                  if (_startupMode == StorageService.startupIptvModePinned)
-                    _FocusableSettingsTile(
-                      focusNode: _startupChannelFocusNode,
-                      icon: Icons.live_tv_rounded,
-                      label: _startupChannel == null
-                          ? 'Choose channel'
-                          : 'Change channel',
-                      onTap: _pickStartupChannel,
-                    ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Continue watching
-          const SettingsSectionLabel('Continue watching'),
-          const SizedBox(height: 6),
-          Card(
-            child: SwitchListTile(
-              title: const Text('Track movies and series'),
-              subtitle: const Text(
-                'Keeps a Continue watching shelf of the on-demand items you '
-                'start, on Home and in IPTV. Off hides it and stops adding to '
-                'it — nothing is deleted, and playback still resumes where '
-                'you left off.',
-              ),
-              value: _trackContinueWatching,
-              onChanged: _setTrackContinueWatching,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Appearance — only where the cockpit renders (Android TV, desktop).
-          if (_appearanceVisible) ...[
-            const SettingsSectionLabel('Appearance'),
-            Text(
-              'How the IPTV page looks on TV and desktop. Phones keep the '
-              'classic list either way.',
-              style: TextStyle(fontSize: 12, color: kSettingsDim),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Column(
-                children: [
-                  RadioListTile<String>(
-                    title: const Text('Command Center'),
-                    subtitle: const Text(
-                      'The shipped cockpit — dense guide, gold focus',
-                    ),
-                    value: 'command',
-                    groupValue: _iptvStyle,
-                    onChanged: (v) =>
-                        v == null ? null : unawaited(_setIptvStyle(v)),
-                  ),
-                  RadioListTile<String>(
-                    title: const Text('First Edition'),
-                    subtitle: const Text(
-                      'Editorial ink and serif headlines — hairline ledger, '
-                      'ivory focus',
-                    ),
-                    value: 'edition',
-                    groupValue: _iptvStyle,
-                    onChanged: (v) =>
-                        v == null ? null : unawaited(_setIptvStyle(v)),
-                  ),
-                  RadioListTile<String>(
-                    title: const Text('Master Control'),
-                    subtitle: const Text(
-                      'Broadcast console — pure black, mono numerals, amber '
-                      'playhead',
-                    ),
-                    value: 'console',
-                    groupValue: _iptvStyle,
-                    onChanged: (v) =>
-                        v == null ? null : unawaited(_setIptvStyle(v)),
+                  _FocusableSettingsTile(
+                    focusNode: _batteryFocusNode,
+                    icon: Icons.battery_alert_rounded,
+                    label: _batteryExempt == true
+                        ? 'Battery optimization — excluded ✓'
+                        : 'Battery optimization — tap to exclude',
+                    onTap: _requestBatteryExemption,
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // Player guide — how the in-player guide surfaces look (zap
-          // banner, channel guide). Both players read it, so no gate.
-          const SettingsSectionLabel('Player guide'),
-          Text(
-            'How the channel banner and in-player guide look during live '
-            'TV — on this device and on Android TV.',
-            style: TextStyle(fontSize: 12, color: kSettingsDim),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Column(
-              children: [
-                RadioListTile<String>(
-                  title: const Text('Classic'),
-                  subtitle: const Text("Today's look"),
-                  value: 'classic',
-                  groupValue: _playerGuideStyle,
-                  onChanged: (v) =>
-                      v == null ? null : unawaited(_setPlayerGuideStyle(v)),
-                ),
-                RadioListTile<String>(
-                  title: const Text('Cinema Glass'),
-                  subtitle: const Text(
-                    'Translucent panels, one violet accent — modern streaming',
-                  ),
-                  value: 'glass',
-                  groupValue: _playerGuideStyle,
-                  onChanged: (v) =>
-                      v == null ? null : unawaited(_setPlayerGuideStyle(v)),
-                ),
-                RadioListTile<String>(
-                  title: const Text('Midnight Edition'),
-                  subtitle: const Text(
-                    'Ink panels and serif headlines — editorial',
-                  ),
-                  value: 'edition',
-                  groupValue: _playerGuideStyle,
-                  onChanged: (v) =>
-                      v == null ? null : unawaited(_setPlayerGuideStyle(v)),
-                ),
-                RadioListTile<String>(
-                  title: const Text('Master Control'),
-                  subtitle: const Text(
-                    'Black instrument — mono numerals, amber machinery',
-                  ),
-                  value: 'console',
-                  groupValue: _playerGuideStyle,
-                  onChanged: (v) =>
-                      v == null ? null : unawaited(_setPlayerGuideStyle(v)),
+                const Divider(height: 1),
+                _FocusableSettingsTile(
+                  focusNode: _scheduledRecordingsFocusNode,
+                  icon: Icons.fiber_manual_record_rounded,
+                  label: _scheduledCount == 0
+                      ? 'Recordings'
+                      : 'Recordings ($_scheduledCount scheduled)',
+                  onTap: _openScheduledRecordings,
                 ),
               ],
-            ),
+            ],
           ),
-          const SizedBox(height: 24),
-
-          // Recording — only where the engine can actually run (Android 10+).
-          if (_recordingSectionVisible) ...[
-            const SettingsSectionLabel('Recording'),
-            const SizedBox(height: 6),
-            Card(
-              child: Column(
-                children: [
-                  if (_engineToggleVisible)
-                    SwitchListTile(
-                      title: const Text('Background recording engine'),
-                      subtitle: const Text(
-                        'Recordings keep running when you zap or leave the '
-                        'app, and programmes can be scheduled from the TV '
-                        'guide. Off returns to player-tied recording. Uses an '
-                        'extra connection to your provider.',
-                      ),
-                      value: _recordingEngineOn,
-                      onChanged: (enabled) async {
-                        await LiveRecordingService.setEngineEnabled(enabled);
-                        if (mounted) {
-                          setState(() => _recordingEngineOn = enabled);
-                        }
-                      },
-                    ),
-                  if (!_engineToggleVisible || _recordingEngineOn) ...[
-                    if (_engineToggleVisible) const Divider(height: 1),
-                    _FocusableSettingsTile(
-                      focusNode: _maxConcurrentFocusNode,
-                      icon: Icons.filter_none_rounded,
-                      label: 'Simultaneous recordings ($_maxConcurrent)',
-                      onTap: _pickMaxConcurrent,
-                    ),
-                    if (_batteryExempt != null) ...[
-                      const Divider(height: 1),
-                      _FocusableSettingsTile(
-                        focusNode: _batteryFocusNode,
-                        icon: Icons.battery_alert_rounded,
-                        label: _batteryExempt == true
-                            ? 'Battery optimization — excluded ✓'
-                            : 'Battery optimization — tap to exclude',
-                        onTap: _requestBatteryExemption,
-                      ),
-                    ],
-                    const Divider(height: 1),
-                    _FocusableSettingsTile(
-                      focusNode: _scheduledRecordingsFocusNode,
-                      icon: Icons.fiber_manual_record_rounded,
-                      label: _scheduledCount == 0
-                          ? 'Recordings'
-                          : 'Recordings ($_scheduledCount scheduled)',
-                      onTap: _openScheduledRecordings,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // Default Playlist Info
-          if (_defaultPlaylistId != null)
-            const SettingsInfoBanner(
-              text:
-                  'Your default playlist will load automatically when you select IPTV.',
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -3412,7 +3580,10 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
 
   void _goBack() {
     if (mounted) {
-      Navigator.of(context).pop();
+      // maybePop, not pop: the page's PopScope turns a sub-view back press
+      // into "return to the hub" — a direct pop would bypass it and close
+      // the whole page from anywhere.
+      Navigator.of(context).maybePop();
     }
   }
 
